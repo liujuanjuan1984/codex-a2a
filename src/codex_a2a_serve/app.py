@@ -29,11 +29,11 @@ from fastapi.responses import JSONResponse
 from starlette.responses import StreamingResponse
 
 from .agent import OpencodeAgentExecutor
+from .codex_client import OpencodeClient
 from .config import Settings
 from .jsonrpc_ext import (
     OpencodeSessionQueryJSONRPCApplication,
 )
-from .codex_client import OpencodeClient
 
 logger = logging.getLogger(__name__)
 

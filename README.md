@@ -10,7 +10,7 @@
   `GET /v1/tasks/{task_id}:subscribe`, and related endpoints
 - A2A JSON-RPC: `POST /` (for standard methods and extensions such as session queries)
 
-In practice, this service is a protocol bridge and security boundary: it maps A2A message/task semantics to Codex session/message/event APIs, while adding authentication, observability, and session-continuation contracts.
+In practice, this service is a protocol bridge and security boundary: it maps A2A message/task semantics to Codex app-server JSON-RPC APIs, while adding authentication, observability, and session-continuation contracts.
 
 > Important: `A2A_BEARER_TOKEN` is required for startup.
 > See `docs/guide.md`.
@@ -67,10 +67,10 @@ Additional notes:
 
 ## Quick Start
 
-1. Start Codex:
+1. Ensure Codex CLI is available (`codex` in `PATH`), or set `CODEX_CLI_BIN`:
 
 ```bash
-codex serve
+codex --version
 ```
 
 2. Install dependencies:
@@ -108,15 +108,19 @@ curl -sS http://127.0.0.1:8000/v1/message:send \
 
 For full configuration, see `docs/guide.md`. Most commonly used options:
 
-- `OPENCODE_BASE_URL`: Codex base URL (default: `http://127.0.0.1:4096`)
-- `OPENCODE_DIRECTORY`: Codex `directory` parameter (optional; controlled by
-  server and cannot be overridden by clients)
+- `CODEX_CLI_BIN`: Codex CLI binary path (default: `codex`)
+- `CODEX_APP_SERVER_LISTEN`: Codex app-server transport (default: `stdio://`)
+- `CODEX_MODEL`: default model for `thread/start` (default: `gpt-5.1-codex`)
+- `CODEX_DIRECTORY`: default `cwd` (optional; controlled by server and cannot be overridden by clients)
 - `A2A_BEARER_TOKEN`: required bearer token for authentication
 - `A2A_PUBLIC_URL`: externally reachable URL prefix exposed in Agent Card
 - `A2A_PROJECT`: optional project label injected into Agent Card metadata/examples
 - `A2A_STREAMING`: enables SSE streaming (default: `true`)
 - `A2A_SESSION_CACHE_TTL_SECONDS` / `A2A_SESSION_CACHE_MAXSIZE`:
   in-memory `(identity, contextId) -> session_id` mapping cache settings
+
+Compatibility note:
+- Legacy `OPENCODE_*` env keys are still accepted as fallback aliases.
 
 ## Session Continuation Contract
 

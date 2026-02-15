@@ -427,8 +427,7 @@ async def test_streaming_emits_interrupt_status_for_permission_asked_event() -> 
         for event in queue.events
         if isinstance(event, TaskStatusUpdateEvent)
         and event.final is False
-        and (event.metadata or {}).get("codex", {}).get("interrupt", {}).get("type")
-        == "permission"
+        and (event.metadata or {}).get("codex", {}).get("interrupt", {}).get("type") == "permission"
     ]
     assert len(interrupt_statuses) == 1
     interrupt = interrupt_statuses[0].metadata["codex"]["interrupt"]

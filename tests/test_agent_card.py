@@ -13,9 +13,7 @@ def test_agent_card_description_reflects_actual_transport_capabilities() -> None
     assert "HTTP+JSON and JSON-RPC transports" in card.description
     assert "message/send, message/stream" in card.description
     assert "tasks/get, tasks/cancel" in card.description
-    assert (
-        "all consumers share the same underlying Codex workspace/environment" in card.description
-    )
+    assert "all consumers share the same underlying Codex workspace/environment" in card.description
 
 
 def test_agent_card_injects_deployment_context_into_extensions() -> None:

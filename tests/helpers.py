@@ -7,8 +7,8 @@ from a2a.server.agent_execution import RequestContext
 from a2a.server.context import ServerCallContext
 from a2a.types import Message, MessageSendParams, Role, TextPart
 
-from codex_a2a_serve.config import Settings
 from codex_a2a_serve.codex_client import OpencodeMessage
+from codex_a2a_serve.config import Settings
 
 
 def make_settings(**overrides: Any) -> Settings:
