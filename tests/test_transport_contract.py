@@ -123,3 +123,19 @@ async def test_dual_stack_send_rejects_cross_transport_payload_shapes(monkeypatc
         assert rpc_resp.status_code == 200
         payload = rpc_resp.json()
         assert payload["error"]["code"] == -32602
+
+
+@pytest.mark.asyncio
+async def test_subscribe_missing_task_returns_controlled_404(monkeypatch) -> None:
+    import codex_a2a_serve.app as app_module
+
+    monkeypatch.setattr(app_module, "OpencodeClient", DummyChatOpencodeClient)
+    app = app_module.create_app(make_settings(a2a_bearer_token="test-token"))
+    transport = httpx.ASGITransport(app=app)
+    headers = {"Authorization": "Bearer test-token"}
+
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get("/v1/tasks/task-missing:subscribe", headers=headers)
+
+    assert response.status_code == 404
+    assert response.json() == {"error": "Task not found", "task_id": "task-missing"}
