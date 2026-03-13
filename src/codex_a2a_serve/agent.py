@@ -36,12 +36,29 @@ logger = logging.getLogger(__name__)
 
 _INTERRUPT_ASKED_EVENT_TYPES = {"permission.asked", "question.asked"}
 _INTERRUPT_RESOLVED_EVENT_TYPES = {"permission.replied", "question.replied", "question.rejected"}
+_STREAM_COMPLETION_DRAIN_SECONDS = 0.05
+_STREAM_TEXT_FLUSH_CHARS = 120
+_STREAM_TEXT_FLUSH_SECONDS = 0.2
+_STREAM_REASONING_FLUSH_CHARS = 240
+_STREAM_REASONING_FLUSH_SECONDS = 0.35
 
 
 class BlockType(str, Enum):
     TEXT = "text"
     REASONING = "reasoning"
     TOOL_CALL = "tool_call"
+
+
+def _flush_char_limit(block_type: BlockType) -> int:
+    if block_type == BlockType.REASONING:
+        return _STREAM_REASONING_FLUSH_CHARS
+    return _STREAM_TEXT_FLUSH_CHARS
+
+
+def _flush_time_limit(block_type: BlockType) -> float:
+    if block_type == BlockType.REASONING:
+        return _STREAM_REASONING_FLUSH_SECONDS
+    return _STREAM_TEXT_FLUSH_SECONDS
 
 
 @dataclass(frozen=True)
@@ -53,6 +70,7 @@ class _NormalizedStreamChunk:
     source: str
     message_id: str | None
     role: str | None
+    part_id: str | None
 
 
 @dataclass(frozen=True)
@@ -64,11 +82,74 @@ class _PendingDelta:
 
 @dataclass
 class _StreamPartState:
+    part_id: str
     block_type: BlockType
     message_id: str | None
     role: str | None
     buffer: str = ""
     saw_delta: bool = False
+
+
+@dataclass
+class _BufferedTextChunk:
+    block_type: BlockType
+    part_id: str | None
+    message_id: str | None
+    role: str | None
+    source: str
+    append: bool
+    text: str
+    started_at: float
+
+    @classmethod
+    def from_chunk(cls, chunk: _NormalizedStreamChunk, *, now: float) -> _BufferedTextChunk:
+        text = chunk.part.text if isinstance(chunk.part, TextPart) else ""
+        return cls(
+            block_type=chunk.block_type,
+            part_id=chunk.part_id,
+            message_id=chunk.message_id,
+            role=chunk.role,
+            source=chunk.source,
+            append=chunk.append,
+            text=text,
+            started_at=now,
+        )
+
+    def can_merge(self, chunk: _NormalizedStreamChunk) -> bool:
+        if not isinstance(chunk.part, TextPart):
+            return False
+        if chunk.block_type not in {BlockType.TEXT, BlockType.REASONING}:
+            return False
+        return (
+            self.block_type == chunk.block_type
+            and self.part_id == chunk.part_id
+            and self.message_id == chunk.message_id
+            and self.role == chunk.role
+            and self.source == chunk.source
+            and self.append == chunk.append
+        )
+
+    def append_chunk(self, chunk: _NormalizedStreamChunk) -> None:
+        if not isinstance(chunk.part, TextPart):
+            return
+        self.text = f"{self.text}{chunk.part.text}"
+
+    def should_flush(self, *, now: float) -> bool:
+        return len(self.text) >= _flush_char_limit(self.block_type) or (
+            now - self.started_at
+        ) >= _flush_time_limit(self.block_type)
+
+    def to_chunk(self) -> _NormalizedStreamChunk:
+        return _NormalizedStreamChunk(
+            part=TextPart(text=self.text),
+            content_key=self.text,
+            append=self.append,
+            block_type=self.block_type,
+            source=self.source,
+            message_id=self.message_id,
+            role=self.role,
+            part_id=self.part_id,
+        )
 
 
 @dataclass
@@ -370,6 +451,7 @@ class OpencodeAgentExecutor(AgentExecutor):
             event_id_namespace=f"{task_id}:{context_id}:{stream_artifact_id}",
         )
         stop_event = asyncio.Event()
+        stream_completion_event = asyncio.Event()
         stream_task: asyncio.Task[None] | None = None
         pending_preferred_claim = False
         session_lock: asyncio.Lock | None = None
@@ -403,6 +485,7 @@ class OpencodeAgentExecutor(AgentExecutor):
                         stream_state=stream_state,
                         event_queue=event_queue,
                         stop_event=stop_event,
+                        completion_event=stream_completion_event,
                         directory=directory,
                     )
                 )
@@ -446,6 +529,10 @@ class OpencodeAgentExecutor(AgentExecutor):
                 response_text,
             )
             if streaming_request:
+                stream_completion_event.set()
+                if stream_task:
+                    await stream_task
+                    stream_task = None
                 if stream_state.should_emit_final_snapshot(response_text):
                     sequence = stream_state.next_sequence()
                     await _enqueue_artifact_update(
@@ -810,62 +897,104 @@ class OpencodeAgentExecutor(AgentExecutor):
         stream_state: _StreamOutputState,
         event_queue: EventQueue,
         stop_event: asyncio.Event,
+        completion_event: asyncio.Event,
         directory: str | None = None,
     ) -> None:
         part_states: dict[str, _StreamPartState] = {}
         pending_deltas: defaultdict[str, list[_PendingDelta]] = defaultdict(list)
+        buffered_text_chunk: _BufferedTextChunk | None = None
         backoff = 0.5
         max_backoff = 5.0
 
-        async def _emit_chunks(chunks: list[_NormalizedStreamChunk]) -> None:
-            for chunk in chunks:
-                if not stream_state.matches_expected_message(chunk.message_id):
-                    continue
-                resolved_message_id = stream_state.resolve_message_id(chunk.message_id)
-                if isinstance(chunk.part, TextPart):
-                    if stream_state.should_drop_initial_user_echo(
-                        chunk.part.text,
-                        block_type=chunk.block_type,
-                        role=chunk.role,
-                    ):
-                        continue
-                should_emit, effective_append = stream_state.register_chunk(
+        async def _emit_chunk_now(chunk: _NormalizedStreamChunk) -> None:
+            if not stream_state.matches_expected_message(chunk.message_id):
+                return
+            resolved_message_id = stream_state.resolve_message_id(chunk.message_id)
+            if isinstance(chunk.part, TextPart):
+                if stream_state.should_drop_initial_user_echo(
+                    chunk.part.text,
                     block_type=chunk.block_type,
-                    content_key=chunk.content_key,
-                    append=chunk.append,
-                )
-                if not should_emit:
+                    role=chunk.role,
+                ):
+                    return
+            should_emit, effective_append = stream_state.register_chunk(
+                block_type=chunk.block_type,
+                content_key=chunk.content_key,
+                append=chunk.append,
+            )
+            if not should_emit:
+                return
+            sequence = stream_state.next_sequence()
+            await _enqueue_artifact_update(
+                event_queue=event_queue,
+                task_id=task_id,
+                context_id=context_id,
+                artifact_id=artifact_id,
+                part=chunk.part,
+                append=effective_append,
+                last_chunk=False,
+                artifact_metadata=_build_stream_artifact_metadata(
+                    block_type=chunk.block_type,
+                    source=chunk.source,
+                    message_id=resolved_message_id,
+                    role=chunk.role,
+                    sequence=sequence,
+                    event_id=stream_state.build_event_id(sequence),
+                ),
+            )
+            logger.debug(
+                "Stream chunk task_id=%s session_id=%s block_type=%s append=%s text=%s",
+                task_id,
+                session_id,
+                chunk.block_type,
+                effective_append,
+                (
+                    chunk.part.text
+                    if isinstance(chunk.part, TextPart)
+                    else _serialize_tool_payload(chunk.part.data)
+                ),
+            )
+
+        def _seconds_until_buffer_flush() -> float | None:
+            if buffered_text_chunk is None:
+                return None
+            return max(
+                0.0,
+                _flush_time_limit(buffered_text_chunk.block_type)
+                - (time.monotonic() - buffered_text_chunk.started_at),
+            )
+
+        async def _flush_buffered_text_chunk() -> None:
+            nonlocal buffered_text_chunk
+            if buffered_text_chunk is None:
+                return
+            chunk = buffered_text_chunk.to_chunk()
+            buffered_text_chunk = None
+            await _emit_chunk_now(chunk)
+
+        async def _emit_chunks(chunks: list[_NormalizedStreamChunk]) -> None:
+            nonlocal buffered_text_chunk
+            for chunk in chunks:
+                if isinstance(chunk.part, TextPart) and chunk.block_type in {
+                    BlockType.TEXT,
+                    BlockType.REASONING,
+                }:
+                    now = time.monotonic()
+                    if buffered_text_chunk is None:
+                        buffered_text_chunk = _BufferedTextChunk.from_chunk(chunk, now=now)
+                    elif buffered_text_chunk.can_merge(chunk):
+                        buffered_text_chunk.append_chunk(chunk)
+                    else:
+                        await _flush_buffered_text_chunk()
+                        buffered_text_chunk = _BufferedTextChunk.from_chunk(chunk, now=now)
+                    if buffered_text_chunk is not None and buffered_text_chunk.should_flush(
+                        now=now
+                    ):
+                        await _flush_buffered_text_chunk()
                     continue
-                sequence = stream_state.next_sequence()
-                await _enqueue_artifact_update(
-                    event_queue=event_queue,
-                    task_id=task_id,
-                    context_id=context_id,
-                    artifact_id=artifact_id,
-                    part=chunk.part,
-                    append=effective_append,
-                    last_chunk=False,
-                    artifact_metadata=_build_stream_artifact_metadata(
-                        block_type=chunk.block_type,
-                        source=chunk.source,
-                        message_id=resolved_message_id,
-                        role=chunk.role,
-                        sequence=sequence,
-                        event_id=stream_state.build_event_id(sequence),
-                    ),
-                )
-                logger.debug(
-                    "Stream chunk task_id=%s session_id=%s block_type=%s append=%s text=%s",
-                    task_id,
-                    session_id,
-                    chunk.block_type,
-                    effective_append,
-                    (
-                        chunk.part.text
-                        if isinstance(chunk.part, TextPart)
-                        else _serialize_tool_payload(chunk.part.data)
-                    ),
-                )
+
+                await _flush_buffered_text_chunk()
+                await _emit_chunk_now(chunk)
 
         async def _emit_interrupt_status(
             *,
@@ -877,6 +1006,7 @@ class OpencodeAgentExecutor(AgentExecutor):
             resolution: str | None = None,
             codex_private: Mapping[str, Any] | None = None,
         ) -> None:
+            await _flush_buffered_text_chunk()
             sequence = stream_state.next_sequence()
             interrupt_payload: dict[str, Any] = {
                 "request_id": request_id,
@@ -917,6 +1047,7 @@ class OpencodeAgentExecutor(AgentExecutor):
             source: str,
             message_id: str | None,
             role: str | None,
+            part_id: str | None,
         ) -> _NormalizedStreamChunk:
             return _NormalizedStreamChunk(
                 part=part,
@@ -926,6 +1057,7 @@ class OpencodeAgentExecutor(AgentExecutor):
                 source=source,
                 message_id=message_id,
                 role=role,
+                part_id=part_id,
             )
 
         def _upsert_part_state(
@@ -942,12 +1074,14 @@ class OpencodeAgentExecutor(AgentExecutor):
             state = part_states.get(part_id)
             if state is None:
                 state = _StreamPartState(
+                    part_id=part_id,
                     block_type=block_type,
                     message_id=message_id,
                     role=role,
                 )
                 part_states[part_id] = state
                 return state
+            state.part_id = part_id
             state.block_type = block_type
             if role is not None:
                 state.role = role
@@ -977,6 +1111,7 @@ class OpencodeAgentExecutor(AgentExecutor):
                     source=source,
                     message_id=state.message_id,
                     role=state.role,
+                    part_id=state.part_id,
                 )
             ]
 
@@ -1006,6 +1141,7 @@ class OpencodeAgentExecutor(AgentExecutor):
                         source="part_text_diff",
                         message_id=state.message_id,
                         role=state.role,
+                        part_id=state.part_id,
                     )
                 ]
             state.buffer = snapshot
@@ -1046,6 +1182,7 @@ class OpencodeAgentExecutor(AgentExecutor):
                     source="tool_part_update",
                     message_id=state.message_id,
                     role=state.role,
+                    part_id=state.part_id,
                 )
             ]
 
@@ -1082,15 +1219,48 @@ class OpencodeAgentExecutor(AgentExecutor):
                     source=source,
                     message_id=state.message_id,
                     role=state.role,
+                    part_id=state.part_id,
                 )
             ]
 
         try:
             while not stop_event.is_set():
                 try:
-                    async for event in self._client.stream_events(
+                    stream_iter = self._client.stream_events(
                         stop_event=stop_event, directory=directory
-                    ):
+                    ).__aiter__()
+                    pending_event_task: asyncio.Task[dict[str, Any]] | None = None
+                    while not stop_event.is_set():
+                        if pending_event_task is None:
+                            pending_event_task = asyncio.create_task(anext(stream_iter))
+                        wait_timeout = _seconds_until_buffer_flush()
+                        if completion_event.is_set():
+                            if wait_timeout is None:
+                                wait_timeout = _STREAM_COMPLETION_DRAIN_SECONDS
+                            else:
+                                wait_timeout = min(wait_timeout, _STREAM_COMPLETION_DRAIN_SECONDS)
+                        done, _ = await asyncio.wait(
+                            {pending_event_task},
+                            timeout=wait_timeout,
+                            return_when=asyncio.FIRST_COMPLETED,
+                        )
+                        if pending_event_task not in done:
+                            if completion_event.is_set():
+                                await _flush_buffered_text_chunk()
+                                pending_event_task.cancel()
+                                with suppress(asyncio.CancelledError):
+                                    await pending_event_task
+                                pending_event_task = None
+                                break
+                            await _flush_buffered_text_chunk()
+                            continue
+                        try:
+                            event = pending_event_task.result()
+                        except StopAsyncIteration:
+                            pending_event_task = None
+                            break
+                        finally:
+                            pending_event_task = None
                         if stop_event.is_set():
                             break
                         event_type = event.get("type")
@@ -1261,6 +1431,8 @@ class OpencodeAgentExecutor(AgentExecutor):
                     logger.exception("Codex event stream failed; retrying")
                     await asyncio.sleep(backoff)
                     backoff = min(backoff * 2, max_backoff)
+                finally:
+                    await _flush_buffered_text_chunk()
         except Exception:
             logger.exception("Codex event stream failed")
 
