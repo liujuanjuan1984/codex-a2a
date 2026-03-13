@@ -93,13 +93,19 @@ Read before deployment:
 uv sync --all-extras
 ```
 
-2. Start the service:
+2. Generate a temporary local bearer token:
 
 ```bash
-A2A_BEARER_TOKEN=dev-token uv run codex-a2a-serve
+export A2A_BEARER_TOKEN="$(python -c 'import secrets; print(secrets.token_hex(24))')"
 ```
 
-3. Open the Agent Card:
+3. Start the service:
+
+```bash
+uv run codex-a2a-serve
+```
+
+4. Open the Agent Card:
 
 - `http://127.0.0.1:8000/.well-known/agent-card.json`
 
