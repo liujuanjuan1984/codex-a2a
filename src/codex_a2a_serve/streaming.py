@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import time
 from collections import defaultdict
@@ -20,6 +19,13 @@ from .output_mapping import (
     enqueue_artifact_update,
     extract_token_usage,
     merge_token_usage,
+)
+from .tool_call_payloads import (
+    ToolCallPayload,
+    as_tool_call_payload,
+    normalize_tool_call_payload,
+    serialize_tool_call_payload,
+    tool_call_state_payload_from_part,
 )
 
 _INTERRUPT_ASKED_EVENT_TYPES = {"permission.asked", "question.asked"}
@@ -76,7 +82,7 @@ class StreamPartState:
     role: str | None
     buffer: str = ""
     saw_delta: bool = False
-    tool_chunk_count: int = 0
+    emitted_tool_chunks: int = 0
     last_tool_state_payload: str | None = None
 
 
@@ -315,11 +321,9 @@ async def consume_codex_stream(
             session_id,
             chunk.block_type,
             effective_append,
-            (
-                chunk.part.text
-                if isinstance(chunk.part, TextPart)
-                else serialize_tool_payload(chunk.part.data)
-            ),
+            chunk.part.text
+            if isinstance(chunk.part, TextPart)
+            else chunk.part.data,
         )
 
     def seconds_until_buffer_flush() -> float | None:
@@ -519,36 +523,51 @@ async def consume_codex_stream(
         )
         return []
 
-    def tool_chunks(
+    def emit_tool_payload_chunk(
         *,
         state: StreamPartState,
-        part: Mapping[str, Any],
+        payload: ToolCallPayload,
         message_id: str | None,
+        source: str,
     ) -> list[NormalizedStreamChunk]:
-        payload = extract_tool_part_payload(part)
-        if payload is None:
-            return []
-        tool_chunk = serialize_tool_payload(payload)
+        tool_chunk = serialize_tool_call_payload(payload)
         if message_id:
             state.message_id = message_id
-        if tool_chunk == state.last_tool_state_payload:
+        if payload["kind"] == "state" and tool_chunk == state.last_tool_state_payload:
             return []
-        append = state.tool_chunk_count > 0
-        state.tool_chunk_count += 1
-        state.last_tool_state_payload = tool_chunk
+        append = state.emitted_tool_chunks > 0
+        state.emitted_tool_chunks += 1
+        if payload["kind"] == "state":
+            state.last_tool_state_payload = tool_chunk
         content_key = tool_chunk if not append else f"\n{tool_chunk}"
         return [
             new_chunk(
-                part=DataPart(data=payload),
+                part=DataPart(data=as_tool_call_payload(payload)),
                 content_key=content_key,
                 append=append,
                 block_type=state.block_type,
-                source="tool_part_update",
+                source=source,
                 message_id=state.message_id,
                 role=state.role,
                 part_id=state.part_id,
             )
         ]
+
+    def tool_part_chunks(
+        *,
+        state: StreamPartState,
+        part: Mapping[str, Any],
+        message_id: str | None,
+    ) -> list[NormalizedStreamChunk]:
+        payload = tool_call_state_payload_from_part(part)
+        if payload is None:
+            return []
+        return emit_tool_payload_chunk(
+            state=state,
+            payload=payload,
+            message_id=message_id,
+            source="tool_part_update",
+        )
 
     def tool_delta_chunks(
         *,
@@ -557,7 +576,17 @@ async def consume_codex_stream(
         message_id: str | None,
         source: str,
     ) -> list[NormalizedStreamChunk]:
-        payload = parse_tool_payload(delta_value)
+        if not isinstance(delta_value, Mapping):
+            logger.warning(
+                "Suppressing non-structured tool_call payload "
+                "task_id=%s session_id=%s source=%s payload=%s",
+                task_id,
+                session_id,
+                source,
+                delta_value,
+            )
+            return []
+        payload = normalize_tool_call_payload(delta_value)
         if payload is None:
             logger.warning(
                 "Suppressing unrecognized tool_call payload "
@@ -568,28 +597,12 @@ async def consume_codex_stream(
                 delta_value,
             )
             return []
-        tool_chunk = serialize_tool_payload(payload)
-        if message_id:
-            state.message_id = message_id
-        if payload.get("kind") == "state" and tool_chunk == state.last_tool_state_payload:
-            return []
-        append = state.tool_chunk_count > 0
-        state.tool_chunk_count += 1
-        if payload.get("kind") == "state":
-            state.last_tool_state_payload = tool_chunk
-        content_key = tool_chunk if not append else f"\n{tool_chunk}"
-        return [
-            new_chunk(
-                part=DataPart(data=payload),
-                content_key=content_key,
-                append=append,
-                block_type=state.block_type,
-                source=source,
-                message_id=state.message_id,
-                role=state.role,
-                part_id=state.part_id,
-            )
-        ]
+        return emit_tool_payload_chunk(
+            state=state,
+            payload=payload,
+            message_id=message_id,
+            source=source,
+        )
 
     try:
         while not stop_event.is_set():
@@ -764,7 +777,7 @@ async def consume_codex_stream(
                             )
                         else:
                             chunks.extend(
-                                tool_chunks(
+                                tool_part_chunks(
                                     state=state,
                                     part=part,
                                     message_id=message_id,
@@ -1069,132 +1082,3 @@ def classify_stream_block_type(
     ):
         return BlockType.TEXT
     return None
-
-
-def serialize_tool_payload(payload: Mapping[str, Any]) -> str:
-    return json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-
-
-def extract_tool_part_payload(part: Mapping[str, Any]) -> dict[str, Any] | None:
-    for source_key in ("toolPayload", "tool_payload", "payload", "data"):
-        value = part.get(source_key)
-        if isinstance(value, Mapping):
-            payload = normalize_tool_payload(value)
-            if payload is not None:
-                return payload
-
-    payload: dict[str, Any] = {"kind": "state"}
-    call_id = _normalized_string_candidates(part, "callID", "callId", "call_id")
-    if call_id is not None:
-        payload["call_id"] = call_id
-    tool = _normalized_string_candidates(part, "tool", "name")
-    if tool is not None:
-        payload["tool"] = tool
-    source_method = _normalized_string_candidates(part, "source_method", "sourceMethod")
-    if source_method is not None:
-        payload["source_method"] = source_method
-    state = part.get("state")
-    if isinstance(state, Mapping):
-        status = _normalized_string_candidates(state, "status")
-        if status is not None:
-            payload["status"] = status
-        for key in ("title", "subtitle", "input", "output", "error"):
-            value = state.get(key)
-            if value is not None:
-                payload[key] = value
-    if len(payload) == 1:
-        return None
-    return payload
-
-
-def _normalized_string_candidates(payload: Mapping[str, Any], *keys: str) -> str | None:
-    for key in keys:
-        value = payload.get(key)
-        if isinstance(value, str):
-            normalized = value.strip()
-            if normalized:
-                return normalized
-    return None
-
-
-def normalize_tool_payload(
-    payload: Mapping[str, Any],
-    *,
-    preserve_extra_fields: bool = False,
-) -> dict[str, Any] | None:
-    kind = _normalized_string_candidates(payload, "kind")
-    output_delta = None
-    for key in ("output_delta", "outputDelta"):
-        value = payload.get(key)
-        if isinstance(value, str) and value != "":
-            output_delta = value
-            break
-    if kind is None:
-        kind = "output_delta" if output_delta is not None else "state"
-    if kind not in {"state", "output_delta"}:
-        return None
-
-    normalized: dict[str, Any] = {"kind": kind}
-    source_method = _normalized_string_candidates(payload, "source_method", "sourceMethod")
-    if source_method is not None:
-        normalized["source_method"] = source_method
-    call_id = _normalized_string_candidates(payload, "call_id", "callID", "callId")
-    if call_id is not None:
-        normalized["call_id"] = call_id
-    tool = _normalized_string_candidates(payload, "tool", "name")
-    if tool is not None:
-        normalized["tool"] = tool
-    status = _normalized_string_candidates(payload, "status")
-    if status is not None:
-        normalized["status"] = status
-
-    for key in ("title", "subtitle", "input", "output", "error"):
-        value = payload.get(key)
-        if value is not None:
-            normalized[key] = value
-
-    if kind == "output_delta":
-        if output_delta is None:
-            return None
-        normalized["output_delta"] = output_delta
-
-    if preserve_extra_fields:
-        for key, value in payload.items():
-            if key in {
-                "kind",
-                "source_method",
-                "sourceMethod",
-                "call_id",
-                "callID",
-                "callId",
-                "tool",
-                "name",
-                "status",
-                "title",
-                "subtitle",
-                "input",
-                "output",
-                "error",
-                "output_delta",
-                "outputDelta",
-            }:
-                continue
-            normalized[key] = value
-
-    if kind == "state" and len(normalized) == 1:
-        return None
-    return normalized
-
-
-def parse_tool_payload(raw: Any) -> dict[str, Any] | None:
-    if isinstance(raw, Mapping):
-        return normalize_tool_payload(raw, preserve_extra_fields=True)
-    if not isinstance(raw, str):
-        return None
-    try:
-        payload = json.loads(raw)
-    except json.JSONDecodeError:
-        return None
-    if not isinstance(payload, Mapping):
-        return None
-    return normalize_tool_payload(payload, preserve_extra_fields=True)

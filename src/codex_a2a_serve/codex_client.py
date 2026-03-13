@@ -13,6 +13,10 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from .config import Settings
+from .tool_call_payloads import (
+    as_tool_call_payload,
+    tool_call_output_delta_payload_from_notification,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -71,18 +75,17 @@ def _build_tool_call_output_event(method: str, params: dict[str, Any]) -> dict[s
     tool = _first_string(params, "tool", "name")
     status = _extract_tool_status(params)
     source_method = _tool_source_method(method)
-    payload: dict[str, Any] = {
-        "kind": "output_delta",
-        "output_delta": delta,
-    }
-    if source_method is not None:
-        payload["source_method"] = source_method
-    if call_id is not None:
-        payload["call_id"] = call_id
-    if tool is not None:
-        payload["tool"] = tool
-    if status is not None:
-        payload["status"] = status
+    if source_method not in {"commandExecution", "fileChange"}:
+        return None
+    payload = tool_call_output_delta_payload_from_notification(
+        source_method=source_method,
+        delta=delta,
+        call_id=call_id,
+        tool=tool,
+        status=status,
+    )
+    if payload is None:
+        return None
 
     part: dict[str, Any] = {
         "sessionID": thread_id,
@@ -105,7 +108,7 @@ def _build_tool_call_output_event(method: str, params: dict[str, Any]) -> dict[s
         "type": "message.part.updated",
         "properties": {
             "part": part,
-            "delta": payload,
+            "delta": as_tool_call_payload(payload),
         },
     }
 

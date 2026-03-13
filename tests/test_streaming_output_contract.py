@@ -282,11 +282,14 @@ async def test_streaming_filters_user_echo_and_emits_single_artifact_block_types
         stream_events_payload=[
             _event(session_id="ses-1", role="ROLE_USER", part_type="text", delta=user_text),
             _event(session_id="ses-1", role="assistant", part_type="reasoning", delta="thinking"),
-            _event(
+            _tool_call_update_event(
                 session_id="ses-1",
-                role="assistant",
-                part_type="tool_call",
-                delta='{"tool":"search"}',
+                part_id="prt-tool-search",
+                tool="search",
+                payload={
+                    "kind": "state",
+                    "tool": "search",
+                },
             ),
             _event(session_id="ses-1", role="assistant", part_type="text", delta="final answer"),
         ],
@@ -1149,26 +1152,34 @@ async def test_streaming_aggregates_small_text_deltas_into_single_update() -> No
 
 
 @pytest.mark.asyncio
-async def test_streaming_emits_tool_call_delta_events_as_data_parts() -> None:
+async def test_streaming_emits_structured_tool_call_delta_payloads_as_data_parts() -> None:
     client = DummyStreamingClient(
         stream_events_payload=[
-            _event(
+            _tool_call_update_event(
                 session_id="ses-1",
-                role="assistant",
-                part_type="tool_call",
-                delta="",
                 part_id="prt-tool-delta",
-                text="",
+                call_id="call-1",
+                tool="bash",
+                status="running",
+                payload={
+                    "kind": "state",
+                    "call_id": "call-1",
+                    "tool": "bash",
+                    "status": "running",
+                },
             ),
-            _delta_event(
+            _tool_call_update_event(
                 session_id="ses-1",
                 part_id="prt-tool-delta",
-                delta='{"tool":"bash","status":"running"}',
-            ),
-            _delta_event(
-                session_id="ses-1",
-                part_id="prt-tool-delta",
-                delta='{"tool":"bash","status":"completed"}',
+                call_id="call-1",
+                tool="bash",
+                status="completed",
+                payload={
+                    "kind": "state",
+                    "call_id": "call-1",
+                    "tool": "bash",
+                    "status": "completed",
+                },
             ),
         ],
         response_text="answer",
@@ -1192,6 +1203,44 @@ async def test_streaming_emits_tool_call_delta_events_as_data_parts() -> None:
     assert all(_part_data(event)["kind"] == "state" for event in tool_updates)
     assert [_part_data(event)["status"] for event in tool_updates] == ["running", "completed"]
     assert all(_part_data(event)["tool"] == "bash" for event in tool_updates)
+    assert all(_part_data(event)["call_id"] == "call-1" for event in tool_updates)
+
+
+@pytest.mark.asyncio
+async def test_streaming_suppresses_legacy_string_tool_call_deltas() -> None:
+    client = DummyStreamingClient(
+        stream_events_payload=[
+            _event(
+                session_id="ses-1",
+                role="assistant",
+                part_type="tool_call",
+                delta="",
+                part_id="prt-tool-legacy",
+                text="",
+            ),
+            _delta_event(
+                session_id="ses-1",
+                part_id="prt-tool-legacy",
+                delta='{"tool":"bash","status":"running"}',
+            ),
+        ],
+        response_text="answer",
+    )
+    executor = OpencodeAgentExecutor(client, streaming_enabled=True)
+    executor._should_stream = lambda context: True  # type: ignore[method-assign]
+    queue = DummyEventQueue()
+
+    await executor.execute(
+        make_request_context(task_id="task-tool-legacy", context_id="ctx-tool-legacy", text="go"),
+        queue,
+    )
+
+    tool_updates = [
+        event
+        for event in _artifact_updates(queue)
+        if _artifact_stream_meta(event)["block_type"] == "tool_call"
+    ]
+    assert tool_updates == []
 
 
 @pytest.mark.asyncio
