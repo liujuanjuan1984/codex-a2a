@@ -34,10 +34,15 @@ Additional notes:
 
 - The A2A layer enforces bearer-token authentication via `A2A_BEARER_TOKEN`.
 - When `A2A_LOG_PAYLOADS=true`, payload logs may include request/response
-  bodies. For `codex.sessions.*` JSON-RPC queries, request/response body
-  logging is intentionally suppressed to reduce chat-history exposure risk.
+  bodies, but only for JSON payloads that pass content-type / size checks. For
+  `codex.*` JSON-RPC extensions, request/response body logging is intentionally
+  suppressed to reduce chat-history and control-parameter exposure risk.
+- In systemd deployment mode, secret persistence is opt-in. Deploy scripts do
+  not write `GH_TOKEN`, `A2A_BEARER_TOKEN`, or provider keys to disk unless
+  `ENABLE_SECRET_PERSISTENCE=true` is explicitly set.
 - Deployment-side LLM provider coverage and known gaps are documented in
   `docs/deployment.md` (`Current Provider Coverage and Gaps`).
+- For threat model and disclosure guidance, see `SECURITY.md`.
 
 ## Capabilities
 
@@ -215,6 +220,8 @@ curl -sS http://127.0.0.1:8000/ \
   [`docs/guide.md`](docs/guide.md)
 - Systemd multi-instance deployment details:
   [`docs/deployment.md`](docs/deployment.md)
+- Security policy and threat model:
+  [`SECURITY.md`](SECURITY.md)
 
 ## License
 

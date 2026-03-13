@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # Create project user, directories, and env files for systemd services.
-# Usage: GH_TOKEN=<token> A2A_BEARER_TOKEN=<token> ./setup_instance.sh <project_name>
+# Usage: [GH_TOKEN=<token>] [A2A_BEARER_TOKEN=<token>] [ENABLE_SECRET_PERSISTENCE=true] ./setup_instance.sh <project_name>
 # Requires env: DATA_ROOT, OPENCODE_BIND_HOST, OPENCODE_BIND_PORT, OPENCODE_LOG_LEVEL,
 #               A2A_HOST, A2A_PORT, A2A_PUBLIC_URL.
 # Optional provider secret env: see scripts/deploy/provider_secret_env_keys.sh
-# All provided keys are persisted into config/codex.secret.env.
+# Secret persistence is opt-in via ENABLE_SECRET_PERSISTENCE=true.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -14,12 +14,9 @@ source "${SCRIPT_DIR}/provider_secret_env_keys.sh"
 PROJECT_NAME="${1:-}"
 
 if [[ "$#" -ne 1 || -z "$PROJECT_NAME" ]]; then
-  echo "Usage: GH_TOKEN=<token> A2A_BEARER_TOKEN=<token> $0 <project_name>" >&2
+  echo "Usage: [GH_TOKEN=<token>] [A2A_BEARER_TOKEN=<token>] [ENABLE_SECRET_PERSISTENCE=true] $0 <project_name>" >&2
   exit 1
 fi
-
-: "${GH_TOKEN:?GH_TOKEN is required}"
-: "${A2A_BEARER_TOKEN:?A2A_BEARER_TOKEN is required}"
 
 : "${DATA_ROOT:?}"
 : "${OPENCODE_BIND_HOST:?}"
@@ -29,11 +26,14 @@ fi
 : "${A2A_PORT:?}"
 : "${A2A_PUBLIC_URL:?}"
 : "${A2A_STREAMING:=true}"
+: "${ENABLE_SECRET_PERSISTENCE:=false}"
 
 PROJECT_DIR="${DATA_ROOT}/${PROJECT_NAME}"
 WORKSPACE_DIR="${PROJECT_DIR}/workspace"
 CONFIG_DIR="${PROJECT_DIR}/config"
+CODEX_AUTH_ENV_FILE="${CONFIG_DIR}/codex.auth.env"
 OPENCODE_SECRET_ENV_FILE="${CONFIG_DIR}/codex.secret.env"
+A2A_SECRET_ENV_FILE="${CONFIG_DIR}/a2a.secret.env"
 LOG_DIR="${PROJECT_DIR}/logs"
 RUN_DIR="${PROJECT_DIR}/run"
 ASKPASS_SCRIPT="${RUN_DIR}/git-askpass.sh"
@@ -44,6 +44,18 @@ OPENCODE_LOCAL_SHARE_DIR="${PROJECT_DIR}/.local/share/codex"
 OPENCODE_BIN_DIR="${OPENCODE_LOCAL_SHARE_DIR}/bin"
 DATA_DIR="${PROJECT_DIR}/.local/share/codex/storage/session"
 SECRET_ENV_KEYS=("${PROVIDER_SECRET_ENV_KEYS[@]}")
+
+is_truthy() {
+  case "${1,,}" in
+    1|true|yes|on) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+PERSIST_SECRETS="false"
+if is_truthy "${ENABLE_SECRET_PERSISTENCE}"; then
+  PERSIST_SECRETS="true"
+fi
 
 # DATA_ROOT must be traversable by the per-project system user. In hardened
 # deployments, using a non-traversable DATA_ROOT (missing o+x) will break
@@ -120,6 +132,35 @@ sudo install -d -m 700 -o "$PROJECT_NAME" -g "$PROJECT_NAME" \
 # fix it to avoid EACCES when codex tries to mkdir under codex/.
 sudo chown -R "$PROJECT_NAME:$PROJECT_NAME" "$CACHE_DIR" "$STATE_DIR" "$OPENCODE_LOCAL_SHARE_DIR"
 
+codex_auth_example_tmp="$(mktemp)"
+cat <<'EOF' >"$codex_auth_example_tmp"
+# Root-only runtime secret file for codex@.service.
+# Populate GH_TOKEN here if ENABLE_SECRET_PERSISTENCE is not enabled during deploy.
+GH_TOKEN=<github-token>
+EOF
+sudo install -m 600 -o root -g root "$codex_auth_example_tmp" "$CONFIG_DIR/codex.auth.env.example"
+rm -f "$codex_auth_example_tmp"
+
+a2a_secret_example_tmp="$(mktemp)"
+cat <<'EOF' >"$a2a_secret_example_tmp"
+# Root-only runtime secret file for codex-a2a@.service.
+# Populate A2A_BEARER_TOKEN here if ENABLE_SECRET_PERSISTENCE is not enabled during deploy.
+A2A_BEARER_TOKEN=<a2a-bearer-token>
+EOF
+sudo install -m 600 -o root -g root "$a2a_secret_example_tmp" "$CONFIG_DIR/a2a.secret.env.example"
+rm -f "$a2a_secret_example_tmp"
+
+codex_secret_example_tmp="$(mktemp)"
+{
+  echo "# Optional root-only provider secret file for codex@.service."
+  echo "# Populate only the provider keys your deployment actually uses."
+  for key in "${SECRET_ENV_KEYS[@]}"; do
+    echo "${key}=<optional>"
+  done
+} >"$codex_secret_example_tmp"
+sudo install -m 600 -o root -g root "$codex_secret_example_tmp" "$CONFIG_DIR/codex.secret.env.example"
+rm -f "$codex_secret_example_tmp"
+
 askpass_tmp="$(mktemp)"
 cat <<'SCRIPT' >"$askpass_tmp"
 #!/usr/bin/env bash
@@ -148,7 +189,6 @@ codex_env_tmp="$(mktemp)"
   echo "OPENCODE_BIND_PORT=${OPENCODE_BIND_PORT}"
   echo "OPENCODE_EXTRA_ARGS=${OPENCODE_EXTRA_ARGS:-}"
   echo "OPENCODE_LSP=${OPENCODE_LSP:-false}"
-  echo "GH_TOKEN=${GH_TOKEN}"
   echo "GIT_ASKPASS=${ASKPASS_SCRIPT}"
   echo "GIT_ASKPASS_REQUIRE=force"
   echo "GIT_TERMINAL_PROMPT=0"
@@ -166,22 +206,41 @@ codex_env_tmp="$(mktemp)"
 sudo install -m 600 -o root -g root "$codex_env_tmp" "$CONFIG_DIR/codex.env"
 rm -f "$codex_env_tmp"
 
-codex_secret_env_tmp="$(mktemp)"
-has_secret_entry=0
-for key in "${SECRET_ENV_KEYS[@]}"; do
-  value="${!key:-}"
-  if [[ -z "$value" && -f "$OPENCODE_SECRET_ENV_FILE" ]]; then
-    value="$(sed -n "s/^${key}=//p" "$OPENCODE_SECRET_ENV_FILE" | head -n 1)"
+if [[ "$PERSIST_SECRETS" == "true" ]]; then
+  : "${GH_TOKEN:?GH_TOKEN is required when ENABLE_SECRET_PERSISTENCE=true}"
+  : "${A2A_BEARER_TOKEN:?A2A_BEARER_TOKEN is required when ENABLE_SECRET_PERSISTENCE=true}"
+
+  codex_auth_env_tmp="$(mktemp)"
+  {
+    echo "GH_TOKEN=${GH_TOKEN}"
+  } >"$codex_auth_env_tmp"
+  sudo install -m 600 -o root -g root "$codex_auth_env_tmp" "$CODEX_AUTH_ENV_FILE"
+  rm -f "$codex_auth_env_tmp"
+
+  codex_secret_env_tmp="$(mktemp)"
+  has_secret_entry=0
+  for key in "${SECRET_ENV_KEYS[@]}"; do
+    value="${!key:-}"
+    if [[ -z "$value" && -f "$OPENCODE_SECRET_ENV_FILE" ]]; then
+      value="$(sed -n "s/^${key}=//p" "$OPENCODE_SECRET_ENV_FILE" | head -n 1)"
+    fi
+    if [[ -n "$value" ]]; then
+      printf '%s=%s\n' "$key" "$value" >>"$codex_secret_env_tmp"
+      has_secret_entry=1
+    fi
+  done
+  if [[ "$has_secret_entry" -eq 1 ]]; then
+    sudo install -m 600 -o root -g root "$codex_secret_env_tmp" "$OPENCODE_SECRET_ENV_FILE"
   fi
-  if [[ -n "$value" ]]; then
-    printf '%s=%s\n' "$key" "$value" >>"$codex_secret_env_tmp"
-    has_secret_entry=1
-  fi
-done
-if [[ "$has_secret_entry" -eq 1 ]]; then
-  sudo install -m 600 -o root -g root "$codex_secret_env_tmp" "$OPENCODE_SECRET_ENV_FILE"
+  rm -f "$codex_secret_env_tmp"
+else
+  echo "ENABLE_SECRET_PERSISTENCE is disabled; deploy will not write GH_TOKEN, A2A_BEARER_TOKEN, or provider keys to disk." >&2
+  echo "Provision root-only runtime secret files under ${CONFIG_DIR} before starting services:" >&2
+  echo "  - codex.auth.env (required: GH_TOKEN)" >&2
+  echo "  - a2a.secret.env (required: A2A_BEARER_TOKEN)" >&2
+  echo "  - codex.secret.env (optional provider keys, if your Codex provider requires them)" >&2
+  echo "Templates were generated as *.example files in ${CONFIG_DIR}." >&2
 fi
-rm -f "$codex_secret_env_tmp"
 
 a2a_env_tmp="$(mktemp)"
 {
@@ -189,7 +248,6 @@ a2a_env_tmp="$(mktemp)"
   echo "A2A_PORT=${A2A_PORT}"
   echo "A2A_PUBLIC_URL=${A2A_PUBLIC_URL}"
   echo "A2A_PROJECT=${PROJECT_NAME}"
-  echo "A2A_BEARER_TOKEN=${A2A_BEARER_TOKEN}"
   echo "A2A_STREAMING=${A2A_STREAMING}"
   echo "A2A_LOG_LEVEL=${A2A_LOG_LEVEL:-INFO}"
   echo "A2A_LOG_PAYLOADS=${A2A_LOG_PAYLOADS:-false}"
@@ -210,13 +268,45 @@ a2a_env_tmp="$(mktemp)"
 sudo install -m 600 -o root -g root "$a2a_env_tmp" "$CONFIG_DIR/a2a.env"
 rm -f "$a2a_env_tmp"
 
+if [[ "$PERSIST_SECRETS" == "true" ]]; then
+  a2a_secret_env_tmp="$(mktemp)"
+  {
+    echo "A2A_BEARER_TOKEN=${A2A_BEARER_TOKEN}"
+  } >"$a2a_secret_env_tmp"
+  sudo install -m 600 -o root -g root "$a2a_secret_env_tmp" "$A2A_SECRET_ENV_FILE"
+  rm -f "$a2a_secret_env_tmp"
+fi
+
+require_runtime_secret_file() {
+  local file="$1"
+  local key="$2"
+  local example="$3"
+  if ! sudo test -f "$file"; then
+    echo "Missing required runtime secret file: ${file}" >&2
+    echo "Copy and edit the template: ${example}" >&2
+    exit 1
+  fi
+  if ! sudo grep -q "^${key}=" "$file"; then
+    echo "Runtime secret file does not define ${key}: ${file}" >&2
+    echo "See template: ${example}" >&2
+    exit 1
+  fi
+}
+
+require_runtime_secret_file "$CODEX_AUTH_ENV_FILE" "GH_TOKEN" "$CONFIG_DIR/codex.auth.env.example"
+require_runtime_secret_file "$A2A_SECRET_ENV_FILE" "A2A_BEARER_TOKEN" "$CONFIG_DIR/a2a.secret.env.example"
+
 if command -v gh >/dev/null 2>&1; then
   sudo install -d -m 700 -o "$PROJECT_NAME" -g "$PROJECT_NAME" \
     "${PROJECT_DIR}/.config" "${PROJECT_DIR}/.config/gh"
-  if ! printf '%s' "$GH_TOKEN" | sudo -u "$PROJECT_NAME" -H \
-    gh auth login --hostname github.com --with-token >/dev/null 2>&1; then
-    echo "gh auth login failed for ${PROJECT_NAME}" >&2
-    exit 1
+  if [[ -n "${GH_TOKEN:-}" ]]; then
+    if ! printf '%s' "$GH_TOKEN" | sudo -u "$PROJECT_NAME" -H \
+      gh auth login --hostname github.com --with-token >/dev/null 2>&1; then
+      echo "gh auth login failed for ${PROJECT_NAME}" >&2
+      exit 1
+    fi
+  else
+    echo "GH_TOKEN not provided to setup_instance.sh; skipping gh auth login during deploy." >&2
   fi
 else
   echo "gh not found; skipping gh auth setup." >&2
@@ -232,11 +322,15 @@ if [[ -n "${REPO_URL:-}" ]]; then
     if [[ -n "${REPO_BRANCH:-}" ]]; then
       clone_args=(--branch "$REPO_BRANCH" --single-branch "${clone_args[@]}")
     fi
-    sudo -u "$PROJECT_NAME" -H env \
-      GH_TOKEN="$GH_TOKEN" \
-      GIT_ASKPASS="$ASKPASS_SCRIPT" \
-      GIT_ASKPASS_REQUIRE=force \
-      GIT_TERMINAL_PROMPT=0 \
-      git clone "${clone_args[@]}"
+    if [[ -n "${GH_TOKEN:-}" ]]; then
+      sudo -u "$PROJECT_NAME" -H env \
+        GH_TOKEN="$GH_TOKEN" \
+        GIT_ASKPASS="$ASKPASS_SCRIPT" \
+        GIT_ASKPASS_REQUIRE=force \
+        GIT_TERMINAL_PROMPT=0 \
+        git clone "${clone_args[@]}"
+    else
+      sudo -u "$PROJECT_NAME" -H git clone "${clone_args[@]}"
+    fi
   fi
 fi

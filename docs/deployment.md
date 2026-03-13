@@ -67,26 +67,77 @@ Default permissions:
 
 ## Quick Deploy
 
+Default behavior:
+
+- `ENABLE_SECRET_PERSISTENCE=false` by default.
+- In that default mode, deploy scripts do **not** write `GH_TOKEN`,
+  `A2A_BEARER_TOKEN`, or provider keys to disk.
+- The script expects operators to pre-provision root-only runtime secret files:
+  - `config/codex.auth.env`
+  - `config/a2a.secret.env`
+  - `config/codex.secret.env` (optional provider keys)
+- If those files are missing, the first deploy attempt creates `*.example`
+  templates under `config/` and stops before services are started.
+
+Secure default workflow (recommended):
+
+1. Bootstrap project directories and example files:
+
 ```bash
-GH_TOKEN='<gh-token>' A2A_BEARER_TOKEN='<a2a-token>' \
+./scripts/deploy.sh project=alpha a2a_port=8010 a2a_host=127.0.0.1
+```
+
+2. Populate runtime secret files as `root` using the generated templates:
+
+```bash
+sudo cp /data/codex-a2a/alpha/config/codex.auth.env.example /data/codex-a2a/alpha/config/codex.auth.env
+sudo cp /data/codex-a2a/alpha/config/a2a.secret.env.example /data/codex-a2a/alpha/config/a2a.secret.env
+sudoedit /data/codex-a2a/alpha/config/codex.auth.env
+sudoedit /data/codex-a2a/alpha/config/a2a.secret.env
+```
+
+3. Re-run deploy:
+
+```bash
+./scripts/deploy.sh project=alpha a2a_port=8010 a2a_host=127.0.0.1
+```
+
+Explicit persistence opt-in (legacy-style one-step deploy):
+
+```bash
+read -rsp 'GH_TOKEN: ' GH_TOKEN; echo
+read -rsp 'A2A_BEARER_TOKEN: ' A2A_BEARER_TOKEN; echo
+GH_TOKEN="${GH_TOKEN}" A2A_BEARER_TOKEN="${A2A_BEARER_TOKEN}" ENABLE_SECRET_PERSISTENCE=true \
+./scripts/deploy.sh project=alpha a2a_port=8010 a2a_host=127.0.0.1
+```
+
+```bash
+GH_TOKEN="${GH_TOKEN}" A2A_BEARER_TOKEN="${A2A_BEARER_TOKEN}" ENABLE_SECRET_PERSISTENCE=true \
 ./scripts/deploy.sh project=alpha a2a_port=8010 a2a_host=127.0.0.1
 ```
 
 HTTPS public URL example:
 
 ```bash
-GH_TOKEN='<gh-token>' A2A_BEARER_TOKEN='<a2a-token>' \
+GH_TOKEN="${GH_TOKEN}" A2A_BEARER_TOKEN="${A2A_BEARER_TOKEN}" ENABLE_SECRET_PERSISTENCE=true \
 ./scripts/deploy.sh project=alpha a2a_port=8010 a2a_host=127.0.0.1 a2a_public_url=https://a2a.example.com
 ```
 
-Supported CLI keys (case-insensitive): `project`/`project_name`, `data_root`, `a2a_port`, `a2a_host`, `a2a_public_url`, `a2a_streaming`, `a2a_log_level`, `a2a_log_payloads`, `a2a_log_body_limit`, `codex_provider_id`, `codex_model_id`, `codex_lsp`, `repo_url`, `repo_branch`, `codex_timeout`, `codex_timeout_stream`, `git_identity_name`, `git_identity_email`, `update_a2a`, `force_restart`.
+Supported CLI keys (case-insensitive): `project`/`project_name`, `data_root`, `a2a_port`, `a2a_host`, `a2a_public_url`, `a2a_streaming`, `a2a_log_level`, `a2a_log_payloads`, `a2a_log_body_limit`, `codex_provider_id`, `codex_model_id`, `codex_lsp`, `repo_url`, `repo_branch`, `codex_timeout`, `codex_timeout_stream`, `git_identity_name`, `git_identity_email`, `enable_secret_persistence`, `update_a2a`, `force_restart`.
 
-Required secret env vars: `GH_TOKEN`, `A2A_BEARER_TOKEN`
+Runtime secret requirements:
 
-Recommended style: keep only secret values in process env; pass non-secret overrides as CLI keys:
+- `GH_TOKEN` must be available to the `codex@.service` runtime
+- `A2A_BEARER_TOKEN` must be available to the `codex-a2a@.service` runtime
+- By default these are expected from pre-provisioned root-only secret files
+- If `ENABLE_SECRET_PERSISTENCE=true`, deploy writes them into those files
+
+Recommended style: capture secret values without echo and pass non-secret overrides as CLI keys:
 
 ```bash
-GH_TOKEN='<gh-token>' A2A_BEARER_TOKEN='<a2a-token>' \
+read -rsp 'GH_TOKEN: ' GH_TOKEN; echo
+read -rsp 'A2A_BEARER_TOKEN: ' A2A_BEARER_TOKEN; echo
+GH_TOKEN="${GH_TOKEN}" A2A_BEARER_TOKEN="${A2A_BEARER_TOKEN}" ENABLE_SECRET_PERSISTENCE=true \
 ./scripts/deploy.sh \
   project=alpha \
   data_root=/data/codex-a2a \
@@ -102,7 +153,7 @@ Optional provider secret env vars: `GOOGLE_GENERATIVE_AI_API_KEY`, `OPENAI_API_K
 Minimal example:
 
 ```bash
-GH_TOKEN='<gh-token>' A2A_BEARER_TOKEN='<a2a-token>' \
+GH_TOKEN="${GH_TOKEN}" A2A_BEARER_TOKEN="${A2A_BEARER_TOKEN}" ENABLE_SECRET_PERSISTENCE=true \
 ./scripts/deploy.sh project=alpha a2a_port=8010
 ```
 
@@ -112,14 +163,14 @@ LSP behavior:
 - To enable LSP for one instance, pass `codex_lsp=true`:
 
 ```bash
-GH_TOKEN='<gh-token>' A2A_BEARER_TOKEN='<a2a-token>' \
+GH_TOKEN="${GH_TOKEN}" A2A_BEARER_TOKEN="${A2A_BEARER_TOKEN}" ENABLE_SECRET_PERSISTENCE=true \
 ./scripts/deploy.sh project=alpha codex_lsp=true
 ```
 
 Upgrade an existing instance after shared-code update:
 
 ```bash
-GH_TOKEN='<gh-token>' A2A_BEARER_TOKEN='<a2a-token>' \
+GH_TOKEN="${GH_TOKEN}" A2A_BEARER_TOKEN="${A2A_BEARER_TOKEN}" ENABLE_SECRET_PERSISTENCE=true \
 ./scripts/deploy.sh project=alpha update_a2a=true force_restart=true
 ```
 
@@ -128,35 +179,35 @@ GH_TOKEN='<gh-token>' A2A_BEARER_TOKEN='<a2a-token>' \
 Gemini (Google):
 
 ```bash
-GH_TOKEN='<gh-token>' A2A_BEARER_TOKEN='<a2a-token>' GOOGLE_GENERATIVE_AI_API_KEY='<google-key>' \
+GH_TOKEN="${GH_TOKEN}" A2A_BEARER_TOKEN="${A2A_BEARER_TOKEN}" GOOGLE_GENERATIVE_AI_API_KEY="${GOOGLE_GENERATIVE_AI_API_KEY}" ENABLE_SECRET_PERSISTENCE=true \
 ./scripts/deploy.sh project=alpha codex_provider_id=google codex_model_id=gemini-3-flash-preview
 ```
 
 OpenAI:
 
 ```bash
-GH_TOKEN='<gh-token>' A2A_BEARER_TOKEN='<a2a-token>' OPENAI_API_KEY='<openai-key>' \
+GH_TOKEN="${GH_TOKEN}" A2A_BEARER_TOKEN="${A2A_BEARER_TOKEN}" OPENAI_API_KEY="${OPENAI_API_KEY}" ENABLE_SECRET_PERSISTENCE=true \
 ./scripts/deploy.sh project=alpha codex_provider_id=openai codex_model_id='<openai-model-id>'
 ```
 
 Anthropic:
 
 ```bash
-GH_TOKEN='<gh-token>' A2A_BEARER_TOKEN='<a2a-token>' ANTHROPIC_API_KEY='<anthropic-key>' \
+GH_TOKEN="${GH_TOKEN}" A2A_BEARER_TOKEN="${A2A_BEARER_TOKEN}" ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY}" ENABLE_SECRET_PERSISTENCE=true \
 ./scripts/deploy.sh project=alpha codex_provider_id=anthropic codex_model_id='<anthropic-model-id>'
 ```
 
 Azure OpenAI:
 
 ```bash
-GH_TOKEN='<gh-token>' A2A_BEARER_TOKEN='<a2a-token>' AZURE_OPENAI_API_KEY='<azure-openai-key>' \
+GH_TOKEN="${GH_TOKEN}" A2A_BEARER_TOKEN="${A2A_BEARER_TOKEN}" AZURE_OPENAI_API_KEY="${AZURE_OPENAI_API_KEY}" ENABLE_SECRET_PERSISTENCE=true \
 ./scripts/deploy.sh project=alpha codex_provider_id=azure codex_model_id='<azure-deployment-or-model-id>'
 ```
 
 OpenRouter:
 
 ```bash
-GH_TOKEN='<gh-token>' A2A_BEARER_TOKEN='<a2a-token>' OPENROUTER_API_KEY='<openrouter-key>' \
+GH_TOKEN="${GH_TOKEN}" A2A_BEARER_TOKEN="${A2A_BEARER_TOKEN}" OPENROUTER_API_KEY="${OPENROUTER_API_KEY}" ENABLE_SECRET_PERSISTENCE=true \
 ./scripts/deploy.sh project=alpha codex_provider_id=openrouter codex_model_id='<openrouter-model-id>'
 ```
 
@@ -171,7 +222,7 @@ Notes:
 This section describes what this repository's deploy scripts currently cover.
 It is not a full Codex provider capability matrix.
 
-| Provider | Secret key persisted by deploy scripts | Example in this doc | Startup key enforcement in `run_codex.sh` |
+| Provider | Secret key persisted by deploy scripts | Example in this doc | Startup key enforcement in `run_opencode.sh` |
 | --- | --- | --- | --- |
 | Google / Gemini | `GOOGLE_GENERATIVE_AI_API_KEY` | Yes | Yes (explicitly required for `provider=google` or `model=*gemini*`) |
 | OpenAI | `OPENAI_API_KEY` | Yes | No explicit provider-specific check |
@@ -208,13 +259,13 @@ Naming rule in the tables below:
 
 | ENV Name | Required | Default | CLI Support | Notes |
 | --- | --- | --- | --- | --- |
-| `GH_TOKEN` | Yes | None | No | Used by Codex and `gh auth login`. |
-| `A2A_BEARER_TOKEN` | Yes | None | No | Written to `a2a.env`. |
-| `GOOGLE_GENERATIVE_AI_API_KEY` | Optional | None | No | Persisted into `codex.secret.env` if provided. |
-| `OPENAI_API_KEY` | Optional | None | No | Persisted into `codex.secret.env` if provided. |
-| `ANTHROPIC_API_KEY` | Optional | None | No | Persisted into `codex.secret.env` if provided. |
-| `AZURE_OPENAI_API_KEY` | Optional | None | No | Persisted into `codex.secret.env` if provided. |
-| `OPENROUTER_API_KEY` | Optional | None | No | Persisted into `codex.secret.env` if provided. |
+| `GH_TOKEN` | Conditionally | None | No | Used by Codex and optional `gh auth login`; persisted only when `ENABLE_SECRET_PERSISTENCE=true`. |
+| `A2A_BEARER_TOKEN` | Conditionally | None | No | Required by A2A runtime; persisted only when `ENABLE_SECRET_PERSISTENCE=true`. |
+| `GOOGLE_GENERATIVE_AI_API_KEY` | Optional | None | No | Persisted into `codex.secret.env` only when `ENABLE_SECRET_PERSISTENCE=true`. |
+| `OPENAI_API_KEY` | Optional | None | No | Persisted into `codex.secret.env` only when `ENABLE_SECRET_PERSISTENCE=true`. |
+| `ANTHROPIC_API_KEY` | Optional | None | No | Persisted into `codex.secret.env` only when `ENABLE_SECRET_PERSISTENCE=true`. |
+| `AZURE_OPENAI_API_KEY` | Optional | None | No | Persisted into `codex.secret.env` only when `ENABLE_SECRET_PERSISTENCE=true`. |
+| `OPENROUTER_API_KEY` | Optional | None | No | Persisted into `codex.secret.env` only when `ENABLE_SECRET_PERSISTENCE=true`. |
 
 #### Non-Secret Input Variables
 
@@ -235,6 +286,7 @@ Naming rule in the tables below:
 | `OPENCODE_TIMEOUT_STREAM` | `codex_timeout_stream` | Optional | None | Codex streaming timeout (seconds). |
 | `GIT_IDENTITY_NAME` | `git_identity_name` | Optional | `Codex-<project>` | Git author/committer name. |
 | `GIT_IDENTITY_EMAIL` | `git_identity_email` | Optional | `<project>@example.com` | Git author/committer email. |
+| `ENABLE_SECRET_PERSISTENCE` | `enable_secret_persistence` | Optional | `false` | Explicitly allow deploy to write root-only secret env files. |
 | `A2A_HOST` | `a2a_host` | Optional | `127.0.0.1` | A2A bind host. |
 | `A2A_PORT` | `a2a_port` | Optional | `8000` | A2A bind port. |
 | `A2A_PUBLIC_URL` | `a2a_public_url` | Optional | `http://<A2A_HOST>:<A2A_PORT>` | Public Agent Card URL. |
@@ -261,12 +313,18 @@ Naming rule in the tables below:
 
 For each project (`/data/codex-a2a/<project>/config/`):
 
-- `codex.env`: Codex-only settings (`GH_TOKEN`, git identity, etc.)
-- `codex.secret.env`: optional sensitive Codex settings
+- `codex.env`: Codex-only non-secret settings (bind host/port, git identity, askpass path, etc.)
+- `codex.auth.env`: root-only runtime secret file for `GH_TOKEN`
+- `codex.secret.env`: optional sensitive Codex provider settings
   (`GOOGLE_GENERATIVE_AI_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `AZURE_OPENAI_API_KEY`, `OPENROUTER_API_KEY`)
-- `a2a.env`: A2A-only settings (`A2A_BEARER_TOKEN`, model options, etc.)
+- `a2a.env`: A2A-only non-secret settings (host/port, logging, model options, etc.)
+- `a2a.secret.env`: root-only runtime secret file for `A2A_BEARER_TOKEN`
+- `*.example`: root-only templates generated by deploy for secret file provisioning
 
-If provider keys are supplied during deploy, they are persisted into `codex.secret.env` (`600`, `root:root`) and loaded by `codex@.service` via `EnvironmentFile`.
+When `ENABLE_SECRET_PERSISTENCE=true`, deploy writes these secret files as
+`600 root:root` and systemd loads them via `EnvironmentFile`. When the flag is
+not enabled, operators are expected to provision the real secret files
+themselves from the generated templates.
 
 ### Token and Key Risk
 
@@ -276,12 +334,16 @@ This architecture does not provide hard guarantees that provider keys are inacce
 
 ### Recommended Secret Input Pattern
 
-Use single-command environment variable injection to avoid long-lived shell exports:
+Use shell prompts or an external secret manager to avoid typing raw secrets into
+shell history.
 
-> Note: if you type secrets directly in a shell command, they may still be recorded by shell history depending on your shell settings and operational practices.
+Recommended capture pattern for the opt-in persistence path:
 
 ```bash
-GH_TOKEN='<gh-token>' A2A_BEARER_TOKEN='<a2a-token>' GOOGLE_GENERATIVE_AI_API_KEY='<google-key>' \
+read -rsp 'GH_TOKEN: ' GH_TOKEN; echo
+read -rsp 'A2A_BEARER_TOKEN: ' A2A_BEARER_TOKEN; echo
+read -rsp 'GOOGLE_GENERATIVE_AI_API_KEY: ' GOOGLE_GENERATIVE_AI_API_KEY; echo
+GH_TOKEN="${GH_TOKEN}" A2A_BEARER_TOKEN="${A2A_BEARER_TOKEN}" GOOGLE_GENERATIVE_AI_API_KEY="${GOOGLE_GENERATIVE_AI_API_KEY}" ENABLE_SECRET_PERSISTENCE=true \
 ./scripts/deploy.sh \
   project=alpha \
   a2a_port=8010 \
@@ -295,7 +357,10 @@ GH_TOKEN='<gh-token>' A2A_BEARER_TOKEN='<a2a-token>' GOOGLE_GENERATIVE_AI_API_KE
 Rotate Gemini key:
 
 ```bash
-GH_TOKEN='<gh-token>' A2A_BEARER_TOKEN='<a2a-token>' GOOGLE_GENERATIVE_AI_API_KEY='<google-key-new>' \
+read -rsp 'GH_TOKEN: ' GH_TOKEN; echo
+read -rsp 'A2A_BEARER_TOKEN: ' A2A_BEARER_TOKEN; echo
+read -rsp 'GOOGLE_GENERATIVE_AI_API_KEY: ' GOOGLE_GENERATIVE_AI_API_KEY; echo
+GH_TOKEN="${GH_TOKEN}" A2A_BEARER_TOKEN="${A2A_BEARER_TOKEN}" GOOGLE_GENERATIVE_AI_API_KEY="${GOOGLE_GENERATIVE_AI_API_KEY}" ENABLE_SECRET_PERSISTENCE=true \
 ./scripts/deploy.sh project=alpha force_restart=true
 ```
 
@@ -310,7 +375,7 @@ sudo systemctl restart codex-a2a@<project>.service
 
 ### Gemini Key Acceptance Checklist
 
-- first deploy: `config/codex.secret.env` exists with `600` and `root:root`
+- first deploy: `config/codex.secret.env` exists with `600` and `root:root` when persistence is enabled
 - service restart: Gemini requests still succeed
 - host reboot: service auto-recovers and Gemini requests still succeed
 - key rotation: new key takes effect after re-running deploy

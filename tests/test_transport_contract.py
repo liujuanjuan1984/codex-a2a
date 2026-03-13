@@ -1,3 +1,5 @@
+import logging
+
 import httpx
 import pytest
 from a2a.types import TransportProtocol
@@ -139,3 +141,208 @@ async def test_subscribe_missing_task_returns_controlled_404(monkeypatch) -> Non
 
     assert response.status_code == 404
     assert response.json() == {"error": "Task not found", "task_id": "task-missing"}
+
+
+def _rest_message_payload() -> dict:
+    return {
+        "message": {
+            "messageId": "m-rest",
+            "role": "ROLE_USER",
+            "content": [{"text": "hello from rest"}],
+        }
+    }
+
+
+def _jsonrpc_message_send_payload(text: str) -> dict:
+    return {
+        "jsonrpc": "2.0",
+        "id": 99,
+        "method": "message/send",
+        "params": {
+            "message": {
+                "messageId": "m-rpc",
+                "role": "user",
+                "parts": [{"kind": "text", "text": text}],
+            }
+        },
+    }
+
+
+@pytest.mark.asyncio
+async def test_log_payloads_keeps_body_for_rest_handler(monkeypatch, caplog) -> None:
+    import codex_a2a_serve.app as app_module
+
+    monkeypatch.setattr(app_module, "OpencodeClient", DummyChatOpencodeClient)
+    app = app_module.create_app(make_settings(a2a_bearer_token="test-token", a2a_log_payloads=True))
+    transport = httpx.ASGITransport(app=app)
+    headers = {"Authorization": "Bearer test-token"}
+
+    with caplog.at_level(logging.DEBUG, logger="codex_a2a_serve.app"):
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.post(
+                "/v1/message:send",
+                headers=headers,
+                json=_rest_message_payload(),
+            )
+
+            assert resp.status_code == 200
+
+    assert any(
+        "A2A request POST /v1/message:send body=" in record.message for record in caplog.records
+    )
+
+
+@pytest.mark.asyncio
+async def test_log_payloads_streaming_response_path(monkeypatch, caplog) -> None:
+    import codex_a2a_serve.app as app_module
+
+    monkeypatch.setattr(app_module, "OpencodeClient", DummyChatOpencodeClient)
+    app = app_module.create_app(make_settings(a2a_bearer_token="test-token", a2a_log_payloads=True))
+    transport = httpx.ASGITransport(app=app)
+    headers = {"Authorization": "Bearer test-token"}
+
+    with caplog.at_level(logging.DEBUG, logger="codex_a2a_serve.app"):
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            async with client.stream(
+                "POST", "/v1/message:stream", headers=headers, json=_rest_message_payload()
+            ) as resp:
+                assert resp.status_code == 200
+                assert "text/event-stream" in resp.headers.get("content-type", "")
+                async for chunk in resp.aiter_bytes():
+                    if chunk:
+                        break
+
+    assert any(
+        "A2A response /v1/message:stream status=200" in record.message
+        or "A2A response /v1/message:stream streaming" in record.message
+        for record in caplog.records
+    )
+
+
+@pytest.mark.asyncio
+async def test_log_payloads_omits_non_json_request_body(monkeypatch, caplog) -> None:
+    import codex_a2a_serve.app as app_module
+
+    monkeypatch.setattr(app_module, "OpencodeClient", DummyChatOpencodeClient)
+    app = app_module.create_app(make_settings(a2a_bearer_token="test-token", a2a_log_payloads=True))
+    transport = httpx.ASGITransport(app=app)
+    headers = {
+        "Authorization": "Bearer test-token",
+        "Content-Type": "application/octet-stream",
+    }
+
+    with caplog.at_level(logging.DEBUG, logger="codex_a2a_serve.app"):
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.post("/", headers=headers, content=b"\x00\x01\x02\x03")
+            assert resp.status_code < 500
+
+    assert any(
+        "body=[omitted non-json content-type=application/octet-stream]" in record.message
+        for record in caplog.records
+    )
+    assert "\\x00\\x01\\x02\\x03" not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_log_payloads_omits_text_plain_request_body(monkeypatch, caplog) -> None:
+    import codex_a2a_serve.app as app_module
+
+    monkeypatch.setattr(app_module, "OpencodeClient", DummyChatOpencodeClient)
+    app = app_module.create_app(make_settings(a2a_bearer_token="test-token", a2a_log_payloads=True))
+    transport = httpx.ASGITransport(app=app)
+    headers = {
+        "Authorization": "Bearer test-token",
+        "Content-Type": "text/plain",
+    }
+    body = (
+        '{"jsonrpc":"2.0","id":1,"method":"message/send","params":{"message":'
+        '{"messageId":"m","role":"user","parts":[{"kind":"text","text":"secret"}]}}}'
+    )
+
+    with caplog.at_level(logging.DEBUG, logger="codex_a2a_serve.app"):
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.post("/", headers=headers, content=body)
+            assert resp.status_code < 500
+
+    assert any(
+        "body=[omitted non-json content-type=text/plain]" in record.message
+        for record in caplog.records
+    )
+    assert "secret" not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_log_payloads_omits_when_content_length_missing(monkeypatch, caplog) -> None:
+    import codex_a2a_serve.app as app_module
+
+    monkeypatch.setattr(app_module, "OpencodeClient", DummyChatOpencodeClient)
+    app = app_module.create_app(
+        make_settings(
+            a2a_bearer_token="test-token",
+            a2a_log_payloads=True,
+            a2a_log_body_limit=64,
+        )
+    )
+    transport = httpx.ASGITransport(app=app)
+    headers = {
+        "Authorization": "Bearer test-token",
+        "Content-Type": "application/json",
+    }
+    body = (
+        b'{"jsonrpc":"2.0","id":1,"method":"message/send","params":{"message":'
+        b'{"messageId":"m","role":"user","parts":[{"kind":"text","text":"missing-cl"}]}}}'
+    )
+
+    async def _body_stream():
+        yield body
+
+    with caplog.at_level(logging.DEBUG, logger="codex_a2a_serve.app"):
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.post(
+                "/",
+                headers=headers,
+                content=_body_stream(),
+            )
+            assert resp.status_code == 200
+
+    assert any(
+        "body=[omitted missing content-length with limit=64]" in record.message
+        for record in caplog.records
+    )
+    assert any(
+        "body=[omitted request_missing content-length with limit=64]" in record.message
+        for record in caplog.records
+    )
+    assert "missing-cl" not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_log_payloads_omits_oversized_request_body(monkeypatch, caplog) -> None:
+    import codex_a2a_serve.app as app_module
+
+    monkeypatch.setattr(app_module, "OpencodeClient", DummyChatOpencodeClient)
+    app = app_module.create_app(
+        make_settings(
+            a2a_bearer_token="test-token",
+            a2a_log_payloads=True,
+            a2a_log_body_limit=64,
+        )
+    )
+    transport = httpx.ASGITransport(app=app)
+    headers = {"Authorization": "Bearer test-token"}
+    oversized_text = "x" * 512
+
+    with caplog.at_level(logging.DEBUG, logger="codex_a2a_serve.app"):
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.post(
+                "/",
+                headers=headers,
+                json=_jsonrpc_message_send_payload(oversized_text),
+            )
+            assert resp.status_code == 200
+
+    assert any(
+        "body=[omitted content-length=" in record.message and "exceeds limit=64" in record.message
+        for record in caplog.records
+    )
+    assert oversized_text not in caplog.text
