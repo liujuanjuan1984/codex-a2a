@@ -321,9 +321,7 @@ async def consume_codex_stream(
             session_id,
             chunk.block_type,
             effective_append,
-            chunk.part.text
-            if isinstance(chunk.part, TextPart)
-            else chunk.part.data,
+            chunk.part.text if isinstance(chunk.part, TextPart) else chunk.part.data,
         )
 
     def seconds_until_buffer_flush() -> float | None:

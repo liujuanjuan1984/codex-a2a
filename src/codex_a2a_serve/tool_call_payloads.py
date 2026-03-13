@@ -130,7 +130,9 @@ def _normalize_state_payload(payload: Mapping[str, Any]) -> ToolCallStatePayload
     return normalized
 
 
-def _normalize_output_delta_payload(payload: Mapping[str, Any]) -> ToolCallOutputDeltaPayload | None:
+def _normalize_output_delta_payload(
+    payload: Mapping[str, Any],
+) -> ToolCallOutputDeltaPayload | None:
     output_delta = payload.get("output_delta")
     if not isinstance(output_delta, str) or output_delta == "":
         return None

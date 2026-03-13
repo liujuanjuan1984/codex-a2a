@@ -483,7 +483,7 @@ Application-level safeguards:
   structured state fields such as `tool`, `call_id`, `status`, `input`,
   `output`, and `error`, while `kind=output_delta` carries raw tool text in
   `output_delta` and may also include `source_method`, `tool`, `call_id`, and
-  `status`
+  `status`; legacy stringified JSON tool payloads are rejected
 - interrupt lifecycle is explicit in `metadata.shared.interrupt`:
   asked events use `phase=asked`, resolved events use `phase=resolved`, and
   resolved events may include `resolution=replied|rejected`

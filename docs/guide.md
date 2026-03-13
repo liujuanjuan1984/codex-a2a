@@ -113,7 +113,9 @@ Compatibility note:
   `kind=state` carries fields such as `tool`, `call_id`, `status`, `input`,
   `output`, and `error`; `kind=output_delta` carries the raw text increment in
   `output_delta` and may also include `source_method`, `tool`, `call_id`, and
-  `status`. To avoid character-level event floods, the
+  `status`. Legacy stringified JSON tool payloads are rejected; the stream
+  contract only accepts structured `DataPart(data={...})` payloads. To avoid
+  character-level event floods, the
   service performs light server-side aggregation before emitting `text` and
   `reasoning` updates: `text` flushes at `120 chars or 200ms`, `reasoning`
   flushes at `240 chars or 350ms`, and both flush immediately on block
@@ -132,6 +134,22 @@ Compatibility note:
   resolved events are suppressed by `request_id`. Provider-private raw
   interrupt payload is preserved under `metadata.codex.interrupt`.
   Non-streaming requests return a `Task` directly.
+- `tool_call` payload contract:
+
+| `kind` | Required fields | Optional fields | Notes |
+| --- | --- | --- | --- |
+| `state` | `kind` | `source_method`, `call_id`, `tool`, `status`, `title`, `subtitle`, `input`, `output`, `error` | Used for structured tool state snapshots. A payload that contains only `kind=state` is invalid and is suppressed. |
+| `output_delta` | `kind`, `output_delta` | `source_method`, `call_id`, `tool`, `status` | Used for raw tool output text increments. `output_delta` is preserved verbatim and may contain spaces or trailing newlines. |
+
+  Examples:
+
+  ```json
+  {"kind":"state","tool":"bash","call_id":"call-1","status":"running"}
+  ```
+
+  ```json
+  {"kind":"output_delta","source_method":"commandExecution","tool":"bash","call_id":"call-1","status":"running","output_delta":"Passed\n"}
+  ```
 - Non-streaming `message:send` responses may include normalized token usage at
   `Task.metadata.shared.usage` with the same field schema.
 - Requests require `Authorization: Bearer <token>`; otherwise `401` is
