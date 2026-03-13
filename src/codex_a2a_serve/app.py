@@ -346,7 +346,10 @@ def create_app(settings: Settings) -> FastAPI:
         session_claim=executor.claim_session,
         session_claim_finalize=executor.finalize_session_claim,
         session_claim_release=executor.release_session_claim,
+        session_owner_matcher=executor.session_owner_matches,
     ).build(title=settings.a2a_title, version=settings.a2a_version, lifespan=lifespan)
+    app.state.codex_client = client
+    app.state.codex_executor = executor
 
     rest_adapter = RESTAdapter(
         agent_card=agent_card,

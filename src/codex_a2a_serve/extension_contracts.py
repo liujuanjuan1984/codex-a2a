@@ -178,15 +178,25 @@ INTERRUPT_CALLBACK_METHODS: dict[str, str] = {
 INTERRUPT_SUCCESS_RESULT_FIELDS: tuple[str, ...] = ("ok", "request_id")
 INTERRUPT_ERROR_BUSINESS_CODES: dict[str, int] = {
     "INTERRUPT_REQUEST_NOT_FOUND": -32004,
+    "INTERRUPT_REQUEST_EXPIRED": -32007,
+    "INTERRUPT_TYPE_MISMATCH": -32008,
     "UPSTREAM_UNREACHABLE": -32002,
     "UPSTREAM_HTTP_ERROR": -32003,
 }
 INTERRUPT_ERROR_TYPES: tuple[str, ...] = (
     "INTERRUPT_REQUEST_NOT_FOUND",
+    "INTERRUPT_REQUEST_EXPIRED",
+    "INTERRUPT_TYPE_MISMATCH",
     "UPSTREAM_UNREACHABLE",
     "UPSTREAM_HTTP_ERROR",
 )
-INTERRUPT_ERROR_DATA_FIELDS: tuple[str, ...] = ("type", "request_id", "upstream_status")
+INTERRUPT_ERROR_DATA_FIELDS: tuple[str, ...] = (
+    "type",
+    "request_id",
+    "expected_interrupt_type",
+    "actual_interrupt_type",
+    "upstream_status",
+)
 INTERRUPT_INVALID_PARAMS_DATA_FIELDS: tuple[str, ...] = (
     "type",
     "field",
@@ -260,6 +270,8 @@ def build_streaming_extension_params() -> dict[str, Any]:
         "interrupt_fields": {
             "request_id": f"{SHARED_INTERRUPT_METADATA_FIELD}.request_id",
             "type": f"{SHARED_INTERRUPT_METADATA_FIELD}.type",
+            "phase": f"{SHARED_INTERRUPT_METADATA_FIELD}.phase",
+            "resolution": f"{SHARED_INTERRUPT_METADATA_FIELD}.resolution",
             "details": f"{SHARED_INTERRUPT_METADATA_FIELD}.details",
         },
         "usage_fields": {

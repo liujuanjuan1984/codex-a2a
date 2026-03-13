@@ -23,7 +23,7 @@ from fastapi.responses import JSONResponse
 from starlette.requests import Request
 from starlette.responses import Response
 
-from .codex_client import OpencodeClient
+from .codex_client import InterruptRequestBinding, InterruptRequestError, OpencodeClient
 from .extension_contracts import (
     COMMAND_ALLOWED_FIELDS,
     PROMPT_ASYNC_ALLOWED_FIELDS,
@@ -39,6 +39,8 @@ ERR_UPSTREAM_UNREACHABLE = -32002
 ERR_UPSTREAM_HTTP_ERROR = -32003
 ERR_INTERRUPT_NOT_FOUND = -32004
 ERR_UPSTREAM_PAYLOAD_ERROR = -32005
+ERR_INTERRUPT_EXPIRED = -32007
+ERR_INTERRUPT_TYPE_MISMATCH = -32008
 
 
 def _normalize_permission_reply(value: Any) -> str:
@@ -88,6 +90,12 @@ def _parse_positive_int(value: Any, *, field: str) -> int | None:
     if parsed < 1:
         raise ValueError(f"{field} must be >= 1")
     return parsed
+
+
+def _interrupt_expected_type(method: str, *, permission_method: str) -> str:
+    if method == permission_method:
+        return "permission"
+    return "question"
 
 
 class _ControlValidationError(ValueError):
@@ -283,6 +291,7 @@ class OpencodeSessionQueryJSONRPCApplication(A2AFastAPIApplication):
         session_claim=None,
         session_claim_finalize=None,
         session_claim_release=None,
+        session_owner_matcher=None,
         **kwargs: Any,
     ):
         super().__init__(*args, **kwargs)
@@ -299,6 +308,7 @@ class OpencodeSessionQueryJSONRPCApplication(A2AFastAPIApplication):
         self._session_claim = session_claim
         self._session_claim_finalize = session_claim_finalize
         self._session_claim_release = session_claim_release
+        self._session_owner_matcher = session_owner_matcher
 
     async def _handle_requests(self, request: Request) -> Response:
         # Fast path: sniff method first then either handle here or delegate.
@@ -352,7 +362,7 @@ class OpencodeSessionQueryJSONRPCApplication(A2AFastAPIApplication):
             return await self._handle_session_query_request(base_request, params)
         if base_request.method in session_control_methods:
             return await self._handle_session_control_request(base_request, params, request=request)
-        return await self._handle_interrupt_callback_request(base_request, params)
+        return await self._handle_interrupt_callback_request(base_request, params, request=request)
 
     async def _handle_session_query_request(
         self,
@@ -799,6 +809,8 @@ class OpencodeSessionQueryJSONRPCApplication(A2AFastAPIApplication):
         self,
         base_request: JSONRPCRequest,
         params: dict[str, Any],
+        *,
+        request: Request,
     ) -> Response:
         request_id = params.get("request_id")
         if not isinstance(request_id, str) or not request_id.strip():
@@ -836,6 +848,52 @@ class OpencodeSessionQueryJSONRPCApplication(A2AFastAPIApplication):
                 ),
             )
 
+        expected_interrupt_type = _interrupt_expected_type(
+            base_request.method,
+            permission_method=self._method_reply_permission,
+        )
+        interrupt_status, binding = self._codex_client.resolve_interrupt_request(request_id)
+        if interrupt_status == "missing":
+            return self._interrupt_error_response(
+                base_request.id,
+                code=ERR_INTERRUPT_NOT_FOUND,
+                message="Interrupt request not found",
+                data={
+                    "type": "INTERRUPT_REQUEST_NOT_FOUND",
+                    "request_id": request_id,
+                },
+            )
+        if interrupt_status == "expired":
+            return self._interrupt_error_response(
+                base_request.id,
+                code=ERR_INTERRUPT_EXPIRED,
+                message="Interrupt request expired",
+                data={
+                    "type": "INTERRUPT_REQUEST_EXPIRED",
+                    "request_id": request_id,
+                },
+            )
+        if binding is not None and binding.interrupt_type != expected_interrupt_type:
+            return self._interrupt_error_response(
+                base_request.id,
+                code=ERR_INTERRUPT_TYPE_MISMATCH,
+                message="Interrupt callback type mismatch",
+                data={
+                    "type": "INTERRUPT_TYPE_MISMATCH",
+                    "request_id": request_id,
+                    "expected_interrupt_type": expected_interrupt_type,
+                    "actual_interrupt_type": binding.interrupt_type,
+                },
+            )
+        owner_error = await self._validate_interrupt_owner(
+            request=request,
+            binding=binding,
+            request_id=request_id,
+            response_id=base_request.id,
+        )
+        if owner_error is not None:
+            return owner_error
+
         try:
             if base_request.method == self._method_reply_permission:
                 reply = _normalize_permission_reply(params.get("reply"))
@@ -871,6 +929,9 @@ class OpencodeSessionQueryJSONRPCApplication(A2AFastAPIApplication):
                     "ok": True,
                     "request_id": request_id,
                 }
+            self._codex_client.discard_interrupt_request(request_id)
+        except InterruptRequestError as exc:
+            return self._interrupt_error_from_exception(base_request.id, exc)
         except ValueError as exc:
             return self._generate_error_response(
                 base_request.id,
@@ -884,16 +945,15 @@ class OpencodeSessionQueryJSONRPCApplication(A2AFastAPIApplication):
         except httpx.HTTPStatusError as exc:
             upstream_status = exc.response.status_code
             if upstream_status == 404:
-                return self._generate_error_response(
+                self._codex_client.discard_interrupt_request(request_id)
+                return self._interrupt_error_response(
                     base_request.id,
-                    JSONRPCError(
-                        code=ERR_INTERRUPT_NOT_FOUND,
-                        message="Interrupt request not found",
-                        data={
-                            "type": "INTERRUPT_REQUEST_NOT_FOUND",
-                            "request_id": request_id,
-                        },
-                    ),
+                    code=ERR_INTERRUPT_NOT_FOUND,
+                    message="Interrupt request not found",
+                    data={
+                        "type": "INTERRUPT_REQUEST_NOT_FOUND",
+                        "request_id": request_id,
+                    },
                 )
             return self._generate_error_response(
                 base_request.id,
@@ -926,6 +986,89 @@ class OpencodeSessionQueryJSONRPCApplication(A2AFastAPIApplication):
         if base_request.id is None:
             return Response(status_code=204)
         return self._jsonrpc_success_response(base_request.id, result)
+
+    async def _validate_interrupt_owner(
+        self,
+        *,
+        request: Request,
+        binding: InterruptRequestBinding | None,
+        request_id: str,
+        response_id: str | int | None,
+    ) -> Response | None:
+        identity = getattr(request.state, "user_identity", None)
+        if not isinstance(identity, str) or not identity.strip():
+            return None
+        if binding is None or not binding.session_id or self._session_owner_matcher is None:
+            return None
+        matches = await self._session_owner_matcher(
+            identity=identity.strip(),
+            session_id=binding.session_id,
+        )
+        if matches is False:
+            return self._interrupt_error_response(
+                response_id,
+                code=ERR_INTERRUPT_NOT_FOUND,
+                message="Interrupt request not found",
+                data={
+                    "type": "INTERRUPT_REQUEST_NOT_FOUND",
+                    "request_id": request_id,
+                },
+            )
+        return None
+
+    def _interrupt_error_from_exception(
+        self,
+        request_id: str | int | None,
+        exc: InterruptRequestError,
+    ) -> JSONResponse:
+        if exc.error_type == "INTERRUPT_REQUEST_EXPIRED":
+            return self._interrupt_error_response(
+                request_id,
+                code=ERR_INTERRUPT_EXPIRED,
+                message="Interrupt request expired",
+                data={
+                    "type": exc.error_type,
+                    "request_id": exc.request_id,
+                },
+            )
+        if exc.error_type == "INTERRUPT_TYPE_MISMATCH":
+            return self._interrupt_error_response(
+                request_id,
+                code=ERR_INTERRUPT_TYPE_MISMATCH,
+                message="Interrupt callback type mismatch",
+                data={
+                    "type": exc.error_type,
+                    "request_id": exc.request_id,
+                    "expected_interrupt_type": exc.expected_interrupt_type,
+                    "actual_interrupt_type": exc.actual_interrupt_type,
+                },
+            )
+        return self._interrupt_error_response(
+            request_id,
+            code=ERR_INTERRUPT_NOT_FOUND,
+            message="Interrupt request not found",
+            data={
+                "type": "INTERRUPT_REQUEST_NOT_FOUND",
+                "request_id": exc.request_id,
+            },
+        )
+
+    def _interrupt_error_response(
+        self,
+        request_id: str | int | None,
+        *,
+        code: int,
+        message: str,
+        data: dict[str, Any],
+    ) -> JSONResponse:
+        return self._generate_error_response(
+            request_id,
+            JSONRPCError(
+                code=code,
+                message=message,
+                data=data,
+            ),
+        )
 
     def _jsonrpc_success_response(self, request_id: str | int, result: Any) -> JSONResponse:
         return JSONResponse(

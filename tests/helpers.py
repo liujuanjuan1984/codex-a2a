@@ -7,7 +7,7 @@ from a2a.server.agent_execution import RequestContext
 from a2a.server.context import ServerCallContext
 from a2a.types import Message, MessageSendParams, Role, TextPart
 
-from codex_a2a_serve.codex_client import OpencodeMessage
+from codex_a2a_serve.codex_client import InterruptRequestBinding, OpencodeMessage
 from codex_a2a_serve.config import Settings
 
 
@@ -165,6 +165,10 @@ class DummySessionQueryOpencodeClient:
         self.last_prompt_async: dict[str, Any] | None = None
         self.last_command: dict[str, Any] | None = None
         self.last_shell: dict[str, Any] | None = None
+        self.permission_reply_calls: list[dict[str, Any]] = []
+        self.question_reply_calls: list[dict[str, Any]] = []
+        self.question_reject_calls: list[dict[str, Any]] = []
+        self._interrupt_requests: dict[str, InterruptRequestBinding] = {}
 
     async def close(self) -> None:
         return None
@@ -237,7 +241,14 @@ class DummySessionQueryOpencodeClient:
         message: str | None = None,
         directory: str | None = None,
     ) -> bool:
-        del request_id, reply, message, directory
+        self.permission_reply_calls.append(
+            {
+                "request_id": request_id,
+                "reply": reply,
+                "message": message,
+                "directory": directory,
+            }
+        )
         return True
 
     async def question_reply(
@@ -247,7 +258,9 @@ class DummySessionQueryOpencodeClient:
         answers: list[list[str]],
         directory: str | None = None,
     ) -> bool:
-        del request_id, answers, directory
+        self.question_reply_calls.append(
+            {"request_id": request_id, "answers": answers, "directory": directory}
+        )
         return True
 
     async def question_reject(
@@ -256,5 +269,44 @@ class DummySessionQueryOpencodeClient:
         *,
         directory: str | None = None,
     ) -> bool:
-        del request_id, directory
+        self.question_reject_calls.append({"request_id": request_id, "directory": directory})
         return True
+
+    def prime_interrupt_request(
+        self,
+        request_id: str,
+        *,
+        interrupt_type: str,
+        session_id: str = "ses-1",
+        created_at: float = 0.0,
+        provider_method: str | None = None,
+    ) -> None:
+        resolved_method = provider_method
+        if resolved_method is None:
+            resolved_method = (
+                "item/tool/requestUserInput"
+                if interrupt_type == "question"
+                else "item/commandExecution/requestApproval"
+            )
+        self._interrupt_requests[request_id] = InterruptRequestBinding(
+            request_id=request_id,
+            interrupt_type=interrupt_type,
+            session_id=session_id,
+            created_at=created_at,
+            provider_method=resolved_method,
+        )
+
+    def resolve_interrupt_request(
+        self,
+        request_id: str,
+    ) -> tuple[str, InterruptRequestBinding | None]:
+        binding = self._interrupt_requests.get(request_id)
+        if binding is None:
+            return "missing", None
+        if binding.created_at == 0.0:
+            return "active", binding
+        self._interrupt_requests.pop(request_id, None)
+        return "expired", binding
+
+    def discard_interrupt_request(self, request_id: str) -> None:
+        self._interrupt_requests.pop(request_id, None)

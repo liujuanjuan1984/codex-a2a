@@ -18,6 +18,7 @@ from a2a.server.agent_execution import AgentExecutor, RequestContext
 from a2a.server.events.event_queue import EventQueue
 from a2a.types import (
     Artifact,
+    DataPart,
     Message,
     Role,
     Task,
@@ -45,7 +46,8 @@ class BlockType(str, Enum):
 
 @dataclass(frozen=True)
 class _NormalizedStreamChunk:
-    text: str
+    part: TextPart | DataPart
+    content_key: str
     append: bool
     block_type: BlockType
     source: str
@@ -101,10 +103,10 @@ class _StreamOutputState:
         return bool(user_text) and text.strip() == user_text
 
     def register_chunk(
-        self, *, block_type: BlockType, text: str, append: bool
+        self, *, block_type: BlockType, content_key: str, append: bool
     ) -> tuple[bool, bool]:
         previous = self.content_buffers.get(block_type, "")
-        next_value = f"{previous}{text}" if append else text
+        next_value = f"{previous}{content_key}" if append else content_key
         if next_value == previous:
             return False, False
         self.content_buffers[block_type] = next_value
@@ -150,8 +152,12 @@ class _StreamOutputState:
         self.pending_interrupt_request_ids.add(normalized)
         return True
 
-    def clear_interrupt_pending(self, request_id: str) -> None:
-        self.pending_interrupt_request_ids.discard(request_id.strip())
+    def clear_interrupt_pending(self, request_id: str) -> bool:
+        normalized = request_id.strip()
+        if not normalized or normalized not in self.pending_interrupt_request_ids:
+            return False
+        self.pending_interrupt_request_ids.discard(normalized)
+        return True
 
 
 class _TTLCache:
@@ -447,7 +453,7 @@ class OpencodeAgentExecutor(AgentExecutor):
                         task_id=task_id,
                         context_id=context_id,
                         artifact_id=stream_artifact_id,
-                        text=response_text,
+                        part=TextPart(text=response_text),
                         append=stream_state.emitted_stream_chunk,
                         last_chunk=True,
                         artifact_metadata=_build_stream_artifact_metadata(
@@ -718,6 +724,16 @@ class OpencodeAgentExecutor(AgentExecutor):
     async def release_session_claim(self, *, identity: str, session_id: str) -> None:
         await self._release_preferred_session_claim(identity=identity, session_id=session_id)
 
+    async def session_owner_matches(self, *, identity: str, session_id: str) -> bool | None:
+        async with self._lock:
+            owner = self._session_owners.get(session_id)
+            if owner:
+                return owner == identity
+            pending_owner = self._pending_session_claims.get(session_id)
+            if pending_owner:
+                return pending_owner == identity
+        return None
+
     def resolve_directory(self, requested: str | None) -> str | None:
         return self._resolve_and_validate_directory(requested)
 
@@ -751,7 +767,7 @@ class OpencodeAgentExecutor(AgentExecutor):
                 task_id=task_id,
                 context_id=context_id,
                 artifact_id=f"{task_id}:error",
-                text=message,
+                part=TextPart(text=message),
                 append=False,
                 last_chunk=True,
             )
@@ -806,15 +822,16 @@ class OpencodeAgentExecutor(AgentExecutor):
                 if not stream_state.matches_expected_message(chunk.message_id):
                     continue
                 resolved_message_id = stream_state.resolve_message_id(chunk.message_id)
-                if stream_state.should_drop_initial_user_echo(
-                    chunk.text,
-                    block_type=chunk.block_type,
-                    role=chunk.role,
-                ):
-                    continue
+                if isinstance(chunk.part, TextPart):
+                    if stream_state.should_drop_initial_user_echo(
+                        chunk.part.text,
+                        block_type=chunk.block_type,
+                        role=chunk.role,
+                    ):
+                        continue
                 should_emit, effective_append = stream_state.register_chunk(
                     block_type=chunk.block_type,
-                    text=chunk.text,
+                    content_key=chunk.content_key,
                     append=chunk.append,
                 )
                 if not should_emit:
@@ -825,7 +842,7 @@ class OpencodeAgentExecutor(AgentExecutor):
                     task_id=task_id,
                     context_id=context_id,
                     artifact_id=artifact_id,
-                    text=chunk.text,
+                    part=chunk.part,
                     append=effective_append,
                     last_chunk=False,
                     artifact_metadata=_build_stream_artifact_metadata(
@@ -843,7 +860,11 @@ class OpencodeAgentExecutor(AgentExecutor):
                     session_id,
                     chunk.block_type,
                     effective_append,
-                    chunk.text,
+                    (
+                        chunk.part.text
+                        if isinstance(chunk.part, TextPart)
+                        else _serialize_tool_payload(chunk.part.data)
+                    ),
                 )
 
         async def _emit_interrupt_status(
@@ -852,9 +873,19 @@ class OpencodeAgentExecutor(AgentExecutor):
             request_id: str,
             interrupt_type: str,
             details: Mapping[str, Any],
+            phase: str,
+            resolution: str | None = None,
             codex_private: Mapping[str, Any] | None = None,
         ) -> None:
             sequence = stream_state.next_sequence()
+            interrupt_payload: dict[str, Any] = {
+                "request_id": request_id,
+                "type": interrupt_type,
+                "phase": phase,
+                "details": dict(details),
+            }
+            if resolution is not None:
+                interrupt_payload["resolution"] = resolution
             await event_queue.enqueue_event(
                 TaskStatusUpdateEvent(
                     task_id=task_id,
@@ -869,11 +900,7 @@ class OpencodeAgentExecutor(AgentExecutor):
                             "source": "interrupt",
                             "sequence": sequence,
                         },
-                        interrupt={
-                            "request_id": request_id,
-                            "type": interrupt_type,
-                            "details": dict(details),
-                        },
+                        interrupt=interrupt_payload,
                         codex_private=(
                             {"interrupt": dict(codex_private)} if codex_private else None
                         ),
@@ -883,7 +910,8 @@ class OpencodeAgentExecutor(AgentExecutor):
 
         def _new_chunk(
             *,
-            text: str,
+            part: TextPart | DataPart,
+            content_key: str,
             append: bool,
             block_type: BlockType,
             source: str,
@@ -891,7 +919,8 @@ class OpencodeAgentExecutor(AgentExecutor):
             role: str | None,
         ) -> _NormalizedStreamChunk:
             return _NormalizedStreamChunk(
-                text=text,
+                part=part,
+                content_key=content_key,
                 append=append,
                 block_type=block_type,
                 source=source,
@@ -941,7 +970,8 @@ class OpencodeAgentExecutor(AgentExecutor):
             state.saw_delta = True
             return [
                 _new_chunk(
-                    text=delta_text,
+                    part=TextPart(text=delta_text),
+                    content_key=delta_text,
                     append=True,
                     block_type=state.block_type,
                     source=source,
@@ -969,7 +999,8 @@ class OpencodeAgentExecutor(AgentExecutor):
                     return []
                 return [
                     _new_chunk(
-                        text=delta_text,
+                        part=TextPart(text=delta_text),
+                        content_key=delta_text,
                         append=True,
                         block_type=state.block_type,
                         source="part_text_diff",
@@ -995,22 +1026,60 @@ class OpencodeAgentExecutor(AgentExecutor):
             part: Mapping[str, Any],
             message_id: str | None,
         ) -> list[_NormalizedStreamChunk]:
-            tool_chunk = _serialize_tool_part(part)
-            if not tool_chunk:
+            payload = _extract_tool_part_payload(part)
+            if payload is None:
                 return []
+            tool_chunk = _serialize_tool_payload(payload)
             if message_id:
                 state.message_id = message_id
             previous = state.buffer
             if tool_chunk == previous:
                 return []
             state.buffer = tool_chunk
-            text = tool_chunk if not previous else f"\n{tool_chunk}"
+            content_key = tool_chunk if not previous else f"\n{tool_chunk}"
             return [
                 _new_chunk(
-                    text=text,
+                    part=DataPart(data=payload),
+                    content_key=content_key,
                     append=bool(previous),
                     block_type=state.block_type,
                     source="tool_part_update",
+                    message_id=state.message_id,
+                    role=state.role,
+                )
+            ]
+
+        def _tool_delta_chunks(
+            *,
+            state: _StreamPartState,
+            delta_text: str,
+            message_id: str | None,
+            source: str,
+        ) -> list[_NormalizedStreamChunk]:
+            payload = _parse_tool_payload(delta_text)
+            if payload is None:
+                logger.warning(
+                    "Suppressing invalid tool_call delta task_id=%s session_id=%s delta=%s",
+                    task_id,
+                    session_id,
+                    delta_text,
+                )
+                return []
+            tool_chunk = _serialize_tool_payload(payload)
+            if message_id:
+                state.message_id = message_id
+            previous = state.buffer
+            if tool_chunk == previous:
+                return []
+            state.buffer = tool_chunk
+            content_key = tool_chunk if not previous else f"\n{tool_chunk}"
+            return [
+                _new_chunk(
+                    part=DataPart(data=payload),
+                    content_key=content_key,
+                    append=bool(previous),
+                    block_type=state.block_type,
+                    source=source,
                     message_id=state.message_id,
                     role=state.role,
                 )
@@ -1044,11 +1113,20 @@ class OpencodeAgentExecutor(AgentExecutor):
                                         request_id=request_id,
                                         interrupt_type=asked["interrupt_type"],
                                         details=asked["details"],
+                                        phase="asked",
                                         codex_private=asked.get("codex_private"),
                                     )
                             resolved = _extract_interrupt_resolved_event(event)
                             if resolved is not None:
-                                stream_state.clear_interrupt_pending(resolved["request_id"])
+                                if stream_state.clear_interrupt_pending(resolved["request_id"]):
+                                    await _emit_interrupt_status(
+                                        state=TaskState.working,
+                                        request_id=resolved["request_id"],
+                                        interrupt_type=resolved["interrupt_type"],
+                                        details={},
+                                        phase="resolved",
+                                        resolution=resolved["resolution"],
+                                    )
                         if event_type not in {"message.part.updated", "message.part.delta"}:
                             continue
                         part = props.get("part")
@@ -1078,12 +1156,20 @@ class OpencodeAgentExecutor(AgentExecutor):
                                 continue
                             if state.role in {"user", "system"}:
                                 continue
-                            chunks = _delta_chunks(
-                                state=state,
-                                delta_text=delta,
-                                message_id=message_id,
-                                source="delta_event",
-                            )
+                            if state.block_type == BlockType.TOOL_CALL:
+                                chunks = _tool_delta_chunks(
+                                    state=state,
+                                    delta_text=delta,
+                                    message_id=message_id,
+                                    source="delta_event",
+                                )
+                            else:
+                                chunks = _delta_chunks(
+                                    state=state,
+                                    delta_text=delta,
+                                    message_id=message_id,
+                                    source="delta_event",
+                                )
                             if chunks:
                                 await _emit_chunks(chunks)
                             continue
@@ -1108,25 +1194,45 @@ class OpencodeAgentExecutor(AgentExecutor):
                         for buffered in pending:
                             if buffered.field != "text":
                                 continue
-                            chunks.extend(
-                                _delta_chunks(
-                                    state=state,
-                                    delta_text=buffered.delta,
-                                    message_id=buffered.message_id,
-                                    source="delta_event_buffered",
+                            if state.block_type == BlockType.TOOL_CALL:
+                                chunks.extend(
+                                    _tool_delta_chunks(
+                                        state=state,
+                                        delta_text=buffered.delta,
+                                        message_id=buffered.message_id,
+                                        source="delta_event_buffered",
+                                    )
                                 )
-                            )
+                            else:
+                                chunks.extend(
+                                    _delta_chunks(
+                                        state=state,
+                                        delta_text=buffered.delta,
+                                        message_id=buffered.message_id,
+                                        source="delta_event_buffered",
+                                    )
+                                )
 
                         delta = props.get("delta")
                         if isinstance(delta, str) and delta:
-                            chunks.extend(
-                                _delta_chunks(
-                                    state=state,
-                                    delta_text=delta,
-                                    message_id=message_id,
-                                    source="delta",
+                            if state.block_type == BlockType.TOOL_CALL:
+                                chunks.extend(
+                                    _tool_delta_chunks(
+                                        state=state,
+                                        delta_text=delta,
+                                        message_id=message_id,
+                                        source="delta",
+                                    )
                                 )
-                            )
+                            else:
+                                chunks.extend(
+                                    _delta_chunks(
+                                        state=state,
+                                        delta_text=delta,
+                                        message_id=message_id,
+                                        source="delta",
+                                    )
+                                )
                         elif state.block_type == BlockType.TOOL_CALL:
                             chunks.extend(
                                 _tool_chunks(
@@ -1181,7 +1287,7 @@ async def _enqueue_artifact_update(
     task_id: str,
     context_id: str,
     artifact_id: str,
-    text: str,
+    part: TextPart | DataPart,
     append: bool | None,
     last_chunk: bool | None,
     artifact_metadata: Mapping[str, Any] | None = None,
@@ -1190,7 +1296,7 @@ async def _enqueue_artifact_update(
     normalized_last_chunk = True if last_chunk is True else None
     artifact = Artifact(
         artifact_id=artifact_id,
-        parts=[TextPart(text=text)],
+        parts=[part],
         metadata=dict(artifact_metadata) if artifact_metadata else None,
     )
     await event_queue.enqueue_event(
@@ -1527,7 +1633,26 @@ def _extract_interrupt_resolved_event(event: Mapping[str, Any]) -> dict[str, str
     request_id = _extract_interrupt_resolved_request_id(props)
     if not request_id:
         return None
-    return {"request_id": request_id, "event_type": event_type}
+    if event_type == "permission.replied":
+        return {
+            "request_id": request_id,
+            "event_type": event_type,
+            "interrupt_type": "permission",
+            "resolution": "replied",
+        }
+    if event_type == "question.rejected":
+        return {
+            "request_id": request_id,
+            "event_type": event_type,
+            "interrupt_type": "question",
+            "resolution": "rejected",
+        }
+    return {
+        "request_id": request_id,
+        "event_type": event_type,
+        "interrupt_type": "question",
+        "resolution": "replied",
+    }
 
 
 def _extract_stream_message_id(part: Mapping[str, Any], props: Mapping[str, Any]) -> str | None:
@@ -1633,7 +1758,11 @@ def _classify_stream_block_type(
     return None
 
 
-def _serialize_tool_part(part: Mapping[str, Any]) -> str | None:
+def _serialize_tool_payload(payload: Mapping[str, Any]) -> str:
+    return json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+
+
+def _extract_tool_part_payload(part: Mapping[str, Any]) -> dict[str, Any] | None:
     payload: dict[str, Any] = {}
     for source_key in ("callID", "callId", "call_id"):
         value = part.get(source_key)
@@ -1662,7 +1791,17 @@ def _serialize_tool_part(part: Mapping[str, Any]) -> str | None:
                 payload[key] = value
     if not payload:
         return None
-    return json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return payload
+
+
+def _parse_tool_payload(raw: str) -> dict[str, Any] | None:
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(payload, Mapping):
+        return None
+    return dict(payload)
 
 
 def _build_history(context: RequestContext) -> list[Message]:

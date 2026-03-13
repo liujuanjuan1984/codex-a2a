@@ -7,6 +7,7 @@ import logging
 import os
 import shlex
 import shutil
+import time
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from typing import Any
@@ -20,6 +21,7 @@ _DEFAULT_CLIENT_NAME = "codex_a2a_serve"
 _DEFAULT_CLIENT_TITLE = "Codex A2A Serve"
 _DEFAULT_CLIENT_VERSION = "0.1.0"
 _EVENT_QUEUE_MAXSIZE = 2048
+_INTERRUPT_REQUEST_TTL_SECONDS = 3600
 
 
 @dataclass(frozen=True)
@@ -37,10 +39,35 @@ class CodexRPCError(RuntimeError):
         self.data = data
 
 
+class InterruptRequestError(RuntimeError):
+    def __init__(
+        self,
+        *,
+        error_type: str,
+        request_id: str,
+        expected_interrupt_type: str | None = None,
+        actual_interrupt_type: str | None = None,
+    ) -> None:
+        super().__init__(error_type)
+        self.error_type = error_type
+        self.request_id = request_id
+        self.expected_interrupt_type = expected_interrupt_type
+        self.actual_interrupt_type = actual_interrupt_type
+
+
+@dataclass(frozen=True)
+class InterruptRequestBinding:
+    request_id: str
+    interrupt_type: str
+    session_id: str
+    created_at: float
+    provider_method: str
+
+
 @dataclass
-class _PendingServerRequest:
-    method: str
-    request_id: str | int
+class _PendingInterruptRequest:
+    binding: InterruptRequestBinding
+    rpc_request_id: str | int
     params: dict[str, Any]
 
 
@@ -85,7 +112,7 @@ class OpencodeClient:
         self._initialized = False
         self._next_request_id = 1
         self._pending_requests: dict[str, asyncio.Future[Any]] = {}
-        self._pending_server_requests: dict[str, _PendingServerRequest] = {}
+        self._pending_server_requests: dict[str, _PendingInterruptRequest] = {}
         self._event_subscribers: set[asyncio.Queue[dict[str, Any]]] = set()
         self._turn_trackers: dict[tuple[str, str], _TurnTracker] = {}
 
@@ -488,10 +515,18 @@ class OpencodeClient:
             "applyPatchApproval",
             "execCommandApproval",
         }:
-            self._pending_server_requests[request_key] = _PendingServerRequest(
-                method=method, request_id=request_id, params=params
-            )
             session_id = str(params.get("threadId") or params.get("conversationId") or "").strip()
+            self._pending_server_requests[request_key] = _PendingInterruptRequest(
+                binding=InterruptRequestBinding(
+                    request_id=request_key,
+                    interrupt_type="permission",
+                    session_id=session_id,
+                    created_at=time.monotonic(),
+                    provider_method=method,
+                ),
+                rpc_request_id=request_id,
+                params=params,
+            )
             await self._enqueue_stream_event(
                 {
                     "type": "permission.asked",
@@ -508,10 +543,18 @@ class OpencodeClient:
             return
 
         if method == "item/tool/requestUserInput":
-            self._pending_server_requests[request_key] = _PendingServerRequest(
-                method=method, request_id=request_id, params=params
+            session_id = str(params.get("threadId") or params.get("conversationId") or "").strip()
+            self._pending_server_requests[request_key] = _PendingInterruptRequest(
+                binding=InterruptRequestBinding(
+                    request_id=request_key,
+                    interrupt_type="question",
+                    session_id=session_id,
+                    created_at=time.monotonic(),
+                    provider_method=method,
+                ),
+                rpc_request_id=request_id,
+                params=params,
             )
-            session_id = str(params.get("threadId") or "").strip()
             questions = params.get("questions")
             await self._enqueue_stream_event(
                 {
@@ -787,18 +830,76 @@ class OpencodeClient:
             "raw": result,
         }
 
-    async def _reply_to_server_request(self, request_id: str, result: dict[str, Any]) -> None:
-        pending = self._pending_server_requests.get(request_id)
-        if not pending:
-            raise RuntimeError(f"interrupt request not found: {request_id}")
-        await self._send_json_message({"id": pending.request_id, "result": result})
+    def _interrupt_request_status(
+        self,
+        binding: InterruptRequestBinding,
+    ) -> str:
+        expires_at = binding.created_at + float(_INTERRUPT_REQUEST_TTL_SECONDS)
+        if expires_at <= time.monotonic():
+            return "expired"
+        return "active"
 
-        session_id = str(
-            pending.params.get("threadId") or pending.params.get("conversationId") or ""
-        ).strip()
+    def resolve_interrupt_request(
+        self, request_id: str
+    ) -> tuple[str, InterruptRequestBinding | None]:
+        request_key = request_id.strip()
+        pending = self._pending_server_requests.get(request_key)
+        if pending is None:
+            return "missing", None
+        status = self._interrupt_request_status(pending.binding)
+        if status == "expired":
+            self._pending_server_requests.pop(request_key, None)
+            return status, pending.binding
+        return status, pending.binding
+
+    def discard_interrupt_request(self, request_id: str) -> None:
+        self._pending_server_requests.pop(request_id.strip(), None)
+
+    def _require_pending_interrupt_request(
+        self,
+        request_id: str,
+        *,
+        expected_interrupt_type: str,
+    ) -> _PendingInterruptRequest:
+        request_key = request_id.strip()
+        status, binding = self.resolve_interrupt_request(request_key)
+        if status == "missing":
+            raise InterruptRequestError(
+                error_type="INTERRUPT_REQUEST_NOT_FOUND",
+                request_id=request_key,
+            )
+        if status == "expired" or binding is None:
+            raise InterruptRequestError(
+                error_type="INTERRUPT_REQUEST_EXPIRED",
+                request_id=request_key,
+            )
+        if binding.interrupt_type != expected_interrupt_type:
+            raise InterruptRequestError(
+                error_type="INTERRUPT_TYPE_MISMATCH",
+                request_id=request_key,
+                expected_interrupt_type=expected_interrupt_type,
+                actual_interrupt_type=binding.interrupt_type,
+            )
+        pending = self._pending_server_requests.get(request_key)
+        if pending is None:
+            raise InterruptRequestError(
+                error_type="INTERRUPT_REQUEST_NOT_FOUND",
+                request_id=request_key,
+            )
+        return pending
+
+    async def _reply_to_server_request(
+        self,
+        *,
+        request_id: str,
+        pending: _PendingInterruptRequest,
+        result: dict[str, Any],
+    ) -> None:
+        await self._send_json_message({"id": pending.rpc_request_id, "result": result})
+
         resolved_type = (
             "question.replied"
-            if pending.method == "item/tool/requestUserInput"
+            if pending.binding.interrupt_type == "question"
             else "permission.replied"
         )
         await self._enqueue_stream_event(
@@ -807,11 +908,11 @@ class OpencodeClient:
                 "properties": {
                     "id": request_id,
                     "requestID": request_id,
-                    "sessionID": session_id,
+                    "sessionID": pending.binding.session_id,
                 },
             }
         )
-        self._pending_server_requests.pop(request_id, None)
+        self.discard_interrupt_request(request_id)
 
     async def permission_reply(
         self,
@@ -823,6 +924,10 @@ class OpencodeClient:
     ) -> bool:
         del message, directory
         normalized = (reply or "").strip().lower()
+        pending = self._require_pending_interrupt_request(
+            request_id,
+            expected_interrupt_type="permission",
+        )
         decision = "decline"
         if normalized == "once":
             decision = "accept"
@@ -831,7 +936,11 @@ class OpencodeClient:
         elif normalized in {"reject", "deny"}:
             decision = "decline"
 
-        await self._reply_to_server_request(request_id, {"decision": decision})
+        await self._reply_to_server_request(
+            request_id=request_id,
+            pending=pending,
+            result={"decision": decision},
+        )
         return True
 
     async def question_reply(
@@ -842,10 +951,11 @@ class OpencodeClient:
         directory: str | None = None,
     ) -> bool:
         del directory
+        pending = self._require_pending_interrupt_request(
+            request_id,
+            expected_interrupt_type="question",
+        )
         # requestUserInput expects a dict keyed by question id.
-        pending = self._pending_server_requests.get(request_id)
-        if not pending:
-            raise RuntimeError(f"interrupt request not found: {request_id}")
         questions = pending.params.get("questions")
         answer_map: dict[str, dict[str, list[str]]] = {}
         if isinstance(questions, list):
@@ -858,7 +968,11 @@ class OpencodeClient:
                 selected = answers[index] if index < len(answers) else []
                 selected = [v for v in selected if isinstance(v, str)]
                 answer_map[qid] = {"answers": selected}
-        await self._reply_to_server_request(request_id, {"answers": answer_map})
+        await self._reply_to_server_request(
+            request_id=request_id,
+            pending=pending,
+            result={"answers": answer_map},
+        )
         return True
 
     async def question_reject(
@@ -868,23 +982,23 @@ class OpencodeClient:
         directory: str | None = None,
     ) -> bool:
         del directory
-        pending = self._pending_server_requests.get(request_id)
-        if not pending:
-            raise RuntimeError(f"interrupt request not found: {request_id}")
+        pending = self._require_pending_interrupt_request(
+            request_id,
+            expected_interrupt_type="question",
+        )
         # For requestUserInput, an empty answers map acts as reject/abort.
-        await self._send_json_message({"id": pending.request_id, "result": {"answers": {}}})
-        session_id = str(pending.params.get("threadId") or "").strip()
+        await self._send_json_message({"id": pending.rpc_request_id, "result": {"answers": {}}})
         await self._enqueue_stream_event(
             {
                 "type": "question.rejected",
                 "properties": {
                     "id": request_id,
                     "requestID": request_id,
-                    "sessionID": session_id,
+                    "sessionID": pending.binding.session_id,
                 },
             }
         )
-        self._pending_server_requests.pop(request_id, None)
+        self.discard_interrupt_request(request_id)
         return True
 
 

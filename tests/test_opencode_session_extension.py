@@ -699,32 +699,10 @@ async def test_session_control_rejects_invalid_metadata_directory(monkeypatch):
 async def test_interrupt_callback_extension_permission_reply(monkeypatch):
     import codex_a2a_serve.app as app_module
 
-    class InterruptClient(DummyOpencodeClient):
-        def __init__(self, _settings: Settings) -> None:
-            super().__init__(_settings)
-            self.permission_reply_calls: list[dict] = []
-
-        async def permission_reply(
-            self,
-            request_id: str,
-            *,
-            reply: str,
-            message: str | None = None,
-            directory: str | None = None,
-        ) -> bool:
-            self.permission_reply_calls.append(
-                {
-                    "request_id": request_id,
-                    "reply": reply,
-                    "message": message,
-                    "directory": directory,
-                }
-            )
-            return True
-
-    dummy = InterruptClient(
+    dummy = DummyOpencodeClient(
         make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
+    dummy.prime_interrupt_request("perm-1", interrupt_type="permission")
     monkeypatch.setattr(app_module, "OpencodeClient", lambda _settings: dummy)
     app = app_module.create_app(
         make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
@@ -757,6 +735,8 @@ async def test_interrupt_callback_extension_permission_reply(monkeypatch):
         assert dummy.permission_reply_calls[0]["request_id"] == "perm-1"
         assert dummy.permission_reply_calls[0]["reply"] == "once"
         assert dummy.permission_reply_calls[0]["directory"] == "/workspace"
+        status, _ = dummy.resolve_interrupt_request("perm-1")
+        assert status == "missing"
 
 
 @pytest.mark.asyncio
@@ -792,36 +772,11 @@ async def test_interrupt_callback_extension_rejects_legacy_permission_fields(mon
 async def test_interrupt_callback_extension_question_reply_and_reject(monkeypatch):
     import codex_a2a_serve.app as app_module
 
-    class InterruptClient(DummyOpencodeClient):
-        def __init__(self, _settings: Settings) -> None:
-            super().__init__(_settings)
-            self.question_reply_calls: list[dict] = []
-            self.question_reject_calls: list[dict] = []
-
-        async def question_reply(
-            self,
-            request_id: str,
-            *,
-            answers: list[list[str]],
-            directory: str | None = None,
-        ) -> bool:
-            self.question_reply_calls.append(
-                {"request_id": request_id, "answers": answers, "directory": directory}
-            )
-            return True
-
-        async def question_reject(
-            self,
-            request_id: str,
-            *,
-            directory: str | None = None,
-        ) -> bool:
-            self.question_reject_calls.append({"request_id": request_id, "directory": directory})
-            return True
-
-    dummy = InterruptClient(
+    dummy = DummyOpencodeClient(
         make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
+    dummy.prime_interrupt_request("q-1", interrupt_type="question")
+    dummy.prime_interrupt_request("q-2", interrupt_type="question")
     monkeypatch.setattr(app_module, "OpencodeClient", lambda _settings: dummy)
     app = app_module.create_app(
         make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
@@ -858,6 +813,8 @@ async def test_interrupt_callback_extension_question_reply_and_reject(monkeypatc
         reject_payload = reject_resp.json()
         assert reject_payload["result"]["ok"] is True
         assert dummy.question_reject_calls[0]["request_id"] == "q-2"
+        assert dummy.resolve_interrupt_request("q-1")[0] == "missing"
+        assert dummy.resolve_interrupt_request("q-2")[0] == "missing"
 
 
 @pytest.mark.asyncio
@@ -878,7 +835,11 @@ async def test_interrupt_callback_extension_maps_404_to_interrupt_not_found(monk
             response = httpx.Response(404, request=request)
             raise httpx.HTTPStatusError("Not Found", request=request, response=response)
 
-    monkeypatch.setattr(app_module, "OpencodeClient", NotFoundInterruptClient)
+    dummy = NotFoundInterruptClient(
+        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+    )
+    dummy.prime_interrupt_request("perm-404", interrupt_type="permission")
+    monkeypatch.setattr(app_module, "OpencodeClient", lambda _settings: dummy)
     app = app_module.create_app(
         make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
@@ -899,3 +860,147 @@ async def test_interrupt_callback_extension_maps_404_to_interrupt_not_found(monk
         payload = resp.json()
         assert payload["error"]["code"] == -32004
         assert payload["error"]["data"]["type"] == "INTERRUPT_REQUEST_NOT_FOUND"
+        assert dummy.resolve_interrupt_request("perm-404")[0] == "missing"
+
+
+@pytest.mark.asyncio
+async def test_interrupt_callback_extension_returns_not_found_for_missing_local_request(
+    monkeypatch,
+):
+    import codex_a2a_serve.app as app_module
+
+    dummy = DummyOpencodeClient(
+        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+    )
+    monkeypatch.setattr(app_module, "OpencodeClient", lambda _settings: dummy)
+    app = app_module.create_app(
+        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+    )
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        headers = {"Authorization": "Bearer t-1"}
+        resp = await client.post(
+            "/",
+            headers=headers,
+            json={
+                "jsonrpc": "2.0",
+                "id": 15,
+                "method": "a2a.interrupt.permission.reply",
+                "params": {"request_id": "perm-missing", "reply": "reject"},
+            },
+        )
+        payload = resp.json()
+        assert payload["error"]["code"] == -32004
+        assert payload["error"]["data"]["type"] == "INTERRUPT_REQUEST_NOT_FOUND"
+        assert dummy.permission_reply_calls == []
+
+
+@pytest.mark.asyncio
+async def test_interrupt_callback_extension_returns_expired_for_stale_request(monkeypatch):
+    import codex_a2a_serve.app as app_module
+
+    dummy = DummyOpencodeClient(
+        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+    )
+    dummy.prime_interrupt_request("perm-expired", interrupt_type="permission", created_at=1.0)
+    monkeypatch.setattr(app_module, "OpencodeClient", lambda _settings: dummy)
+    app = app_module.create_app(
+        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+    )
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        headers = {"Authorization": "Bearer t-1"}
+        resp = await client.post(
+            "/",
+            headers=headers,
+            json={
+                "jsonrpc": "2.0",
+                "id": 16,
+                "method": "a2a.interrupt.permission.reply",
+                "params": {"request_id": "perm-expired", "reply": "reject"},
+            },
+        )
+        payload = resp.json()
+        assert payload["error"]["code"] == -32007
+        assert payload["error"]["data"]["type"] == "INTERRUPT_REQUEST_EXPIRED"
+        assert dummy.resolve_interrupt_request("perm-expired")[0] == "missing"
+
+
+@pytest.mark.asyncio
+async def test_interrupt_callback_extension_rejects_interrupt_type_mismatch(monkeypatch):
+    import codex_a2a_serve.app as app_module
+
+    dummy = DummyOpencodeClient(
+        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+    )
+    dummy.prime_interrupt_request("perm-type", interrupt_type="permission")
+    monkeypatch.setattr(app_module, "OpencodeClient", lambda _settings: dummy)
+    app = app_module.create_app(
+        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+    )
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        headers = {"Authorization": "Bearer t-1"}
+        resp = await client.post(
+            "/",
+            headers=headers,
+            json={
+                "jsonrpc": "2.0",
+                "id": 17,
+                "method": "a2a.interrupt.question.reply",
+                "params": {"request_id": "perm-type", "answers": [["A"]]},
+            },
+        )
+        payload = resp.json()
+        assert payload["error"]["code"] == -32008
+        assert payload["error"]["data"]["type"] == "INTERRUPT_TYPE_MISMATCH"
+        assert payload["error"]["data"]["expected_interrupt_type"] == "question"
+        assert payload["error"]["data"]["actual_interrupt_type"] == "permission"
+        assert dummy.question_reply_calls == []
+        assert dummy.resolve_interrupt_request("perm-type")[0] == "active"
+
+
+@pytest.mark.asyncio
+async def test_interrupt_callback_extension_masks_owner_mismatch_as_not_found(monkeypatch):
+    import codex_a2a_serve.app as app_module
+
+    dummy = DummyOpencodeClient(
+        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+    )
+    dummy.prime_interrupt_request("perm-owned", interrupt_type="permission", session_id="ses-owned")
+    monkeypatch.setattr(app_module, "OpencodeClient", lambda _settings: dummy)
+    app = app_module.create_app(
+        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+    )
+
+    @app.middleware("http")
+    async def inject_identity(request, call_next):  # noqa: ANN001
+        request.state.user_identity = "user-1"
+        return await call_next(request)
+
+    await app.state.codex_executor.finalize_session_claim(
+        identity="other-user",
+        session_id="ses-owned",
+    )
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        headers = {"Authorization": "Bearer t-1"}
+        resp = await client.post(
+            "/",
+            headers=headers,
+            json={
+                "jsonrpc": "2.0",
+                "id": 18,
+                "method": "a2a.interrupt.permission.reply",
+                "params": {"request_id": "perm-owned", "reply": "once"},
+            },
+        )
+        payload = resp.json()
+        assert payload["error"]["code"] == -32004
+        assert payload["error"]["data"]["type"] == "INTERRUPT_REQUEST_NOT_FOUND"
+        assert dummy.permission_reply_calls == []
+        assert dummy.resolve_interrupt_request("perm-owned")[0] == "active"

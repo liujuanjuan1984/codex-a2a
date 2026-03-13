@@ -1,8 +1,13 @@
 import asyncio
+import time
 
 import pytest
 
-from codex_a2a_serve.codex_client import OpencodeClient, _PendingServerRequest
+from codex_a2a_serve.codex_client import (
+    InterruptRequestBinding,
+    OpencodeClient,
+    _PendingInterruptRequest,
+)
 from tests.helpers import make_settings
 
 
@@ -43,9 +48,15 @@ async def test_list_calls_use_expected_rpc_params() -> None:
 @pytest.mark.asyncio
 async def test_permission_reply_maps_to_codex_decision() -> None:
     client = OpencodeClient(make_settings(a2a_bearer_token="t-1", codex_timeout=1.0))
-    client._pending_server_requests["100"] = _PendingServerRequest(
-        method="item/commandExecution/requestApproval",
-        request_id=100,
+    client._pending_server_requests["100"] = _PendingInterruptRequest(
+        binding=InterruptRequestBinding(
+            request_id="100",
+            interrupt_type="permission",
+            session_id="thr-1",
+            created_at=time.monotonic(),
+            provider_method="item/commandExecution/requestApproval",
+        ),
+        rpc_request_id=100,
         params={"threadId": "thr-1"},
     )
 
@@ -73,9 +84,15 @@ async def test_permission_reply_maps_to_codex_decision() -> None:
 @pytest.mark.asyncio
 async def test_question_reply_builds_answer_map() -> None:
     client = OpencodeClient(make_settings(a2a_bearer_token="t-1", codex_timeout=1.0))
-    client._pending_server_requests["200"] = _PendingServerRequest(
-        method="item/tool/requestUserInput",
-        request_id=200,
+    client._pending_server_requests["200"] = _PendingInterruptRequest(
+        binding=InterruptRequestBinding(
+            request_id="200",
+            interrupt_type="question",
+            session_id="thr-2",
+            created_at=time.monotonic(),
+            provider_method="item/tool/requestUserInput",
+        ),
+        rpc_request_id=200,
         params={
             "threadId": "thr-2",
             "questions": [
