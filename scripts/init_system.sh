@@ -14,7 +14,7 @@ UV_PYTHON_DIR_FINAL_MODE="755"
 UV_PYTHON_DIR_GROUP=""
 UV_PYTHON_INSTALL_DIR="$UV_PYTHON_DIR"
 DATA_ROOT="/data/codex-a2a"
-CODEX_A2A_REPO="https://github.com/liujuanjuan1984/codex-a2a-serve.git"
+CODEX_A2A_REPO="https://github.com/liujuanjuan1984/codex-a2a-server.git"
 CODEX_A2A_BRANCH="main"
 CODEX_INSTALL_CMD="curl -fsSL https://codex.ai/install | bash"
 
