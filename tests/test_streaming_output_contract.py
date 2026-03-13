@@ -3,8 +3,9 @@ import asyncio
 import pytest
 from a2a.types import TaskArtifactUpdateEvent, TaskState, TaskStatusUpdateEvent
 
-from codex_a2a_serve.agent import OpencodeAgentExecutor, _extract_interrupt_resolved_event
+from codex_a2a_serve.agent import OpencodeAgentExecutor
 from codex_a2a_serve.codex_client import OpencodeMessage
+from codex_a2a_serve.streaming import extract_interrupt_resolved_event
 from tests.helpers import DummyEventQueue, make_request_context, make_settings
 
 
@@ -603,10 +604,10 @@ def _unique(items: list[str]) -> list[str]:
 
 
 def test_extract_interrupt_resolved_event_accepts_request_id_aliases() -> None:
-    legacy = _extract_interrupt_resolved_event(
+    legacy = extract_interrupt_resolved_event(
         {"type": "permission.replied", "properties": {"requestID": "perm-1"}}
     )
-    modern = _extract_interrupt_resolved_event(
+    modern = extract_interrupt_resolved_event(
         {"type": "permission.replied", "properties": {"id": "perm-2"}}
     )
     assert legacy == {
