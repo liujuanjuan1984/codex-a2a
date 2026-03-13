@@ -1,6 +1,11 @@
 # Usage Guide
 
-This guide covers configuration, authentication, API behavior, streaming re-subscription, and A2A client usage examples.
+This guide is the technical reference for day-to-day integration. It focuses on
+runtime configuration, transport contracts, streaming/session/interrupt
+behavior, and client examples.
+
+If you are looking for project value, architecture, or documentation entry
+navigation, start from [README.md](../README.md) instead.
 
 ## Transport Contracts
 
