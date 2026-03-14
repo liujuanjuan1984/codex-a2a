@@ -26,7 +26,8 @@ overview, runtime contracts, or deployment rationale in detail.
   `codex_model_reasoning_effort=...`, and blocks known-invalid model /
   reasoning combinations before launch. It stays in the foreground and writes
   logs to stdout/stderr so callers can decide whether to use `nohup`, `pm2`,
-  `systemd`, or another supervisor for detached execution and log capture.
+  `systemd`, or another supervisor for detached execution and log capture. See
+  [`docs/guide.md`](../docs/guide.md) for concrete `nohup` and `pm2` examples.
 - [`scripts/start_services.sh`](./start_services.sh):
   local foreground runner without systemd.
 - [`scripts/uninstall.sh`](./uninstall.sh):

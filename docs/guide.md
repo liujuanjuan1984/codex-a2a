@@ -89,6 +89,55 @@ Configuration note:
   scaffolding. Use `deploy.sh` when you need a repository-managed service
   lifecycle.
 
+Example `nohup` usage:
+
+```bash
+mkdir -p ./logs/light
+A2A_BEARER_TOKEN="$A2A_BEARER_TOKEN" \
+nohup ./scripts/deploy_light.sh start \
+  workdir=/abs/path/to/workdir \
+  instance=dev \
+  a2a_host=127.0.0.1 \
+  a2a_port=8000 \
+  a2a_public_url=http://127.0.0.1:8000 \
+  > ./logs/light/dev.out.log 2>&1 &
+echo $! > ./run/light/dev.pid
+```
+
+To stop a `nohup`-managed process, use the PID captured by your shell wrapper:
+
+```bash
+kill "$(cat ./run/light/dev.pid)"
+```
+
+Example `pm2` usage:
+
+```bash
+mkdir -p ./logs/light
+export A2A_BEARER_TOKEN="$A2A_BEARER_TOKEN"
+pm2 start ./scripts/deploy_light.sh \
+  --name codex-a2a-light-dev \
+  --interpreter bash \
+  --time \
+  --output ./logs/light/dev.out.log \
+  --error ./logs/light/dev.err.log \
+  -- start \
+  workdir=/abs/path/to/workdir \
+  instance=dev \
+  a2a_host=127.0.0.1 \
+  a2a_port=8000 \
+  a2a_public_url=http://127.0.0.1:8000
+```
+
+Useful `pm2` follow-up commands:
+
+```bash
+pm2 status codex-a2a-light-dev
+pm2 restart codex-a2a-light-dev
+pm2 logs codex-a2a-light-dev
+pm2 stop codex-a2a-light-dev
+```
+
 ## Service Behavior
 
 - The service forwards A2A `message:send` to Codex session/message calls.
