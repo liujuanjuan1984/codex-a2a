@@ -4,6 +4,7 @@ from unittest import mock
 import pytest
 from pydantic import ValidationError
 
+from codex_a2a_server.app import _warn_on_non_recommended_stream_heartbeat
 from codex_a2a_server.config import Settings
 
 
@@ -38,3 +39,51 @@ def test_parse_oauth_scopes():
     with mock.patch.dict(os.environ, env, clear=True):
         settings = Settings.from_env()
         assert settings.a2a_oauth_scopes == {"scope1": "", "scope2": "", "scope3": ""}
+
+
+def test_stream_heartbeat_rejects_values_below_minimum():
+    env = {
+        "A2A_BEARER_TOKEN": "test-token",
+        "A2A_STREAM_HEARTBEAT_SECONDS": "4",
+    }
+    with mock.patch.dict(os.environ, env, clear=True):
+        with pytest.raises(ValidationError) as excinfo:
+            Settings.from_env()
+    assert "at least 5 seconds" in str(excinfo.value)
+
+
+def test_stream_heartbeat_rejects_values_above_maximum():
+    env = {
+        "A2A_BEARER_TOKEN": "test-token",
+        "A2A_STREAM_HEARTBEAT_SECONDS": "61",
+    }
+    with mock.patch.dict(os.environ, env, clear=True):
+        with pytest.raises(ValidationError) as excinfo:
+            Settings.from_env()
+    assert "at most 60 seconds" in str(excinfo.value)
+
+
+def test_stream_heartbeat_accepts_recommended_value_without_warning(caplog):
+    settings = Settings(
+        a2a_bearer_token="test-token",
+        a2a_stream_heartbeat_seconds=12,
+    )
+
+    with caplog.at_level("WARNING", logger="codex_a2a_server.app"):
+        _warn_on_non_recommended_stream_heartbeat(settings)
+
+    assert caplog.records == []
+
+
+def test_stream_heartbeat_warns_when_value_is_outside_recommended_range(caplog):
+    settings = Settings(
+        a2a_bearer_token="test-token",
+        a2a_stream_heartbeat_seconds=20,
+    )
+
+    with caplog.at_level("WARNING", logger="codex_a2a_server.app"):
+        _warn_on_non_recommended_stream_heartbeat(settings)
+
+    assert any(
+        "outside the recommended range 10-15 seconds" in record.message for record in caplog.records
+    )

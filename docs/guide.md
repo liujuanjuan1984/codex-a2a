@@ -47,7 +47,7 @@ navigation, start from [README.md](../README.md) instead.
 - `A2A_PORT`: bind port, default `8000`
 - `A2A_BEARER_TOKEN`: required; service fails fast if unset
 - `A2A_STREAMING`: enable SSE streaming (`/v1/message:stream`), default `true`
-- `A2A_STREAM_HEARTBEAT_SECONDS`: 客户端可见 idle 心跳阈值（秒）；未设置时禁用
+- `A2A_STREAM_HEARTBEAT_SECONDS`: 客户端可见 idle 心跳阈值（秒）；未设置时禁用，推荐 `10-15` 秒；小于 `5` 或大于 `60` 会被拒绝，超出推荐区间但仍在允许范围内会在启动时告警
 - `A2A_LOG_LEVEL`: `DEBUG/INFO/WARNING/ERROR`, default `INFO`
 - `A2A_LOG_PAYLOADS`: log A2A/Codex payload bodies, default `false`
 - `A2A_LOG_BODY_LIMIT`: payload log body size limit, default `0` (no truncation)

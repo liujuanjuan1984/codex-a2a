@@ -537,8 +537,8 @@ async def test_streaming_emits_idle_heartbeat_when_enabled() -> None:
     client.settings = make_settings(
         a2a_bearer_token="test",
         codex_base_url="http://localhost",
-        a2a_stream_heartbeat_seconds=0.01,
     )
+    client.settings.a2a_stream_heartbeat_seconds = 0.01
     executor = CodexAgentExecutor(client, streaming_enabled=True)
     executor._should_stream = lambda context: True  # type: ignore[method-assign]
     queue = DummyEventQueue()
@@ -610,8 +610,8 @@ async def test_streaming_does_not_emit_idle_heartbeat_while_input_is_required() 
     client.settings = make_settings(
         a2a_bearer_token="test",
         codex_base_url="http://localhost",
-        a2a_stream_heartbeat_seconds=0.01,
     )
+    client.settings.a2a_stream_heartbeat_seconds = 0.01
     executor = CodexAgentExecutor(client, streaming_enabled=True)
     executor._should_stream = lambda context: True  # type: ignore[method-assign]
     queue = DummyEventQueue()

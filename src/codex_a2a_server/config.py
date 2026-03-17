@@ -5,6 +5,11 @@ from typing import Any
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+STREAM_HEARTBEAT_MIN_SECONDS = 5.0
+STREAM_HEARTBEAT_RECOMMENDED_MIN_SECONDS = 10.0
+STREAM_HEARTBEAT_RECOMMENDED_MAX_SECONDS = 15.0
+STREAM_HEARTBEAT_MAX_SECONDS = 60.0
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -80,6 +85,11 @@ class Settings(BaseSettings):
     a2a_stream_heartbeat_seconds: float | None = Field(
         default=None,
         alias="A2A_STREAM_HEARTBEAT_SECONDS",
+        description=(
+            "Optional idle heartbeat threshold in seconds for client-visible A2A stream "
+            "status updates. Disabled when unset. Recommended range: 10-15 seconds. "
+            "Values below 5 or above 60 are rejected."
+        ),
     )
     a2a_log_level: str = Field(default="INFO", alias="A2A_LOG_LEVEL")
     a2a_log_payloads: bool = Field(default=False, alias="A2A_LOG_PAYLOADS")
@@ -121,8 +131,16 @@ class Settings(BaseSettings):
     def validate_stream_heartbeat_seconds(cls, v: float | None) -> float | None:
         if v is None:
             return None
-        if v <= 0:
-            raise ValueError("A2A_STREAM_HEARTBEAT_SECONDS must be greater than 0")
+        if v < STREAM_HEARTBEAT_MIN_SECONDS:
+            raise ValueError(
+                "A2A_STREAM_HEARTBEAT_SECONDS must be at least "
+                f"{STREAM_HEARTBEAT_MIN_SECONDS:g} seconds"
+            )
+        if v > STREAM_HEARTBEAT_MAX_SECONDS:
+            raise ValueError(
+                "A2A_STREAM_HEARTBEAT_SECONDS must be at most "
+                f"{STREAM_HEARTBEAT_MAX_SECONDS:g} seconds"
+            )
         return v
 
     @classmethod
