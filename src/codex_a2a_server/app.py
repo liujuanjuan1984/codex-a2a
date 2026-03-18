@@ -41,6 +41,7 @@ from .extension_contracts import (
     build_streaming_extension_params,
 )
 from .jsonrpc_ext import CodexSessionQueryJSONRPCApplication
+from .openapi_contracts import patch_openapi_contract
 from .request_handler import CodexRequestHandler
 
 logger = logging.getLogger(__name__)
@@ -337,6 +338,7 @@ def create_app(settings: Settings) -> FastAPI:
         yield
         await client.close()
 
+    deployment_context = _build_deployment_context(settings)
     agent_card = build_agent_card(settings)
     context_builder = IdentityAwareCallContextBuilder()
     jsonrpc_methods = {
@@ -579,6 +581,12 @@ def create_app(settings: Settings) -> FastAPI:
         return response
 
     add_auth_middleware(app, settings)
+    patch_openapi_contract(
+        app,
+        deployment_context=deployment_context,
+        directory_override_enabled=settings.a2a_allow_directory_override,
+        session_shell_enabled=settings.a2a_enable_session_shell,
+    )
 
     return app
 
@@ -600,7 +608,7 @@ def _configure_logging(level: str) -> None:
 
 
 def main() -> None:
-    settings = Settings.from_env()
+    settings = Settings()
     app = create_app(settings)
     log_level = _normalize_log_level(settings.a2a_log_level)
     _configure_logging(log_level)
