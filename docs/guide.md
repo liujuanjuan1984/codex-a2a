@@ -374,6 +374,9 @@ This service exposes Codex session list and message-history queries via A2A JSON
   - `result.items` is always an array of A2A standard objects
   - session list => `Task` with `status.state=completed`
   - message history => `Message`
+  - limit pagination defaults to `20` items and rejects values above `100`
+  - `codex.sessions.messages.list` enforces `limit` locally after mapping the
+    upstream thread history into A2A messages
   - canonical session metadata is exposed at `metadata.shared.session`
   - raw upstream payload is preserved at `metadata.codex.raw`
   - session title is available at `metadata.shared.session.title`
@@ -404,7 +407,7 @@ curl -sS http://127.0.0.1:8000/ \
     "method": "codex.sessions.messages.list",
     "params": {
       "session_id": "<session_id>",
-      "limit": 50
+      "limit": 20
     }
   }'
 ```
