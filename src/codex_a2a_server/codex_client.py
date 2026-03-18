@@ -966,6 +966,8 @@ class CodexClient:
         command_text = str(request["command"]).strip()
         if not command_text:
             raise RuntimeError("shell command must not be empty")
+        # Shell execution remains a standalone Codex command/exec call. session_id
+        # is preserved here for ownership/attribution, not to bind upstream thread context.
         result = await self._rpc_request(
             "command/exec",
             _build_shell_exec_params(

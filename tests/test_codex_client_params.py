@@ -48,6 +48,31 @@ async def test_list_calls_use_expected_rpc_params() -> None:
 
 
 @pytest.mark.asyncio
+async def test_session_shell_uses_command_exec_without_thread_context() -> None:
+    client = CodexClient(
+        make_settings(
+            a2a_bearer_token="t-1",
+            codex_directory="/safe",
+            codex_timeout=1.0,
+        )
+    )
+
+    seen: list[tuple[str, dict | None]] = []
+
+    async def fake_rpc_request(method: str, params: dict | None = None):
+        seen.append((method, params))
+        return {"stdout": "/safe\n", "stderr": "", "exitCode": 0}
+
+    client._rpc_request = fake_rpc_request  # type: ignore[method-assign]
+
+    result = await client.session_shell("thr-1", {"command": "pwd"})
+
+    assert seen == [("command/exec", {"command": ["pwd"], "cwd": "/safe"})]
+    assert result["info"]["id"].startswith("shell:thr-1:")
+    assert result["parts"][0]["text"] == "exit_code: 0\nstdout:\n/safe"
+
+
+@pytest.mark.asyncio
 async def test_permission_reply_maps_to_codex_decision() -> None:
     client = CodexClient(make_settings(a2a_bearer_token="t-1", codex_timeout=1.0))
     client._pending_server_requests["100"] = _PendingInterruptRequest(

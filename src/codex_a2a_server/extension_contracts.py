@@ -23,6 +23,10 @@ class SessionQueryMethodContract:
     items_field: str | None = None
     notification_response_status: int | None = None
     pagination_mode: str | None = None
+    execution_binding: str | None = None
+    session_binding: str | None = None
+    uses_upstream_session_context: bool | None = None
+    notes: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -117,6 +121,19 @@ SESSION_QUERY_METHOD_CONTRACTS: dict[str, SessionQueryMethodContract] = {
         optional_params=(CODEX_DIRECTORY_METADATA_FIELD,),
         result_fields=("item",),
         notification_response_status=204,
+        execution_binding="standalone_command_exec",
+        session_binding="ownership_attribution_only",
+        uses_upstream_session_context=False,
+        notes=(
+            (
+                "Shell requests run through Codex command/exec and do not resume or "
+                "create an upstream thread."
+            ),
+            (
+                "session_id is used for ownership checks and A2A result attribution; "
+                "it does not provide an upstream session-bound shell context."
+            ),
+        ),
     ),
 }
 
@@ -323,6 +340,16 @@ def build_session_query_extension_params(
             contract_doc["notification_response_status"] = (
                 method_contract.notification_response_status
             )
+        if method_contract.execution_binding is not None:
+            contract_doc["execution_binding"] = method_contract.execution_binding
+        if method_contract.session_binding is not None:
+            contract_doc["session_binding"] = method_contract.session_binding
+        if method_contract.uses_upstream_session_context is not None:
+            contract_doc["uses_upstream_session_context"] = (
+                method_contract.uses_upstream_session_context
+            )
+        if method_contract.notes:
+            contract_doc["notes"] = list(method_contract.notes)
         method_contracts[method_contract.method] = contract_doc
 
         envelope_doc: dict[str, Any] = {"fields": list(method_contract.result_fields)}
