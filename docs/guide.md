@@ -118,6 +118,10 @@ managed systemd deployment flow.
   status plus deployment-relevant flags such as streaming, session shell, and
   interrupt TTL; it does not call upstream Codex.
 - The service forwards A2A `message:send` to Codex session/message calls.
+- `codex.sessions.shell` is a session-scoped shell control method for
+  ownership, attribution, and traceability. It keeps `session_id` in the A2A
+  contract, but the underlying execution still uses Codex `command/exec`
+  rather than resuming or creating an upstream Codex thread.
 - Task state defaults to `input-required` to support multi-turn interactions.
 - Streaming (`/v1/message:stream`) emits incremental
   `TaskArtifactUpdateEvent` and then
