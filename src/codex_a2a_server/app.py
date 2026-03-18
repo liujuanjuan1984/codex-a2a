@@ -604,15 +604,6 @@ def create_app(settings: Settings) -> FastAPI:
         logger.info("A2A request started method=%s path=%s", request.method, path)
         try:
             response = await call_next(request)
-        except Exception:
-            logger.exception(
-                "A2A request failed method=%s path=%s duration_ms=%.2f",
-                request.method,
-                path,
-                (time.perf_counter() - started_at) * 1000.0,
-            )
-            raise
-        try:
             response.headers[CORRELATION_ID_HEADER] = correlation_id
             logger.info(
                 "A2A request completed method=%s path=%s status=%s duration_ms=%.2f",
@@ -622,6 +613,14 @@ def create_app(settings: Settings) -> FastAPI:
                 (time.perf_counter() - started_at) * 1000.0,
             )
             return response
+        except Exception:
+            logger.exception(
+                "A2A request failed method=%s path=%s duration_ms=%.2f",
+                request.method,
+                path,
+                (time.perf_counter() - started_at) * 1000.0,
+            )
+            raise
         finally:
             reset_correlation_id(token)
 
@@ -643,6 +642,7 @@ def _normalize_log_level(value: str) -> str:
 
 
 def _configure_logging(level: str) -> None:
+    install_log_record_factory()
     logging.basicConfig(
         level=getattr(logging, level, logging.INFO),
         format=(
