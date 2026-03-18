@@ -80,6 +80,13 @@ def test_agent_card_injects_deployment_context_into_extensions() -> None:
         session_query.params["context_semantics"]["upstream_session_id_field"]
         == "metadata.shared.session.id"
     )
+    assert session_query.params["context_semantics"]["context_id_strategy"] == (
+        "equals_upstream_session_id"
+    )
+    assert any(
+        "contextId equal to the upstream session_id" in note
+        for note in session_query.params["context_semantics"]["notes"]
+    )
     shell_contract = session_query.params["method_contracts"]["codex.sessions.shell"]
     assert shell_contract["execution_binding"] == "standalone_command_exec"
     assert shell_contract["session_binding"] == "ownership_attribution_only"

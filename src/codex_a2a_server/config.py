@@ -101,6 +101,10 @@ class Settings(BaseSettings):
     # Session cache settings
     a2a_session_cache_ttl_seconds: int = Field(default=3600, alias="A2A_SESSION_CACHE_TTL_SECONDS")
     a2a_session_cache_maxsize: int = Field(default=10_000, alias="A2A_SESSION_CACHE_MAXSIZE")
+    a2a_cancel_abort_timeout_seconds: float = Field(
+        default=1.0,
+        alias="A2A_CANCEL_ABORT_TIMEOUT_SECONDS",
+    )
     a2a_interrupt_request_ttl_seconds: int = Field(
         default=3600,
         alias="A2A_INTERRUPT_REQUEST_TTL_SECONDS",
@@ -119,6 +123,13 @@ class Settings(BaseSettings):
             if scope:
                 scopes[scope] = ""
         return scopes
+
+    @field_validator("a2a_cancel_abort_timeout_seconds")
+    @classmethod
+    def validate_cancel_abort_timeout_seconds(cls, value: float) -> float:
+        if value < 0:
+            raise ValueError("A2A_CANCEL_ABORT_TIMEOUT_SECONDS must be >= 0")
+        return value
 
     @field_validator("a2a_interrupt_request_ttl_seconds")
     @classmethod

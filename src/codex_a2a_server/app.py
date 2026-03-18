@@ -367,6 +367,7 @@ def create_app(settings: Settings) -> FastAPI:
     executor = CodexAgentExecutor(
         client,
         streaming_enabled=settings.a2a_streaming,
+        cancel_abort_timeout_seconds=settings.a2a_cancel_abort_timeout_seconds,
         session_cache_ttl_seconds=settings.a2a_session_cache_ttl_seconds,
         session_cache_maxsize=settings.a2a_session_cache_maxsize,
     )

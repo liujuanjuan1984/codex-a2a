@@ -547,6 +547,14 @@ def build_session_query_extension_params(
         "context_semantics": {
             "a2a_context_id_field": "contextId",
             "upstream_session_id_field": SHARED_SESSION_BINDING_FIELD,
+            "context_id_strategy": "equals_upstream_session_id",
+            "notes": [
+                (
+                    "session query projections currently set contextId equal to the "
+                    "upstream session_id"
+                ),
+                "metadata.shared.session.id carries the same upstream session identity explicitly",
+            ],
         },
     }
 

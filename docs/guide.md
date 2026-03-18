@@ -151,6 +151,9 @@ Current implementation note:
 - `A2A_SESSION_CACHE_TTL_SECONDS`: in-memory TTL for
   `(identity, contextId) -> Codex session_id`, default `3600`
 - `A2A_SESSION_CACHE_MAXSIZE`: max cache entries, default `10000`
+- `A2A_CANCEL_ABORT_TIMEOUT_SECONDS`: how long `tasks/cancel` waits for
+  in-flight execution/session-create cleanup after issuing cancellation,
+  default `1.0`; `0` means best-effort cancel without waiting
 - `A2A_INTERRUPT_REQUEST_TTL_SECONDS`: TTL for pending interrupt callbacks
   before they become expired, default `3600`
 
@@ -212,6 +215,10 @@ managed systemd deployment flow.
   ownership, attribution, and traceability. It keeps `session_id` in the A2A
   contract, but the underlying execution still uses Codex `command/exec`
   rather than resuming or creating an upstream Codex thread.
+- Session query projections currently use the upstream Codex `session_id` as
+  the A2A `contextId`. This is intentional for the current deployment model:
+  `contextId` and `metadata.shared.session.id` refer to the same upstream
+  session identity, and the contract declares that equality explicitly.
 - Task state defaults to `input-required` to support multi-turn interactions.
 - Streaming (`/v1/message:stream`) emits incremental
   `TaskArtifactUpdateEvent` and then

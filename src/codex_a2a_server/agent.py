@@ -110,11 +110,13 @@ class CodexAgentExecutor(AgentExecutor):
         client: CodexClient,
         *,
         streaming_enabled: bool,
+        cancel_abort_timeout_seconds: float = 1.0,
         session_cache_ttl_seconds: int = 3600,
         session_cache_maxsize: int = 10_000,
     ) -> None:
         self._client = client
         self._streaming_enabled = streaming_enabled
+        self._cancel_abort_timeout_seconds = float(cancel_abort_timeout_seconds)
         self._sessions = _TTLCache(
             ttl_seconds=session_cache_ttl_seconds,
             maxsize=session_cache_maxsize,
@@ -465,10 +467,41 @@ class CodexAgentExecutor(AgentExecutor):
                 and not running_task.done()
             ):
                 running_task.cancel()
+            waitables: list[asyncio.Task[Any]] = []
+            if (
+                running_task
+                and running_task is not asyncio.current_task()
+                and not running_task.done()
+            ):
+                waitables.append(running_task)
             if inflight:
                 inflight.cancel()
-                with suppress(asyncio.CancelledError):
-                    await inflight
+                waitables.append(inflight)
+
+            if waitables and self._cancel_abort_timeout_seconds > 0:
+                done, pending = await asyncio.wait(
+                    set(waitables),
+                    timeout=self._cancel_abort_timeout_seconds,
+                )
+                for task in done:
+                    with suppress(asyncio.CancelledError, Exception):
+                        await task
+                if pending:
+                    logger.warning(
+                        "Cancel abort timeout exceeded task_id=%s context_id=%s "
+                        "abort_timeout_seconds=%.3f pending_tasks=%s",
+                        task_id,
+                        context_id,
+                        self._cancel_abort_timeout_seconds,
+                        len(pending),
+                    )
+            elif waitables:
+                logger.info(
+                    "Cancel abort wait skipped task_id=%s context_id=%s abort_timeout_seconds=%.3f",
+                    task_id,
+                    context_id,
+                    self._cancel_abort_timeout_seconds,
+                )
         except Exception as exc:
             logger.exception("Cancel failed")
             if task_id and context_id:

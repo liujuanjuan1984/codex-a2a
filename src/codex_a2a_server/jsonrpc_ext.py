@@ -49,6 +49,13 @@ ERR_INTERRUPT_EXPIRED = -32007
 ERR_INTERRUPT_TYPE_MISMATCH = -32008
 
 
+SESSION_CONTEXT_ID_STRATEGY = "equals_upstream_session_id"
+
+
+def _session_context_id(session_id: str) -> str:
+    return session_id
+
+
 def _interrupt_expected_type(method: str, *, permission_method: str) -> str:
     if method == permission_method:
         return "permission"
@@ -76,7 +83,7 @@ def _as_a2a_session_task(session: Any) -> dict[str, Any] | None:
         return None
     task = Task(
         id=session_id,
-        context_id=session_id,
+        context_id=_session_context_id(session_id),
         # Model Codex sessions as completed A2A Tasks for stable downstream rendering.
         status=TaskStatus(state=TaskState.completed),
         metadata={
@@ -112,7 +119,7 @@ def _as_a2a_message(session_id: str, item: Any) -> dict[str, Any] | None:
         message_id=message_id,
         role=role,
         parts=[TextPart(text=text)],
-        context_id=session_id,
+        context_id=_session_context_id(session_id),
         metadata={
             "shared": {"session": {"id": session_id}},
             "codex": {"raw": item},
@@ -193,6 +200,28 @@ class CodexSessionQueryJSONRPCApplication(A2AFastAPIApplication):
         self._session_claim_finalize = session_claim_finalize
         self._session_claim_release = session_claim_release
         self._session_owner_matcher = session_owner_matcher
+        self._validate_guard_hooks()
+
+    def _validate_guard_hooks(self) -> None:
+        missing_for_session_control: list[str] = []
+        if self._session_claim is None:
+            missing_for_session_control.append("session_claim")
+        if self._session_claim_finalize is None:
+            missing_for_session_control.append("session_claim_finalize")
+        if self._session_claim_release is None:
+            missing_for_session_control.append("session_claim_release")
+        if missing_for_session_control:
+            missing = ", ".join(missing_for_session_control)
+            raise ValueError(
+                "CodexSessionQueryJSONRPCApplication missing required session control hooks: "
+                f"{missing}"
+            )
+
+        if self._session_owner_matcher is None:
+            raise ValueError(
+                "CodexSessionQueryJSONRPCApplication missing required interrupt ownership "
+                "hook: session_owner_matcher"
+            )
 
     async def _handle_requests(self, request: Request) -> Response:
         # Fast path: sniff method first then either handle here or delegate.

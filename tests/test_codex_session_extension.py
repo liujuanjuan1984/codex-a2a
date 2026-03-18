@@ -1,9 +1,18 @@
 import logging
+from unittest.mock import MagicMock
 
 import httpx
 import pytest
 
+from codex_a2a_server.app import build_agent_card
 from codex_a2a_server.config import Settings
+from codex_a2a_server.extension_contracts import (
+    INTERRUPT_CALLBACK_METHODS,
+    SESSION_CONTROL_METHODS,
+    SESSION_QUERY_METHODS,
+    build_supported_jsonrpc_methods,
+)
+from codex_a2a_server.jsonrpc_ext import CodexSessionQueryJSONRPCApplication
 from tests.helpers import DummySessionQueryCodexClient as DummyCodexClient
 from tests.helpers import make_settings
 
@@ -11,6 +20,61 @@ _BASE_SETTINGS = {
     "codex_timeout": 1.0,
     "a2a_log_level": "DEBUG",
 }
+
+
+def _build_extension_app(
+    *,
+    session_claim=None,
+    session_claim_finalize=None,
+    session_claim_release=None,
+    session_owner_matcher=None,
+) -> CodexSessionQueryJSONRPCApplication:
+    settings = make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+    methods = {
+        **SESSION_QUERY_METHODS,
+        **SESSION_CONTROL_METHODS,
+        **INTERRUPT_CALLBACK_METHODS,
+    }
+    return CodexSessionQueryJSONRPCApplication(
+        agent_card=build_agent_card(settings),
+        http_handler=MagicMock(),
+        codex_client=DummyCodexClient(settings),
+        methods=methods,
+        protocol_version=settings.a2a_protocol_version,
+        supported_methods=build_supported_jsonrpc_methods(session_shell_enabled=True),
+        session_claim=session_claim,
+        session_claim_finalize=session_claim_finalize,
+        session_claim_release=session_claim_release,
+        session_owner_matcher=session_owner_matcher,
+    )
+
+
+def test_session_extension_fails_fast_when_session_control_hooks_are_missing() -> None:
+    async def owner_matcher(*, identity: str, session_id: str) -> bool:
+        del identity, session_id
+        return True
+
+    with pytest.raises(ValueError, match="missing required session control hooks"):
+        _build_extension_app(session_owner_matcher=owner_matcher)
+
+
+def test_session_extension_fails_fast_when_interrupt_owner_hook_is_missing() -> None:
+    async def claim(*, identity: str, session_id: str) -> bool:
+        del identity, session_id
+        return False
+
+    async def finalize(*, identity: str, session_id: str) -> None:
+        del identity, session_id
+
+    async def release(*, identity: str, session_id: str) -> None:
+        del identity, session_id
+
+    with pytest.raises(ValueError, match="missing required interrupt ownership hook"):
+        _build_extension_app(
+            session_claim=claim,
+            session_claim_finalize=finalize,
+            session_claim_release=release,
+        )
 
 
 @pytest.mark.asyncio
@@ -75,6 +139,7 @@ async def test_session_query_extension_returns_jsonrpc_result(monkeypatch):
         session = payload["result"]["items"][0]
         assert session["id"] == "s-1"
         assert session["contextId"] == "s-1"
+        assert session["contextId"] == session["metadata"]["shared"]["session"]["id"]
         assert session["metadata"]["shared"]["session"]["id"] == "s-1"
         assert session["metadata"]["shared"]["session"]["title"] == "Session s-1"
         assert session["metadata"]["codex"]["raw"]["id"] == "s-1"
@@ -98,6 +163,7 @@ async def test_session_query_extension_returns_jsonrpc_result(monkeypatch):
         assert "raw" not in payload["result"]
         message = payload["result"]["items"][0]
         assert message["contextId"] == "s-1"
+        assert message["contextId"] == message["metadata"]["shared"]["session"]["id"]
         assert message["parts"][0]["text"] == "SECRET_HISTORY"
         assert message["metadata"]["shared"]["session"]["id"] == "s-1"
         assert dummy.last_messages_params is not None

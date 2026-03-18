@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -89,3 +90,65 @@ async def test_cancel_does_not_block_with_real_event_queue() -> None:
     queue = EventQueue()
 
     await asyncio.wait_for(executor.cancel(context, queue), timeout=0.5)
+
+
+@pytest.mark.asyncio
+async def test_cancel_logs_abort_timeout_when_cleanup_does_not_finish(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    client = AsyncMock(spec=CodexClient)
+    send_started = asyncio.Event()
+    release_send = asyncio.Event()
+
+    async def send_message(
+        session_id,
+        _text,
+        *,
+        directory=None,  # noqa: ARG001
+        timeout_override=None,  # noqa: ARG001
+    ):
+        send_started.set()
+        try:
+            await asyncio.sleep(10)
+        except asyncio.CancelledError:
+            await release_send.wait()
+        response = MagicMock()
+        response.text = "Codex response"
+        response.session_id = session_id
+        response.message_id = "msg-1"
+        return response
+
+    client.create_session.return_value = "session-1"
+    client.send_message.side_effect = send_message
+    configure_mock_client_runtime(client)
+
+    executor = CodexAgentExecutor(
+        client,
+        streaming_enabled=False,
+        cancel_abort_timeout_seconds=0.01,
+    )
+
+    execute_context = make_request_context_mock(
+        task_id="task-timeout",
+        context_id="context-timeout",
+        identity="user-1",
+        user_input="hello",
+    )
+    execute_queue = AsyncMock(spec=EventQueue)
+    execute_task = asyncio.create_task(executor.execute(execute_context, execute_queue))
+    await asyncio.wait_for(send_started.wait(), timeout=1.0)
+
+    cancel_context = make_request_context_mock(
+        task_id="task-timeout",
+        context_id="context-timeout",
+        call_context_enabled=False,
+    )
+    cancel_queue = AsyncMock(spec=EventQueue)
+    caplog.set_level(logging.WARNING, logger="codex_a2a_server.agent")
+
+    await asyncio.wait_for(executor.cancel(cancel_context, cancel_queue), timeout=0.5)
+
+    assert any("Cancel abort timeout exceeded" in record.getMessage() for record in caplog.records)
+
+    release_send.set()
+    await asyncio.wait_for(execute_task, timeout=1.0)

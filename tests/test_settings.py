@@ -42,18 +42,31 @@ def test_parse_oauth_scopes():
         assert settings.a2a_oauth_scopes == {"scope1": "", "scope2": "", "scope3": ""}
 
 
-def test_settings_parse_ops_flags_and_interrupt_ttl():
+def test_settings_parse_ops_flags_and_timeouts():
     env = {
         "A2A_BEARER_TOKEN": "test",
         "A2A_ENABLE_HEALTH_ENDPOINT": "false",
         "A2A_ENABLE_SESSION_SHELL": "false",
+        "A2A_CANCEL_ABORT_TIMEOUT_SECONDS": "0.25",
         "A2A_INTERRUPT_REQUEST_TTL_SECONDS": "90",
     }
     with mock.patch.dict(os.environ, env, clear=True):
         settings = Settings()
         assert settings.a2a_enable_health_endpoint is False
         assert settings.a2a_enable_session_shell is False
+        assert settings.a2a_cancel_abort_timeout_seconds == 0.25
         assert settings.a2a_interrupt_request_ttl_seconds == 90
+
+
+def test_settings_reject_invalid_cancel_abort_timeout():
+    env = {
+        "A2A_BEARER_TOKEN": "test",
+        "A2A_CANCEL_ABORT_TIMEOUT_SECONDS": "-0.1",
+    }
+    with mock.patch.dict(os.environ, env, clear=True):
+        with pytest.raises(ValidationError) as excinfo:
+            Settings()
+    assert "A2A_CANCEL_ABORT_TIMEOUT_SECONDS" in str(excinfo.value)
 
 
 def test_settings_reject_invalid_interrupt_request_ttl():
