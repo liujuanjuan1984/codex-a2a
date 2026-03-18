@@ -38,6 +38,53 @@ def test_health_route_can_be_disabled() -> None:
     assert "/health" not in route_paths
 
 
+def test_openapi_rest_message_routes_include_schema_examples_and_extension_contracts() -> None:
+    app = create_app(make_settings(a2a_bearer_token="test-token"))
+    openapi = app.openapi()
+    paths = openapi["paths"]
+
+    expected: dict[str, str] = {
+        "/v1/message:send": "#/components/schemas/SendMessageRequest",
+        "/v1/message:stream": "#/components/schemas/SendStreamingMessageRequest",
+    }
+    for path, expected_schema_ref in expected.items():
+        post = paths[path]["post"]
+        assert post["summary"] in {"Send Message (HTTP+JSON)", "Stream Message (HTTP+JSON)"}
+        content = post.get("requestBody", {}).get("content", {}).get("application/json", {})
+        assert content.get("schema", {}).get("$ref") == expected_schema_ref
+        examples = content.get("examples")
+        assert isinstance(examples, dict)
+        assert "basic_message" in examples
+        assert "continue_session" in examples
+        contracts = post.get("x-a2a-extension-contracts")
+        assert isinstance(contracts, dict)
+        assert "session_binding" in contracts
+
+    stream_contract = paths["/v1/message:stream"]["post"].get("x-a2a-streaming")
+    assert isinstance(stream_contract, dict)
+
+
+def test_openapi_jsonrpc_examples_include_core_and_extension_methods() -> None:
+    app = create_app(make_settings(a2a_bearer_token="test-token"))
+    openapi = app.openapi()
+    post = openapi["paths"]["/"]["post"]
+    example_values = (
+        post.get("requestBody", {})
+        .get("content", {})
+        .get("application/json", {})
+        .get("examples", {})
+        .values()
+    )
+    methods = {value.get("value", {}).get("method") for value in example_values}
+    assert "message/send" in methods
+    assert "message/stream" in methods
+    assert "codex.sessions.list" in methods
+    assert "codex.sessions.messages.list" in methods
+    assert "codex.sessions.prompt_async" in methods
+    assert "codex.sessions.command" in methods
+    assert "a2a.interrupt.permission.reply" in methods
+
+
 @pytest.mark.asyncio
 async def test_health_endpoint_is_public_and_reports_runtime_flags(monkeypatch) -> None:
     import codex_a2a_server.app as app_module

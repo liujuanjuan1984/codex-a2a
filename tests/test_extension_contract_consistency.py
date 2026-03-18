@@ -1,8 +1,20 @@
 import httpx
 import pytest
 
-from codex_a2a_server.app import SESSION_QUERY_EXTENSION_URI, build_agent_card, create_app
-from codex_a2a_server.extension_contracts import build_session_query_extension_params
+from codex_a2a_server.app import (
+    INTERRUPT_CALLBACK_EXTENSION_URI,
+    SESSION_BINDING_EXTENSION_URI,
+    SESSION_QUERY_EXTENSION_URI,
+    STREAMING_EXTENSION_URI,
+    build_agent_card,
+    create_app,
+)
+from codex_a2a_server.extension_contracts import (
+    build_interrupt_callback_extension_params,
+    build_session_binding_extension_params,
+    build_session_query_extension_params,
+    build_streaming_extension_params,
+)
 from tests.helpers import DummySessionQueryCodexClient as DummyCodexClient
 from tests.helpers import make_settings
 
@@ -107,3 +119,61 @@ async def test_session_query_runtime_result_envelope_matches_declared_contract(
     items_field = expected_envelope.get("items_field")
     if items_field is not None:
         assert isinstance(payload["result"][items_field], list)
+
+
+def test_openapi_jsonrpc_contract_extension_matches_ssot() -> None:
+    settings = make_settings(a2a_bearer_token="test-token")
+    app = create_app(settings)
+    openapi = app.openapi()
+    post = openapi["paths"]["/"]["post"]
+
+    contract = post.get("x-a2a-extension-contracts")
+    assert isinstance(contract, dict), (
+        "POST / OpenAPI is missing x-a2a-extension-contracts metadata."
+    )
+
+    session_binding = contract["session_binding"]
+    streaming = contract["streaming"]
+    session_query = contract["session_query"]
+    interrupt_callback = contract["interrupt_callback"]
+    deployment_context = session_query["deployment_context"]
+    expected_session_binding = build_session_binding_extension_params(
+        deployment_context=deployment_context,
+        directory_override_enabled=True,
+    )
+    expected_streaming = build_streaming_extension_params()
+    expected_session_query = build_session_query_extension_params(
+        deployment_context=deployment_context,
+        session_shell_enabled=settings.a2a_enable_session_shell,
+    )
+    expected_interrupt_callback = build_interrupt_callback_extension_params(
+        deployment_context=deployment_context,
+    )
+
+    assert session_binding == expected_session_binding, (
+        "OpenAPI session binding contract drifted from extension_contracts SSOT."
+    )
+    assert streaming == expected_streaming, (
+        "OpenAPI streaming contract drifted from extension_contracts SSOT."
+    )
+    assert session_query == expected_session_query, (
+        "OpenAPI session query contract drifted from extension_contracts SSOT."
+    )
+    assert interrupt_callback == expected_interrupt_callback, (
+        "OpenAPI interrupt callback contract drifted from extension_contracts SSOT."
+    )
+
+
+def test_openapi_and_agent_card_extension_contracts_match() -> None:
+    settings = make_settings(a2a_bearer_token="test-token")
+    card = build_agent_card(settings)
+    ext_by_uri = {ext.uri: ext for ext in card.capabilities.extensions or []}
+    openapi = create_app(settings).openapi()
+    post_contract = openapi["paths"]["/"]["post"]["x-a2a-extension-contracts"]
+
+    assert post_contract["session_binding"] == ext_by_uri[SESSION_BINDING_EXTENSION_URI].params
+    assert post_contract["streaming"] == ext_by_uri[STREAMING_EXTENSION_URI].params
+    assert post_contract["session_query"] == ext_by_uri[SESSION_QUERY_EXTENSION_URI].params
+    assert (
+        post_contract["interrupt_callback"] == ext_by_uri[INTERRUPT_CALLBACK_EXTENSION_URI].params
+    )
