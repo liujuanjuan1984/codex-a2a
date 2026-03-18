@@ -18,8 +18,8 @@ from codex_a2a_server.metrics import (
     snapshot_metrics,
 )
 from codex_a2a_server.request_handler import CodexRequestHandler
-from codex_a2a_server.streaming import consume_codex_stream
 from codex_a2a_server.stream_state import StreamOutputState
+from codex_a2a_server.streaming import consume_codex_stream
 from tests.helpers import DummyEventQueue
 from tests.test_request_handler import _make_message_send_params
 
