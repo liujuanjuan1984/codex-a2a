@@ -19,6 +19,15 @@ from tests.helpers import DummySessionQueryCodexClient as DummyCodexClient
 from tests.helpers import make_settings
 
 
+def _example_params_include_field(payload: object, dotted_field: str) -> bool:
+    current = payload
+    for segment in dotted_field.split("."):
+        if not isinstance(current, dict) or segment not in current:
+            return False
+        current = current[segment]
+    return True
+
+
 def test_session_query_extension_ssot_matches_agent_card_contract() -> None:
     settings = make_settings(a2a_bearer_token="test-token")
     card = build_agent_card(settings)
@@ -177,3 +186,47 @@ def test_openapi_and_agent_card_extension_contracts_match() -> None:
     assert (
         post_contract["interrupt_callback"] == ext_by_uri[INTERRUPT_CALLBACK_EXTENSION_URI].params
     )
+
+
+def test_openapi_jsonrpc_examples_match_declared_extension_contracts() -> None:
+    settings = make_settings(a2a_bearer_token="test-token")
+    openapi = create_app(settings).openapi()
+    post = openapi["paths"]["/"]["post"]
+    extension_contracts = post["x-a2a-extension-contracts"]
+    session_method_contracts = extension_contracts["session_query"]["method_contracts"]
+    interrupt_method_contracts = extension_contracts["interrupt_callback"]["method_contracts"]
+    declared_extension_methods = set(session_method_contracts) | set(interrupt_method_contracts)
+    examples = post["requestBody"]["content"]["application/json"]["examples"]
+
+    for example in examples.values():
+        payload = example["value"]
+        method = payload["method"]
+        if method in {"message/send", "message/stream"}:
+            continue
+
+        assert method in declared_extension_methods, (
+            f"OpenAPI example method {method!r} is not declared by extension contracts."
+        )
+
+        params = payload.get("params", {})
+        method_contract = session_method_contracts.get(method) or interrupt_method_contracts[method]
+        required_fields = method_contract["params"].get("required", [])
+        for field in required_fields:
+            assert _example_params_include_field(params, field), (
+                f"OpenAPI example for {method!r} is missing required field {field!r}."
+            )
+
+
+def test_openapi_jsonrpc_examples_hide_shell_when_shell_disabled() -> None:
+    settings = make_settings(
+        a2a_bearer_token="test-token",
+        a2a_enable_session_shell=False,
+    )
+    openapi = create_app(settings).openapi()
+    post = openapi["paths"]["/"]["post"]
+    examples = post["requestBody"]["content"]["application/json"]["examples"]
+    methods = {example["value"]["method"] for example in examples.values()}
+    session_contracts = post["x-a2a-extension-contracts"]["session_query"]["method_contracts"]
+
+    assert "codex.sessions.shell" not in methods
+    assert "codex.sessions.shell" not in session_contracts
