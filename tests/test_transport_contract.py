@@ -42,14 +42,13 @@ def test_health_route_can_be_disabled() -> None:
 async def test_health_endpoint_is_public_and_reports_runtime_flags(monkeypatch) -> None:
     import codex_a2a_server.app as app_module
 
-    monkeypatch.setattr(app_module, "CodexClient", DummyChatCodexClient)
-    app = app_module.create_app(
-        make_settings(
-            a2a_bearer_token="test-token",
-            a2a_enable_session_shell=False,
-            a2a_interrupt_request_ttl_seconds=90,
-        )
+    settings = make_settings(
+        a2a_bearer_token="test-token",
+        a2a_enable_session_shell=False,
+        a2a_interrupt_request_ttl_seconds=90,
     )
+    monkeypatch.setattr(app_module, "CodexClient", DummyChatCodexClient)
+    app = app_module.create_app(settings)
     transport = httpx.ASGITransport(app=app)
 
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
@@ -59,7 +58,7 @@ async def test_health_endpoint_is_public_and_reports_runtime_flags(monkeypatch) 
     assert resp.json() == {
         "status": "ok",
         "service": "codex-a2a-server",
-        "version": "0.1.0",
+        "version": settings.a2a_version,
         "streaming_enabled": True,
         "session_shell_enabled": False,
         "interrupt_request_ttl_seconds": 90,
