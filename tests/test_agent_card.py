@@ -1,4 +1,5 @@
 from codex_a2a_server.app import (
+    COMPATIBILITY_PROFILE_EXTENSION_URI,
     INTERRUPT_CALLBACK_EXTENSION_URI,
     SESSION_BINDING_EXTENSION_URI,
     SESSION_QUERY_EXTENSION_URI,
@@ -14,6 +15,7 @@ def test_agent_card_description_reflects_actual_transport_capabilities() -> None
     assert "HTTP+JSON and JSON-RPC transports" in card.description
     assert "message/send, message/stream" in card.description
     assert "tasks/get, tasks/cancel" in card.description
+    assert "machine-readable compatibility profile" in card.description
     assert "all consumers share the same underlying Codex workspace/environment" in card.description
 
 
@@ -94,6 +96,21 @@ def test_agent_card_injects_deployment_context_into_extensions() -> None:
     assert "expected_interrupt_type" in interrupt.params["errors"]["error_data_fields"]
     assert "actual_interrupt_type" in interrupt.params["errors"]["error_data_fields"]
 
+    compatibility = ext_by_uri[COMPATIBILITY_PROFILE_EXTENSION_URI]
+    assert compatibility.params["profile_id"] == "codex-a2a-core-plus-extensions-v1"
+    assert compatibility.params["protocol_version"] == "0.3.0"
+    assert compatibility.params["core"]["jsonrpc_methods"] == [
+        "message/send",
+        "message/stream",
+        "tasks/get",
+        "tasks/cancel",
+        "tasks/resubscribe",
+    ]
+    shell_policy = compatibility.params["method_retention"]["codex.sessions.shell"]
+    assert shell_policy["availability"] == "enabled"
+    assert shell_policy["retention"] == "deployment-conditional"
+    assert shell_policy["toggle"] == "A2A_ENABLE_SESSION_SHELL"
+
 
 def test_agent_card_chat_examples_include_project_hint_when_configured() -> None:
     card = build_agent_card(make_settings(a2a_bearer_token="test-token", a2a_project="alpha"))
@@ -117,3 +134,6 @@ def test_agent_card_omits_shell_method_when_disabled() -> None:
     assert "codex.sessions.shell" not in session_query.params["method_contracts"]
     assert session_query.params["deployment_context"]["session_shell_enabled"] is False
     assert session_query.params["deployment_context"]["interrupt_request_ttl_seconds"] == 45
+    compatibility = ext_by_uri[COMPATIBILITY_PROFILE_EXTENSION_URI]
+    shell_policy = compatibility.params["method_retention"]["codex.sessions.shell"]
+    assert shell_policy["availability"] == "disabled"
