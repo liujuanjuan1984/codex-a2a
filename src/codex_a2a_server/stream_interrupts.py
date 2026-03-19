@@ -40,8 +40,9 @@ def extract_interrupt_asked_event(event: Mapping[str, Any]) -> dict[str, Any] | 
             "always": extract_string_list(props.get("always")),
         }
         codex_private: dict[str, Any] = {}
-        if isinstance(props.get("metadata"), Mapping):
-            codex_private["metadata"] = dict(props.get("metadata"))
+        metadata = props.get("metadata")
+        if isinstance(metadata, Mapping):
+            codex_private["metadata"] = dict(metadata)
         tool = props.get("tool")
         if isinstance(tool, Mapping):
             codex_private["tool"] = dict(tool)

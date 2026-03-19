@@ -32,11 +32,10 @@ uv run pre-commit run --all-files
 uv run pytest
 ```
 
-For deployment or shell script changes, also run:
+For shell script changes, validate the touched scripts directly, for example:
 
 ```bash
-bash -n scripts/deploy.sh
-bash -n scripts/deploy/setup_instance.sh
+bash -n scripts/smoke_test_built_cli.sh
 ```
 
 If `pre-commit` rewrites files, review the rewritten output and re-run the

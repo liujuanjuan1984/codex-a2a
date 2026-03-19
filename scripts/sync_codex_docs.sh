@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-DEST_BASE="$ROOT_DIR/docs/vendor/codex"
+DEST_BASE="$ROOT_DIR/vendor/codex"
 TMP_DIR="$(mktemp -d /tmp/codex-upstream.XXXXXX)"
 
 cleanup() {
