@@ -690,6 +690,166 @@ async def test_unsupported_server_request_returns_jsonrpc_error() -> None:
 
 
 @pytest.mark.asyncio
+async def test_permission_request_emits_reason_as_display_message_only() -> None:
+    client = CodexClient(make_settings(a2a_bearer_token="t-1", codex_timeout=1.0))
+    events: list[dict] = []
+
+    async def fake_enqueue(event: dict) -> None:
+        events.append(event)
+
+    client._enqueue_stream_event = fake_enqueue  # type: ignore[method-assign]
+
+    await client._handle_server_request(
+        {
+            "id": 301,
+            "method": "execCommandApproval",
+            "params": {
+                "conversationId": "thr-1",
+                "callId": "call-1",
+                "command": ["cat", ".env"],
+                "cwd": "/repo",
+                "parsedCmd": [
+                    {"cmd": "cat .env", "name": "cat", "path": "/repo/.env", "type": "read"}
+                ],
+                "reason": "The command needs confirmation before continuing.",
+            },
+        }
+    )
+
+    assert len(events) == 1
+    props = events[0]["properties"]
+    assert props["id"] == "301"
+    assert props["sessionID"] == "thr-1"
+    assert props["display_message"] == "The command needs confirmation before continuing."
+    assert "permission" not in props
+    assert "patterns" not in props
+    assert "always" not in props
+    assert "reason" not in props
+    assert props["metadata"]["raw"]["parsedCmd"] == [
+        {"cmd": "cat .env", "name": "cat", "path": "/repo/.env", "type": "read"}
+    ]
+
+
+@pytest.mark.asyncio
+async def test_question_request_emits_protocol_questions_only() -> None:
+    client = CodexClient(make_settings(a2a_bearer_token="t-1", codex_timeout=1.0))
+    events: list[dict] = []
+
+    async def fake_enqueue(event: dict) -> None:
+        events.append(event)
+
+    client._enqueue_stream_event = fake_enqueue  # type: ignore[method-assign]
+
+    await client._handle_server_request(
+        {
+            "id": 302,
+            "method": "item/tool/requestUserInput",
+            "params": {
+                "threadId": "thr-2",
+                "itemId": "item-1",
+                "turnId": "turn-1",
+                "description": "Please confirm how the agent should continue.",
+                "prompt": "Proceed with deployment?",
+                "questions": [
+                    {
+                        "header": "Deploy",
+                        "id": "q1",
+                        "question": "Proceed with deployment?",
+                    }
+                ],
+            },
+        }
+    )
+
+    assert len(events) == 1
+    props = events[0]["properties"]
+    assert props["id"] == "302"
+    assert "display_message" not in props
+    assert "description" not in props
+    assert "prompt" not in props
+    assert props["questions"] == [
+        {"header": "Deploy", "id": "q1", "question": "Proceed with deployment?"}
+    ]
+    assert props["metadata"]["raw"]["prompt"] == "Proceed with deployment?"
+
+
+@pytest.mark.asyncio
+async def test_permission_request_ignores_non_protocol_text_fields() -> None:
+    client = CodexClient(make_settings(a2a_bearer_token="t-1", codex_timeout=1.0))
+    events: list[dict] = []
+
+    async def fake_enqueue(event: dict) -> None:
+        events.append(event)
+
+    client._enqueue_stream_event = fake_enqueue  # type: ignore[method-assign]
+
+    await client._handle_server_request(
+        {
+            "id": 303,
+            "method": "execCommandApproval",
+            "params": {
+                "conversationId": "thr-3",
+                "callId": "call-3",
+                "command": ["cat", ".env"],
+                "cwd": "/repo",
+                "parsedCmd": [
+                    {"cmd": "cat .env", "name": "cat", "path": "/repo/.env", "type": "read"}
+                ],
+                "request": {
+                    "description": "Agent wants to read the environment file.",
+                    "reason": "The command needs confirmation before continuing.",
+                },
+            },
+        }
+    )
+
+    assert len(events) == 1
+    props = events[0]["properties"]
+    assert "display_message" not in props
+    assert "request" not in props
+    assert props["metadata"]["raw"]["request"] == {
+        "description": "Agent wants to read the environment file.",
+        "reason": "The command needs confirmation before continuing.",
+    }
+
+
+@pytest.mark.asyncio
+async def test_question_request_ignores_nested_question_fallbacks() -> None:
+    client = CodexClient(make_settings(a2a_bearer_token="t-1", codex_timeout=1.0))
+    events: list[dict] = []
+
+    async def fake_enqueue(event: dict) -> None:
+        events.append(event)
+
+    client._enqueue_stream_event = fake_enqueue  # type: ignore[method-assign]
+
+    await client._handle_server_request(
+        {
+            "id": 304,
+            "method": "item/tool/requestUserInput",
+            "params": {
+                "threadId": "thr-4",
+                "itemId": "item-4",
+                "turnId": "turn-4",
+                "context": {
+                    "description": "Please confirm how the agent should continue.",
+                    "questions": [{"id": "q1", "question": "Proceed with deployment?"}],
+                },
+            },
+        }
+    )
+
+    assert len(events) == 1
+    props = events[0]["properties"]
+    assert "display_message" not in props
+    assert props["questions"] == []
+    assert props["metadata"]["method"] == "item/tool/requestUserInput"
+    assert props["metadata"]["raw"]["context"]["description"] == (
+        "Please confirm how the agent should continue."
+    )
+
+
+@pytest.mark.asyncio
 async def test_ensure_started_passes_reasoning_effort_override_to_codex_cli() -> None:
     client = CodexClient(
         make_settings(
