@@ -131,7 +131,14 @@ Install an exact release:
 uv tool install "codex-a2a-server==<version>"
 ```
 
-Self-start the released CLI against an existing project:
+Before starting the runtime:
+
+- Install and verify the local `codex` CLI itself.
+- Configure Codex with a working provider/model setup and any required credentials.
+- `codex-a2a-server` does not provision Codex providers, login state, or API keys for you.
+- Startup fails fast if the local `codex` runtime is missing or cannot initialize.
+
+Self-start the released CLI against a workspace root:
 
 ```bash
 export A2A_BEARER_TOKEN="$(python -c 'import secrets; print(secrets.token_hex(24))')"
@@ -158,19 +165,24 @@ validation against unreleased changes on `main`.
 uv sync --all-extras
 ```
 
-2. Generate a local bearer token:
+2. Make sure local Codex is already usable:
+
+- verify `codex` is installed and available on `PATH` (or set `CODEX_CLI_BIN`)
+- verify Codex provider/auth configuration already works outside this repository
+
+3. Generate a local bearer token:
 
 ```bash
 export A2A_BEARER_TOKEN="$(python -c 'import secrets; print(secrets.token_hex(24))')"
 ```
 
-3. Start this service from the source tree:
+4. Start this service from the source tree:
 
 ```bash
-uv run codex-a2a-server
+CODEX_WORKSPACE_ROOT=/abs/path/to/workspace uv run codex-a2a-server
 ```
 
-4. Open the Agent Card:
+5. Open the Agent Card:
 
 - `http://127.0.0.1:8000/.well-known/agent-card.json`
 

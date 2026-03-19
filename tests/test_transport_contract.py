@@ -136,6 +136,28 @@ async def test_health_endpoint_with_bearer_token_reports_runtime_flags(monkeypat
 
 
 @pytest.mark.asyncio
+async def test_app_lifespan_runs_codex_startup_preflight() -> None:
+    calls: list[str] = []
+
+    class PreflightClient(DummyChatCodexClient):
+        async def startup_preflight(self) -> None:
+            calls.append("startup_preflight")
+
+    import codex_a2a_server.app as app_module
+
+    original_client = app_module.CodexClient
+    app_module.CodexClient = PreflightClient  # type: ignore[assignment]
+    try:
+        app = app_module.create_app(make_settings(a2a_bearer_token="test-token"))
+        async with app.router.lifespan_context(app):
+            pass
+    finally:
+        app_module.CodexClient = original_client  # type: ignore[assignment]
+
+    assert calls == ["startup_preflight"]
+
+
+@pytest.mark.asyncio
 async def test_dual_stack_send_accepts_transport_native_payloads(monkeypatch) -> None:
     import codex_a2a_server.app as app_module
 

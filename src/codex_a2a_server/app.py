@@ -364,6 +364,9 @@ def create_app(settings: Settings) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
+        startup_preflight = getattr(client, "startup_preflight", None)
+        if callable(startup_preflight):
+            await startup_preflight()
         yield
         await client.close()
 

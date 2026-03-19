@@ -29,6 +29,10 @@ _DEFAULT_CLIENT_VERSION = "0.1.0"
 _EVENT_QUEUE_MAXSIZE = 2048
 
 
+class CodexStartupPrerequisiteError(RuntimeError):
+    """Raised when local Codex prerequisites are not satisfied."""
+
+
 def _normalized_string(value: Any) -> str | None:
     if not isinstance(value, str):
         return None
@@ -324,6 +328,56 @@ class CodexClient:
             params[key] = value if isinstance(value, str) else str(value)
         return params
 
+    def _resolve_cli_bin(self) -> str:
+        cli_bin = self._cli_bin.strip() or "codex"
+        if os.path.sep in cli_bin or (os.path.altsep and os.path.altsep in cli_bin):
+            expanded = os.path.expanduser(cli_bin)
+            if not os.path.exists(expanded):
+                raise CodexStartupPrerequisiteError(
+                    f"Codex prerequisite not satisfied: CLI binary not found at "
+                    f"{expanded!r}. Install Codex or set CODEX_CLI_BIN to a valid "
+                    "executable."
+                )
+            if not os.access(expanded, os.X_OK):
+                raise CodexStartupPrerequisiteError(
+                    f"Codex prerequisite not satisfied: CLI binary at {expanded!r} "
+                    "is not executable. Fix permissions or set CODEX_CLI_BIN to a "
+                    "valid executable."
+                )
+            return expanded
+
+        resolved = shutil.which(cli_bin)
+        if resolved is None and cli_bin == "codex":
+            npm_global_bin = os.path.expanduser("~/.npm-global/bin/codex")
+            if os.path.exists(npm_global_bin) and os.access(npm_global_bin, os.X_OK):
+                resolved = npm_global_bin
+        if resolved is None:
+            raise CodexStartupPrerequisiteError(
+                f"Codex prerequisite not satisfied: {cli_bin!r} was not found on "
+                "PATH. Install Codex and verify the `codex` CLI is available "
+                "before starting codex-a2a-server."
+            )
+        return resolved
+
+    async def startup_preflight(self) -> None:
+        try:
+            await self._ensure_started()
+        except CodexStartupPrerequisiteError:
+            raise
+        except FileNotFoundError as exc:
+            raise CodexStartupPrerequisiteError(
+                "Codex prerequisite not satisfied: failed to execute the "
+                "configured Codex CLI. Verify that Codex is installed and "
+                "CODEX_CLI_BIN points to a valid executable."
+            ) from exc
+        except Exception as exc:
+            raise CodexStartupPrerequisiteError(
+                "Codex prerequisite not satisfied: failed to start or initialize "
+                "`codex app-server`. Verify that Codex itself is usable and "
+                "that its provider/auth configuration is valid before "
+                "starting codex-a2a-server."
+            ) from exc
+
     async def _ensure_started(self) -> None:
         if self._closed:
             raise RuntimeError("codex client already closed")
@@ -336,13 +390,7 @@ class CodexClient:
             if self._closed:
                 raise RuntimeError("codex client already closed")
 
-            cli_bin = self._cli_bin
-            if cli_bin == "codex" and shutil.which("codex") is None:
-                npm_global_bin = os.path.expanduser("~/.npm-global/bin/codex")
-                if os.path.exists(npm_global_bin):
-                    cli_bin = npm_global_bin
-
-            cli_args: list[str] = [cli_bin]
+            cli_args: list[str] = [self._resolve_cli_bin()]
             if self._model_reasoning_effort:
                 cli_args.extend(
                     [

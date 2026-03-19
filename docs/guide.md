@@ -166,9 +166,15 @@ Current implementation note:
 Configuration note:
 - The service configuration layer only accepts `CODEX_*` names for Codex-facing settings.
 
+Codex prerequisite note:
+- `codex-a2a-server` assumes the local `codex` runtime is already usable.
+- Install and verify the `codex` CLI itself before starting this server.
+- Provider selection, login state, and upstream API keys remain Codex-side prerequisites.
+- Service startup fails fast when the local `codex` runtime is missing or cannot initialize.
+
 ## Released CLI Self-Start
 
-For a single user or an existing project checkout, prefer the published CLI
+For a single user or an existing workspace root, prefer the published CLI
 instead of repository scripts.
 
 Install once:
@@ -177,7 +183,13 @@ Install once:
 uv tool install codex-a2a-server
 ```
 
-Run against an existing project:
+Before starting the runtime:
+
+- verify `codex` itself is installed and available on `PATH` (or set `CODEX_CLI_BIN`)
+- verify your Codex provider/model/auth setup already works outside this repository
+- `codex-a2a-server` does not provision Codex providers, login state, or API keys
+
+Run against a workspace root:
 
 ```bash
 export A2A_BEARER_TOKEN="$(python -c 'import secrets; print(secrets.token_hex(24))')"
