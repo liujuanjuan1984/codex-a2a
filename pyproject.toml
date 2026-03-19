@@ -64,7 +64,7 @@ quote-style = "double"
 package = true
 
 [tool.setuptools_scm]
-fallback_version = "0.1.0"
+fallback_version = "0.0.0+unknown"
 tag_regex = "^v?(?P<version>.+)$"
 
 [tool.pytest.ini_options]
