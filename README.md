@@ -1,23 +1,22 @@
 # codex-a2a-server
 
-> Turn Codex into a stateful, production-oriented A2A agent service.
+> Expose Codex through A2A.
 
-`codex-a2a-server` turns the local Codex runtime into an A2A service with
-auth, streaming, session continuity, and interrupt handling.
+`codex-a2a-server` adds an A2A service layer to the local Codex runtime, with
+auth, streaming, session continuity, interrupt handling, and a clear
+deployment boundary.
 
 ## What This Is
 
-- An A2A adapter service in front of the local Codex runtime.
-- A good fit when you want to keep Codex as the runtime but expose a stable
-  network service for apps, gateways, or A2A clients.
-- Not a multi-tenant isolation layer. One deployed instance should be treated
-  as one single-tenant trust boundary.
+- An A2A adapter service for the local Codex runtime.
+- Use it when you need a stable A2A endpoint for apps, gateways, or A2A
+  clients.
 
 ## Logical Components
 
 ```mermaid
 flowchart TD
-    Client["A2A client / app"]
+    Client["a2a-client-hub / any A2A client"]
 
     subgraph ServerSide["Server-side"]
         Adapter["codex-a2a-server\nA2A adapter service"]
@@ -28,10 +27,6 @@ flowchart TD
 
     Client <--> Adapter
 ```
-
-The service sits between A2A consumers and the local Codex runtime. It keeps
-the network-facing contract stable without pretending to replace Codex's own
-runtime boundary.
 
 ## Fast Start
 
