@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Validate that a locally built wheel can be installed as a uv tool and serves /health.
+# Validate that a locally built wheel can be installed as a uv tool and serves authenticated /health.
 set -euo pipefail
 
 if ! command -v uv >/dev/null 2>&1; then

@@ -329,8 +329,6 @@ def add_auth_middleware(app: FastAPI, settings: Settings) -> None:
         "/.well-known/agent-card.json",
         "/.well-known/agent.json",
     }
-    if settings.a2a_enable_health_endpoint:
-        public_paths.add("/health")
 
     @app.middleware("http")
     async def bearer_auth(request: Request, call_next):

@@ -92,7 +92,23 @@ def test_openapi_jsonrpc_examples_include_core_and_extension_methods() -> None:
 
 
 @pytest.mark.asyncio
-async def test_health_endpoint_is_public_and_reports_runtime_flags(monkeypatch) -> None:
+async def test_health_endpoint_requires_bearer_token(monkeypatch) -> None:
+    import codex_a2a_server.app as app_module
+
+    settings = make_settings(a2a_bearer_token="test-token")
+    monkeypatch.setattr(app_module, "CodexClient", DummyChatCodexClient)
+    app = app_module.create_app(settings)
+    transport = httpx.ASGITransport(app=app)
+
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.get("/health")
+
+    assert resp.status_code == 401
+    assert resp.json() == {"error": "Unauthorized"}
+
+
+@pytest.mark.asyncio
+async def test_health_endpoint_with_bearer_token_reports_runtime_flags(monkeypatch) -> None:
     import codex_a2a_server.app as app_module
 
     settings = make_settings(
@@ -103,9 +119,10 @@ async def test_health_endpoint_is_public_and_reports_runtime_flags(monkeypatch) 
     monkeypatch.setattr(app_module, "CodexClient", DummyChatCodexClient)
     app = app_module.create_app(settings)
     transport = httpx.ASGITransport(app=app)
+    headers = {"Authorization": "Bearer test-token"}
 
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-        resp = await client.get("/health")
+        resp = await client.get("/health", headers=headers)
 
     assert resp.status_code == 200
     assert resp.json() == {

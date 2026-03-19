@@ -148,7 +148,7 @@ Current implementation note:
 - `A2A_HOST`: bind host, default `127.0.0.1`
 - `A2A_PORT`: bind port, default `8000`
 - `A2A_BEARER_TOKEN`: required; service fails fast if unset
-- `A2A_ENABLE_HEALTH_ENDPOINT`: enable the public lightweight `/health` probe, default `true`
+- `A2A_ENABLE_HEALTH_ENDPOINT`: enable the authenticated lightweight `/health` probe, default `true`
 - `A2A_ENABLE_SESSION_SHELL`: expose `codex.sessions.shell` on JSON-RPC extensions, default `true`
 - `A2A_LOG_LEVEL`: `DEBUG/INFO/WARNING/ERROR`, default `INFO`
 - `A2A_LOG_PAYLOADS`: log A2A/Codex payload bodies, default `false`
@@ -214,9 +214,10 @@ managed systemd deployment flow.
 
 ## Service Behavior
 
-- `GET /health` is a lightweight public probe endpoint. It returns service
-  status plus deployment-relevant flags such as streaming, session shell, and
-  interrupt TTL; it does not call upstream Codex.
+- `GET /health` is a lightweight authenticated status probe. It requires the
+  same `Authorization: Bearer <token>` header as other protected endpoints and
+  returns service status plus deployment-relevant flags such as streaming,
+  session shell, and interrupt TTL; it does not call upstream Codex.
 - The service forwards A2A `message:send` to Codex session/message calls.
 - Streaming is always enabled for this service surface. `/v1/message:stream`
   and JSON-RPC `message/stream` are stable core capabilities rather than

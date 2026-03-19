@@ -226,6 +226,23 @@ Per instance, deploy writes:
 The systemd unit loads both `codex.env` and `a2a.env`, so Codex subprocess
 settings and A2A settings stay in one service boundary.
 
+## Deploy Readiness Probe
+
+When `A2A_ENABLE_HEALTH_ENDPOINT=true`, `scripts/deploy/enable_instance.sh`
+waits for an authenticated `GET /health` probe before considering the service
+ready.
+
+- The probe uses `Authorization: Bearer <token>`
+- It prefers `A2A_BEARER_TOKEN` from the current environment
+- Otherwise it reads `${DATA_ROOT}/<project>/config/a2a.secret.env`
+- If `A2A_ENABLE_HEALTH_ENDPOINT=false`, deploy skips the `/health` probe and
+  only verifies systemd service state
+
+Optional deploy-only tuning:
+
+- `DEPLOY_HEALTHCHECK_TIMEOUT_SECONDS`: readiness timeout, default `30`
+- `DEPLOY_HEALTHCHECK_INTERVAL_SECONDS`: probe interval, default `1`
+
 ## Service Management
 
 Inspect the deployed service:

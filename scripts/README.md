@@ -19,7 +19,8 @@ overview, runtime contracts, or deployment rationale in detail.
   runtime for managed systemd deployment.
 - [`scripts/deploy.sh`](./deploy.sh):
   create or update one long-running `codex-a2a@.service` instance backed by the
-  published package runtime.
+  published package runtime, including an authenticated `/health` readiness
+  probe when the health endpoint is enabled.
 - [`scripts/uninstall.sh`](./uninstall.sh):
   remove one deployed instance (preview-first, explicit confirm required).
 - [`scripts/smoke_test_built_cli.sh`](./smoke_test_built_cli.sh):
