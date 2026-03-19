@@ -43,6 +43,7 @@ fi
 tmpdir="$(mktemp -d)"
 tool_dir="${tmpdir}/tools"
 tool_bin_dir="${tmpdir}/bin"
+fake_codex_bin="${tmpdir}/codex"
 server_log="${tmpdir}/server.log"
 
 cleanup() {
@@ -63,6 +64,29 @@ UV_TOOL_DIR="${tool_dir}" \
 UV_TOOL_BIN_DIR="${tool_bin_dir}" \
 uv tool install "${wheel_path}" --python 3.13
 
+cat >"${fake_codex_bin}" <<'PY'
+#!/usr/bin/env python3
+import json
+import sys
+
+
+for raw_line in sys.stdin:
+    line = raw_line.strip()
+    if not line:
+        continue
+    message = json.loads(line)
+    request_id = message.get("id")
+    method = message.get("method")
+    if request_id is None:
+        continue
+    response = {"jsonrpc": "2.0", "id": request_id, "result": {}}
+    if method == "initialize":
+        response["result"] = {"capabilities": {}}
+    sys.stdout.write(json.dumps(response) + "\n")
+    sys.stdout.flush()
+PY
+chmod +x "${fake_codex_bin}"
+
 port="$(
   "${python_bin}" - <<'PY'
 import socket
@@ -78,6 +102,7 @@ bearer_token="smoke-test-token"
 A2A_BEARER_TOKEN="${bearer_token}" \
 A2A_PORT="${port}" \
 A2A_HOST="127.0.0.1" \
+CODEX_CLI_BIN="${fake_codex_bin}" \
 "${tool_bin_dir}/codex-a2a-server" >"${server_log}" 2>&1 &
 server_pid="$!"
 

@@ -1,6 +1,8 @@
 import asyncio
 import json
 import logging
+import os
+import shutil
 import time
 from unittest.mock import MagicMock
 
@@ -8,6 +10,7 @@ import pytest
 
 from codex_a2a_server.codex_client import (
     CodexClient,
+    CodexStartupPrerequisiteError,
     InterruptRequestBinding,
     _PendingInterruptRequest,
     _PendingRpcRequest,
@@ -25,7 +28,7 @@ async def test_list_calls_use_expected_rpc_params() -> None:
     client = CodexClient(
         make_settings(
             a2a_bearer_token="t-1",
-            codex_directory="/safe",
+            codex_workspace_root="/safe",
             codex_timeout=1.0,
         )
     )
@@ -59,7 +62,7 @@ async def test_list_messages_applies_limit_locally_after_mapping() -> None:
     client = CodexClient(
         make_settings(
             a2a_bearer_token="t-1",
-            codex_directory="/safe",
+            codex_workspace_root="/safe",
             codex_timeout=1.0,
         )
     )
@@ -98,7 +101,7 @@ async def test_session_shell_uses_command_exec_without_thread_context() -> None:
     client = CodexClient(
         make_settings(
             a2a_bearer_token="t-1",
-            codex_directory="/safe",
+            codex_workspace_root="/safe",
             codex_timeout=1.0,
         )
     )
@@ -736,6 +739,7 @@ async def test_ensure_started_passes_reasoning_effort_override_to_codex_cli() ->
     client._send_json_message = fake_send_json  # type: ignore[method-assign]
     client._read_stdout_loop = fake_stdout_loop  # type: ignore[method-assign]
     client._read_stderr_loop = fake_stderr_loop  # type: ignore[method-assign]
+    client._resolve_cli_bin = lambda: "codex-custom"  # type: ignore[method-assign]
 
     original = asyncio.create_subprocess_exec
     asyncio.create_subprocess_exec = fake_create_subprocess_exec  # type: ignore[assignment]
@@ -748,6 +752,29 @@ async def test_ensure_started_passes_reasoning_effort_override_to_codex_cli() ->
     assert captured
     args, _kwargs = captured[0]
     assert args[:4] == ("codex-custom", "-c", 'model_reasoning_effort="high"', "app-server")
+
+
+@pytest.mark.asyncio
+async def test_startup_preflight_fails_clearly_when_codex_is_missing() -> None:
+    client = CodexClient(make_settings(a2a_bearer_token="t-1", codex_timeout=1.0))
+
+    original_which = shutil.which
+    original_exists = os.path.exists
+    shutil.which = lambda _name: None  # type: ignore[assignment]
+    os.path.exists = (
+        lambda path: False
+        if path == os.path.expanduser("~/.npm-global/bin/codex")
+        else original_exists(path)
+    )  # type: ignore[assignment]
+    try:
+        with pytest.raises(CodexStartupPrerequisiteError) as excinfo:
+            await client.startup_preflight()
+    finally:
+        shutil.which = original_which  # type: ignore[assignment]
+        os.path.exists = original_exists  # type: ignore[assignment]
+        await client.close()
+
+    assert "Install Codex" in str(excinfo.value)
 
 
 @pytest.mark.asyncio

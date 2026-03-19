@@ -111,6 +111,9 @@ class DummyEventQueue:
     async def close(self) -> None:
         return None
 
+    async def startup_preflight(self) -> None:
+        return None
+
 
 def make_request_context_mock(
     *,
@@ -185,6 +188,9 @@ class DummyChatCodexClient:
         )
 
     async def close(self) -> None:
+        return None
+
+    async def startup_preflight(self) -> None:
         return None
 
     async def create_session(

@@ -127,13 +127,12 @@ Current implementation note:
 - `CODEX_MODEL_ID`: per-turn model override passed to `turn/start` (optional)
 - `CODEX_MODEL_REASONING_EFFORT`: explicit reasoning effort override passed to
   Codex CLI app-server via `-c model_reasoning_effort=...` (optional)
-- `CODEX_DIRECTORY`: default Codex working directory (optional)
+- `CODEX_WORKSPACE_ROOT`: default Codex workspace root (optional)
 - `CODEX_PROVIDER_ID`: deployment metadata only (optional)
 - `CODEX_AGENT`: deployment metadata only (optional)
 - `CODEX_SYSTEM`: reserved compatibility field (optional)
 - `CODEX_VARIANT`: deployment metadata only (optional)
 - `CODEX_TIMEOUT`: request timeout in seconds, default `120`
-  (systemd deployment template may write `300` by default)
 - `CODEX_TIMEOUT_STREAM`: streaming turn timeout in seconds (optional);
   unset means no explicit stream timeout for the streaming send path
 - `CODEX_BASE_URL`: reserved compatibility field for legacy HTTP mode; not used by app-server mode
@@ -167,9 +166,15 @@ Current implementation note:
 Configuration note:
 - The service configuration layer only accepts `CODEX_*` names for Codex-facing settings.
 
+Codex prerequisite note:
+- `codex-a2a-server` assumes the local `codex` runtime is already usable.
+- Install and verify the `codex` CLI itself before starting this server.
+- Provider selection, login state, and upstream API keys remain Codex-side prerequisites.
+- Service startup fails fast when the local `codex` runtime is missing or cannot initialize.
+
 ## Released CLI Self-Start
 
-For a single user or an existing project checkout, prefer the published CLI
+For a single user or an existing workspace root, prefer the published CLI
 instead of repository scripts.
 
 Install once:
@@ -178,14 +183,20 @@ Install once:
 uv tool install codex-a2a-server
 ```
 
-Run against an existing project:
+Before starting the runtime:
+
+- verify `codex` itself is installed and available on `PATH` (or set `CODEX_CLI_BIN`)
+- verify your Codex provider/model/auth setup already works outside this repository
+- `codex-a2a-server` does not provision Codex providers, login state, or API keys
+
+Run against a workspace root:
 
 ```bash
 export A2A_BEARER_TOKEN="$(python -c 'import secrets; print(secrets.token_hex(24))')"
 A2A_HOST=127.0.0.1 \
 A2A_PORT=8000 \
 A2A_PUBLIC_URL=http://127.0.0.1:8000 \
-CODEX_DIRECTORY=/abs/path/to/project \
+CODEX_WORKSPACE_ROOT=/abs/path/to/workspace \
 CODEX_MODEL_ID=gpt-5.1-codex \
 CODEX_TIMEOUT=300 \
 codex-a2a-server
@@ -193,7 +204,7 @@ codex-a2a-server
 
 Notes:
 
-- `CODEX_DIRECTORY` should point at the project you want Codex to operate in.
+- `CODEX_WORKSPACE_ROOT` should point at the workspace root you want Codex to operate in.
 - `codex-a2a-server` launches the Codex app-server subprocess itself; no
   separate `codex serve` step is required.
 - Upgrade the installed CLI with `uv tool upgrade codex-a2a-server`.
@@ -206,11 +217,11 @@ unreleased changes:
 ```bash
 uv sync --all-extras
 export A2A_BEARER_TOKEN="$(python -c 'import secrets; print(secrets.token_hex(24))')"
-CODEX_DIRECTORY=/abs/path/to/project uv run codex-a2a-server
+CODEX_WORKSPACE_ROOT=/abs/path/to/workspace uv run codex-a2a-server
 ```
 
 This path is for contributors. End users should prefer the released CLI or the
-managed systemd deployment flow.
+released CLI self-start path.
 
 ## Service Behavior
 
@@ -307,7 +318,7 @@ managed systemd deployment flow.
   - Failure events include concrete error details with `failed` state.
 - Directory validation and normalization:
   - Clients can pass `metadata.codex.directory`, but it must stay inside
-    `${CODEX_DIRECTORY}` (or service runtime root if not configured).
+    `${CODEX_WORKSPACE_ROOT}` (or service runtime root if not configured).
   - All paths are normalized with `realpath` to prevent `..` or symlink
     boundary bypass.
   - If `A2A_ALLOW_DIRECTORY_OVERRIDE=false`, only the default directory is
