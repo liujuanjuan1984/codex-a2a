@@ -113,10 +113,12 @@ class CodexAgentExecutor(AgentExecutor):
         cancel_abort_timeout_seconds: float = 1.0,
         session_cache_ttl_seconds: int = 3600,
         session_cache_maxsize: int = 10_000,
+        stream_idle_diagnostic_seconds: float | None = None,
     ) -> None:
         self._client = client
         self._streaming_enabled = streaming_enabled
         self._cancel_abort_timeout_seconds = float(cancel_abort_timeout_seconds)
+        self._stream_idle_diagnostic_seconds = stream_idle_diagnostic_seconds
         self._sessions = _TTLCache(
             ttl_seconds=session_cache_ttl_seconds,
             maxsize=session_cache_maxsize,
@@ -287,6 +289,7 @@ class CodexAgentExecutor(AgentExecutor):
                         event_queue=event_queue,
                         stop_event=stop_event,
                         completion_event=stream_completion_event,
+                        idle_diagnostic_seconds=self._stream_idle_diagnostic_seconds,
                         directory=directory,
                     )
                 )

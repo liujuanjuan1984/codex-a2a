@@ -158,6 +158,10 @@ Current implementation note:
 - `A2A_CANCEL_ABORT_TIMEOUT_SECONDS`: how long `tasks/cancel` waits for
   in-flight execution/session-create cleanup after issuing cancellation,
   default `1.0`; `0` means best-effort cancel without waiting
+- `A2A_STREAM_SSE_PING_SECONDS`: transport-level SSE keepalive interval,
+  default `10.0`
+- `A2A_STREAM_IDLE_DIAGNOSTIC_SECONDS`: threshold before the server emits a
+  stream idle diagnostic log, default `60.0`
 - `A2A_INTERRUPT_REQUEST_TTL_SECONDS`: TTL for pending interrupt callbacks
   before they become expired, default `3600`
 
@@ -285,6 +289,8 @@ described first in [README.md](../README.md) and above in this guide.
   and `tool/requestUserInput` requests, user-visible approval/question details
   are normalized into `metadata.shared.interrupt.details`, including readable
   `display_message`, resolved `patterns`, and `questions` when available.
+  HTTP streaming responses also send transport-level SSE ping comments on a
+  configurable interval, without adding synthetic A2A business events.
   Interrupt status events no longer mirror the asked payload under
   `metadata.codex.interrupt`; downstream consumers should treat
   `metadata.shared.interrupt` as the single interrupt rendering contract.
