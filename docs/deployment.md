@@ -136,8 +136,7 @@ Templates are generated automatically as:
 - `a2a.secret.env.example`
 - `codex.secret.env.example`
 
-The released CLI uses flags as the preferred contract. For compatibility, the
-underlying packaged deploy helper still accepts legacy `key=value` passthrough.
+The released CLI uses flags as the deploy contract.
 
 ## Supported `codex-a2a-server deploy` Inputs
 

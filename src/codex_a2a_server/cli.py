@@ -91,8 +91,7 @@ def _build_deploy_parser(
     )
     deploy_parser.epilog = (
         "Secrets such as A2A_BEARER_TOKEN and provider API keys remain "
-        "environment-only inputs. Legacy key=value arguments are still accepted "
-        "for compatibility, but flags are the preferred CLI contract."
+        "environment-only inputs. Flags are the supported CLI contract."
     )
 
 
@@ -149,12 +148,6 @@ def _run_packaged_script(
         return completed.returncode
 
 
-def _is_legacy_passthrough(command: str, args: Sequence[str]) -> bool:
-    if command != "deploy":
-        return False
-    return bool(args) and all("=" in arg and not arg.startswith("-") for arg in args)
-
-
 def _append_key_value_arg(args: list[str], key: str, value: object | None) -> None:
     if value is None:
         return
@@ -201,9 +194,6 @@ def _build_deploy_args(namespace: argparse.Namespace) -> list[str]:
 def main(argv: Sequence[str] | None = None) -> int:
     args = list(sys.argv[1:] if argv is None else argv)
     parser = build_parser()
-
-    if args and _is_legacy_passthrough(args[0], args[1:]):
-        return _run_packaged_script("deploy.sh", args[1:])
 
     namespace = parser.parse_args(args)
     if namespace.command in {None, "serve"}:

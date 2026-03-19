@@ -33,7 +33,7 @@ def test_cli_deploy_help_exposes_flag_contract(capsys: pytest.CaptureFixture[str
     assert "--a2a-port" in help_text
     assert "--a2a-enable-health-endpoint" in help_text
     assert "Secrets such as A2A_BEARER_TOKEN" in help_text
-    assert "Legacy key=value arguments are still accepted" in help_text
+    assert "Flags are the supported CLI contract." in help_text
     assert "--repo-url" not in help_text
 
 
@@ -61,16 +61,6 @@ def test_cli_serve_subcommand_invokes_runtime() -> None:
         assert cli.main(["serve"]) == 0
 
     serve_mock.assert_called_once_with()
-
-
-def test_cli_deploy_subcommand_supports_legacy_key_value_args() -> None:
-    with mock.patch("codex_a2a_server.cli._run_packaged_script", return_value=0) as run_mock:
-        assert cli.main(["deploy", "project=alpha", "a2a_port=8010"]) == 0
-
-    run_mock.assert_called_once_with(
-        "deploy.sh",
-        ["project=alpha", "a2a_port=8010"],
-    )
 
 
 def test_cli_deploy_subcommand_maps_flags_to_key_value_args() -> None:
@@ -108,6 +98,16 @@ def test_cli_deploy_subcommand_maps_flags_to_key_value_args() -> None:
             "force_restart=true",
         ],
     )
+
+
+def test_cli_deploy_rejects_legacy_key_value_args(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    with pytest.raises(SystemExit) as excinfo:
+        cli.main(["deploy", "--project", "alpha", "a2a_port=8010"])
+
+    assert excinfo.value.code == 2
+    assert "unrecognized arguments" in capsys.readouterr().err
 
 
 def test_cli_packages_deploy_scripts_as_assets() -> None:
