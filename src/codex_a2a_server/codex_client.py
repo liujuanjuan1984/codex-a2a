@@ -201,7 +201,6 @@ class InterruptRequestBinding:
     interrupt_type: str
     session_id: str
     created_at: float
-    provider_method: str
 
 
 @dataclass
@@ -723,7 +722,6 @@ class CodexClient:
                     interrupt_type="permission",
                     session_id=session_id,
                     created_at=time.monotonic(),
-                    provider_method=method,
                 ),
                 rpc_request_id=request_id,
                 params=params,
@@ -751,7 +749,6 @@ class CodexClient:
                     interrupt_type="question",
                     session_id=session_id,
                     created_at=time.monotonic(),
-                    provider_method=method,
                 ),
                 rpc_request_id=request_id,
                 params=params,

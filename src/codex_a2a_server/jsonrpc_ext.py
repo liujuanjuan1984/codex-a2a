@@ -49,9 +49,6 @@ ERR_INTERRUPT_EXPIRED = -32007
 ERR_INTERRUPT_TYPE_MISMATCH = -32008
 
 
-SESSION_CONTEXT_ID_STRATEGY = "equals_upstream_session_id"
-
-
 def _session_context_id(session_id: str) -> str:
     return session_id
 

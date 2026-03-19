@@ -127,7 +127,6 @@ async def test_permission_reply_maps_to_codex_decision() -> None:
             interrupt_type="permission",
             session_id="thr-1",
             created_at=time.monotonic(),
-            provider_method="item/commandExecution/requestApproval",
         ),
         rpc_request_id=100,
         params={"threadId": "thr-1"},
@@ -163,7 +162,6 @@ async def test_question_reply_builds_answer_map() -> None:
             interrupt_type="question",
             session_id="thr-2",
             created_at=time.monotonic(),
-            provider_method="item/tool/requestUserInput",
         ),
         rpc_request_id=200,
         params={
@@ -215,7 +213,6 @@ def test_interrupt_request_status_uses_configured_ttl(monkeypatch) -> None:
             interrupt_type="permission",
             session_id="thr-1",
             created_at=10.0,
-            provider_method="item/commandExecution/requestApproval",
         ),
         rpc_request_id=1,
         params={"threadId": "thr-1"},
