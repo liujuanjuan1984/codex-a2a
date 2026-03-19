@@ -5,13 +5,19 @@ import json
 import logging
 import secrets
 import time
+from collections.abc import Awaitable, Callable
 from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING
 from urllib.parse import unquote
 
 import uvicorn
 from a2a.server.apps.jsonrpc.jsonrpc_app import DefaultCallContextBuilder
-from a2a.server.apps.rest.rest_adapter import RESTAdapter
+from a2a.server.apps.rest.rest_adapter import (
+    InvalidRequestError,
+    RESTAdapter,
+    ServerError,
+    rest_stream_error_handler,
+)
 from a2a.server.tasks.inmemory_task_store import InMemoryTaskStore
 from a2a.types import (
     AgentCapabilities,
@@ -25,6 +31,7 @@ from a2a.types import (
 )
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
+from sse_starlette.sse import EventSourceResponse
 from starlette.responses import StreamingResponse
 
 from .agent import CodexAgentExecutor
@@ -90,6 +97,55 @@ class IdentityAwareCallContextBuilder(DefaultCallContextBuilder):
             context.state["correlation_id"] = correlation_id
 
         return context
+
+
+class CodexRESTAdapter(RESTAdapter):
+    def __init__(
+        self,
+        *,
+        agent_card: AgentCard,
+        http_handler,
+        sse_ping_seconds: float,
+        extended_agent_card: AgentCard | None = None,
+        context_builder: DefaultCallContextBuilder | None = None,
+        card_modifier: Callable[[AgentCard], Awaitable[AgentCard] | AgentCard] | None = None,
+        extended_card_modifier: Callable[
+            [AgentCard, ServerCallContext], Awaitable[AgentCard] | AgentCard
+        ]
+        | None = None,
+    ) -> None:
+        super().__init__(
+            agent_card=agent_card,
+            http_handler=http_handler,
+            extended_agent_card=extended_agent_card,
+            context_builder=context_builder,
+            card_modifier=card_modifier,
+            extended_card_modifier=extended_card_modifier,
+        )
+        self._sse_ping_seconds = float(sse_ping_seconds)
+
+    @rest_stream_error_handler
+    async def _handle_streaming_request(self, method, request):
+        try:
+            await request.body()
+        except (ValueError, RuntimeError, OSError) as e:
+            raise ServerError(
+                error=InvalidRequestError(message=f"Failed to pre-consume request body: {e}")
+            ) from e
+
+        call_context = self._context_builder.build(request)
+
+        async def event_generator(stream):
+            async for item in stream:
+                yield {"data": item}
+
+        return EventSourceResponse(
+            event_generator(method(request, call_context)),
+            ping=self._sse_ping_seconds,
+        )
+
+
+CodexRESTAdapter._handle_streaming_request.__annotations__["request"] = Request
 
 
 def _build_deployment_context(settings: Settings) -> dict[str, str | bool | int]:
@@ -355,6 +411,7 @@ def create_app(settings: Settings) -> FastAPI:
         cancel_abort_timeout_seconds=settings.a2a_cancel_abort_timeout_seconds,
         session_cache_ttl_seconds=settings.a2a_session_cache_ttl_seconds,
         session_cache_maxsize=settings.a2a_session_cache_maxsize,
+        stream_idle_diagnostic_seconds=settings.a2a_stream_idle_diagnostic_seconds,
     )
     task_store = InMemoryTaskStore()
     handler = CodexRequestHandler(
@@ -401,10 +458,11 @@ def create_app(settings: Settings) -> FastAPI:
     app.state.codex_client = client
     app.state.codex_executor = executor
 
-    rest_adapter = RESTAdapter(
+    rest_adapter = CodexRESTAdapter(
         agent_card=agent_card,
         http_handler=handler,
         context_builder=context_builder,
+        sse_ping_seconds=settings.a2a_stream_sse_ping_seconds,
     )
     for route, callback in rest_adapter.routes().items():
         app.add_api_route(route[0], callback, methods=[route[1]])

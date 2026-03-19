@@ -1801,7 +1801,7 @@ async def test_streaming_keeps_multiple_message_ids_in_same_request_window() -> 
 
 
 @pytest.mark.asyncio
-async def test_streaming_logs_idle_diagnostics_when_only_transport_keepalive_is_visible(
+async def test_streaming_logs_idle_diagnostics_at_debug_when_only_transport_keepalive_is_visible(
     monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
@@ -1824,7 +1824,7 @@ async def test_streaming_logs_idle_diagnostics_when_only_transport_keepalive_is_
     executor._should_stream = lambda context: True  # type: ignore[method-assign]
     queue = DummyEventQueue()
 
-    caplog.set_level(logging.INFO, logger="codex_a2a_server.streaming")
+    caplog.set_level(logging.DEBUG, logger="codex_a2a_server.streaming")
 
     await executor.execute(
         make_request_context(task_id="task-idle-log", context_id="ctx-idle-log", text="go"),

@@ -1,12 +1,14 @@
 import hashlib
 import logging
 import uuid
+from unittest.mock import MagicMock
 
 import httpx
 import pytest
 from a2a.types import TransportProtocol
+from starlette.requests import Request
 
-from codex_a2a_server.app import build_agent_card, create_app
+from codex_a2a_server.app import CodexRESTAdapter, build_agent_card, create_app
 from tests.helpers import DummyChatCodexClient, make_settings
 
 
@@ -56,6 +58,56 @@ def test_create_app_resets_sse_app_status() -> None:
     finally:
         AppStatus.should_exit = original_should_exit
         AppStatus.should_exit_event = original_should_exit_event
+
+
+@pytest.mark.asyncio
+async def test_rest_adapter_uses_configured_sse_ping_interval() -> None:
+    adapter = CodexRESTAdapter(
+        agent_card=build_agent_card(make_settings(a2a_bearer_token="test-token")),
+        http_handler=MagicMock(),
+        sse_ping_seconds=7.5,
+    )
+
+    async def receive() -> dict:
+        return {"type": "http.request", "body": b"{}", "more_body": False}
+
+    request = Request(
+        {
+            "type": "http",
+            "http_version": "1.1",
+            "method": "POST",
+            "scheme": "http",
+            "path": "/v1/message:stream",
+            "raw_path": b"/v1/message:stream",
+            "query_string": b"",
+            "headers": [],
+            "client": ("127.0.0.1", 12345),
+            "server": ("test", 80),
+        },
+        receive,
+    )
+
+    async def stream_method(_request: Request, _context):
+        if False:
+            yield {}
+
+    response = await adapter._handle_streaming_request(stream_method, request)
+
+    assert response.ping_interval == 7.5
+
+
+def test_create_app_propagates_stream_idle_diagnostic_setting(monkeypatch) -> None:
+    import codex_a2a_server.app as app_module
+
+    settings = make_settings(
+        a2a_bearer_token="test-token",
+        a2a_stream_idle_diagnostic_seconds=42.0,
+    )
+    monkeypatch.setattr(app_module, "CodexClient", DummyChatCodexClient)
+
+    app = app_module.create_app(settings)
+
+    assert app.state.codex_executor._stream_idle_diagnostic_seconds == 42.0
 
 
 def test_openapi_rest_message_routes_include_schema_examples_and_extension_contracts() -> None:

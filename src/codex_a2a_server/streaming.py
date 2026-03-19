@@ -57,7 +57,7 @@ logger = logging.getLogger(__name__)
 metrics = get_metrics_registry()
 
 _STREAM_COMPLETION_DRAIN_SECONDS = 0.05
-_STREAM_IDLE_DIAGNOSTIC_SECONDS = 15.0
+_STREAM_IDLE_DIAGNOSTIC_SECONDS = 60.0
 __all__ = [
     "BlockType",
     "StreamOutputState",
@@ -101,13 +101,13 @@ class StreamDiagnostics:
             ),
         }
 
-    def should_log_idle(self, *, now: float) -> bool:
+    def should_log_idle(self, *, now: float, threshold_seconds: float) -> bool:
         threshold_base = self.last_idle_log_at or self.started_at
-        if now - threshold_base < _STREAM_IDLE_DIAGNOSTIC_SECONDS:
+        if now - threshold_base < threshold_seconds:
             return False
         return (
             self.last_visible_chunk_at is None
-            or (now - self.last_visible_chunk_at) >= _STREAM_IDLE_DIAGNOSTIC_SECONDS
+            or (now - self.last_visible_chunk_at) >= threshold_seconds
         )
 
 
@@ -122,6 +122,7 @@ async def consume_codex_stream(
     event_queue: EventQueue,
     stop_event: asyncio.Event,
     completion_event: asyncio.Event,
+    idle_diagnostic_seconds: float | None = None,
     directory: str | None = None,
 ) -> None:
     part_states: dict[str, StreamPartState] = {}
@@ -129,21 +130,29 @@ async def consume_codex_stream(
     buffered_text_chunk: BufferedTextChunk | None = None
     backoff = 0.5
     max_backoff = 5.0
+    resolved_idle_diagnostic_seconds = (
+        _STREAM_IDLE_DIAGNOSTIC_SECONDS
+        if idle_diagnostic_seconds is None
+        else float(idle_diagnostic_seconds)
+    )
     diagnostics = StreamDiagnostics(started_at=time.monotonic())
     logger.info(
         "Codex event stream started task_id=%s session_id=%s idle_diagnostic_seconds=%.1f",
         task_id,
         session_id,
-        _STREAM_IDLE_DIAGNOSTIC_SECONDS,
+        resolved_idle_diagnostic_seconds,
     )
 
     def maybe_log_idle(*, now: float) -> None:
-        if not diagnostics.should_log_idle(now=now):
+        if not diagnostics.should_log_idle(
+            now=now,
+            threshold_seconds=resolved_idle_diagnostic_seconds,
+        ):
             return
         diagnostics.last_idle_log_at = now
         diagnostics.idle_log_count += 1
         snapshot = diagnostics.snapshot(now=now, stream_open=not completion_event.is_set())
-        logger.info(
+        logger.debug(
             "Codex event stream idle task_id=%s session_id=%s completion_observed=%s "
             "emitted_chunk_count=%s suppressed_chunk_count=%s started_ms_ago=%s "
             "last_upstream_event_ms_ago=%s last_visible_chunk_ms_ago=%s idle_log_count=%s",
@@ -219,7 +228,10 @@ async def consume_codex_stream(
         if completion_event.is_set():
             return None
         threshold_base = diagnostics.last_idle_log_at or diagnostics.started_at
-        return max(0.0, _STREAM_IDLE_DIAGNOSTIC_SECONDS - (time.monotonic() - threshold_base))
+        return max(
+            0.0,
+            resolved_idle_diagnostic_seconds - (time.monotonic() - threshold_base),
+        )
 
     async def flush_buffered_text_chunk() -> None:
         nonlocal buffered_text_chunk
