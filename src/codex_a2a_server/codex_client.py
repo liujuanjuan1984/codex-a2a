@@ -15,6 +15,7 @@ from typing import Any
 from . import __version__
 from .config import Settings
 from .logging_context import bind_correlation_id, get_correlation_id, install_log_record_factory
+from .stream_interrupts import extract_interrupt_questions
 from .tool_call_payloads import (
     as_tool_call_payload,
     tool_call_output_delta_payload_from_notification,
@@ -46,6 +47,32 @@ def _first_string(payload: dict[str, Any], *keys: str) -> str | None:
         if value is not None:
             return value
     return None
+
+
+def _build_codex_permission_interrupt_properties(
+    *, request_key: str, session_id: str, method: str, params: dict[str, Any]
+) -> dict[str, Any]:
+    properties: dict[str, Any] = {
+        "id": request_key,
+        "sessionID": session_id,
+        "metadata": {"method": method, "raw": params},
+    }
+    # Only map protocol-defined approval text into shared interrupt details.
+    display_message = _first_string(params, "reason")
+    if display_message is not None:
+        properties["display_message"] = display_message
+    return properties
+
+
+def _build_codex_question_interrupt_properties(
+    *, request_key: str, session_id: str, method: str, params: dict[str, Any]
+) -> dict[str, Any]:
+    return {
+        "id": request_key,
+        "sessionID": session_id,
+        "questions": extract_interrupt_questions(params),
+        "metadata": {"method": method, "raw": params},
+    }
 
 
 def _extract_tool_status(payload: dict[str, Any]) -> str | None:
@@ -777,14 +804,12 @@ class CodexClient:
             await self._enqueue_stream_event(
                 {
                     "type": "permission.asked",
-                    "properties": {
-                        "id": request_key,
-                        "sessionID": session_id,
-                        "permission": "approval",
-                        "patterns": [],
-                        "always": [],
-                        "metadata": {"method": method, "raw": params},
-                    },
+                    "properties": _build_codex_permission_interrupt_properties(
+                        request_key=request_key,
+                        session_id=session_id,
+                        method=method,
+                        params=params,
+                    ),
                 }
             )
             return
@@ -801,15 +826,15 @@ class CodexClient:
                 rpc_request_id=request_id,
                 params=params,
             )
-            questions = params.get("questions")
             await self._enqueue_stream_event(
                 {
                     "type": "question.asked",
-                    "properties": {
-                        "id": request_key,
-                        "sessionID": session_id,
-                        "questions": questions if isinstance(questions, list) else [],
-                    },
+                    "properties": _build_codex_question_interrupt_properties(
+                        request_key=request_key,
+                        session_id=session_id,
+                        method=method,
+                        params=params,
+                    ),
                 }
             )
             return

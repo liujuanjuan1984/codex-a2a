@@ -283,6 +283,13 @@ released CLI self-start path.
   `metadata.shared.interrupt.resolution=replied|rejected`. Duplicate or unknown
   resolved events are suppressed by `request_id`. Provider-private raw
   interrupt payload is preserved under `metadata.codex.interrupt`.
+  For Codex app-server approval and `tool/requestUserInput` requests, shared
+  interrupt details are derived only from protocol-defined fields in the
+  vendored Codex schema: approval `reason` maps to shared
+  `details.display_message`, and `questions` is forwarded for
+  `tool/requestUserInput`. Undocumented or provider-private fields remain under
+  `metadata.codex.interrupt.metadata.raw` and are not promoted into shared
+  interrupt metadata.
   Non-streaming requests return a `Task` directly.
 - `tool_call` payload contract:
 

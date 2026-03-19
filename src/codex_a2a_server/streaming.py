@@ -38,6 +38,7 @@ from .stream_chunks import (
     upsert_stream_part_state,
 )
 from .stream_interrupts import (
+    diagnose_interrupt_event,
     extract_interrupt_asked_event,
     extract_interrupt_resolved_event,
 )
@@ -390,6 +391,13 @@ async def consume_codex_stream(
                                     phase="resolved",
                                     resolution=resolved["resolution"],
                                 )
+                        interrupt_diagnostic = diagnose_interrupt_event(event)
+                        if interrupt_diagnostic is not None and asked is None and resolved is None:
+                            logger.debug(
+                                "Interrupt payload not adapted reason=%s payload=%s",
+                                interrupt_diagnostic,
+                                event,
+                            )
                     maybe_log_idle(now=time.monotonic())
                     if event_type not in {"message.part.updated", "message.part.delta"}:
                         continue
