@@ -18,6 +18,10 @@
 #   ./scripts/uninstall.sh project=alpha confirm=UNINSTALL
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/shell_helpers.sh"
+
 PROJECT_NAME=""
 DATA_ROOT_INPUT=""
 CONFIRM_INPUT=""
@@ -257,16 +261,11 @@ if [[ "$APPLY" == "true" ]]; then
     echo "sudo not found; cannot apply uninstall." >&2
     exit 1
   fi
-  if [[ -t 0 ]]; then
-    # Interactive terminal: refresh credentials (may prompt).
-    sudo -v
-  else
-    # Non-interactive: require non-prompting sudo.
-    if ! sudo -n true 2>/dev/null; then
-      echo "sudo requires a password or is not permitted (non-interactive). Refusing to apply." >&2
-      echo "Run in an interactive shell, or configure NOPASSWD for required commands." >&2
-      exit 1
-    fi
+  if ! ensure_sudo_ready \
+    "sudo requires a password or is not permitted (non-interactive). Refusing to apply." \
+    "Run in an interactive shell, or configure NOPASSWD for required commands."
+  then
+    exit 1
   fi
 fi
 

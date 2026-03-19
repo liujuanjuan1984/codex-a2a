@@ -5,6 +5,10 @@
 # Optional env:
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/shell_helpers.sh"
+
 CODEX_CORE_DIR="/opt/.codex"
 CODEX_A2A_ROOT="/opt/codex-a2a"
 CODEX_A2A_RUNTIME_DIR="${CODEX_A2A_ROOT}/runtime"
@@ -83,7 +87,12 @@ if [[ "${EUID}" -ne 0 ]]; then
   fi
   SUDO="sudo"
   log_start "Checking sudo access..."
-  sudo -v
+  if ! ensure_sudo_ready \
+    "sudo requires a password or is not permitted (non-interactive). Refusing to continue." \
+    "Run in an interactive shell, or configure NOPASSWD for required commands."
+  then
+    die "sudo access is not ready."
+  fi
   log_done "Sudo access ready."
 fi
 
