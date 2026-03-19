@@ -811,6 +811,7 @@ class CodexClient:
                         "sessionID": session_id,
                         "questions": extract_interrupt_questions(params),
                         **extract_interrupt_text_details(params),
+                        "metadata": {"method": method, "raw": params},
                     },
                 }
             )

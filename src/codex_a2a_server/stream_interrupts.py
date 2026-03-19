@@ -142,6 +142,8 @@ def extract_interrupt_asked_event(event: Mapping[str, Any]) -> dict[str, Any] | 
     details = {"questions": extract_interrupt_questions(props)}
     details.update(extract_interrupt_text_details(props))
     codex_private = {}
+    if isinstance(props.get("metadata"), Mapping):
+        codex_private["metadata"] = dict(props.get("metadata"))
     tool = props.get("tool")
     if isinstance(tool, Mapping):
         codex_private["tool"] = dict(tool)

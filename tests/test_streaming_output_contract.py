@@ -584,6 +584,15 @@ async def test_streaming_emits_interrupt_status_for_nested_question_details() ->
                 "properties": {
                     "id": "q-nested-1",
                     "sessionID": "ses-1",
+                    "metadata": {
+                        "method": "item/tool/requestUserInput",
+                        "raw": {
+                            "context": {
+                                "description": "Please confirm how the agent should continue.",
+                                "questions": [{"id": "q1", "question": "Proceed with deployment?"}],
+                            }
+                        },
+                    },
                     "context": {
                         "description": "Please confirm how the agent should continue.",
                         "questions": [{"id": "q1", "question": "Proceed with deployment?"}],
@@ -623,6 +632,9 @@ async def test_streaming_emits_interrupt_status_for_nested_question_details() ->
         "description": "Please confirm how the agent should continue.",
         "questions": [{"id": "q1", "question": "Proceed with deployment?"}],
     }
+    assert question_interrupts[0].metadata["codex"]["interrupt"]["metadata"]["method"] == (
+        "item/tool/requestUserInput"
+    )
     assert question_interrupts[0].status.state == TaskState.input_required
 
 

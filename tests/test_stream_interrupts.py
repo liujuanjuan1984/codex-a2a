@@ -92,6 +92,7 @@ def test_extract_question_interrupt_keeps_nested_context_and_question_fallback()
         "type": "question.asked",
         "properties": {
             "id": "q-2",
+            "metadata": {"method": "item/tool/requestUserInput"},
             "context": {
                 "description": "Please confirm how the agent should continue.",
                 "questions": [{"id": "q1", "question": "Proceed with deployment?"}],
@@ -110,5 +111,5 @@ def test_extract_question_interrupt_keeps_nested_context_and_question_fallback()
             },
             "display_message": "Please confirm how the agent should continue.",
         },
-        "codex_private": {},
+        "codex_private": {"metadata": {"method": "item/tool/requestUserInput"}},
     }

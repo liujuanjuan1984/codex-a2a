@@ -823,6 +823,10 @@ async def test_question_request_emits_nested_context_fields_and_question_fallbac
         "questions": [{"id": "q1", "question": "Proceed with deployment?"}],
     }
     assert props["questions"] == [{"id": "q1", "question": "Proceed with deployment?"}]
+    assert props["metadata"]["method"] == "item/tool/requestUserInput"
+    assert props["metadata"]["raw"]["context"]["description"] == (
+        "Please confirm how the agent should continue."
+    )
 
 
 @pytest.mark.asyncio
