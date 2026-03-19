@@ -378,7 +378,8 @@ This service exposes Codex session list and message-history queries via A2A JSON
   - pagination behavior is mixed: `codex.sessions.list` forwards `limit` upstream,
     while `codex.sessions.messages.list` applies the limit locally
   - `codex.sessions.messages.list` enforces `limit` locally after mapping the
-    upstream thread history into A2A messages
+    upstream thread history into A2A messages, keeping the most recent N messages
+    while preserving their original order
   - canonical session metadata is exposed at `metadata.shared.session`
   - raw upstream payload is preserved at `metadata.codex.raw`
   - session title is available at `metadata.shared.session.title`
