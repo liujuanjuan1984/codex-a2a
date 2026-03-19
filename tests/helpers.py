@@ -360,21 +360,12 @@ class DummySessionQueryCodexClient:
         interrupt_type: str,
         session_id: str = "ses-1",
         created_at: float = 0.0,
-        provider_method: str | None = None,
     ) -> None:
-        resolved_method = provider_method
-        if resolved_method is None:
-            resolved_method = (
-                "item/tool/requestUserInput"
-                if interrupt_type == "question"
-                else "item/commandExecution/requestApproval"
-            )
         self._interrupt_requests[request_id] = InterruptRequestBinding(
             request_id=request_id,
             interrupt_type=interrupt_type,
             session_id=session_id,
             created_at=created_at,
-            provider_method=resolved_method,
         )
 
     def resolve_interrupt_request(
