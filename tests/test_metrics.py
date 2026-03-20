@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Iterator
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -25,7 +26,7 @@ from tests.test_request_handler import _make_message_send_params
 
 
 @pytest.fixture(autouse=True)
-def reset_metrics_state() -> None:
+def reset_metrics_state() -> Iterator[None]:
     reset_metrics()
     yield
     reset_metrics()
@@ -114,7 +115,7 @@ async def test_streaming_metrics_capture_tool_call_and_interrupt_events() -> Non
             }
 
     await consume_codex_stream(
-        client=_Client(),  # type: ignore[arg-type]
+        client=_Client(),
         session_id="ses-1",
         task_id="task-1",
         context_id="ctx-1",
@@ -155,7 +156,7 @@ async def test_streaming_retry_metric_increments_once_per_retry(monkeypatch) -> 
     monkeypatch.setattr("codex_a2a_server.streaming.asyncio.sleep", _fast_sleep)
 
     await consume_codex_stream(
-        client=_FlakyClient(),  # type: ignore[arg-type]
+        client=_FlakyClient(),
         session_id="ses-1",
         task_id="task-1",
         context_id="ctx-1",

@@ -5,8 +5,10 @@ README_TEXT = Path("README.md").read_text()
 CONTRIBUTING_TEXT = Path("CONTRIBUTING.md").read_text()
 SECURITY_TEXT = Path("SECURITY.md").read_text()
 SCRIPTS_README_TEXT = Path("scripts/README.md").read_text()
+CI_WORKFLOW_TEXT = Path(".github/workflows/ci.yml").read_text()
 PUBLISH_WORKFLOW_TEXT = Path(".github/workflows/publish.yml").read_text()
 SMOKE_TEST_SCRIPT_TEXT = Path("scripts/smoke_test_built_cli.sh").read_text()
+RUNTIME_MATRIX_SCRIPT_TEXT = Path("scripts/validate_runtime_matrix.sh").read_text()
 SYNC_CODEX_DOCS_TEXT = Path("scripts/sync_codex_docs.sh").read_text()
 
 
@@ -42,7 +44,17 @@ def test_publish_workflow_builds_and_smoke_tests_release_artifacts() -> None:
     assert "gh-action-pypi-publish" in PUBLISH_WORKFLOW_TEXT
 
 
+def test_ci_workflow_deduplicates_full_gate_and_runtime_matrix() -> None:
+    assert "quality-gate:" in CI_WORKFLOW_TEXT
+    assert 'python-version: "3.13"' in CI_WORKFLOW_TEXT
+    assert "bash ./scripts/validate_baseline.sh" in CI_WORKFLOW_TEXT
+    assert "runtime-matrix:" in CI_WORKFLOW_TEXT
+    assert 'python-version: ["3.11", "3.12"]' in CI_WORKFLOW_TEXT
+    assert "bash ./scripts/validate_runtime_matrix.sh" in CI_WORKFLOW_TEXT
+
+
 def test_scripts_index_exposes_built_cli_smoke_test() -> None:
+    assert "validate_runtime_matrix.sh" in SCRIPTS_README_TEXT
     assert "smoke_test_built_cli.sh" in SCRIPTS_README_TEXT
     assert "`uv tool`" in SCRIPTS_README_TEXT
     assert "runtime entrypoints live in the released `codex-a2a-server` CLI" in SCRIPTS_README_TEXT
@@ -80,6 +92,9 @@ def test_repository_removes_redundant_deploy_wrappers() -> None:
 
 def test_repository_wrappers_only_keep_remaining_user_or_maintainer_entrypoints() -> None:
     assert "uv tool install" in SMOKE_TEST_SCRIPT_TEXT
+    assert '--python "${python_bin}"' in SMOKE_TEST_SCRIPT_TEXT
+    assert "--python 3.13" not in SMOKE_TEST_SCRIPT_TEXT
+    assert "uv run pytest --no-cov" in RUNTIME_MATRIX_SCRIPT_TEXT
     assert 'CODEX_CLI_BIN="${fake_codex_bin}"' in SMOKE_TEST_SCRIPT_TEXT
     assert 'cat >"${fake_codex_bin}"' in SMOKE_TEST_SCRIPT_TEXT
     assert "git clone --depth 1 https://github.com/openai/codex.git" in SYNC_CODEX_DOCS_TEXT

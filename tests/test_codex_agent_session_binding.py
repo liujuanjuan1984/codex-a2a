@@ -117,6 +117,8 @@ async def test_agent_uses_stable_fallback_message_id_when_upstream_missing_messa
     )
 
     task = next(event for event in q.events if isinstance(event, Task))
+    assert task.metadata is not None
+    assert task.status.message is not None
     assert "message_id" not in task.metadata["shared"]["session"]
     assert task.status.message.message_id == "t-fallback:c-fallback:assistant"
 
@@ -161,6 +163,7 @@ async def test_agent_includes_usage_in_non_stream_task_metadata() -> None:
     )
 
     task = next(event for event in q.events if isinstance(event, Task))
+    assert task.metadata is not None
     usage = task.metadata["shared"]["usage"]
     assert usage["input_tokens"] == 7
     assert usage["output_tokens"] == 3

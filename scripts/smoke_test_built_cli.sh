@@ -28,12 +28,19 @@ shopt -s nullglob
 wheel_paths=(dist/codex_a2a_server-*.whl)
 shopt -u nullglob
 
-if [[ "${#wheel_paths[@]}" -eq 0 ]]; then
-  echo "No built wheel found in dist/" >&2
-  exit 1
-fi
+wheel_path="${WHEEL_PATH:-}"
 
-wheel_path="$(ls -1t "${wheel_paths[@]}" | head -n 1)"
+if [[ -z "${wheel_path}" ]]; then
+  if [[ "${#wheel_paths[@]}" -eq 0 ]]; then
+    echo "No built wheel found in dist/" >&2
+    exit 1
+  fi
+  if [[ "${#wheel_paths[@]}" -gt 1 ]]; then
+    echo "Multiple built wheels found in dist/; set WHEEL_PATH explicitly." >&2
+    exit 1
+  fi
+  wheel_path="${wheel_paths[0]}"
+fi
 
 if [[ ! -f "${wheel_path}" ]]; then
   echo "Wheel path does not exist: ${wheel_path}" >&2
@@ -62,7 +69,7 @@ mkdir -p "${tool_dir}" "${tool_bin_dir}"
 
 UV_TOOL_DIR="${tool_dir}" \
 UV_TOOL_BIN_DIR="${tool_bin_dir}" \
-uv tool install "${wheel_path}" --python 3.13
+uv tool install "${wheel_path}" --python "${python_bin}"
 
 cat >"${fake_codex_bin}" <<'PY'
 #!/usr/bin/env python3

@@ -8,6 +8,7 @@ from a2a.server.tasks.inmemory_task_store import InMemoryTaskStore
 from a2a.types import (
     Message,
     MessageSendParams,
+    Part,
     Role,
     Task,
     TaskIdParams,
@@ -24,7 +25,7 @@ def _make_message_send_params() -> MessageSendParams:
         message=Message(
             message_id="m-1",
             role=Role.user,
-            parts=[TextPart(text="hello")],
+            parts=[Part(root=TextPart(text="hello"))],
         )
     )
 

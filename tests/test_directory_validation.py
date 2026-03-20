@@ -13,7 +13,6 @@ from tests.helpers import make_request_context_mock, make_settings
 def mock_client():
     settings = make_settings(
         a2a_bearer_token="test",
-        codex_base_url="http://localhost",
         codex_workspace_root="/tmp/workspace",
         a2a_allow_directory_override=True,
     )

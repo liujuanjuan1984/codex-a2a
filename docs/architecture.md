@@ -105,6 +105,6 @@ Use the docs by responsibility:
   stability expectations
 - [Contributing Guide](../CONTRIBUTING.md): contributor workflow and validation
 - [Security Policy](../SECURITY.md): threat model and disclosure guidance
-- [Vendored Codex References](../vendor/codex/SYNC.md): upstream reference
-  snapshots used for comparison; they do not override this repository's
-  runtime behavior, tests, or machine-readable declarations
+
+Maintainers can regenerate optional upstream Codex reference snapshots with
+`scripts/sync_codex_docs.sh` when protocol comparison is needed.

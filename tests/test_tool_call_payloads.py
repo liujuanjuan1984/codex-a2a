@@ -27,6 +27,7 @@ def test_tool_call_state_payload_from_part_extracts_structured_state() -> None:
         }
     )
 
+    assert payload is not None
     assert as_tool_call_payload(payload) == {
         "kind": "state",
         "call_id": "call-1",
@@ -47,6 +48,7 @@ def test_tool_call_output_delta_payload_preserves_verbatim_text() -> None:
         status="running",
     )
 
+    assert payload is not None
     assert as_tool_call_payload(payload) == {
         "kind": "output_delta",
         "source_method": "commandExecution",
@@ -69,6 +71,7 @@ def test_normalize_tool_call_payload_accepts_a2a_style_aliases() -> None:
         }
     )
 
+    assert payload is not None
     assert as_tool_call_payload(payload) == {
         "kind": "output_delta",
         "source_method": "commandExecution",
@@ -93,6 +96,7 @@ def test_tool_call_state_payload_from_item_normalizes_command_execution_lifecycl
         }
     )
 
+    assert payload is not None
     assert as_tool_call_payload(payload) == {
         "kind": "state",
         "source_method": "commandExecution",
@@ -123,6 +127,7 @@ def test_tool_call_state_payload_from_item_summarizes_file_change_paths() -> Non
         }
     )
 
+    assert payload is not None
     assert as_tool_call_payload(payload) == {
         "kind": "state",
         "source_method": "fileChange",

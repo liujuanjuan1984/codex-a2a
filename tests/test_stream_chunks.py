@@ -1,5 +1,7 @@
 import logging
 
+from a2a.types import DataPart, TextPart
+
 from codex_a2a_server.stream_chunks import (
     delta_chunks,
     snapshot_chunks,
@@ -62,6 +64,7 @@ def test_snapshot_chunks_emits_prefix_delta_and_suppresses_non_prefix_rewrite(
     )
 
     assert len(chunks) == 1
+    assert isinstance(chunks[0].part, TextPart)
     assert chunks[0].part.text == " world"
     assert chunks[0].source == "part_text_diff"
     assert state.buffer == "hello world"
@@ -97,6 +100,7 @@ def test_delta_chunks_appends_text_and_marks_state_as_delta() -> None:
     )
 
     assert len(chunks) == 1
+    assert isinstance(chunks[0].part, TextPart)
     assert chunks[0].part.text == "answer"
     assert chunks[0].append is True
     assert state.buffer == "answer"
@@ -122,6 +126,7 @@ def test_tool_delta_chunks_normalizes_payload_and_rejects_unstructured_payload(c
     )
 
     assert len(chunks) == 1
+    assert isinstance(chunks[0].part, DataPart)
     assert chunks[0].part.data == {"kind": "state", "tool": "bash", "status": "running"}
     assert state.message_id == "msg-2"
 

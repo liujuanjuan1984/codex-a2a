@@ -43,7 +43,7 @@ async def test_list_calls_use_expected_rpc_params() -> None:
             return {"thread": {"turns": []}}
         return {}
 
-    client._rpc_request = fake_rpc_request  # type: ignore[method-assign]
+    client._rpc_request = fake_rpc_request
 
     sessions = await client.list_sessions(params={"directory": "/evil", "limit": 1, "roots": True})
     assert sessions == [
@@ -89,7 +89,7 @@ async def test_list_messages_applies_limit_locally_after_mapping() -> None:
             }
         }
 
-    client._rpc_request = fake_rpc_request  # type: ignore[method-assign]
+    client._rpc_request = fake_rpc_request
 
     messages = await client.list_messages("thr-1", params={"limit": 2})
 
@@ -112,7 +112,7 @@ async def test_session_shell_uses_command_exec_without_thread_context() -> None:
         seen.append((method, params))
         return {"stdout": "/safe\n", "stderr": "", "exitCode": 0}
 
-    client._rpc_request = fake_rpc_request  # type: ignore[method-assign]
+    client._rpc_request = fake_rpc_request
 
     result = await client.session_shell("thr-1", {"command": "pwd"})
 
@@ -144,8 +144,8 @@ async def test_permission_reply_maps_to_codex_decision() -> None:
     async def fake_enqueue(event: dict) -> None:
         events.append(event)
 
-    client._send_json_message = fake_send_json  # type: ignore[method-assign]
-    client._enqueue_stream_event = fake_enqueue  # type: ignore[method-assign]
+    client._send_json_message = fake_send_json
+    client._enqueue_stream_event = fake_enqueue
 
     ok = await client.permission_reply("100", reply="always")
     assert ok is True
@@ -184,8 +184,8 @@ async def test_question_reply_builds_answer_map() -> None:
     async def fake_enqueue(_event: dict) -> None:
         return None
 
-    client._send_json_message = fake_send_json  # type: ignore[method-assign]
-    client._enqueue_stream_event = fake_enqueue  # type: ignore[method-assign]
+    client._send_json_message = fake_send_json
+    client._enqueue_stream_event = fake_enqueue
 
     ok = await client.question_reply("200", answers=[["A"], ["B", "C"]])
     assert ok is True
@@ -237,7 +237,7 @@ async def test_stream_events_broadcasts_to_all_consumers() -> None:
     async def fake_ensure_started() -> None:
         return None
 
-    client._ensure_started = fake_ensure_started  # type: ignore[method-assign]
+    client._ensure_started = fake_ensure_started
 
     stop_1 = asyncio.Event()
     stop_2 = asyncio.Event()
@@ -273,7 +273,7 @@ async def test_handle_notification_normalizes_tool_output_delta_payload() -> Non
     async def fake_enqueue(event: dict) -> None:
         events.append(event)
 
-    client._enqueue_stream_event = fake_enqueue  # type: ignore[method-assign]
+    client._enqueue_stream_event = fake_enqueue
 
     await client._handle_notification(
         {
@@ -321,7 +321,7 @@ async def test_handle_notification_normalizes_file_change_output_delta_payload()
     async def fake_enqueue(event: dict) -> None:
         events.append(event)
 
-    client._enqueue_stream_event = fake_enqueue  # type: ignore[method-assign]
+    client._enqueue_stream_event = fake_enqueue
 
     await client._handle_notification(
         {
@@ -364,7 +364,7 @@ async def test_handle_notification_normalizes_command_execution_started_state() 
     async def fake_enqueue(event: dict) -> None:
         events.append(event)
 
-    client._enqueue_stream_event = fake_enqueue  # type: ignore[method-assign]
+    client._enqueue_stream_event = fake_enqueue
 
     await client._handle_notification(
         {
@@ -420,7 +420,7 @@ async def test_handle_notification_normalizes_file_change_completed_state() -> N
     async def fake_enqueue(event: dict) -> None:
         events.append(event)
 
-    client._enqueue_stream_event = fake_enqueue  # type: ignore[method-assign]
+    client._enqueue_stream_event = fake_enqueue
 
     await client._handle_notification(
         {
@@ -647,7 +647,7 @@ async def test_send_message_timeout_override_none_disables_wait_timeout() -> Non
     async def fake_rpc_request(_method: str, _params: dict | None = None):
         return {"turn": {"id": "turn-1"}}
 
-    client._rpc_request = fake_rpc_request  # type: ignore[method-assign]
+    client._rpc_request = fake_rpc_request
     tracker = client._get_or_create_tracker("thr-1", "turn-1")
 
     async def finish_turn() -> None:
@@ -674,7 +674,7 @@ async def test_unsupported_server_request_returns_jsonrpc_error() -> None:
     async def fake_send_json(payload: dict) -> None:
         sent.append(payload)
 
-    client._send_json_message = fake_send_json  # type: ignore[method-assign]
+    client._send_json_message = fake_send_json
 
     await client._handle_server_request({"id": 300, "method": "item/tool/call", "params": {}})
 
@@ -697,7 +697,7 @@ async def test_permission_request_emits_shared_message_and_patterns() -> None:
     async def fake_enqueue(event: dict) -> None:
         events.append(event)
 
-    client._enqueue_stream_event = fake_enqueue  # type: ignore[method-assign]
+    client._enqueue_stream_event = fake_enqueue
 
     await client._handle_server_request(
         {
@@ -738,7 +738,7 @@ async def test_question_request_emits_shared_questions_and_display_message() -> 
     async def fake_enqueue(event: dict) -> None:
         events.append(event)
 
-    client._enqueue_stream_event = fake_enqueue  # type: ignore[method-assign]
+    client._enqueue_stream_event = fake_enqueue
 
     await client._handle_server_request(
         {
@@ -781,7 +781,7 @@ async def test_permission_request_promotes_nested_request_message() -> None:
     async def fake_enqueue(event: dict) -> None:
         events.append(event)
 
-    client._enqueue_stream_event = fake_enqueue  # type: ignore[method-assign]
+    client._enqueue_stream_event = fake_enqueue
 
     await client._handle_server_request(
         {
@@ -822,7 +822,7 @@ async def test_question_request_promotes_nested_context_details() -> None:
     async def fake_enqueue(event: dict) -> None:
         events.append(event)
 
-    client._enqueue_stream_event = fake_enqueue  # type: ignore[method-assign]
+    client._enqueue_stream_event = fake_enqueue
 
     await client._handle_server_request(
         {
@@ -896,18 +896,18 @@ async def test_ensure_started_passes_reasoning_effort_override_to_codex_cli() ->
     async def fake_stderr_loop() -> None:
         return None
 
-    client._rpc_request = fake_rpc_request  # type: ignore[method-assign]
-    client._send_json_message = fake_send_json  # type: ignore[method-assign]
-    client._read_stdout_loop = fake_stdout_loop  # type: ignore[method-assign]
-    client._read_stderr_loop = fake_stderr_loop  # type: ignore[method-assign]
-    client._resolve_cli_bin = lambda: "codex-custom"  # type: ignore[method-assign]
+    client._rpc_request = fake_rpc_request
+    client._send_json_message = fake_send_json
+    client._read_stdout_loop = fake_stdout_loop
+    client._read_stderr_loop = fake_stderr_loop
+    client._resolve_cli_bin = lambda: "codex-custom"
 
     original = asyncio.create_subprocess_exec
-    asyncio.create_subprocess_exec = fake_create_subprocess_exec  # type: ignore[assignment]
+    asyncio.create_subprocess_exec = fake_create_subprocess_exec
     try:
         await client._ensure_started()
     finally:
-        asyncio.create_subprocess_exec = original  # type: ignore[assignment]
+        asyncio.create_subprocess_exec = original
         await client.close()
 
     assert captured
@@ -921,18 +921,18 @@ async def test_startup_preflight_fails_clearly_when_codex_is_missing() -> None:
 
     original_which = shutil.which
     original_exists = os.path.exists
-    shutil.which = lambda _name: None  # type: ignore[assignment]
+    shutil.which = lambda _name: None
     os.path.exists = (
         lambda path: False
         if path == os.path.expanduser("~/.npm-global/bin/codex")
         else original_exists(path)
-    )  # type: ignore[assignment]
+    )
     try:
         with pytest.raises(CodexStartupPrerequisiteError) as excinfo:
             await client.startup_preflight()
     finally:
-        shutil.which = original_which  # type: ignore[assignment]
-        os.path.exists = original_exists  # type: ignore[assignment]
+        shutil.which = original_which
+        os.path.exists = original_exists
         await client.close()
 
     assert "Install Codex" in str(excinfo.value)
@@ -968,7 +968,7 @@ async def test_read_stdout_loop_handles_very_long_json_line() -> None:
     async def fake_dispatch(message: dict[str, object]) -> None:
         seen.append(message)
 
-    client._dispatch_message = fake_dispatch  # type: ignore[method-assign]
+    client._dispatch_message = fake_dispatch
 
     await client._read_stdout_loop()
 

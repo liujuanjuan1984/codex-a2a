@@ -12,10 +12,33 @@ permissions:
 jobs:
   quality-gate:
     runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+
+      - name: Sync Dependencies
+        run: uv sync --all-extras --frozen
+
+      - name: Run validation baseline
+        run: bash ./scripts/validate_baseline.sh
+
+  runtime-matrix:
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.11", "3.12", "3.13"]
+        python-version: ["3.11", "3.12"]
 
     steps:
       - name: Checkout
@@ -34,17 +57,5 @@ jobs:
       - name: Sync Dependencies
         run: uv sync --all-extras --frozen
 
-      - name: Run pre-commit
-        run: uv run pre-commit run --all-files
-
-      - name: Run mypy
-        run: uv run mypy --config-file mypy.ini
-
-      - name: Run pytest
-        run: uv run pytest
-
-      - name: Build package artifacts
-        run: uv build --no-sources
-
-      - name: Smoke test built CLI
-        run: bash ./scripts/smoke_test_built_cli.sh
+      - name: Run runtime matrix validation
+        run: bash ./scripts/validate_runtime_matrix.sh
