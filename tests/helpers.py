@@ -17,7 +17,6 @@ _FIXTURES_DIR = Path(__file__).resolve().parent / "fixtures"
 
 def make_settings(**overrides: Any) -> Settings:
     base: dict[str, Any] = {
-        "codex_base_url": "http://127.0.0.1:4096",
         "a2a_bearer_token": "test-token",
     }
     base.update(overrides)
@@ -150,7 +149,6 @@ def configure_mock_client_runtime(
 ) -> None:
     overrides: dict[str, Any] = {
         "a2a_bearer_token": "test",
-        "codex_base_url": "http://localhost",
         "a2a_allow_directory_override": True,
     }
     if settings_overrides:
@@ -184,7 +182,6 @@ class DummyChatCodexClient:
         self.directory = None
         self.settings = settings or make_settings(
             a2a_bearer_token="test",
-            codex_base_url="http://localhost",
         )
 
     async def close(self) -> None:

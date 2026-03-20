@@ -40,9 +40,10 @@ Maintainer-local upstream Codex snapshots generated via
 protocol context. They do not override this repository's declared service
 contract.
 
-## Stable Surface
+## Compatibility-Sensitive Surface
 
-The current major line treats these areas as stable service-facing contracts:
+This repository still ships as an alpha project. Within that alpha line, these
+declared surfaces should not drift silently:
 
 - core A2A send / stream / task methods
 - shared session-binding metadata

@@ -47,7 +47,6 @@ class DummyStreamingClient:
         self._interrupt_sessions: dict[str, str] = {}
         self.settings = make_settings(
             a2a_bearer_token="test",
-            codex_base_url="http://localhost",
         )
 
     async def create_session(

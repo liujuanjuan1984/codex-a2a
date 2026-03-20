@@ -128,12 +128,10 @@ Current implementation note:
 - `CODEX_WORKSPACE_ROOT`: default Codex workspace root (optional)
 - `CODEX_PROVIDER_ID`: deployment metadata only (optional)
 - `CODEX_AGENT`: deployment metadata only (optional)
-- `CODEX_SYSTEM`: reserved compatibility field (optional)
 - `CODEX_VARIANT`: deployment metadata only (optional)
 - `CODEX_TIMEOUT`: request timeout in seconds, default `120`
 - `CODEX_TIMEOUT_STREAM`: streaming turn timeout in seconds (optional);
   unset means no explicit stream timeout for the streaming send path
-- `CODEX_BASE_URL`: reserved compatibility field for legacy HTTP mode; not used by app-server mode
 
 - `A2A_PUBLIC_URL`: externally reachable A2A URL prefix,
   default `http://127.0.0.1:8000`
@@ -229,14 +227,24 @@ described first in [README.md](../README.md) and above in this guide.
 
 ## Service Behavior
 
+### Health, Auth, and Deployment Boundary
+
 - `GET /health` is a lightweight authenticated status probe. It requires the
   same `Authorization: Bearer <token>` header as other protected endpoints and
   returns service status plus deployment-relevant flags such as streaming,
   session shell, and interrupt TTL; it does not call upstream Codex.
+- Requests require `Authorization: Bearer <token>`; otherwise `401` is
+  returned. Agent Card endpoints are public.
+- Within one `codex-a2a-server` instance, all consumers share the same
+  underlying Codex workspace/environment. This deployment model is not
+  tenant-isolated by default.
+
+### Session and Task Behavior
+
 - The service forwards A2A `message:send` to Codex session/message calls.
 - Streaming is always enabled for this service surface. `/v1/message:stream`
-  and JSON-RPC `message/stream` are stable core capabilities rather than
-  deployment-time toggles.
+  and JSON-RPC `message/stream` are compatibility-sensitive core capabilities
+  rather than deployment-time toggles.
 - `codex.sessions.shell` is a session-scoped shell control method for
   ownership, attribution, and traceability. It keeps `session_id` in the A2A
   contract, but the underlying execution still uses Codex `command/exec`
@@ -246,55 +254,61 @@ described first in [README.md](../README.md) and above in this guide.
   `contextId` and `metadata.shared.session.id` refer to the same upstream
   session identity, and the contract declares that equality explicitly.
 - Task state defaults to `input-required` to support multi-turn interactions.
+- Non-streaming requests return a `Task` directly.
+- Non-streaming `message:send` responses may include normalized token usage at
+  `Task.metadata.shared.usage` with the same field schema.
+
+### Streaming and Interrupt Contract
+
 - Streaming (`/v1/message:stream`) emits incremental
-  `TaskArtifactUpdateEvent` and then
-  `TaskStatusUpdateEvent(final=true)`. Stream artifacts carry
-  `artifact.metadata.shared.stream.block_type` with values
-  `text` / `reasoning` / `tool_call`. All chunks share one stream
-  artifact ID and preserve original timeline via
+  `TaskArtifactUpdateEvent` and then `TaskStatusUpdateEvent(final=true)`.
+- Stream artifacts carry `artifact.metadata.shared.stream.block_type` with
+  values `text`, `reasoning`, and `tool_call`.
+- All chunks share one stream artifact ID and preserve original timeline via
   `artifact.metadata.shared.stream.sequence`. Timeline identity fields such as
   `message_id`, `event_id`, and `source` are emitted under
-  `metadata.shared.stream`. A final snapshot is only emitted when stream chunks
-  did not already produce the same final text.
-  Stream routing is schema-first: the service classifies chunks primarily by
-  Codex `part.type` (plus `part_id` state) rather than inline text markers.
-  `message.part.delta` and `message.part.updated` are merged per `part_id`;
+  `metadata.shared.stream`.
+- A final snapshot is emitted only when stream chunks did not already produce
+  the same final text.
+- Stream routing is schema-first: the service classifies chunks primarily by
+  Codex `part.type` plus `part_id` state rather than inline text markers.
+- `message.part.delta` and `message.part.updated` are merged per `part_id`;
   out-of-order deltas are buffered and replayed when the corresponding
-  `part.updated` arrives. `text` and `reasoning` chunks are emitted as
-  `TextPart`, while `tool_call` chunks are emitted as `DataPart` with a
-  normalized structured payload. Tool payloads use `kind` to distinguish
-  structured state updates from plain tool output text:
-  `kind=state` carries fields such as `tool`, `call_id`, `status`, `input`,
-  `output`, and `error`; `kind=output_delta` carries the raw text increment in
-  `output_delta` and may also include `source_method`, `tool`, `call_id`, and
-  `status`. Legacy stringified JSON tool payloads are rejected; the stream
-  contract only accepts structured `DataPart(data={...})` payloads. To avoid
-  character-level event floods, the
-  service performs light server-side aggregation before emitting `text` and
-  `reasoning` updates: `text` flushes at `120 chars or 200ms`, `reasoning`
-  flushes at `240 chars or 350ms`, and both flush immediately on block
-  switches, `tool_call`, and request completion boundaries. Final status event
-  metadata may include
-  normalized token usage at `metadata.shared.usage` with fields like
-  `input_tokens`, `output_tokens`, `total_tokens`, and optional `cost`.
-  Interrupt lifecycle is explicit: asked events (`permission.asked` /
-  `question.asked`) are mapped to
-  `TaskStatusUpdateEvent(final=false, state=input-required)` with
-  `metadata.shared.interrupt.phase=asked`; resolved events
-  (`permission.replied` / `question.replied` / `question.rejected`) are mapped
-  to `TaskStatusUpdateEvent(final=false, state=working)` with
-  `metadata.shared.interrupt.phase=resolved` and
-  `metadata.shared.interrupt.resolution=replied|rejected`. Duplicate or unknown
-  resolved events are suppressed by `request_id`. For Codex app-server approval
-  and `tool/requestUserInput` requests, user-visible approval/question details
-  are normalized into `metadata.shared.interrupt.details`, including readable
-  `display_message`, resolved `patterns`, and `questions` when available.
-  HTTP streaming responses also send transport-level SSE ping comments on a
-  configurable interval, without adding synthetic A2A business events.
-  Interrupt status events no longer mirror the asked payload under
+  `part.updated` arrives.
+- `text` and `reasoning` chunks are emitted as `TextPart`, while `tool_call`
+  chunks are emitted as `DataPart` with a normalized structured payload.
+- Legacy stringified JSON tool payloads are rejected; the stream contract only
+  accepts structured `DataPart(data={...})` payloads.
+- To avoid character-level event floods, the service performs light server-side
+  aggregation before emitting `text` and `reasoning` updates: `text` flushes at
+  `120 chars or 200ms`, `reasoning` flushes at `240 chars or 350ms`, and both
+  flush immediately on block switches, `tool_call`, and request completion
+  boundaries.
+- Final status event metadata may include normalized token usage at
+  `metadata.shared.usage` with fields like `input_tokens`, `output_tokens`,
+  `total_tokens`, and optional `cost`.
+- Interrupt lifecycle is explicit:
+  - asked events (`permission.asked` / `question.asked`) are mapped to
+    `TaskStatusUpdateEvent(final=false, state=input-required)` with
+    `metadata.shared.interrupt.phase=asked`
+  - resolved events (`permission.replied` / `question.replied` /
+    `question.rejected`) are mapped to
+    `TaskStatusUpdateEvent(final=false, state=working)` with
+    `metadata.shared.interrupt.phase=resolved` and
+    `metadata.shared.interrupt.resolution=replied|rejected`
+- Duplicate or unknown resolved events are suppressed by `request_id`.
+- For Codex app-server approval and `tool/requestUserInput` requests,
+  user-visible approval/question details are normalized into
+  `metadata.shared.interrupt.details`, including readable `display_message`,
+  resolved `patterns`, and `questions` when available.
+- HTTP streaming responses send transport-level SSE ping comments on a
+  configurable interval without adding synthetic A2A business events.
+- Interrupt status events no longer mirror the asked payload under
   `metadata.codex.interrupt`; downstream consumers should treat
   `metadata.shared.interrupt` as the single interrupt rendering contract.
-  Non-streaming requests return a `Task` directly.
+
+### Tool Call Payload Contract
+
 - `tool_call` payload contract:
 
 | `kind` | Required fields | Optional fields | Notes |
@@ -302,9 +316,9 @@ described first in [README.md](../README.md) and above in this guide.
 | `state` | `kind` | `source_method`, `call_id`, `tool`, `status`, `title`, `subtitle`, `input`, `output`, `error` | Used for structured tool state snapshots. A payload that contains only `kind=state` is invalid and is suppressed. |
 | `output_delta` | `kind`, `output_delta` | `source_method`, `call_id`, `tool`, `status` | Used for raw tool output text increments. `output_delta` is preserved verbatim and may contain spaces or trailing newlines. |
 
-  `codex app-server` lifecycle events such as `item/started` and
-  `item/completed` are normalized into `kind=state`; `item/*/outputDelta`
-  notifications are normalized into `kind=output_delta`.
+`codex app-server` lifecycle events such as `item/started` and
+`item/completed` are normalized into `kind=state`; `item/*/outputDelta`
+notifications are normalized into `kind=output_delta`.
 
   Examples:
 
@@ -315,25 +329,18 @@ described first in [README.md](../README.md) and above in this guide.
   ```json
   {"kind":"output_delta","source_method":"commandExecution","tool":"bash","call_id":"call-1","status":"running","output_delta":"Passed\n"}
   ```
-- Non-streaming `message:send` responses may include normalized token usage at
-  `Task.metadata.shared.usage` with the same field schema.
-- Requests require `Authorization: Bearer <token>`; otherwise `401` is
-  returned. Agent Card endpoints are public.
-- Within one `codex-a2a-server` instance, all consumers share the same
-  underlying Codex workspace/environment. This deployment model is not
-  tenant-isolated by default.
-- Error handling:
-  - For validation failures, missing context (`task_id`/`context_id`), or
-    internal errors, the service attempts to return standard A2A failure events
-    via `event_queue`.
-  - Failure events include concrete error details with `failed` state.
-- Directory validation and normalization:
-  - Clients can pass `metadata.codex.directory`, but it must stay inside
-    `${CODEX_WORKSPACE_ROOT}` (or service runtime root if not configured).
-  - All paths are normalized with `realpath` to prevent `..` or symlink
-    boundary bypass.
-  - If `A2A_ALLOW_DIRECTORY_OVERRIDE=false`, only the default directory is
-    accepted.
+### Directory and Error Handling
+
+- For validation failures, missing context (`task_id`/`context_id`), or
+  internal errors, the service attempts to return standard A2A failure events
+  via `event_queue`.
+- Failure events include concrete error details with `failed` state.
+- Clients can pass `metadata.codex.directory`, but it must stay inside
+  `${CODEX_WORKSPACE_ROOT}` (or service runtime root if not configured).
+- All paths are normalized with `realpath` to prevent `..` or symlink boundary
+  bypass.
+- If `A2A_ALLOW_DIRECTORY_OVERRIDE=false`, only the default directory is
+  accepted.
 ## Authentication Setup For Local Examples
 
 For local development examples, prefer generating a temporary token once and

@@ -18,10 +18,6 @@ class Settings(BaseSettings):
     )
 
     # Codex settings (app-server mode)
-    codex_base_url: str = Field(
-        default="http://127.0.0.1:4096",
-        alias="CODEX_BASE_URL",
-    )
     codex_workspace_root: str | None = Field(
         default=None,
         alias="CODEX_WORKSPACE_ROOT",
@@ -37,10 +33,6 @@ class Settings(BaseSettings):
     codex_agent: str | None = Field(
         default=None,
         alias="CODEX_AGENT",
-    )
-    codex_system: str | None = Field(
-        default=None,
-        alias="CODEX_SYSTEM",
     )
     codex_variant: str | None = Field(
         default=None,
