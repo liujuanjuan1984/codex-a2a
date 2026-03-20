@@ -7,7 +7,7 @@ import secrets
 import time
 from collections.abc import AsyncIterable, AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any
 from urllib.parse import unquote
 
 import uvicorn
@@ -103,7 +103,7 @@ def _build_sse_streaming_route(
     *,
     method: Callable[[Request, ServerCallContext], AsyncIterable[object]],
     context_builder: DefaultCallContextBuilder,
-    sse_ping_seconds: float,
+    sse_ping_seconds: int,
 ) -> Callable[[Request], Awaitable[EventSourceResponse]]:
     async def route(request: Request):
         try:
@@ -118,8 +118,7 @@ def _build_sse_streaming_route(
 
             return EventSourceResponse(
                 event_generator(method(request, call_context)),
-                # sse-starlette accepts float ping intervals at runtime.
-                ping=cast(Any, float(sse_ping_seconds)),
+                ping=sse_ping_seconds,
             )
         except (ValueError, RuntimeError, OSError) as e:
             raise ServerError(
