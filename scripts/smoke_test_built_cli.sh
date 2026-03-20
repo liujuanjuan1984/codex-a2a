@@ -69,7 +69,7 @@ mkdir -p "${tool_dir}" "${tool_bin_dir}"
 
 UV_TOOL_DIR="${tool_dir}" \
 UV_TOOL_BIN_DIR="${tool_bin_dir}" \
-uv tool install "${wheel_path}" --python 3.13
+uv tool install "${wheel_path}" --python "${python_bin}"
 
 cat >"${fake_codex_bin}" <<'PY'
 #!/usr/bin/env python3

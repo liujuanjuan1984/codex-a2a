@@ -80,6 +80,8 @@ def test_repository_removes_redundant_deploy_wrappers() -> None:
 
 def test_repository_wrappers_only_keep_remaining_user_or_maintainer_entrypoints() -> None:
     assert "uv tool install" in SMOKE_TEST_SCRIPT_TEXT
+    assert '--python "${python_bin}"' in SMOKE_TEST_SCRIPT_TEXT
+    assert "--python 3.13" not in SMOKE_TEST_SCRIPT_TEXT
     assert 'CODEX_CLI_BIN="${fake_codex_bin}"' in SMOKE_TEST_SCRIPT_TEXT
     assert 'cat >"${fake_codex_bin}"' in SMOKE_TEST_SCRIPT_TEXT
     assert "git clone --depth 1 https://github.com/openai/codex.git" in SYNC_CODEX_DOCS_TEXT
