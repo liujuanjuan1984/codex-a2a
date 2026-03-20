@@ -90,6 +90,11 @@ Current profile shape:
   - `interrupts.request_ttl_seconds=<int>`
   - `service_features.streaming.enabled=true`
   - `service_features.health_endpoint.enabled=true|false`
+  - `execution_environment.sandbox.mode=unknown|read-only|workspace-write|danger-full-access`
+  - `execution_environment.sandbox.filesystem_scope=unknown|none|workspace_root|workspace_root_or_descendant|configured_roots|full_filesystem`
+  - `execution_environment.network.access=unknown|disabled|enabled|restricted`
+  - `execution_environment.approval.policy=unknown|never|on-request|on-failure|untrusted-only`
+  - `execution_environment.write_access.scope=unknown|none|workspace_root|workspace_root_or_descendant|configured_roots|full_filesystem`
 - runtime context:
   - `project=<optional>`
   - `workspace_root=<optional>`
@@ -123,6 +128,9 @@ Retention guidance:
   baseline capabilities.
 - Treat `codex.sessions.shell` as deployment-conditional. Discover it from the
   declared compatibility profile and extension contracts before calling it.
+- Treat `execution_environment.*` as deployment-configured discovery metadata.
+  It does not promise per-request snapshots of temporary approvals, escalations,
+  or host-side runtime mutations.
 
 Current implementation note:
 
@@ -177,6 +185,24 @@ Current implementation note:
   stream idle diagnostic log, default `60.0`
 - `A2A_INTERRUPT_REQUEST_TTL_SECONDS`: TTL for pending interrupt callbacks
   before they become expired, default `3600`
+- `A2A_EXECUTION_SANDBOX_MODE`: declarative sandbox mode for machine-readable
+  discovery, default `unknown`
+- `A2A_EXECUTION_SANDBOX_FILESYSTEM_SCOPE`: optional filesystem scope override
+  for machine-readable discovery
+- `A2A_EXECUTION_SANDBOX_WRITABLE_ROOTS`: optional comma-separated writable
+  root list for machine-readable discovery
+- `A2A_EXECUTION_NETWORK_ACCESS`: declarative network access policy for
+  machine-readable discovery, default `unknown`
+- `A2A_EXECUTION_NETWORK_ALLOWED_DOMAINS`: optional comma-separated allowlist
+  exposed only when safe to disclose
+- `A2A_EXECUTION_APPROVAL_POLICY`: declarative approval policy for
+  machine-readable discovery, default `unknown`
+- `A2A_EXECUTION_APPROVAL_ESCALATION_BEHAVIOR`: optional declarative approval
+  escalation behavior override
+- `A2A_EXECUTION_WRITE_ACCESS_SCOPE`: optional declarative write-access scope
+  override for machine-readable discovery
+- `A2A_EXECUTION_WRITE_OUTSIDE_WORKSPACE`: optional declarative override for
+  whether write access extends outside the workspace
 
 Configuration note:
 - The service configuration layer only accepts `CODEX_*` names for Codex-facing settings.

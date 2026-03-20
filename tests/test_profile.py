@@ -16,6 +16,13 @@ def test_runtime_profile_splits_stable_deployment_and_runtime_features() -> None
             codex_model_id="gemini-2.5-flash",
             codex_agent="code-reviewer",
             codex_variant="safe",
+            a2a_execution_sandbox_mode="workspace-write",
+            a2a_execution_sandbox_writable_roots=["/srv/workspaces/alpha", "/tmp/cache"],
+            a2a_execution_network_access="restricted",
+            a2a_execution_network_allowed_domains=["api.openai.com", "github.com"],
+            a2a_execution_approval_policy="on-request",
+            a2a_execution_write_access_scope="configured_roots",
+            a2a_execution_write_outside_workspace=True,
         )
     )
 
@@ -48,6 +55,25 @@ def test_runtime_profile_splits_stable_deployment_and_runtime_features() -> None
                 "enabled": True,
                 "availability": "enabled",
                 "toggle": "A2A_ENABLE_HEALTH_ENDPOINT",
+            },
+        },
+        "execution_environment": {
+            "sandbox": {
+                "mode": "workspace-write",
+                "filesystem_scope": "workspace_root_or_descendant",
+                "writable_roots": ["/srv/workspaces/alpha", "/tmp/cache"],
+            },
+            "network": {
+                "access": "restricted",
+                "allowed_domains": ["api.openai.com", "github.com"],
+            },
+            "approval": {
+                "policy": "on-request",
+                "escalation_behavior": "per_request",
+            },
+            "write_access": {
+                "scope": "configured_roots",
+                "outside_workspace": True,
             },
         },
     }

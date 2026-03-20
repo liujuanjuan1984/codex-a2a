@@ -71,6 +71,11 @@ The compatibility surface distinguishes between:
 - runtime features such as directory binding policy, session shell availability,
   interrupt TTL, and health endpoint exposure
 
+Execution-environment boundary fields are also published through the runtime
+profile when configured. Those fields are declarative deployment metadata, not
+promises that every temporary approval, sandbox escalation, or host-side change
+will be reflected live per request.
+
 ## Extension Stability
 
 - Shared metadata and extension contracts should stay synchronized across Agent

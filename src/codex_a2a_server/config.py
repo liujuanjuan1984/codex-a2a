@@ -1,11 +1,66 @@
 from __future__ import annotations
 
-from typing import cast
+from typing import Annotated, Any, cast
 
 from pydantic import Field, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 from codex_a2a_server import __version__
+
+_SANDBOX_MODES = {
+    "unknown",
+    "read-only",
+    "workspace-write",
+    "danger-full-access",
+}
+_FILESYSTEM_SCOPES = {
+    "unknown",
+    "none",
+    "workspace_root",
+    "workspace_root_or_descendant",
+    "configured_roots",
+    "full_filesystem",
+}
+_NETWORK_ACCESS_MODES = {
+    "unknown",
+    "disabled",
+    "enabled",
+    "restricted",
+}
+_APPROVAL_POLICIES = {
+    "unknown",
+    "never",
+    "on-request",
+    "on-failure",
+    "untrusted-only",
+}
+_APPROVAL_ESCALATION_BEHAVIORS = {
+    "unknown",
+    "unavailable",
+    "per_request",
+    "fallback_only",
+    "restricted",
+}
+
+
+def _parse_str_list(value: Any) -> Any:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        stripped = value.strip()
+        if not stripped:
+            return []
+        return [item.strip() for item in stripped.split(",") if item.strip()]
+    if isinstance(value, tuple):
+        return list(value)
+    return value
+
+
+def _validate_choice(value: str, *, allowed: set[str], env_name: str) -> str:
+    if value not in allowed:
+        allowed_values = ", ".join(sorted(allowed))
+        raise ValueError(f"{env_name} must be one of: {allowed_values}")
+    return value
 
 
 class Settings(BaseSettings):
@@ -100,6 +155,42 @@ class Settings(BaseSettings):
         default=3600,
         alias="A2A_INTERRUPT_REQUEST_TTL_SECONDS",
     )
+    a2a_execution_sandbox_mode: str = Field(
+        default="unknown",
+        alias="A2A_EXECUTION_SANDBOX_MODE",
+    )
+    a2a_execution_sandbox_filesystem_scope: str | None = Field(
+        default=None,
+        alias="A2A_EXECUTION_SANDBOX_FILESYSTEM_SCOPE",
+    )
+    a2a_execution_sandbox_writable_roots: Annotated[list[str], NoDecode] = Field(
+        default_factory=list,
+        alias="A2A_EXECUTION_SANDBOX_WRITABLE_ROOTS",
+    )
+    a2a_execution_network_access: str = Field(
+        default="unknown",
+        alias="A2A_EXECUTION_NETWORK_ACCESS",
+    )
+    a2a_execution_network_allowed_domains: Annotated[list[str], NoDecode] = Field(
+        default_factory=list,
+        alias="A2A_EXECUTION_NETWORK_ALLOWED_DOMAINS",
+    )
+    a2a_execution_approval_policy: str = Field(
+        default="unknown",
+        alias="A2A_EXECUTION_APPROVAL_POLICY",
+    )
+    a2a_execution_approval_escalation_behavior: str | None = Field(
+        default=None,
+        alias="A2A_EXECUTION_APPROVAL_ESCALATION_BEHAVIOR",
+    )
+    a2a_execution_write_access_scope: str | None = Field(
+        default=None,
+        alias="A2A_EXECUTION_WRITE_ACCESS_SCOPE",
+    )
+    a2a_execution_write_outside_workspace: bool | None = Field(
+        default=None,
+        alias="A2A_EXECUTION_WRITE_OUTSIDE_WORKSPACE",
+    )
 
     @field_validator("a2a_cancel_abort_timeout_seconds")
     @classmethod
@@ -128,6 +219,75 @@ class Settings(BaseSettings):
         if value < 1:
             raise ValueError("A2A_INTERRUPT_REQUEST_TTL_SECONDS must be >= 1")
         return value
+
+    @field_validator(
+        "a2a_execution_sandbox_writable_roots",
+        "a2a_execution_network_allowed_domains",
+        mode="before",
+    )
+    @classmethod
+    def parse_execution_lists(cls, value: Any) -> Any:
+        return _parse_str_list(value)
+
+    @field_validator("a2a_execution_sandbox_mode")
+    @classmethod
+    def validate_execution_sandbox_mode(cls, value: str) -> str:
+        return _validate_choice(
+            value,
+            allowed=_SANDBOX_MODES,
+            env_name="A2A_EXECUTION_SANDBOX_MODE",
+        )
+
+    @field_validator("a2a_execution_sandbox_filesystem_scope")
+    @classmethod
+    def validate_execution_sandbox_filesystem_scope(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
+        return _validate_choice(
+            value,
+            allowed=_FILESYSTEM_SCOPES,
+            env_name="A2A_EXECUTION_SANDBOX_FILESYSTEM_SCOPE",
+        )
+
+    @field_validator("a2a_execution_network_access")
+    @classmethod
+    def validate_execution_network_access(cls, value: str) -> str:
+        return _validate_choice(
+            value,
+            allowed=_NETWORK_ACCESS_MODES,
+            env_name="A2A_EXECUTION_NETWORK_ACCESS",
+        )
+
+    @field_validator("a2a_execution_approval_policy")
+    @classmethod
+    def validate_execution_approval_policy(cls, value: str) -> str:
+        return _validate_choice(
+            value,
+            allowed=_APPROVAL_POLICIES,
+            env_name="A2A_EXECUTION_APPROVAL_POLICY",
+        )
+
+    @field_validator("a2a_execution_approval_escalation_behavior")
+    @classmethod
+    def validate_execution_approval_escalation_behavior(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
+        return _validate_choice(
+            value,
+            allowed=_APPROVAL_ESCALATION_BEHAVIORS,
+            env_name="A2A_EXECUTION_APPROVAL_ESCALATION_BEHAVIOR",
+        )
+
+    @field_validator("a2a_execution_write_access_scope")
+    @classmethod
+    def validate_execution_write_access_scope(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
+        return _validate_choice(
+            value,
+            allowed=_FILESYSTEM_SCOPES,
+            env_name="A2A_EXECUTION_WRITE_ACCESS_SCOPE",
+        )
 
     @classmethod
     def from_env(cls) -> Settings:

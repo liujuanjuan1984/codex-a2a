@@ -420,6 +420,11 @@ def build_compatibility_profile_params(
                 "codex.sessions.shell is deployment-conditional: discover it from the "
                 "declared profile and current extension contracts before calling it."
             ),
+            (
+                "Treat execution_environment fields as deployment-configured discovery "
+                "metadata rather than per-turn snapshots of temporary approvals or "
+                "runtime escalations."
+            ),
         ],
     }
 

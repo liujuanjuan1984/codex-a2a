@@ -234,6 +234,21 @@ async def test_health_endpoint_with_bearer_token_reports_profile(monkeypatch) ->
                         "toggle": "A2A_ENABLE_HEALTH_ENDPOINT",
                     },
                 },
+                "execution_environment": {
+                    "sandbox": {
+                        "mode": "unknown",
+                        "filesystem_scope": "unknown",
+                    },
+                    "network": {
+                        "access": "unknown",
+                    },
+                    "approval": {
+                        "policy": "unknown",
+                    },
+                    "write_access": {
+                        "scope": "unknown",
+                    },
+                },
             },
         },
     }

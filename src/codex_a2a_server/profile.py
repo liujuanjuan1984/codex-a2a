@@ -74,6 +74,80 @@ class ServiceFeaturesProfile:
 
 
 @dataclass(frozen=True)
+class SandboxProfile:
+    mode: str
+    filesystem_scope: str
+    writable_roots: tuple[str, ...] = ()
+
+    def as_dict(self) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "mode": self.mode,
+            "filesystem_scope": self.filesystem_scope,
+        }
+        if self.writable_roots:
+            payload["writable_roots"] = list(self.writable_roots)
+        return payload
+
+
+@dataclass(frozen=True)
+class NetworkProfile:
+    access: str
+    allowed_domains: tuple[str, ...] = ()
+
+    def as_dict(self) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "access": self.access,
+        }
+        if self.allowed_domains:
+            payload["allowed_domains"] = list(self.allowed_domains)
+        return payload
+
+
+@dataclass(frozen=True)
+class ApprovalProfile:
+    policy: str
+    escalation_behavior: str | None = None
+
+    def as_dict(self) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "policy": self.policy,
+        }
+        if self.escalation_behavior is not None:
+            payload["escalation_behavior"] = self.escalation_behavior
+        return payload
+
+
+@dataclass(frozen=True)
+class WriteAccessProfile:
+    scope: str
+    outside_workspace: bool | None = None
+
+    def as_dict(self) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "scope": self.scope,
+        }
+        if self.outside_workspace is not None:
+            payload["outside_workspace"] = self.outside_workspace
+        return payload
+
+
+@dataclass(frozen=True)
+class ExecutionEnvironmentProfile:
+    sandbox: SandboxProfile
+    network: NetworkProfile
+    approval: ApprovalProfile
+    write_access: WriteAccessProfile
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "sandbox": self.sandbox.as_dict(),
+            "network": self.network.as_dict(),
+            "approval": self.approval.as_dict(),
+            "write_access": self.write_access.as_dict(),
+        }
+
+
+@dataclass(frozen=True)
 class RuntimeContext:
     project: str | None = None
     workspace_root: str | None = None
@@ -107,6 +181,7 @@ class RuntimeProfile:
     session_shell: SessionShellProfile
     interrupts: InterruptProfile
     service_features: ServiceFeaturesProfile
+    execution_environment: ExecutionEnvironmentProfile
     runtime_context: RuntimeContext
 
     @property
@@ -119,6 +194,7 @@ class RuntimeProfile:
             "session_shell": self.session_shell.as_dict(),
             "interrupts": self.interrupts.as_dict(),
             "service_features": self.service_features.as_dict(),
+            "execution_environment": self.execution_environment.as_dict(),
         }
 
     def summary_dict(self) -> dict[str, Any]:
@@ -141,6 +217,52 @@ class RuntimeProfile:
         }
 
 
+def _default_filesystem_scope(*, sandbox_mode: str) -> str:
+    if sandbox_mode == "read-only":
+        return "none"
+    if sandbox_mode == "workspace-write":
+        return "workspace_root_or_descendant"
+    if sandbox_mode == "danger-full-access":
+        return "full_filesystem"
+    return "unknown"
+
+
+def _default_approval_escalation_behavior(*, policy: str) -> str | None:
+    if policy == "never":
+        return "unavailable"
+    if policy == "on-request":
+        return "per_request"
+    if policy == "on-failure":
+        return "fallback_only"
+    if policy == "untrusted-only":
+        return "restricted"
+    return None
+
+
+def _default_write_access_scope(*, sandbox_mode: str, filesystem_scope: str) -> str:
+    if sandbox_mode == "read-only":
+        return "none"
+    if sandbox_mode == "danger-full-access":
+        return "full_filesystem"
+    if filesystem_scope in {
+        "none",
+        "workspace_root",
+        "workspace_root_or_descendant",
+        "configured_roots",
+        "full_filesystem",
+    }:
+        return filesystem_scope
+    return "unknown"
+
+
+def _default_write_outside_workspace(*, write_access_scope: str) -> bool | None:
+    if write_access_scope == "full_filesystem":
+        return True
+    if write_access_scope in {"none", "workspace_root", "workspace_root_or_descendant"}:
+        return False
+    return None
+
+
 def build_runtime_profile(settings: Settings) -> RuntimeProfile:
     deployment = DeploymentProfile(
         id=DEPLOYMENT_PROFILE_ID,
@@ -152,6 +274,24 @@ def build_runtime_profile(settings: Settings) -> RuntimeProfile:
         "workspace_root_or_descendant"
         if settings.a2a_allow_directory_override
         else "workspace_root_only"
+    )
+    sandbox_filesystem_scope = (
+        settings.a2a_execution_sandbox_filesystem_scope
+        or _default_filesystem_scope(sandbox_mode=settings.a2a_execution_sandbox_mode)
+    )
+    approval_escalation_behavior = (
+        settings.a2a_execution_approval_escalation_behavior
+        if settings.a2a_execution_approval_escalation_behavior is not None
+        else _default_approval_escalation_behavior(policy=settings.a2a_execution_approval_policy)
+    )
+    write_access_scope = settings.a2a_execution_write_access_scope or _default_write_access_scope(
+        sandbox_mode=settings.a2a_execution_sandbox_mode,
+        filesystem_scope=sandbox_filesystem_scope,
+    )
+    write_outside_workspace = (
+        settings.a2a_execution_write_outside_workspace
+        if settings.a2a_execution_write_outside_workspace is not None
+        else _default_write_outside_workspace(write_access_scope=write_access_scope)
     )
     return RuntimeProfile(
         profile_id=COMPATIBILITY_PROFILE_ID,
@@ -175,6 +315,25 @@ def build_runtime_profile(settings: Settings) -> RuntimeProfile:
                 "availability": ("enabled" if settings.a2a_enable_health_endpoint else "disabled"),
                 "toggle": "A2A_ENABLE_HEALTH_ENDPOINT",
             },
+        ),
+        execution_environment=ExecutionEnvironmentProfile(
+            sandbox=SandboxProfile(
+                mode=settings.a2a_execution_sandbox_mode,
+                filesystem_scope=sandbox_filesystem_scope,
+                writable_roots=tuple(settings.a2a_execution_sandbox_writable_roots),
+            ),
+            network=NetworkProfile(
+                access=settings.a2a_execution_network_access,
+                allowed_domains=tuple(settings.a2a_execution_network_allowed_domains),
+            ),
+            approval=ApprovalProfile(
+                policy=settings.a2a_execution_approval_policy,
+                escalation_behavior=approval_escalation_behavior,
+            ),
+            write_access=WriteAccessProfile(
+                scope=write_access_scope,
+                outside_workspace=write_outside_workspace,
+            ),
         ),
         runtime_context=RuntimeContext(
             project=settings.a2a_project,

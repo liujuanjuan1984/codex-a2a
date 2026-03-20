@@ -44,6 +44,11 @@ def test_agent_card_injects_profile_into_extensions() -> None:
             codex_agent="code-reviewer",
             codex_variant="safe",
             a2a_allow_directory_override=False,
+            a2a_execution_sandbox_mode="workspace-write",
+            a2a_execution_network_access="restricted",
+            a2a_execution_network_allowed_domains=["api.openai.com"],
+            a2a_execution_approval_policy="on-request",
+            a2a_execution_write_access_scope="workspace_root_or_descendant",
         )
     )
     ext_by_uri = {ext.uri: ext for ext in card.capabilities.extensions or []}
@@ -76,6 +81,24 @@ def test_agent_card_injects_profile_into_extensions() -> None:
     }
     assert profile["runtime_features"]["interrupts"] == {
         "request_ttl_seconds": 3600,
+    }
+    assert profile["runtime_features"]["execution_environment"] == {
+        "sandbox": {
+            "mode": "workspace-write",
+            "filesystem_scope": "workspace_root_or_descendant",
+        },
+        "network": {
+            "access": "restricted",
+            "allowed_domains": ["api.openai.com"],
+        },
+        "approval": {
+            "policy": "on-request",
+            "escalation_behavior": "per_request",
+        },
+        "write_access": {
+            "scope": "workspace_root_or_descendant",
+            "outside_workspace": False,
+        },
     }
     assert binding.params["metadata_field"] == "metadata.shared.session.id"
     assert binding.params["supported_metadata"] == [
@@ -190,6 +213,9 @@ def test_agent_card_injects_profile_into_extensions() -> None:
         for note in compatibility.params["consumer_guidance"]
     )
     assert any("urn:a2a:*" in note for note in compatibility.params["consumer_guidance"])
+    assert any(
+        "execution_environment" in note for note in compatibility.params["consumer_guidance"]
+    )
     shell_policy = compatibility.params["method_retention"]["codex.sessions.shell"]
     assert shell_policy["availability"] == "enabled"
     assert shell_policy["retention"] == "deployment-conditional"
@@ -223,6 +249,21 @@ def test_agent_card_omits_shell_method_when_disabled() -> None:
     }
     assert session_query.params["profile"]["runtime_features"]["interrupts"] == {
         "request_ttl_seconds": 45
+    }
+    assert session_query.params["profile"]["runtime_features"]["execution_environment"] == {
+        "sandbox": {
+            "mode": "unknown",
+            "filesystem_scope": "unknown",
+        },
+        "network": {
+            "access": "unknown",
+        },
+        "approval": {
+            "policy": "unknown",
+        },
+        "write_access": {
+            "scope": "unknown",
+        },
     }
     wire_contract = ext_by_uri[WIRE_CONTRACT_EXTENSION_URI]
     assert "codex.sessions.shell" not in wire_contract.params["all_jsonrpc_methods"]
