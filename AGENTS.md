@@ -36,8 +36,7 @@
 ## 5. 回归与验证
 
 - 回归策略按改动类型选择；默认基线为：
-  - `uv run pre-commit run --all-files`
-  - `uv run pytest`
+  - `bash ./scripts/validate_baseline.sh`
 - Before committing, complete the required validation for the current change set; by default, run the baseline checks above before creating a commit.
 - Before creating or updating a PR, confirm the relevant local validation has passed so CI is not left to catch issues that are already reproducible locally.
 - `pre-commit` 若自动修复文件（如 `ruff --fix`），需复查改动后再提交。

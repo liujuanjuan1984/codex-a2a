@@ -60,13 +60,16 @@ CODEX_WORKSPACE_ROOT=/abs/path/to/workspace uv run codex-a2a-server
 Run the default validation baseline before opening or updating a PR:
 
 ```bash
-uv run pre-commit run --all-files
-uv run pytest
+bash ./scripts/validate_baseline.sh
 ```
+
+This script runs `pre-commit`, `mypy`, `pytest` with the repository coverage
+floor, then builds the package and smoke-tests the freshly built wheel.
 
 For shell script changes, validate the touched scripts directly, for example:
 
 ```bash
+bash -n scripts/validate_baseline.sh
 bash -n scripts/smoke_test_built_cli.sh
 ```
 

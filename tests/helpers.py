@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, PropertyMock
 
 from a2a.server.agent_execution import RequestContext
 from a2a.server.context import ServerCallContext
-from a2a.types import Message, MessageSendParams, Role, TextPart
+from a2a.types import Message, MessageSendParams, Part, Role, TextPart
 
 from codex_a2a_server.codex_client import CodexClient, CodexMessage, InterruptRequestBinding
 from codex_a2a_server.config import Settings
@@ -31,15 +31,15 @@ def load_json_fixture(*relative_parts: str) -> Any:
 
 async def replay_codex_notification_fixture(
     *relative_parts: str,
-) -> tuple[dict[str, Any], list[dict]]:
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     fixture = load_json_fixture(*relative_parts)
     client = CodexClient(make_settings(a2a_bearer_token="test-token", codex_timeout=1.0))
-    events: list[dict] = []
+    events: list[dict[str, Any]] = []
 
     async def fake_enqueue(event: dict) -> None:
         events.append(event)
 
-    client._enqueue_stream_event = fake_enqueue  # type: ignore[method-assign]
+    client._enqueue_stream_event = fake_enqueue
     for notification in fixture["notifications"]:
         await client._handle_notification(notification)
     return fixture, events
@@ -50,15 +50,15 @@ async def replay_codex_jsonrpc_line_fixture(
     prefix_lines: list[bytes] | None = None,
     suffix_lines: list[bytes] | None = None,
     chunk_sizes: tuple[int, ...] | None = None,
-) -> tuple[dict[str, Any], list[dict]]:
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     fixture = load_json_fixture(*relative_parts)
     client = CodexClient(make_settings(a2a_bearer_token="test-token", codex_timeout=1.0))
-    events: list[dict] = []
+    events: list[dict[str, Any]] = []
 
     async def fake_enqueue(event: dict) -> None:
         events.append(event)
 
-    client._enqueue_stream_event = fake_enqueue  # type: ignore[method-assign]
+    client._enqueue_stream_event = fake_enqueue
 
     raw_lines: list[bytes] = []
     if prefix_lines:
@@ -170,7 +170,7 @@ def make_request_context(
     message = Message(
         message_id=message_id,
         role=Role.user,
-        parts=[TextPart(text=text)],
+        parts=[Part(root=TextPart(text=text))],
     )
     params = MessageSendParams(message=message, metadata=metadata)
     return RequestContext(request=params, task_id=task_id, context_id=context_id)
@@ -240,8 +240,8 @@ class DummySessionQueryCodexClient:
     def __init__(self, _settings: Settings) -> None:
         self.directory = "/workspace"
         self.settings = _settings
-        self._sessions_payload = [{"id": "s-1", "title": "Session s-1"}]
-        self._messages_payload = [
+        self._sessions_payload: Any = [{"id": "s-1", "title": "Session s-1"}]
+        self._messages_payload: Any = [
             {
                 "info": {"id": "m-1", "role": "assistant"},
                 "parts": [{"type": "text", "text": "SECRET_HISTORY"}],

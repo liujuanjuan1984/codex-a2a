@@ -1,3 +1,4 @@
+import asyncio
 import hashlib
 import logging
 import uuid
@@ -49,7 +50,7 @@ def test_create_app_resets_sse_app_status() -> None:
     original_should_exit_event = AppStatus.should_exit_event
     try:
         AppStatus.should_exit = True
-        AppStatus.should_exit_event = object()
+        AppStatus.should_exit_event = asyncio.Event()
 
         create_app(make_settings(a2a_bearer_token="test-token"))
 
@@ -218,13 +219,13 @@ async def test_app_lifespan_runs_codex_startup_preflight() -> None:
     import codex_a2a_server.app as app_module
 
     original_client = app_module.CodexClient
-    app_module.CodexClient = PreflightClient  # type: ignore[assignment]
+    app_module.CodexClient = PreflightClient
     try:
         app = app_module.create_app(make_settings(a2a_bearer_token="test-token"))
         async with app.router.lifespan_context(app):
             pass
     finally:
-        app_module.CodexClient = original_client  # type: ignore[assignment]
+        app_module.CodexClient = original_client
 
     assert calls == ["startup_preflight"]
 

@@ -34,17 +34,5 @@ jobs:
       - name: Sync Dependencies
         run: uv sync --all-extras --frozen
 
-      - name: Run pre-commit
-        run: uv run pre-commit run --all-files
-
-      - name: Run mypy
-        run: uv run mypy --config-file mypy.ini
-
-      - name: Run pytest
-        run: uv run pytest
-
-      - name: Build package artifacts
-        run: uv build --no-sources
-
-      - name: Smoke test built CLI
-        run: bash ./scripts/smoke_test_built_cli.sh
+      - name: Run validation baseline
+        run: bash ./scripts/validate_baseline.sh

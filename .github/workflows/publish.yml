@@ -33,26 +33,38 @@ jobs:
       - name: Build package artifacts
         run: uv build --no-sources
 
+      - name: Capture built wheel path
+        id: wheel
+        run: |
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          import pathlib
+
+          wheels = sorted(pathlib.Path("dist").glob("codex_a2a_server-*.whl"))
+          if len(wheels) != 1:
+              raise SystemExit(f"Expected exactly one wheel in dist/, found {len(wheels)}")
+          print(f"wheel_path={wheels[0]}")
+          PY
+
       - name: Verify published version matches tag
         run: |
           python - <<'PY'
           import os
           import pathlib
 
-          dist_dir = pathlib.Path("dist")
-          wheels = sorted(dist_dir.glob("codex_a2a_server-*.whl"))
-          if not wheels:
-              raise SystemExit("No wheel produced in dist/")
-          wheel = wheels[0].name
+          wheel = pathlib.Path(os.environ["WHEEL_PATH"]).name
           version = wheel.removeprefix("codex_a2a_server-").split("-py3", 1)[0]
           tag = os.environ["GITHUB_REF_NAME"].removeprefix("v")
           if version != tag:
               raise SystemExit(f"Wheel version {version!r} does not match tag {tag!r}")
           print(f"Validated release version: {version}")
           PY
+        env:
+          WHEEL_PATH: ${{ steps.wheel.outputs.wheel_path }}
 
       - name: Smoke test wheel install
         run: bash ./scripts/smoke_test_built_cli.sh
+        env:
+          WHEEL_PATH: ${{ steps.wheel.outputs.wheel_path }}
 
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1

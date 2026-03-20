@@ -143,10 +143,9 @@ This repository does not publish directly from an unmerged feature branch.
 
 ## Development
 
-For contributor workflow, validation baseline, helper scripts, and upstream
-reference snapshots, see [Contributing Guide](CONTRIBUTING.md),
-[Scripts Reference](scripts/README.md), and
-[Vendored Codex References](vendor/codex/SYNC.md).
+For contributor workflow and helper scripts, see [Contributing Guide](CONTRIBUTING.md)
+and [Scripts Reference](scripts/README.md). Maintainers can regenerate optional
+upstream Codex reference snapshots locally with `scripts/sync_codex_docs.sh`.
 
 ## License
 
