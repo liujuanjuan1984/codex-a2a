@@ -73,16 +73,6 @@ def _model_dump_if_present(model: _StrictContractModel | None) -> dict[str, Any]
     return payload or None
 
 
-def build_session_metadata(
-    *,
-    session_id: str | None = None,
-    session_title: str | None = None,
-) -> dict[str, Any] | None:
-    if not session_id:
-        return None
-    return _model_dump_if_present(SessionMetadata(id=session_id, title=session_title))
-
-
 def build_artifact_stream_metadata_payload(
     *,
     block_type: StreamBlockType,
@@ -135,12 +125,6 @@ def build_interrupt_metadata(
     ).model_dump(mode="json", by_alias=False, exclude_none=True)
 
 
-def build_usage_metadata(usage: Mapping[str, Any] | None) -> dict[str, Any] | None:
-    if usage is None:
-        return None
-    return _model_dump_if_present(UsageMetadata.model_validate(dict(usage)))
-
-
 def build_output_metadata(
     *,
     session_id: str | None = None,
@@ -156,13 +140,11 @@ def build_output_metadata(
         stream=(
             ArtifactStreamMetadata.model_validate(dict(stream))
             if stream is not None and "block_type" in stream
-            else (
-                StatusStreamMetadata.model_validate(dict(stream))
-                if stream is not None
-                else None
-            )
+            else (StatusStreamMetadata.model_validate(dict(stream)) if stream is not None else None)
         ),
-        interrupt=InterruptMetadata.model_validate(dict(interrupt)) if interrupt is not None else None,
+        interrupt=InterruptMetadata.model_validate(dict(interrupt))
+        if interrupt is not None
+        else None,
     )
     metadata: dict[str, Any] = {}
     shared_payload = _model_dump_if_present(shared)

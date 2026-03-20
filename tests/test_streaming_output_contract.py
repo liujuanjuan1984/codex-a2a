@@ -45,7 +45,6 @@ class DummyStreamingClient:
         self.max_in_flight_send = 0
         self.stream_timeout = None
         self.directory = None
-        self._interrupt_sessions: dict[str, str] = {}
         self.settings = make_settings(
             a2a_bearer_token="test",
         )
@@ -88,15 +87,6 @@ class DummyStreamingClient:
                 break
             await asyncio.sleep(delay)
             yield event
-
-    def remember_interrupt_request(self, *, request_id: str, session_id: str) -> None:
-        self._interrupt_sessions[request_id] = session_id
-
-    def resolve_interrupt_session(self, request_id: str) -> str | None:
-        return self._interrupt_sessions.get(request_id)
-
-    def discard_interrupt_request(self, request_id: str) -> None:
-        self._interrupt_sessions.pop(request_id, None)
 
 
 def _event(
