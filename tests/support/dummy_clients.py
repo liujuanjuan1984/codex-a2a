@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from codex_a2a_server.config import Settings
-from codex_a2a_server.upstream.client import CodexMessage
-from codex_a2a_server.upstream.interrupts import InterruptRequestBinding
+from codex_a2a.config import Settings
+from codex_a2a.upstream.client import CodexMessage
+from codex_a2a.upstream.interrupts import InterruptRequestBinding
 from tests.support.settings import make_settings
 
 

@@ -6,8 +6,8 @@ import pytest
 from a2a.server.events.event_queue import EventQueue
 from a2a.types import TaskState, TaskStatusUpdateEvent
 
-from codex_a2a_server.execution.executor import CodexAgentExecutor
-from codex_a2a_server.upstream.client import CodexClient
+from codex_a2a.execution.executor import CodexAgentExecutor
+from codex_a2a.upstream.client import CodexClient
 from tests.support.context import configure_mock_client_runtime, make_request_context_mock
 
 
@@ -144,7 +144,7 @@ async def test_cancel_logs_abort_timeout_when_cleanup_does_not_finish(
         call_context_enabled=False,
     )
     cancel_queue = AsyncMock(spec=EventQueue)
-    caplog.set_level(logging.WARNING, logger="codex_a2a_server.execution.executor")
+    caplog.set_level(logging.WARNING, logger="codex_a2a.execution.executor")
 
     await asyncio.wait_for(executor.cancel(cancel_context, cancel_queue), timeout=0.5)
 

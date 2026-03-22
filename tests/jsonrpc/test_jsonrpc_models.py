@@ -1,10 +1,10 @@
 import pytest
 
-from codex_a2a_server.contracts.extensions import (
+from codex_a2a.contracts.extensions import (
     SESSION_QUERY_DEFAULT_LIMIT,
     SESSION_QUERY_MAX_LIMIT,
 )
-from codex_a2a_server.jsonrpc.params import (
+from codex_a2a.jsonrpc.params import (
     JsonRpcParamsValidationError,
     parse_get_session_messages_params,
     parse_list_sessions_params,

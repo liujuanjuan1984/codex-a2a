@@ -25,7 +25,7 @@ if [[ -z "${python_bin}" ]]; then
 fi
 
 shopt -s nullglob
-wheel_paths=(dist/codex_a2a_server-*.whl)
+wheel_paths=(dist/codex_a2a-*.whl)
 shopt -u nullglob
 
 wheel_path="${WHEEL_PATH:-}"
@@ -110,7 +110,7 @@ A2A_BEARER_TOKEN="${bearer_token}" \
 A2A_PORT="${port}" \
 A2A_HOST="127.0.0.1" \
 CODEX_CLI_BIN="${fake_codex_bin}" \
-"${tool_bin_dir}/codex-a2a-server" >"${server_log}" 2>&1 &
+"${tool_bin_dir}/codex-a2a" >"${server_log}" 2>&1 &
 server_pid="$!"
 
 health_url="http://127.0.0.1:${port}/health"

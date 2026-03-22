@@ -17,7 +17,7 @@ from a2a.types import (
     TextPart,
 )
 
-from codex_a2a_server.server.request_handler import CodexRequestHandler
+from codex_a2a.server.request_handler import CodexRequestHandler
 
 
 def _make_message_send_params() -> MessageSendParams:

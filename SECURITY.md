@@ -13,7 +13,7 @@ The current deployment model is a single-tenant trust boundary by design.
 
 - `A2A_BEARER_TOKEN` protects access to the A2A surface, but it is not a
   tenant-isolation boundary inside one deployed instance.
-- Within one `codex-a2a-server` instance, consumers share the same underlying
+- Within one `codex-a2a` instance, consumers share the same underlying
   Codex workspace/environment by default.
 - LLM provider keys are consumed by the `codex` process. Prompt injection or
   indirect exfiltration attempts may still expose sensitive values.

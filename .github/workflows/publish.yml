@@ -39,7 +39,7 @@ jobs:
           python - <<'PY' >> "$GITHUB_OUTPUT"
           import pathlib
 
-          wheels = sorted(pathlib.Path("dist").glob("codex_a2a_server-*.whl"))
+          wheels = sorted(pathlib.Path("dist").glob("codex_a2a-*.whl"))
           if len(wheels) != 1:
               raise SystemExit(f"Expected exactly one wheel in dist/, found {len(wheels)}")
           print(f"wheel_path={wheels[0]}")
@@ -52,7 +52,7 @@ jobs:
           import pathlib
 
           wheel = pathlib.Path(os.environ["WHEEL_PATH"]).name
-          version = wheel.removeprefix("codex_a2a_server-").split("-py3", 1)[0]
+          version = wheel.removeprefix("codex_a2a-").split("-py3", 1)[0]
           tag = os.environ["GITHUB_REF_NAME"].removeprefix("v")
           if version != tag:
               raise SystemExit(f"Wheel version {version!r} does not match tag {tag!r}")

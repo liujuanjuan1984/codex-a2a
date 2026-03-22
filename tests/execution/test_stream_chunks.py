@@ -2,13 +2,13 @@ import logging
 
 from a2a.types import DataPart, TextPart
 
-from codex_a2a_server.execution.stream_chunks import (
+from codex_a2a.execution.stream_chunks import (
     delta_chunks,
     snapshot_chunks,
     tool_delta_chunks,
     upsert_stream_part_state,
 )
-from codex_a2a_server.execution.stream_state import BlockType, StreamPartState
+from codex_a2a.execution.stream_state import BlockType, StreamPartState
 
 
 def test_upsert_stream_part_state_creates_and_updates_existing_state() -> None:

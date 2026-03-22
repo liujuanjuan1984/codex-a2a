@@ -3,8 +3,8 @@ import asyncio
 import pytest
 from a2a.types import Task
 
-from codex_a2a_server.execution.executor import CodexAgentExecutor
-from codex_a2a_server.upstream.client import CodexMessage
+from codex_a2a.execution.executor import CodexAgentExecutor
+from codex_a2a.upstream.client import CodexMessage
 from tests.support.context import DummyEventQueue, make_request_context
 from tests.support.dummy_clients import DummyChatCodexClient
 

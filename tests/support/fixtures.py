@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock
 
-from codex_a2a_server.upstream.client import CodexClient
+from codex_a2a.upstream.client import CodexClient
 from tests.support.settings import make_settings
 
 _TESTS_DIR = Path(__file__).resolve().parent.parent

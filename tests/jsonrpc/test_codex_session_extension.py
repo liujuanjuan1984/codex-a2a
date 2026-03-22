@@ -4,8 +4,8 @@ from unittest.mock import MagicMock
 import httpx
 import pytest
 
-from codex_a2a_server.config import Settings
-from codex_a2a_server.contracts.extensions import (
+from codex_a2a.config import Settings
+from codex_a2a.contracts.extensions import (
     INTERRUPT_CALLBACK_METHODS,
     SESSION_CONTROL_METHODS,
     SESSION_QUERY_DEFAULT_LIMIT,
@@ -13,9 +13,9 @@ from codex_a2a_server.contracts.extensions import (
     SESSION_QUERY_METHODS,
     build_supported_jsonrpc_methods,
 )
-from codex_a2a_server.jsonrpc.application import CodexSessionQueryJSONRPCApplication
-from codex_a2a_server.profile.runtime import build_runtime_profile
-from codex_a2a_server.server.agent_card import build_agent_card
+from codex_a2a.jsonrpc.application import CodexSessionQueryJSONRPCApplication
+from codex_a2a.profile.runtime import build_runtime_profile
+from codex_a2a.server.agent_card import build_agent_card
 from tests.support.dummy_clients import DummySessionQueryCodexClient as DummyCodexClient
 from tests.support.settings import make_settings
 
@@ -84,7 +84,7 @@ def test_session_extension_fails_fast_when_interrupt_owner_hook_is_missing() -> 
 
 @pytest.mark.asyncio
 async def test_session_query_extension_requires_bearer_token(monkeypatch):
-    import codex_a2a_server.server.application as app_module
+    import codex_a2a.server.application as app_module
 
     monkeypatch.setattr(app_module, "CodexClient", DummyCodexClient)
     app = app_module.create_app(
@@ -113,7 +113,7 @@ async def test_session_query_extension_requires_bearer_token(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_session_query_extension_returns_jsonrpc_result(monkeypatch):
-    import codex_a2a_server.server.application as app_module
+    import codex_a2a.server.application as app_module
 
     dummy = DummyCodexClient(
         make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
@@ -177,7 +177,7 @@ async def test_session_query_extension_returns_jsonrpc_result(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_session_query_extension_applies_default_limit_when_omitted(monkeypatch):
-    import codex_a2a_server.server.application as app_module
+    import codex_a2a.server.application as app_module
 
     dummy = DummyCodexClient(
         make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
@@ -214,7 +214,7 @@ async def test_session_query_extension_applies_default_limit_when_omitted(monkey
 
 @pytest.mark.asyncio
 async def test_session_query_extension_rejects_non_array_upstream_payload(monkeypatch):
-    import codex_a2a_server.server.application as app_module
+    import codex_a2a.server.application as app_module
 
     class WeirdPayloadClient(DummyCodexClient):
         def __init__(self, _settings: Settings) -> None:
@@ -247,7 +247,7 @@ async def test_session_query_extension_rejects_non_array_upstream_payload(monkey
 
 @pytest.mark.asyncio
 async def test_session_query_extension_session_title_is_extracted_or_placeholder(monkeypatch):
-    import codex_a2a_server.server.application as app_module
+    import codex_a2a.server.application as app_module
 
     class TitlePayloadClient(DummyCodexClient):
         def __init__(self, _settings: Settings) -> None:
@@ -275,7 +275,7 @@ async def test_session_query_extension_session_title_is_extracted_or_placeholder
 
 @pytest.mark.asyncio
 async def test_session_query_extension_message_role_and_id_from_info(monkeypatch):
-    import codex_a2a_server.server.application as app_module
+    import codex_a2a.server.application as app_module
 
     class InfoRoleClient(DummyCodexClient):
         def __init__(self, _settings: Settings) -> None:
@@ -314,7 +314,7 @@ async def test_session_query_extension_message_role_and_id_from_info(monkeypatch
 
 @pytest.mark.asyncio
 async def test_session_query_extension_accepts_top_level_list_payload(monkeypatch):
-    import codex_a2a_server.server.application as app_module
+    import codex_a2a.server.application as app_module
 
     class ListPayloadClient(DummyCodexClient):
         def __init__(self, _settings: Settings) -> None:
@@ -360,7 +360,7 @@ async def test_session_query_extension_accepts_top_level_list_payload(monkeypatc
 
 @pytest.mark.asyncio
 async def test_session_query_extension_rejects_non_list_wrapped_payload(monkeypatch):
-    import codex_a2a_server.server.application as app_module
+    import codex_a2a.server.application as app_module
 
     class AltKeyPayloadClient(DummyCodexClient):
         def __init__(self, _settings: Settings) -> None:
@@ -402,7 +402,7 @@ async def test_session_query_extension_rejects_non_list_wrapped_payload(monkeypa
 
 @pytest.mark.asyncio
 async def test_session_query_extension_rejects_cursor_limit(monkeypatch):
-    import codex_a2a_server.server.application as app_module
+    import codex_a2a.server.application as app_module
 
     dummy = DummyCodexClient(
         make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
@@ -434,7 +434,7 @@ async def test_session_query_extension_rejects_cursor_limit(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_session_query_extension_rejects_page_size_pagination(monkeypatch):
-    import codex_a2a_server.server.application as app_module
+    import codex_a2a.server.application as app_module
 
     dummy = DummyCodexClient(
         make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
@@ -465,7 +465,7 @@ async def test_session_query_extension_rejects_page_size_pagination(monkeypatch)
 
 @pytest.mark.asyncio
 async def test_session_query_extension_rejects_limit_above_declared_max(monkeypatch):
-    import codex_a2a_server.server.application as app_module
+    import codex_a2a.server.application as app_module
 
     dummy = DummyCodexClient(
         make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
@@ -497,7 +497,7 @@ async def test_session_query_extension_rejects_limit_above_declared_max(monkeypa
 
 @pytest.mark.asyncio
 async def test_session_query_extension_maps_404_to_session_not_found(monkeypatch):
-    import codex_a2a_server.server.application as app_module
+    import codex_a2a.server.application as app_module
 
     class NotFoundCodexClient(DummyCodexClient):
         async def list_messages(self, session_id: str, *, params=None):
@@ -532,10 +532,10 @@ async def test_session_query_extension_maps_404_to_session_not_found(monkeypatch
 
 @pytest.mark.asyncio
 async def test_session_query_extension_does_not_log_response_bodies(monkeypatch, caplog):
-    import codex_a2a_server.server.application as app_module
+    import codex_a2a.server.application as app_module
 
     monkeypatch.setattr(app_module, "CodexClient", DummyCodexClient)
-    caplog.set_level(logging.DEBUG, logger="codex_a2a_server.server.http_middlewares")
+    caplog.set_level(logging.DEBUG, logger="codex_a2a.server.http_middlewares")
 
     app = app_module.create_app(
         make_settings(a2a_bearer_token="t-1", a2a_log_payloads=True, **_BASE_SETTINGS)
@@ -563,7 +563,7 @@ async def test_session_query_extension_does_not_log_response_bodies(monkeypatch,
 
 @pytest.mark.asyncio
 async def test_session_control_prompt_async_returns_turn_handle(monkeypatch):
-    import codex_a2a_server.server.application as app_module
+    import codex_a2a.server.application as app_module
 
     dummy = DummyCodexClient(
         make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
@@ -607,7 +607,7 @@ async def test_session_control_prompt_async_returns_turn_handle(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_session_control_command_maps_response_to_a2a_message(monkeypatch):
-    import codex_a2a_server.server.application as app_module
+    import codex_a2a.server.application as app_module
 
     dummy = DummyCodexClient(
         make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
@@ -656,7 +656,7 @@ async def test_session_control_command_maps_response_to_a2a_message(monkeypatch)
 
 @pytest.mark.asyncio
 async def test_session_control_command_accepts_missing_arguments(monkeypatch):
-    import codex_a2a_server.server.application as app_module
+    import codex_a2a.server.application as app_module
 
     dummy = DummyCodexClient(
         make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
@@ -702,7 +702,7 @@ async def test_session_control_command_accepts_missing_arguments(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_session_control_shell_maps_response_to_a2a_message(monkeypatch):
-    import codex_a2a_server.server.application as app_module
+    import codex_a2a.server.application as app_module
 
     dummy = DummyCodexClient(
         make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
@@ -742,7 +742,7 @@ async def test_session_control_shell_maps_response_to_a2a_message(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_session_control_rejects_invalid_request_shape(monkeypatch):
-    import codex_a2a_server.server.application as app_module
+    import codex_a2a.server.application as app_module
 
     dummy = DummyCodexClient(
         make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
@@ -793,7 +793,7 @@ async def test_session_control_rejects_invalid_request_shape(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_session_control_shell_method_is_not_exposed_when_disabled(monkeypatch):
-    import codex_a2a_server.server.application as app_module
+    import codex_a2a.server.application as app_module
 
     dummy = DummyCodexClient(
         make_settings(
@@ -839,7 +839,7 @@ async def test_session_control_shell_method_is_not_exposed_when_disabled(monkeyp
 
 @pytest.mark.asyncio
 async def test_session_control_rejects_invalid_metadata_directory(monkeypatch):
-    import codex_a2a_server.server.application as app_module
+    import codex_a2a.server.application as app_module
 
     dummy = DummyCodexClient(
         make_settings(
@@ -883,7 +883,7 @@ async def test_session_control_rejects_invalid_metadata_directory(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_interrupt_callback_extension_permission_reply(monkeypatch):
-    import codex_a2a_server.server.application as app_module
+    import codex_a2a.server.application as app_module
 
     dummy = DummyCodexClient(
         make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
@@ -927,7 +927,7 @@ async def test_interrupt_callback_extension_permission_reply(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_interrupt_callback_extension_rejects_legacy_permission_fields(monkeypatch):
-    import codex_a2a_server.server.application as app_module
+    import codex_a2a.server.application as app_module
 
     dummy = DummyCodexClient(
         make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
@@ -956,7 +956,7 @@ async def test_interrupt_callback_extension_rejects_legacy_permission_fields(mon
 
 @pytest.mark.asyncio
 async def test_interrupt_callback_extension_question_reply_and_reject(monkeypatch):
-    import codex_a2a_server.server.application as app_module
+    import codex_a2a.server.application as app_module
 
     dummy = DummyCodexClient(
         make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
@@ -1005,7 +1005,7 @@ async def test_interrupt_callback_extension_question_reply_and_reject(monkeypatc
 
 @pytest.mark.asyncio
 async def test_interrupt_callback_extension_maps_404_to_interrupt_not_found(monkeypatch):
-    import codex_a2a_server.server.application as app_module
+    import codex_a2a.server.application as app_module
 
     class NotFoundInterruptClient(DummyCodexClient):
         async def permission_reply(
@@ -1053,7 +1053,7 @@ async def test_interrupt_callback_extension_maps_404_to_interrupt_not_found(monk
 async def test_interrupt_callback_extension_returns_not_found_for_missing_local_request(
     monkeypatch,
 ):
-    import codex_a2a_server.server.application as app_module
+    import codex_a2a.server.application as app_module
 
     dummy = DummyCodexClient(
         make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
@@ -1084,7 +1084,7 @@ async def test_interrupt_callback_extension_returns_not_found_for_missing_local_
 
 @pytest.mark.asyncio
 async def test_interrupt_callback_extension_returns_expired_for_stale_request(monkeypatch):
-    import codex_a2a_server.server.application as app_module
+    import codex_a2a.server.application as app_module
 
     dummy = DummyCodexClient(
         make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
@@ -1116,7 +1116,7 @@ async def test_interrupt_callback_extension_returns_expired_for_stale_request(mo
 
 @pytest.mark.asyncio
 async def test_interrupt_callback_extension_rejects_interrupt_type_mismatch(monkeypatch):
-    import codex_a2a_server.server.application as app_module
+    import codex_a2a.server.application as app_module
 
     dummy = DummyCodexClient(
         make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
@@ -1151,7 +1151,7 @@ async def test_interrupt_callback_extension_rejects_interrupt_type_mismatch(monk
 
 @pytest.mark.asyncio
 async def test_interrupt_callback_extension_masks_owner_mismatch_as_not_found(monkeypatch):
-    import codex_a2a_server.server.application as app_module
+    import codex_a2a.server.application as app_module
 
     dummy = DummyCodexClient(
         make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)

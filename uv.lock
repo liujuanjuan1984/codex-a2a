@@ -148,7 +148,7 @@ wheels = [
 ]
 
 [[package]]
-name = "codex-a2a-server"
+name = "codex-a2a"
 source = { editable = "." }
 dependencies = [
     { name = "a2a-sdk" },

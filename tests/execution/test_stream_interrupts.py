@@ -1,4 +1,4 @@
-from codex_a2a_server.execution.stream_interrupts import extract_interrupt_asked_event
+from codex_a2a.execution.stream_interrupts import extract_interrupt_asked_event
 
 
 def test_extract_permission_interrupt_keeps_explicit_display_message_only() -> None:

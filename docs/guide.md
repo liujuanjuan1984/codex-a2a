@@ -208,7 +208,7 @@ Configuration note:
 - The service configuration layer only accepts `CODEX_*` names for Codex-facing settings.
 
 Codex prerequisite note:
-- `codex-a2a-server` assumes the local `codex` runtime is already usable.
+- `codex-a2a` assumes the local `codex` runtime is already usable.
 - Install and verify the `codex` CLI itself before starting this server.
 - Provider selection, login state, and upstream API keys remain Codex-side prerequisites.
 - Service startup fails fast when the local `codex` runtime is missing or cannot initialize.
@@ -223,14 +223,14 @@ operational notes.
 Install once:
 
 ```bash
-uv tool install codex-a2a-server
+uv tool install codex-a2a
 ```
 
 Before starting the runtime:
 
 - verify `codex` itself is installed and available on `PATH` (or set `CODEX_CLI_BIN`)
 - verify your Codex provider/model/auth setup already works outside this repository
-- `codex-a2a-server` does not provision Codex providers, login state, or API keys
+- `codex-a2a` does not provision Codex providers, login state, or API keys
 
 Run against a workspace root:
 
@@ -242,15 +242,15 @@ A2A_PUBLIC_URL=http://127.0.0.1:8000 \
 CODEX_WORKSPACE_ROOT=/abs/path/to/workspace \
 CODEX_MODEL_ID=gpt-5.1-codex \
 CODEX_TIMEOUT=300 \
-codex-a2a-server
+codex-a2a
 ```
 
 Notes:
 
 - `CODEX_WORKSPACE_ROOT` should point at the workspace root you want Codex to operate in.
-- `codex-a2a-server` launches the Codex app-server subprocess itself; no
+- `codex-a2a` launches the Codex app-server subprocess itself; no
   separate `codex serve` step is required.
-- Upgrade the installed CLI with `uv tool upgrade codex-a2a-server`.
+- Upgrade the installed CLI with `uv tool upgrade codex-a2a`.
 
 ## Source-Based Development Start
 
@@ -260,7 +260,7 @@ unreleased changes:
 ```bash
 uv sync --all-extras
 export A2A_BEARER_TOKEN="$(python -c 'import secrets; print(secrets.token_hex(24))')"
-CODEX_WORKSPACE_ROOT=/abs/path/to/workspace uv run codex-a2a-server
+CODEX_WORKSPACE_ROOT=/abs/path/to/workspace uv run codex-a2a
 ```
 
 This path is for contributors. End users should prefer the released CLI path
@@ -276,7 +276,7 @@ described first in [README.md](../README.md) and above in this guide.
   upstream Codex.
 - Requests require `Authorization: Bearer <token>`; otherwise `401` is
   returned. Agent Card endpoints are public.
-- Within one `codex-a2a-server` instance, all consumers share the same
+- Within one `codex-a2a` instance, all consumers share the same
   underlying Codex workspace/environment. This deployment model is not
   tenant-isolated by default.
 

@@ -1,4 +1,4 @@
-from codex_a2a_server.profile.runtime import build_runtime_profile
+from codex_a2a.profile.runtime import build_runtime_profile
 from tests.support.settings import make_settings
 
 

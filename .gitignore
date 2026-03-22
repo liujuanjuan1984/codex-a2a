@@ -17,6 +17,8 @@ eggs/
 lib/
 lib64/
 parts/
+!tests/parts/
+!tests/parts/**
 sdist/
 var/
 wheels/
