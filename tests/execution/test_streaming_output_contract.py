@@ -5,17 +5,17 @@ from typing import Any
 import pytest
 from a2a.types import Task, TaskArtifactUpdateEvent, TaskState, TaskStatusUpdateEvent
 
-import codex_a2a_server.execution.streaming as streaming_module
-from codex_a2a_server.contracts.extensions import build_streaming_extension_params
-from codex_a2a_server.execution.executor import CodexAgentExecutor
-from codex_a2a_server.execution.streaming import (
+import codex_a2a.execution.streaming as streaming_module
+from codex_a2a.contracts.extensions import build_streaming_extension_params
+from codex_a2a.execution.executor import CodexAgentExecutor
+from codex_a2a.execution.streaming import (
     extract_event_session_id,
     extract_interrupt_resolved_event,
     extract_stream_message_id,
     extract_stream_part_id,
     extract_stream_session_id,
 )
-from codex_a2a_server.upstream.client import CodexMessage
+from codex_a2a.upstream.client import CodexMessage
 from tests.support.context import DummyEventQueue, make_request_context
 from tests.support.fixtures import replay_codex_notification_fixture
 from tests.support.settings import make_settings
@@ -674,7 +674,7 @@ async def test_streaming_logs_unsupported_interrupt_event_type_with_payload(capl
     executor._should_stream = lambda context: True
     queue = DummyEventQueue()
 
-    with caplog.at_level(logging.DEBUG, logger="codex_a2a_server.execution.streaming"):
+    with caplog.at_level(logging.DEBUG, logger="codex_a2a.execution.streaming"):
         await executor.execute(
             make_request_context(
                 task_id="task-q-pending", context_id="ctx-q-pending", text="hello"
@@ -708,7 +708,7 @@ async def test_streaming_logs_interrupt_shape_mismatch_with_payload(caplog) -> N
     executor._should_stream = lambda context: True
     queue = DummyEventQueue()
 
-    with caplog.at_level(logging.DEBUG, logger="codex_a2a_server.execution.streaming"):
+    with caplog.at_level(logging.DEBUG, logger="codex_a2a.execution.streaming"):
         await executor.execute(
             make_request_context(
                 task_id="task-perm-shape", context_id="ctx-perm-shape", text="hello"
@@ -1855,7 +1855,7 @@ async def test_streaming_logs_idle_diagnostics_at_debug_when_only_transport_keep
     executor._should_stream = lambda context: True  # type: ignore[method-assign]
     queue = DummyEventQueue()
 
-    caplog.set_level(logging.DEBUG, logger="codex_a2a_server.execution.streaming")
+    caplog.set_level(logging.DEBUG, logger="codex_a2a.execution.streaming")
 
     await executor.execute(
         make_request_context(task_id="task-idle-log", context_id="ctx-idle-log", text="go"),
@@ -1896,7 +1896,7 @@ async def test_streaming_logs_completion_observed_in_close_diagnostics(
     executor._should_stream = lambda context: True  # type: ignore[method-assign]
     queue = DummyEventQueue()
 
-    caplog.set_level(logging.INFO, logger="codex_a2a_server.execution.streaming")
+    caplog.set_level(logging.INFO, logger="codex_a2a.execution.streaming")
 
     await executor.execute(
         make_request_context(task_id="task-close-log", context_id="ctx-close-log", text="go"),

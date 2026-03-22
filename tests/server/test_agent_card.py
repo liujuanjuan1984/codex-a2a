@@ -1,4 +1,4 @@
-from codex_a2a_server.contracts.extensions import (
+from codex_a2a.contracts.extensions import (
     COMPATIBILITY_PROFILE_EXTENSION_URI,
     INTERRUPT_CALLBACK_EXTENSION_URI,
     SESSION_BINDING_EXTENSION_URI,
@@ -8,7 +8,7 @@ from codex_a2a_server.contracts.extensions import (
     STREAMING_EXTENSION_URI,
     WIRE_CONTRACT_EXTENSION_URI,
 )
-from codex_a2a_server.server.agent_card import build_agent_card
+from codex_a2a.server.agent_card import build_agent_card
 from tests.support.settings import make_settings
 
 

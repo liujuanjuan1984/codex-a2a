@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from codex_a2a_server.config import Settings
+from codex_a2a.config import Settings
 
 
 def make_settings(**overrides: Any) -> Settings:

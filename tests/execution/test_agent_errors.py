@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from a2a.server.events.event_queue import EventQueue
 
-from codex_a2a_server.execution.executor import CodexAgentExecutor
+from codex_a2a.execution.executor import CodexAgentExecutor
 from tests.support.context import make_request_context_mock
 
 

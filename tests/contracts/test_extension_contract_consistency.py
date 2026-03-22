@@ -3,7 +3,7 @@ from pathlib import Path
 import httpx
 import pytest
 
-from codex_a2a_server.contracts.extensions import (
+from codex_a2a.contracts.extensions import (
     COMPATIBILITY_PROFILE_EXTENSION_URI,
     INTERRUPT_CALLBACK_EXTENSION_URI,
     SESSION_BINDING_EXTENSION_URI,
@@ -20,9 +20,9 @@ from codex_a2a_server.contracts.extensions import (
     build_streaming_extension_params,
     build_wire_contract_extension_params,
 )
-from codex_a2a_server.profile.runtime import build_runtime_profile
-from codex_a2a_server.server.agent_card import build_agent_card
-from codex_a2a_server.server.application import create_app
+from codex_a2a.profile.runtime import build_runtime_profile
+from codex_a2a.server.agent_card import build_agent_card
+from codex_a2a.server.application import create_app
 from tests.support.dummy_clients import DummySessionQueryCodexClient as DummyCodexClient
 from tests.support.settings import make_settings
 
@@ -149,7 +149,7 @@ async def test_session_query_runtime_result_envelope_matches_declared_contract(
     method: str,
     params: dict[str, object],
 ) -> None:
-    import codex_a2a_server.server.application as app_module
+    import codex_a2a.server.application as app_module
 
     settings = make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, codex_timeout=1.0)
     card = build_agent_card(settings)
@@ -304,7 +304,7 @@ def test_guide_mentions_resubscribe_service_level_behavior() -> None:
 def test_guide_environment_variables_match_settings_aliases() -> None:
     import re
 
-    from codex_a2a_server.config import Settings
+    from codex_a2a.config import Settings
 
     guide_text = Path("docs/guide.md").read_text()
     env_section = _extract_heading_section(guide_text, "Environment Variables")

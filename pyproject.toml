@@ -3,9 +3,9 @@ requires = ["setuptools>=77", "setuptools-scm[toml]>=8"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "codex-a2a-server"
+name = "codex-a2a"
 dynamic = ["version"]
-description = "A2A wrapper service for codex"
+description = "Codex A2A runtime adapter"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "Apache-2.0"
@@ -44,12 +44,12 @@ dev = [
 ]
 
 [project.scripts]
-codex-a2a-server = "codex_a2a_server.cli:main"
+codex-a2a = "codex_a2a.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/liujuanjuan1984/codex-a2a-server"
-Repository = "https://github.com/liujuanjuan1984/codex-a2a-server"
-Issues = "https://github.com/liujuanjuan1984/codex-a2a-server/issues"
+Homepage = "https://github.com/liujuanjuan1984/codex-a2a"
+Repository = "https://github.com/liujuanjuan1984/codex-a2a"
+Issues = "https://github.com/liujuanjuan1984/codex-a2a/issues"
 
 [tool.ruff]
 line-length = 100
@@ -69,7 +69,7 @@ fallback_version = "0.0.0+unknown"
 tag_regex = "^v?(?P<version>.+)$"
 
 [tool.pytest.ini_options]
-addopts = "--cov=src/codex_a2a_server --cov-branch --cov-report=term-missing:skip-covered"
+addopts = "--cov=src/codex_a2a --cov-branch --cov-report=term-missing:skip-covered"
 filterwarnings = [
     "ignore:'HTTP_413_REQUEST_ENTITY_TOO_LARGE' is deprecated. Use 'HTTP_413_CONTENT_TOO_LARGE' instead.:DeprecationWarning:a2a\\.server\\.apps\\.jsonrpc\\.fastapi_app",
 ]

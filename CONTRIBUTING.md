@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for contributing to `codex-a2a-server`.
+Thanks for contributing to `codex-a2a`.
 
 ## Scope
 
@@ -48,7 +48,7 @@ export A2A_BEARER_TOKEN="$(python -c 'import secrets; print(secrets.token_hex(24
 4. Start this service from the source tree:
 
 ```bash
-CODEX_WORKSPACE_ROOT=/abs/path/to/workspace uv run codex-a2a-server
+CODEX_WORKSPACE_ROOT=/abs/path/to/workspace uv run codex-a2a
 ```
 
 5. Open the Agent Card:

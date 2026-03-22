@@ -11,11 +11,11 @@ uv run pre-commit run --all-files
 uv run mypy --config-file mypy.ini
 uv run pytest
 
-rm -f dist/codex_a2a_server-*.whl dist/codex_a2a_server-*.tar.gz
+rm -f dist/codex_a2a-*.whl dist/codex_a2a-*.tar.gz
 uv build --no-sources
 
 shopt -s nullglob
-wheel_paths=(dist/codex_a2a_server-*.whl)
+wheel_paths=(dist/codex_a2a-*.whl)
 shopt -u nullglob
 
 if [[ "${#wheel_paths[@]}" -ne 1 ]]; then

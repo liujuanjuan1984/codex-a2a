@@ -8,9 +8,9 @@ import pytest
 from a2a.server.tasks.inmemory_task_store import InMemoryTaskStore
 from a2a.types import Task, TaskState, TaskStatus
 
-from codex_a2a_server.execution.stream_state import StreamOutputState
-from codex_a2a_server.execution.streaming import consume_codex_stream
-from codex_a2a_server.metrics import (
+from codex_a2a.execution.stream_state import StreamOutputState
+from codex_a2a.execution.streaming import consume_codex_stream
+from codex_a2a.metrics import (
     A2A_STREAM_ACTIVE,
     A2A_STREAM_REQUESTS_TOTAL,
     CODEX_STREAM_RETRIES_TOTAL,
@@ -20,7 +20,7 @@ from codex_a2a_server.metrics import (
     reset_metrics,
     snapshot_metrics,
 )
-from codex_a2a_server.server.request_handler import CodexRequestHandler
+from codex_a2a.server.request_handler import CodexRequestHandler
 from tests.server.test_request_handler import _make_message_send_params
 from tests.support.context import DummyEventQueue
 
@@ -158,7 +158,7 @@ async def test_streaming_retry_metric_increments_once_per_retry(monkeypatch) -> 
     async def _fast_sleep(_seconds: float) -> None:
         return None
 
-    monkeypatch.setattr("codex_a2a_server.execution.streaming.asyncio.sleep", _fast_sleep)
+    monkeypatch.setattr("codex_a2a.execution.streaming.asyncio.sleep", _fast_sleep)
 
     await consume_codex_stream(
         client=_FlakyClient(),

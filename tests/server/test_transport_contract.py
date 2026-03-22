@@ -11,8 +11,8 @@ from a2a.types import TransportProtocol
 from sse_starlette.sse import EventSourceResponse
 from starlette.requests import Request
 
-from codex_a2a_server.server.agent_card import build_agent_card
-from codex_a2a_server.server.application import create_app
+from codex_a2a.server.agent_card import build_agent_card
+from codex_a2a.server.application import create_app
 from tests.support.dummy_clients import DummyChatCodexClient
 from tests.support.settings import make_settings
 
@@ -110,7 +110,7 @@ async def test_streaming_route_uses_sdk_default_sse_keepalive() -> None:
 
 
 def test_create_app_propagates_stream_idle_diagnostic_setting(monkeypatch) -> None:
-    import codex_a2a_server.server.application as app_module
+    import codex_a2a.server.application as app_module
 
     settings = make_settings(
         a2a_bearer_token="test-token",
@@ -176,7 +176,7 @@ def test_openapi_jsonrpc_examples_include_core_and_extension_methods() -> None:
 
 @pytest.mark.asyncio
 async def test_health_endpoint_requires_bearer_token(monkeypatch) -> None:
-    import codex_a2a_server.server.application as app_module
+    import codex_a2a.server.application as app_module
 
     settings = make_settings(a2a_bearer_token="test-token")
     monkeypatch.setattr(app_module, "CodexClient", DummyChatCodexClient)
@@ -192,7 +192,7 @@ async def test_health_endpoint_requires_bearer_token(monkeypatch) -> None:
 
 @pytest.mark.asyncio
 async def test_health_endpoint_with_bearer_token_reports_profile(monkeypatch) -> None:
-    import codex_a2a_server.server.application as app_module
+    import codex_a2a.server.application as app_module
 
     settings = make_settings(
         a2a_bearer_token="test-token",
@@ -210,7 +210,7 @@ async def test_health_endpoint_with_bearer_token_reports_profile(monkeypatch) ->
     assert resp.status_code == 200
     assert resp.json() == {
         "status": "ok",
-        "service": "codex-a2a-server",
+        "service": "codex-a2a",
         "version": settings.a2a_version,
         "profile": {
             "profile_id": "codex-a2a-single-tenant-coding-v1",
@@ -272,7 +272,7 @@ async def test_app_lifespan_runs_codex_startup_preflight() -> None:
         async def startup_preflight(self) -> None:
             calls.append("startup_preflight")
 
-    import codex_a2a_server.server.application as app_module
+    import codex_a2a.server.application as app_module
 
     original_client = app_module.CodexClient
     app_module.CodexClient = PreflightClient
@@ -288,7 +288,7 @@ async def test_app_lifespan_runs_codex_startup_preflight() -> None:
 
 @pytest.mark.asyncio
 async def test_dual_stack_send_accepts_transport_native_payloads(monkeypatch) -> None:
-    import codex_a2a_server.server.application as app_module
+    import codex_a2a.server.application as app_module
 
     monkeypatch.setattr(app_module, "CodexClient", DummyChatCodexClient)
     app = app_module.create_app(make_settings(a2a_bearer_token="test-token"))
@@ -326,7 +326,7 @@ async def test_dual_stack_send_accepts_transport_native_payloads(monkeypatch) ->
 
 @pytest.mark.asyncio
 async def test_dual_stack_send_rejects_cross_transport_payload_shapes(monkeypatch) -> None:
-    import codex_a2a_server.server.application as app_module
+    import codex_a2a.server.application as app_module
 
     monkeypatch.setattr(app_module, "CodexClient", DummyChatCodexClient)
     app = app_module.create_app(make_settings(a2a_bearer_token="test-token"))
@@ -390,7 +390,7 @@ async def test_dual_stack_send_rejects_cross_transport_payload_shapes(monkeypatc
 
 @pytest.mark.asyncio
 async def test_jsonrpc_unsupported_method_returns_supported_method_contract(monkeypatch) -> None:
-    import codex_a2a_server.server.application as app_module
+    import codex_a2a.server.application as app_module
 
     monkeypatch.setattr(app_module, "CodexClient", DummyChatCodexClient)
     settings = make_settings(a2a_bearer_token="test-token")
@@ -418,7 +418,7 @@ async def test_jsonrpc_unsupported_method_returns_supported_method_contract(monk
 
 @pytest.mark.asyncio
 async def test_jsonrpc_disabled_shell_reports_current_supported_methods(monkeypatch) -> None:
-    import codex_a2a_server.server.application as app_module
+    import codex_a2a.server.application as app_module
 
     monkeypatch.setattr(app_module, "CodexClient", DummyChatCodexClient)
     settings = make_settings(
@@ -451,7 +451,7 @@ async def test_jsonrpc_disabled_shell_reports_current_supported_methods(monkeypa
 
 @pytest.mark.asyncio
 async def test_subscribe_missing_task_returns_controlled_404(monkeypatch) -> None:
-    import codex_a2a_server.server.application as app_module
+    import codex_a2a.server.application as app_module
 
     monkeypatch.setattr(app_module, "CodexClient", DummyChatCodexClient)
     app = app_module.create_app(make_settings(a2a_bearer_token="test-token"))
@@ -492,14 +492,14 @@ def _jsonrpc_message_send_payload(text: str) -> dict:
 
 @pytest.mark.asyncio
 async def test_log_payloads_keeps_body_for_rest_handler(monkeypatch, caplog) -> None:
-    import codex_a2a_server.server.application as app_module
+    import codex_a2a.server.application as app_module
 
     monkeypatch.setattr(app_module, "CodexClient", DummyChatCodexClient)
     app = app_module.create_app(make_settings(a2a_bearer_token="test-token", a2a_log_payloads=True))
     transport = httpx.ASGITransport(app=app)
     headers = {"Authorization": "Bearer test-token"}
 
-    with caplog.at_level(logging.DEBUG, logger="codex_a2a_server.server.http_middlewares"):
+    with caplog.at_level(logging.DEBUG, logger="codex_a2a.server.http_middlewares"):
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
             resp = await client.post(
                 "/v1/message:send",
@@ -516,14 +516,14 @@ async def test_log_payloads_keeps_body_for_rest_handler(monkeypatch, caplog) -> 
 
 @pytest.mark.asyncio
 async def test_log_payloads_streaming_response_path(monkeypatch, caplog) -> None:
-    import codex_a2a_server.server.application as app_module
+    import codex_a2a.server.application as app_module
 
     monkeypatch.setattr(app_module, "CodexClient", DummyChatCodexClient)
     app = app_module.create_app(make_settings(a2a_bearer_token="test-token", a2a_log_payloads=True))
     transport = httpx.ASGITransport(app=app)
     headers = {"Authorization": "Bearer test-token"}
 
-    with caplog.at_level(logging.DEBUG, logger="codex_a2a_server.server.http_middlewares"):
+    with caplog.at_level(logging.DEBUG, logger="codex_a2a.server.http_middlewares"):
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
             async with client.stream(
                 "POST", "/v1/message:stream", headers=headers, json=_rest_message_payload()
@@ -543,7 +543,7 @@ async def test_log_payloads_streaming_response_path(monkeypatch, caplog) -> None
 
 @pytest.mark.asyncio
 async def test_log_payloads_omits_non_json_request_body(monkeypatch, caplog) -> None:
-    import codex_a2a_server.server.application as app_module
+    import codex_a2a.server.application as app_module
 
     monkeypatch.setattr(app_module, "CodexClient", DummyChatCodexClient)
     app = app_module.create_app(make_settings(a2a_bearer_token="test-token", a2a_log_payloads=True))
@@ -553,7 +553,7 @@ async def test_log_payloads_omits_non_json_request_body(monkeypatch, caplog) -> 
         "Content-Type": "application/octet-stream",
     }
 
-    with caplog.at_level(logging.DEBUG, logger="codex_a2a_server.server.http_middlewares"):
+    with caplog.at_level(logging.DEBUG, logger="codex_a2a.server.http_middlewares"):
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
             resp = await client.post("/", headers=headers, content=b"\x00\x01\x02\x03")
             assert resp.status_code < 500
@@ -567,7 +567,7 @@ async def test_log_payloads_omits_non_json_request_body(monkeypatch, caplog) -> 
 
 @pytest.mark.asyncio
 async def test_log_payloads_omits_text_plain_request_body(monkeypatch, caplog) -> None:
-    import codex_a2a_server.server.application as app_module
+    import codex_a2a.server.application as app_module
 
     monkeypatch.setattr(app_module, "CodexClient", DummyChatCodexClient)
     app = app_module.create_app(make_settings(a2a_bearer_token="test-token", a2a_log_payloads=True))
@@ -581,7 +581,7 @@ async def test_log_payloads_omits_text_plain_request_body(monkeypatch, caplog) -
         '{"messageId":"m","role":"user","parts":[{"kind":"text","text":"secret"}]}}}'
     )
 
-    with caplog.at_level(logging.DEBUG, logger="codex_a2a_server.server.http_middlewares"):
+    with caplog.at_level(logging.DEBUG, logger="codex_a2a.server.http_middlewares"):
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
             resp = await client.post("/", headers=headers, content=body)
             assert resp.status_code < 500
@@ -595,7 +595,7 @@ async def test_log_payloads_omits_text_plain_request_body(monkeypatch, caplog) -
 
 @pytest.mark.asyncio
 async def test_log_payloads_omits_when_content_length_missing(monkeypatch, caplog) -> None:
-    import codex_a2a_server.server.application as app_module
+    import codex_a2a.server.application as app_module
 
     monkeypatch.setattr(app_module, "CodexClient", DummyChatCodexClient)
     app = app_module.create_app(
@@ -618,7 +618,7 @@ async def test_log_payloads_omits_when_content_length_missing(monkeypatch, caplo
     async def _body_stream():
         yield body
 
-    with caplog.at_level(logging.DEBUG, logger="codex_a2a_server.server.http_middlewares"):
+    with caplog.at_level(logging.DEBUG, logger="codex_a2a.server.http_middlewares"):
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
             resp = await client.post(
                 "/",
@@ -640,7 +640,7 @@ async def test_log_payloads_omits_when_content_length_missing(monkeypatch, caplo
 
 @pytest.mark.asyncio
 async def test_log_payloads_omits_oversized_request_body(monkeypatch, caplog) -> None:
-    import codex_a2a_server.server.application as app_module
+    import codex_a2a.server.application as app_module
 
     monkeypatch.setattr(app_module, "CodexClient", DummyChatCodexClient)
     app = app_module.create_app(
@@ -654,7 +654,7 @@ async def test_log_payloads_omits_oversized_request_body(monkeypatch, caplog) ->
     headers = {"Authorization": "Bearer test-token"}
     oversized_text = "x" * 512
 
-    with caplog.at_level(logging.DEBUG, logger="codex_a2a_server.server.http_middlewares"):
+    with caplog.at_level(logging.DEBUG, logger="codex_a2a.server.http_middlewares"):
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
             resp = await client.post(
                 "/",
@@ -672,7 +672,7 @@ async def test_log_payloads_omits_oversized_request_body(monkeypatch, caplog) ->
 
 @pytest.mark.asyncio
 async def test_request_logs_reuse_supplied_correlation_id(monkeypatch, caplog) -> None:
-    import codex_a2a_server.server.application as app_module
+    import codex_a2a.server.application as app_module
 
     expected_identity = f"bearer:{hashlib.sha256(b'test-token').hexdigest()[:12]}"
     monkeypatch.setattr(app_module, "CodexClient", DummyChatCodexClient)
@@ -699,9 +699,9 @@ async def test_request_logs_reuse_supplied_correlation_id(monkeypatch, caplog) -
         for record in caplog.records
         if record.name
         in {
-            "codex_a2a_server.server.http_middlewares",
-            "codex_a2a_server.server.request_handler",
-            "codex_a2a_server.execution.executor",
+            "codex_a2a.server.http_middlewares",
+            "codex_a2a.server.request_handler",
+            "codex_a2a.execution.executor",
         }
     ]
     assert relevant
@@ -721,7 +721,7 @@ async def test_request_logs_generate_correlation_id_for_stream_requests(
     monkeypatch,
     caplog,
 ) -> None:
-    import codex_a2a_server.server.application as app_module
+    import codex_a2a.server.application as app_module
 
     expected_identity = f"bearer:{hashlib.sha256(b'test-token').hexdigest()[:12]}"
     monkeypatch.setattr(app_module, "CodexClient", DummyChatCodexClient)
@@ -748,10 +748,10 @@ async def test_request_logs_generate_correlation_id_for_stream_requests(
         for record in caplog.records
         if record.name
         in {
-            "codex_a2a_server.server.http_middlewares",
-            "codex_a2a_server.server.request_handler",
-            "codex_a2a_server.execution.streaming",
-            "codex_a2a_server.execution.executor",
+            "codex_a2a.server.http_middlewares",
+            "codex_a2a.server.request_handler",
+            "codex_a2a.execution.streaming",
+            "codex_a2a.execution.executor",
         }
     ]
     assert relevant

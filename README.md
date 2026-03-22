@@ -1,8 +1,8 @@
-# codex-a2a-server
+# codex-a2a
 
 > Expose Codex through A2A.
 
-`codex-a2a-server` adds an A2A service layer to the local Codex runtime, with
+`codex-a2a` adds an A2A service layer to the local Codex runtime, with
 auth, streaming, session continuity, interrupt handling, and a clear
 deployment boundary.
 
@@ -17,7 +17,7 @@ flowchart TD
     Client["a2a-client-hub / any A2A client"]
 
     subgraph ServerSide["Server-side"]
-        Adapter["codex-a2a-server\nA2A adapter service"]
+        Adapter["codex-a2a\nA2A adapter service"]
         Runtime["Codex app-server / CLI runtime"]
 
         Adapter <--> Runtime
@@ -31,26 +31,26 @@ flowchart TD
 Install the released CLI with `uv tool`:
 
 ```bash
-uv tool install codex-a2a-server
+uv tool install codex-a2a
 ```
 
 Upgrade later with:
 
 ```bash
-uv tool upgrade codex-a2a-server
+uv tool upgrade codex-a2a
 ```
 
 Install an exact release with:
 
 ```bash
-uv tool install "codex-a2a-server==<version>"
+uv tool install "codex-a2a==<version>"
 ```
 
 Before starting the runtime:
 
 - Install and verify the local `codex` CLI itself.
 - Configure Codex with a working provider/model setup and any required credentials.
-- `codex-a2a-server` does not provision Codex providers, login state, or API keys for you.
+- `codex-a2a` does not provision Codex providers, login state, or API keys for you.
 - Startup fails fast if the local `codex` runtime is missing or cannot initialize.
 
 Self-start the released CLI against a workspace root:
@@ -60,7 +60,7 @@ export A2A_BEARER_TOKEN="$(python -c 'import secrets; print(secrets.token_hex(24
 A2A_HOST=127.0.0.1 \
 A2A_PORT=8000 \
 A2A_PUBLIC_URL=http://127.0.0.1:8000 \
-CODEX_WORKSPACE_ROOT=/abs/path/to/workspace codex-a2a-server
+CODEX_WORKSPACE_ROOT=/abs/path/to/workspace codex-a2a
 ```
 
 Agent Card: `http://127.0.0.1:8000/.well-known/agent-card.json`
@@ -98,7 +98,7 @@ If you want a client-side integration layer to consume this service, prefer
 
 It is a better place for client concerns such as A2A consumption, upstream
 adapter normalization, and application-facing integration, while
-`codex-a2a-server` stays focused on the server/runtime boundary around Codex.
+`codex-a2a` stays focused on the server/runtime boundary around Codex.
 
 ## Deployment Boundary
 
