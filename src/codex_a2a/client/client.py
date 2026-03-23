@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import AsyncIterator, Mapping
-from typing import Any
+from typing import Any, cast
 from urllib.parse import urlsplit, urlunsplit
 from uuid import uuid4
 
@@ -32,7 +32,8 @@ from .errors import (
     A2AUnsupportedBindingError,
     map_a2a_sdk_error,
 )
-from .types import A2ACancelTaskRequest, A2AGetTaskRequest, A2ASendRequest
+from .payload_text import extract_text_from_payload
+from .types import A2ACancelTaskRequest, A2AClientEvent, A2AGetTaskRequest, A2ASendRequest
 
 
 class _HeaderInterceptor(ClientCallInterceptor):
@@ -125,7 +126,9 @@ class A2AClient:
         self._closed = True
 
         if self._sdk_client is not None:
-            await self._sdk_client.close()
+            closer = getattr(cast(Any, self._sdk_client), "close", None)
+            if callable(closer):
+                await closer()
             self._sdk_client = None
 
         if self._owns_http_client and self._config.close_http_client:
@@ -148,8 +151,9 @@ class A2AClient:
         accepted_output_modes: list[str] | None = None,
         history_length: int | None = None,
         blocking: bool = True,
-    ) -> AsyncIterator[Task | Message]:
+    ) -> AsyncIterator[A2AClientEvent]:
         client = await self._get_client()
+        sdk_client = cast(Any, client)
         request = self._build_user_message(
             text=text,
             context_id=context_id,
@@ -165,7 +169,7 @@ class A2AClient:
             configuration_kwargs["historyLength"] = history_length
         request_configuration = MessageSendConfiguration(**configuration_kwargs)
         try:
-            async for item in client.send_message(
+            async for item in sdk_client.send_message(
                 request,
                 configuration=request_configuration,
                 request_metadata=request_metadata or {},
@@ -176,8 +180,8 @@ class A2AClient:
         except Exception as exc:
             raise map_a2a_sdk_error(exc, operation="message/send") from exc
 
-    async def send(self, request: A2ASendRequest) -> Task | Message:
-        last_event: Task | Message | None = None
+    async def send(self, request: A2ASendRequest) -> A2AClientEvent:
+        last_event: A2AClientEvent | None = None
         async for item in self.send_message(
             request.text,
             context_id=request.context_id,
@@ -195,9 +199,10 @@ class A2AClient:
 
     async def get_task(self, request: A2AGetTaskRequest) -> Task:
         client = await self._get_client()
+        sdk_client = cast(Any, client)
         request_metadata, extra_headers = self._split_request_metadata(request.metadata)
         try:
-            return await client.get_task(
+            return await sdk_client.get_task(
                 request.to_task_query(),
                 context=self._build_call_context(extra_headers),
                 request_metadata=request_metadata or {},
@@ -220,9 +225,10 @@ class A2AClient:
 
     async def cancel(self, request: A2ACancelTaskRequest) -> Task:
         client = await self._get_client()
+        sdk_client = cast(Any, client)
         request_metadata, extra_headers = self._split_request_metadata(request.metadata)
         try:
-            return await client.cancel_task(
+            return await sdk_client.cancel_task(
                 request.to_task_id(),
                 context=self._build_call_context(extra_headers),
                 request_metadata=request_metadata or {},
@@ -237,7 +243,7 @@ class A2AClient:
 
     @staticmethod
     def extract_text(event: Task | Message | Any) -> str:
-        extracted = A2AClient._extract_text_from_payload(event)
+        extracted = extract_text_from_payload(event)
         return extracted or ""
 
     def _resolve_agent_card_endpoint(self) -> tuple[str, str]:
@@ -305,7 +311,7 @@ class A2AClient:
                 self._card = await resolver.get_agent_card()
         except Exception as exc:
             raise map_a2a_sdk_error(exc, operation="agent_card") from exc
-        return self._card
+        return cast(AgentCard, self._card)
 
     async def _get_client(self) -> Client:
         if self._closed:
@@ -329,6 +335,10 @@ class A2AClient:
         interceptors = self._build_interceptors()
         try:
             self._sdk_client = factory.create(card, interceptors=interceptors)
+        except ValueError as exc:
+            raise A2AUnsupportedBindingError(
+                f"Unable to bind A2A client to peer transport: {exc}"
+            ) from exc
         except TypeError:
             self._sdk_client = factory.create(card)
         if self._sdk_client is None:
@@ -343,175 +353,6 @@ class A2AClient:
 
     def _build_interceptors(self) -> list[ClientCallInterceptor]:
         return [_HeaderInterceptor(self._config.default_headers)]
-
-    @classmethod
-    def _extract_text_from_payload(cls, payload: Any) -> str | None:
-        def extract_from_iterable(items: Any) -> str | None:
-            if not isinstance(items, (list, tuple)):
-                return None
-            for item in items:
-                extracted = cls._extract_text_from_payload(item)
-                if extracted:
-                    return extracted
-            return None
-
-        def extract_from_parts(parts: Any) -> str | None:
-            if not isinstance(parts, (list, tuple)):
-                return None
-            collected: list[str] = []
-            for part in parts:
-                text_part = None
-                if isinstance(part, TextPart):
-                    text_part = part
-                else:
-                    root = getattr(part, "root", None)
-                    if isinstance(root, TextPart):
-                        text_part = root
-                    elif isinstance(part, Mapping):
-                        text_value = part.get("text")
-                        if isinstance(text_value, str) and text_value.strip():
-                            collected.append(text_value)
-                            continue
-                        mapped_root = part.get("root")
-                        if isinstance(mapped_root, TextPart):
-                            text_part = mapped_root
-                        elif isinstance(part.get("role"), str):
-                            nested = cls._extract_text_from_payload(part)
-                            if nested:
-                                collected.append(nested)
-                                continue
-                if text_part and getattr(text_part, "text", None):
-                    collected.append(text_part.text)
-            if collected:
-                return "\n".join(collected)
-            return None
-
-        def extract_from_mapping(payload_map: Mapping[str, Any]) -> str | None:
-            for key in (
-                "content",
-                "message",
-                "messages",
-                "result",
-                "status",
-                "text",
-                "parts",
-                "artifact",
-                "artifacts",
-                "history",
-                "events",
-                "root",
-            ):
-                if key not in payload_map:
-                    continue
-                value = payload_map[key]
-                if value in (None, ""):
-                    continue
-                if key == "text" and isinstance(value, (str, int, float, bool)):
-                    text_value = str(value).strip()
-                    if text_value:
-                        return text_value
-                if key == "parts":
-                    parts_text = extract_from_parts(value)
-                    if parts_text:
-                        return parts_text
-                if key == "artifact":
-                    artifact_text = cls._extract_text_from_payload(value)
-                    if artifact_text:
-                        return artifact_text
-                if isinstance(value, (list, tuple)) and key in (
-                    "messages",
-                    "artifacts",
-                    "history",
-                    "events",
-                ):
-                    iterable_text = extract_from_iterable(value)
-                    if iterable_text:
-                        return iterable_text
-                nested_text = cls._extract_text_from_payload(value)
-                if nested_text:
-                    return nested_text
-            return None
-
-        if isinstance(payload, (list, tuple)):
-            return extract_from_iterable(payload)
-
-        if isinstance(payload, Message):
-            return extract_from_parts(payload.parts)
-
-        if isinstance(payload, str):
-            return payload.strip() or None
-
-        status_payload = getattr(payload, "status", None)
-        if status_payload is not None:
-            text = cls._extract_text_from_payload(status_payload)
-            if text:
-                return text
-
-        message_payload = getattr(payload, "message", None)
-        if message_payload is not None:
-            text = cls._extract_text_from_payload(message_payload)
-            if text:
-                return text
-
-        artifact_payload = getattr(payload, "artifact", None)
-        if artifact_payload is not None:
-            text = cls._extract_text_from_payload(artifact_payload)
-            if text:
-                return text
-
-        result_payload = getattr(payload, "result", None)
-        if result_payload is not None:
-            text = cls._extract_text_from_payload(result_payload)
-            if text:
-                return text
-
-        history = getattr(payload, "history", None)
-        if isinstance(history, (list, tuple)) and history:
-            for item in reversed(history):
-                text = cls._extract_text_from_payload(item)
-                if text:
-                    return text
-
-        artifacts = getattr(payload, "artifacts", None)
-        if isinstance(artifacts, (list, tuple)):
-            for artifact in artifacts:
-                artifact_parts = getattr(artifact, "parts", None)
-                if isinstance(artifact_parts, (list, tuple)):
-                    text = extract_from_parts(artifact_parts)
-                    if text:
-                        return text
-
-        text = extract_from_parts(getattr(payload, "parts", None))
-        if text:
-            return text
-
-        event_text = extract_from_iterable(getattr(payload, "events", None))
-        if event_text:
-            return event_text
-
-        if isinstance(payload, Mapping):
-            mapped_text = extract_from_mapping(payload)
-            if mapped_text:
-                return mapped_text
-
-        mapping_payload = None
-        if hasattr(payload, "model_dump") and callable(payload.model_dump):
-            payload_dict = payload.model_dump()
-            if isinstance(payload_dict, Mapping):
-                mapping_payload = payload_dict
-        elif hasattr(payload, "dict") and callable(payload.dict):
-            payload_dict = payload.dict()
-            if isinstance(payload_dict, Mapping):
-                mapping_payload = payload_dict
-        elif isinstance(getattr(payload, "__dict__", None), Mapping):
-            mapping_payload = dict(payload.__dict__)
-
-        if mapping_payload is not None:
-            mapped_text = extract_from_mapping(mapping_payload)
-            if mapped_text:
-                return mapped_text
-
-        return None
 
     def _build_user_message(
         self,

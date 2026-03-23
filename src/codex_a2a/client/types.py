@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+from typing import Any
 
 from a2a.types import (
     Message,
@@ -8,8 +9,10 @@ from a2a.types import (
     Part,
     Role,
     Task,
+    TaskArtifactUpdateEvent,
     TaskIdParams,
     TaskQueryParams,
+    TaskStatusUpdateEvent,
     TextPart,
 )
 from pydantic import BaseModel, Field
@@ -20,6 +23,7 @@ class A2ASendRequest(BaseModel):
 
     text: str
     context_id: str | None = None
+    task_id: str | None = None
     message_id: str | None = None
     metadata: dict[str, object] | None = None
     accepted_output_modes: list[str] | None = None
@@ -36,12 +40,11 @@ class A2ASendRequest(BaseModel):
         )
 
     def to_send_configuration(self) -> MessageSendConfiguration:
-        config_kwargs: dict[str, object] = {"blocking": self.blocking}
-        if self.accepted_output_modes is not None:
-            config_kwargs["acceptedOutputModes"] = self.accepted_output_modes
-        if self.history_length is not None:
-            config_kwargs["historyLength"] = self.history_length
-        return MessageSendConfiguration(**config_kwargs)
+        return MessageSendConfiguration(
+            blocking=self.blocking,
+            accepted_output_modes=self.accepted_output_modes,
+            history_length=self.history_length,
+        )
 
 
 class A2AGetTaskRequest(BaseModel):
@@ -54,7 +57,7 @@ class A2AGetTaskRequest(BaseModel):
     def to_task_query(self) -> TaskQueryParams:
         return TaskQueryParams(
             id=self.task_id,
-            historyLength=self.history_length,
+            history_length=self.history_length,
             metadata=self.metadata,
         )
 
@@ -73,3 +76,9 @@ class A2ASendResult(BaseModel):
     """Normalized payload from a send request."""
 
     final: Task | Message | None = None
+
+
+A2AClientEvent = (
+    Task | Message | tuple[Task, TaskStatusUpdateEvent | TaskArtifactUpdateEvent | None]
+)
+A2AClientMetadata = dict[str, Any]

@@ -186,7 +186,7 @@ async def test_agent_handles_a2a_call_tool() -> None:
     class _MockA2AClient:
         extract_text = staticmethod(A2AClient.extract_text)
 
-        async def send_message(self, text: str):
+        async def send_message(self, text: str, **_kwargs):
             task = Task(
                 id="remote-task",
                 context_id="remote-ctx",

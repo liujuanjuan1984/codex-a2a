@@ -12,7 +12,7 @@ from .client.types import A2ASendRequest
 
 
 async def run_call(agent_url: str, text: str, token: str | None = None) -> int:
-    metadata: dict[str, str] = {}
+    metadata: dict[str, object] = {}
     if token:
         metadata["authorization"] = f"Bearer {token}"
 

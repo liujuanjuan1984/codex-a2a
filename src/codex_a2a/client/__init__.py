@@ -4,6 +4,7 @@ from .client import A2AClient
 from .config import A2AClientConfig
 from .errors import (
     A2AAgentUnavailableError,
+    A2AClientConfigError,
     A2AClientError,
     A2AClientLifecycleError,
     A2AClientProtocolError,
@@ -24,6 +25,7 @@ __all__ = [
     "A2AClient",
     "A2AClientManager",
     "A2AClientConfig",
+    "A2AClientConfigError",
     "A2AClientError",
     "A2AClientLifecycleError",
     "A2AClientProtocolError",

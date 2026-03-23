@@ -20,8 +20,8 @@ def test_send_request_builds_a2a_message() -> None:
     assert message.context_id == "ctx-1"
     assert message.metadata == {"lang": "zh"}
     assert config.blocking is False
-    assert config.acceptedOutputModes == ["text/plain"]
-    assert config.historyLength == 5
+    assert config.accepted_output_modes == ["text/plain"]
+    assert config.history_length == 5
 
 
 def test_get_task_request_maps_to_query() -> None:
@@ -31,7 +31,7 @@ def test_get_task_request_maps_to_query() -> None:
 
     assert isinstance(params, TaskQueryParams)
     assert params.id == "task-1"
-    assert params.historyLength == 10
+    assert params.history_length == 10
     assert params.metadata == {"k": "v"}
 
 

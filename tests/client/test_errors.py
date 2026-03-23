@@ -3,9 +3,10 @@ from __future__ import annotations
 from a2a.client import (
     A2AClientHTTPError,
     A2AClientJSONError,
-    A2AClientJSONRPCError,
     A2AClientTimeoutError,
 )
+from a2a.client.errors import A2AClientJSONRPCError
+from a2a.types import JSONRPCError, JSONRPCErrorResponse
 
 from codex_a2a.client.errors import (
     A2AAgentUnavailableError,
@@ -16,6 +17,15 @@ from codex_a2a.client.errors import (
     A2AUnsupportedOperationError,
     map_a2a_sdk_error,
 )
+
+
+def _make_jsonrpc_error(code: int, message: str) -> A2AClientJSONRPCError:
+    return A2AClientJSONRPCError(
+        JSONRPCErrorResponse(
+            error=JSONRPCError(code=code, message=message),
+            id="req-1",
+        )
+    )
 
 
 def test_http_unsupported_operation_maps_status_code() -> None:
@@ -56,7 +66,7 @@ def test_protocol_errors_map_to_protocol_type() -> None:
         A2AClientProtocolError,
     )
     assert isinstance(
-        map_a2a_sdk_error(A2AClientJSONRPCError("bad rpc")),
+        map_a2a_sdk_error(_make_jsonrpc_error(-32000, "bad rpc")),
         A2APeerProtocolError,
     )
 
@@ -70,7 +80,8 @@ def test_jsonrpc_mapping_variants(monkeypatch) -> None:
     monkeypatch.setattr(client_errors, "_extract_jsonrpc_error_payload", fake_jsonrpc_payload)
 
     mapped = client_errors.map_a2a_sdk_error(
-        A2AClientJSONRPCError("bad rpc"), operation="message/send"
+        _make_jsonrpc_error(-32602, "bad rpc"),
+        operation="message/send",
     )
 
     assert isinstance(mapped, A2APeerProtocolError)
