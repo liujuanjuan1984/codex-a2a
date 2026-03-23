@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from a2a.client import (
     A2AClientError as SDKA2AClientError,
+)
+from a2a.client import (
     A2AClientHTTPError,
     A2AClientJSONError,
     A2AClientJSONRPCError,
@@ -109,11 +111,7 @@ def map_a2a_sdk_error(
             error.status_code = status_code
             return error
         if status_code in {502, 503, 504}:
-            message = (
-                f"{operation} failed with upstream instability"
-                if operation
-                else str(exc)
-            )
+            message = f"{operation} failed with upstream instability" if operation else str(exc)
             error = A2AClientResetRequiredError(message)
             error.status_code = status_code
             return error

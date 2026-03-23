@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import pytest
-
 from a2a.client import (
     A2AClientHTTPError,
     A2AClientJSONError,
@@ -14,14 +12,16 @@ from codex_a2a.client.errors import (
     A2AClientProtocolError,
     A2AClientRequestError,
     A2AClientResetRequiredError,
-    A2AUnsupportedOperationError,
     A2APeerProtocolError,
+    A2AUnsupportedOperationError,
     map_a2a_sdk_error,
 )
 
 
 def test_http_unsupported_operation_maps_status_code() -> None:
-    mapped = map_a2a_sdk_error(A2AClientHTTPError(405, "method unsupported"), operation="message/send")
+    mapped = map_a2a_sdk_error(
+        A2AClientHTTPError(405, "method unsupported"), operation="message/send"
+    )
 
     assert isinstance(mapped, A2AUnsupportedOperationError)
     assert isinstance(mapped, A2AClientRequestError)
@@ -29,7 +29,9 @@ def test_http_unsupported_operation_maps_status_code() -> None:
 
 
 def test_http_reset_required_maps_transient_failure() -> None:
-    mapped = map_a2a_sdk_error(A2AClientHTTPError(503, "temporary failure"), operation="message/send")
+    mapped = map_a2a_sdk_error(
+        A2AClientHTTPError(503, "temporary failure"), operation="message/send"
+    )
 
     assert isinstance(mapped, A2AClientResetRequiredError)
     assert mapped.status_code == 503
@@ -67,7 +69,9 @@ def test_jsonrpc_mapping_variants(monkeypatch) -> None:
 
     monkeypatch.setattr(client_errors, "_extract_jsonrpc_error_payload", fake_jsonrpc_payload)
 
-    mapped = client_errors.map_a2a_sdk_error(A2AClientJSONRPCError("bad rpc"), operation="message/send")
+    mapped = client_errors.map_a2a_sdk_error(
+        A2AClientJSONRPCError("bad rpc"), operation="message/send"
+    )
 
     assert isinstance(mapped, A2APeerProtocolError)
     assert mapped.error_code == "invalid_params"

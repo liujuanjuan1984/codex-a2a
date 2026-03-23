@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from pydantic import BaseModel, Field
+
 from a2a.types import (
     Message,
     MessageSendConfiguration,
@@ -12,6 +12,7 @@ from a2a.types import (
     TaskQueryParams,
     TextPart,
 )
+from pydantic import BaseModel, Field
 
 
 class A2ASendRequest(BaseModel):

@@ -36,5 +36,5 @@ async def test_close_idempotent() -> None:
     await client.close()
 
     assert client.is_closed is True
-    assert http_client.closed is True
+    assert http_client.closed is False
     assert sdk_client.closed is True

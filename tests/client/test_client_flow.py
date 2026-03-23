@@ -1,20 +1,27 @@
 from __future__ import annotations
 
-import pytest
 import httpx
+import pytest
 from a2a.types import (
-    AgentCard,
     AgentCapabilities,
+    AgentCard,
+    Artifact,
     Message,
+    Part,
+    Role,
     Task,
+    TaskArtifactUpdateEvent,
     TaskIdParams,
     TaskQueryParams,
     TaskState,
     TaskStatus,
+    TextPart,
 )
+
 from codex_a2a.client import (
     A2AClient,
     A2AClientConfig,
+    A2AClientConfigError,
     A2AUnsupportedBindingError,
 )
 from codex_a2a.client.types import A2ACancelTaskRequest, A2AGetTaskRequest, A2ASendRequest
@@ -55,6 +62,27 @@ class _MockAgentCardResolverWithTimeout:
     async def get_agent_card(self, http_kwargs=None, **_kwargs) -> AgentCard:
         if http_kwargs is not None:
             self.http_kwargs = dict(http_kwargs)
+        return AgentCard(
+            name="mock",
+            description="mock agent",
+            url="https://example.org",
+            version="1.0.0",
+            capabilities=AgentCapabilities(),
+            default_input_modes=["text/plain"],
+            default_output_modes=["text/plain"],
+            skills=[],
+        )
+
+
+class _CapturingAgentCardResolver:
+    last_base_url: str | None = None
+    last_agent_card_path: str | None = None
+
+    def __init__(self, _httpx_client, base_url: str, agent_card_path: str) -> None:
+        _CapturingAgentCardResolver.last_base_url = base_url
+        _CapturingAgentCardResolver.last_agent_card_path = agent_card_path
+
+    async def get_agent_card(self, *_, **__) -> AgentCard:
         return AgentCard(
             name="mock",
             description="mock agent",
@@ -161,6 +189,7 @@ async def test_get_agent_card_passes_card_fetch_timeout_to_resolver() -> None:
         A2AClientConfig(
             agent_url="https://example.org",
             card_fetch_timeout_seconds=7.5,
+            default_headers={"Authorization": "Bearer peer-token"},
         ),
         httpx_client=_MockAsyncHttpClient(),
         card_resolver_factory=_Factory(),
@@ -175,6 +204,36 @@ async def test_get_agent_card_passes_card_fetch_timeout_to_resolver() -> None:
     assert timeout is not None
     assert isinstance(timeout, httpx.Timeout)
     assert timeout.connect == 7.5
+    assert resolver.http_kwargs["headers"] == {"Authorization": "Bearer peer-token"}
+
+
+@pytest.mark.asyncio
+async def test_get_agent_card_normalizes_explicit_well_known_path() -> None:
+    _CapturingAgentCardResolver.last_base_url = None
+    _CapturingAgentCardResolver.last_agent_card_path = None
+    client = A2AClient(
+        A2AClientConfig(agent_url="https://ops.example.com/tenant/.well-known/agent-card.json"),
+        httpx_client=_MockAsyncHttpClient(),
+        card_resolver_factory=_CapturingAgentCardResolver,
+    )
+
+    card = await client.get_agent_card()
+
+    assert card.url == "https://example.org"
+    assert _CapturingAgentCardResolver.last_base_url == "https://ops.example.com/tenant"
+    assert _CapturingAgentCardResolver.last_agent_card_path == "/.well-known/agent-card.json"
+
+
+@pytest.mark.asyncio
+async def test_get_agent_card_rejects_relative_agent_url() -> None:
+    client = A2AClient(
+        A2AClientConfig(agent_url="/relative/path"),
+        httpx_client=_MockAsyncHttpClient(),
+        card_resolver_factory=_MockAgentCardResolver,
+    )
+
+    with pytest.raises(A2AClientConfigError, match="absolute URL"):
+        await client.get_agent_card()
 
 
 @pytest.mark.asyncio
@@ -195,3 +254,59 @@ async def test_build_client_maps_unsupported_transport_binding() -> None:
 
     with pytest.raises(A2AUnsupportedBindingError):
         await client._build_client()
+
+
+def test_extract_text_prefers_stream_artifact_payload() -> None:
+    task = Task(
+        id="remote-task",
+        context_id="remote-context",
+        status=TaskStatus(state=TaskState.working),
+    )
+    update = TaskArtifactUpdateEvent(
+        task_id="remote-task",
+        context_id="remote-context",
+        artifact=Artifact(
+            artifact_id="artifact-1",
+            name="response",
+            parts=[Part(root=TextPart(text="streamed remote text"))],
+        ),
+    )
+
+    assert A2AClient.extract_text((task, update)) == "streamed remote text"
+
+
+def test_extract_text_reads_task_status_message() -> None:
+    task = Task(
+        id="remote-task",
+        context_id="remote-context",
+        status=TaskStatus(
+            state=TaskState.completed,
+            message=Message(
+                role=Role.agent,
+                message_id="m1",
+                parts=[Part(root=TextPart(text="status message text"))],
+            ),
+        ),
+    )
+
+    assert A2AClient.extract_text(task) == "status message text"
+
+
+def test_extract_text_reads_nested_mapping_payload() -> None:
+    payload = {
+        "result": {
+            "history": [
+                {"parts": [{"text": "mapped nested text"}]},
+            ]
+        }
+    }
+
+    assert A2AClient.extract_text(payload) == "mapped nested text"
+
+
+def test_extract_text_reads_model_dump_payload() -> None:
+    class _Payload:
+        def model_dump(self) -> dict[str, object]:
+            return {"artifacts": [{"parts": [{"text": "model dump text"}]}]}
+
+    assert A2AClient.extract_text(_Payload()) == "model dump text"

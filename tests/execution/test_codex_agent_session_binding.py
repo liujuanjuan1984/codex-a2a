@@ -1,6 +1,5 @@
 import asyncio
-from unittest.mock import AsyncMock
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from a2a.types import (
@@ -228,7 +227,11 @@ async def test_agent_handles_a2a_call_tool() -> None:
     }
 
     client = DummyChatCodexClient()
-    executor = CodexAgentExecutor(client, streaming_enabled=False, a2a_client_manager=_MockManager())
+    executor = CodexAgentExecutor(
+        client,
+        streaming_enabled=False,
+        a2a_client_manager=_MockManager(),
+    )
     result = await executor._maybe_handle_tools(raw_response)
 
     assert result is not None
@@ -351,7 +354,11 @@ async def test_agent_handles_a2a_call_tool_input_validation_errors() -> None:
         async def get_client(self, _agent_url: str):
             return MagicMock()
 
-    executor = CodexAgentExecutor(client, streaming_enabled=False, a2a_client_manager=_MockManager())
+    executor = CodexAgentExecutor(
+        client,
+        streaming_enabled=False,
+        a2a_client_manager=_MockManager(),
+    )
     raw_response["parts"][0]["state"]["input"] = "invalid"
     result = await executor._maybe_handle_tools(raw_response)
     assert result is not None

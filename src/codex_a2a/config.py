@@ -75,9 +75,7 @@ def _normalize_client_transports(value: Any) -> Any:
     elif isinstance(value, (list, tuple, set)):
         raw_values = [str(item).strip() for item in value if str(item).strip()]
     else:
-        raise ValueError(
-            "A2A_CLIENT_SUPPORTED_TRANSPORTS must be a comma-separated string or list"
-        )
+        raise ValueError("A2A_CLIENT_SUPPORTED_TRANSPORTS must be a comma-separated string or list")
 
     normalized = [_normalize_client_transport(item) for item in raw_values]
     parsed = [transport for transport in normalized if transport]
