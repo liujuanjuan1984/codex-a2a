@@ -111,30 +111,6 @@ class SessionRuntime:
         self._running_identities: dict[tuple[str, str], str] = {}
         self._lock = asyncio.Lock()
 
-    @property
-    def session_bindings(self) -> TTLCache:
-        return self._sessions
-
-    @property
-    def session_owners(self) -> TTLCache:
-        return self._session_owners
-
-    @property
-    def pending_session_claims(self) -> dict[str, str]:
-        return self._pending_session_claims
-
-    @property
-    def running_requests(self) -> dict[tuple[str, str], asyncio.Task[Any]]:
-        return self._running_requests
-
-    @property
-    def running_stop_events(self) -> dict[tuple[str, str], asyncio.Event]:
-        return self._running_stop_events
-
-    @property
-    def running_identities(self) -> dict[tuple[str, str], str]:
-        return self._running_identities
-
     async def bound_session_for(self, *, identity: str, context_id: str) -> str | None:
         async with self._lock:
             return self._sessions.get((identity, context_id))

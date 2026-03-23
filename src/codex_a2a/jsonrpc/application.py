@@ -14,6 +14,7 @@ from fastapi.responses import JSONResponse
 from starlette.requests import Request
 from starlette.responses import Response
 
+from codex_a2a.jsonrpc.dispatch import ExtensionMethodRegistry
 from codex_a2a.jsonrpc.hooks import SessionGuardHooks
 from codex_a2a.jsonrpc.interrupts import handle_interrupt_callback_request
 from codex_a2a.jsonrpc.session_control import handle_session_control_request
@@ -51,17 +52,7 @@ class CodexSessionQueryJSONRPCApplication(A2AFastAPIApplication):
         self._protocol_version = protocol_version
         self._supported_methods = list(supported_methods)
         self._supported_method_set = set(supported_methods)
-        self._extension_method_set = {
-            self._method_list_sessions,
-            self._method_get_session_messages,
-            self._method_prompt_async,
-            self._method_command,
-            self._method_reply_permission,
-            self._method_reply_question,
-            self._method_reject_question,
-        }
-        if self._method_shell is not None:
-            self._extension_method_set.add(self._method_shell)
+        self._method_registry = ExtensionMethodRegistry.from_methods(methods)
         self._guard_hooks = guard_hooks
         self._validate_guard_hooks()
 
@@ -104,7 +95,7 @@ class CodexSessionQueryJSONRPCApplication(A2AFastAPIApplication):
                 return Response(status_code=204)
             return self._unsupported_method_response(base_request.id, base_request.method)
 
-        if base_request.method not in self._extension_method_set:
+        if not self._method_registry.is_extension_method(base_request.method):
             return await super()._handle_requests(request)
 
         params = base_request.params or {}
@@ -114,20 +105,9 @@ class CodexSessionQueryJSONRPCApplication(A2AFastAPIApplication):
                 A2AError(root=InvalidParamsError(message="params must be an object")),
             )
 
-        session_query_methods = {
-            self._method_list_sessions,
-            self._method_get_session_messages,
-        }
-        session_control_methods = {
-            self._method_prompt_async,
-            self._method_command,
-        }
-        if self._method_shell is not None:
-            session_control_methods.add(self._method_shell)
-
-        if base_request.method in session_query_methods:
+        if base_request.method in self._method_registry.session_query_methods:
             return await handle_session_query_request(self, base_request, params)
-        if base_request.method in session_control_methods:
+        if base_request.method in self._method_registry.session_control_methods:
             return await handle_session_control_request(
                 self,
                 base_request,
