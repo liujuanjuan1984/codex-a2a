@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import AsyncIterator, Mapping
-from typing import Any, cast
+from typing import Any, Protocol, cast
 from uuid import uuid4
 
 import httpx
-from a2a.client import A2ACardResolver, Client, ClientConfig, ClientFactory
+from a2a.client import A2ACardResolver, ClientConfig, ClientFactory
 from a2a.client.middleware import ClientCallContext, ClientCallInterceptor
 from a2a.types import (
     AgentCard,
@@ -15,6 +15,8 @@ from a2a.types import (
     Part,
     Role,
     Task,
+    TaskIdParams,
+    TaskQueryParams,
     TextPart,
 )
 
@@ -30,6 +32,34 @@ from .errors import (
 from .payload_text import extract_text_from_payload
 from .request_context import build_call_context, split_request_metadata
 from .types import A2ACancelTaskRequest, A2AClientEvent, A2AGetTaskRequest, A2ASendRequest
+
+
+class _SDKClientProtocol(Protocol):
+    def send_message(
+        self,
+        request: Message,
+        *,
+        configuration: MessageSendConfiguration | None = None,
+        context: ClientCallContext | None = None,
+        request_metadata: dict[str, Any] | None = None,
+        extensions: list[str] | None = None,
+    ) -> AsyncIterator[A2AClientEvent]: ...
+
+    async def get_task(
+        self,
+        request: TaskQueryParams,
+        *,
+        context: ClientCallContext | None = None,
+        extensions: list[str] | None = None,
+    ) -> Task: ...
+
+    async def cancel_task(
+        self,
+        request: TaskIdParams,
+        *,
+        context: ClientCallContext | None = None,
+        extensions: list[str] | None = None,
+    ) -> Task: ...
 
 
 class _HeaderInterceptor(ClientCallInterceptor):
@@ -85,7 +115,7 @@ class A2AClient:
         self._owns_http_client = httpx_client is None
         self._closed = False
         self._card: AgentCard | None = None
-        self._sdk_client: Client | None = None
+        self._sdk_client: _SDKClientProtocol | None = None
         self._card_resolver_factory = card_resolver_factory
         self._client_factory_type = client_factory_type
         self._client_config = ClientConfig(
@@ -146,7 +176,7 @@ class A2AClient:
         blocking: bool = True,
     ) -> AsyncIterator[A2AClientEvent]:
         client = await self._get_client()
-        sdk_client = cast(Any, client)
+        sdk_client = client
         request = self._build_user_message(
             text=text,
             context_id=context_id,
@@ -192,13 +222,16 @@ class A2AClient:
 
     async def get_task(self, request: A2AGetTaskRequest) -> Task:
         client = await self._get_client()
-        sdk_client = cast(Any, client)
+        sdk_client = client
         request_metadata, extra_headers = split_request_metadata(request.metadata)
         try:
             return await sdk_client.get_task(
-                request.to_task_query(),
+                TaskQueryParams(
+                    id=request.task_id,
+                    history_length=request.history_length,
+                    metadata=request_metadata or {},
+                ),
                 context=build_call_context(extra_headers),
-                request_metadata=request_metadata or {},
             )
         except Exception as exc:
             raise map_a2a_sdk_error(exc, operation="tasks/get") from exc
@@ -218,13 +251,12 @@ class A2AClient:
 
     async def cancel(self, request: A2ACancelTaskRequest) -> Task:
         client = await self._get_client()
-        sdk_client = cast(Any, client)
+        sdk_client = client
         request_metadata, extra_headers = split_request_metadata(request.metadata)
         try:
             return await sdk_client.cancel_task(
-                request.to_task_id(),
+                TaskIdParams(id=request.task_id, metadata=request_metadata or {}),
                 context=build_call_context(extra_headers),
-                request_metadata=request_metadata or {},
             )
         except Exception as exc:
             raise map_a2a_sdk_error(exc, operation="tasks/cancel") from exc
@@ -263,7 +295,7 @@ class A2AClient:
             raise map_a2a_sdk_error(exc, operation="agent_card") from exc
         return cast(AgentCard, self._card)
 
-    async def _get_client(self) -> Client:
+    async def _get_client(self) -> _SDKClientProtocol:
         if self._closed:
             raise A2AClientLifecycleError("client is closed")
         async with self._lock:
@@ -271,7 +303,7 @@ class A2AClient:
                 return self._sdk_client
             return await self._build_client()
 
-    async def _build_client(self) -> Client:
+    async def _build_client(self) -> _SDKClientProtocol:
         card = await self._get_agent_card()
         try:
             factory = self._client_factory_type(self._client_config)

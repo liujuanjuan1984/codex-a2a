@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 from a2a.types import (
     AgentCapabilities,
@@ -55,20 +57,30 @@ class _MockAgentCardResolver:
 
 class _MockSDKClient:
     def __init__(self) -> None:
-        self.send_calls = 0
+        self.send_calls: list[dict[str, Any]] = []
         self.get_task_calls: list[TaskQueryParams] = []
+        self.get_task_contexts: list[Any] = []
         self.cancel_calls: list[TaskIdParams] = []
+        self.cancel_contexts: list[Any] = []
 
     async def send_message(
         self,
-        _request: Message,
+        request: Message,
         *,
         configuration=None,
         context=None,
         request_metadata=None,
         extensions=None,
     ):
-        self.send_calls += 1
+        self.send_calls.append(
+            {
+                "request": request,
+                "configuration": configuration,
+                "context": context,
+                "request_metadata": request_metadata,
+                "extensions": extensions,
+            }
+        )
         task = Task(
             id="task-1",
             context_id="ctx-1",
@@ -76,16 +88,18 @@ class _MockSDKClient:
         )
         yield task
 
-    async def get_task(self, request: TaskQueryParams, *_, **__) -> Task:
+    async def get_task(self, request: TaskQueryParams, *, context=None, extensions=None) -> Task:
         self.get_task_calls.append(request)
+        self.get_task_contexts.append(context)
         return Task(
             id=request.id,
             context_id="ctx-1",
             status=TaskStatus(state=TaskState.completed),
         )
 
-    async def cancel_task(self, request: TaskIdParams, *_, **__) -> Task:
+    async def cancel_task(self, request: TaskIdParams, *, context=None, extensions=None) -> Task:
         self.cancel_calls.append(request)
+        self.cancel_contexts.append(context)
         return Task(
             id=request.id,
             context_id="ctx-1",
@@ -98,21 +112,58 @@ class _MockSDKClient:
 
 @pytest.mark.asyncio
 async def test_send_get_task_and_cancel_use_sdk_methods() -> None:
+    sdk_client = _MockSDKClient()
     client = A2AClient(
         A2AClientConfig(agent_url="https://example.org"),
         httpx_client=_MockAsyncHttpClient(),
         card_resolver_factory=_MockAgentCardResolver,
     )
-    client._sdk_client = _MockSDKClient()  # noqa: SLF001
+    client._sdk_client = sdk_client  # noqa: SLF001
 
-    send_result = await client.send(A2ASendRequest(text="hello"))
+    send_result = await client.send(
+        A2ASendRequest(
+            text="hello",
+            metadata={"authorization": "Bearer token", "trace_id": "trace-1"},
+            accepted_output_modes=["text/plain"],
+            history_length=3,
+            blocking=False,
+        )
+    )
     assert send_result.id == "task-1"
+    send_call = sdk_client.send_calls[0]
+    assert send_call["request_metadata"] == {"trace_id": "trace-1"}
+    assert send_call["context"].state["headers"] == {"Authorization": "Bearer token"}
+    assert send_call["configuration"].accepted_output_modes == ["text/plain"]
+    assert send_call["configuration"].history_length == 3
+    assert send_call["configuration"].blocking is False
 
-    task_result = await client.get_task(A2AGetTaskRequest(task_id="task-1"))
+    task_result = await client.get_task(
+        A2AGetTaskRequest(
+            task_id="task-1",
+            history_length=2,
+            metadata={"authorization": "Bearer token", "trace_id": "trace-2"},
+        )
+    )
     assert task_result.id == "task-1"
+    assert sdk_client.get_task_calls[0].model_dump(by_alias=False) == {
+        "id": "task-1",
+        "history_length": 2,
+        "metadata": {"trace_id": "trace-2"},
+    }
+    assert sdk_client.get_task_contexts[0].state["headers"] == {"Authorization": "Bearer token"}
 
-    cancel_result = await client.cancel(A2ACancelTaskRequest(task_id="task-1"))
+    cancel_result = await client.cancel(
+        A2ACancelTaskRequest(
+            task_id="task-1",
+            metadata={"authorization": "Bearer token", "trace_id": "trace-3"},
+        )
+    )
     assert cancel_result.status.state == TaskState.canceled
+    assert sdk_client.cancel_calls[0].model_dump(by_alias=False) == {
+        "id": "task-1",
+        "metadata": {"trace_id": "trace-3"},
+    }
+    assert sdk_client.cancel_contexts[0].state["headers"] == {"Authorization": "Bearer token"}
 
 
 @pytest.mark.asyncio
