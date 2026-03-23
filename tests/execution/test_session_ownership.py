@@ -303,22 +303,25 @@ async def test_preferred_session_claim_is_released_on_upstream_cancellation():
 @pytest.mark.asyncio
 async def test_pending_preferred_session_claim_blocks_other_identity():
     executor = CodexAgentExecutor(AsyncMock(spec=CodexClient), streaming_enabled=False)
+    runtime = executor._session_runtime
 
-    session_id, pending = await executor._get_or_create_session(
-        "user-1",
-        "context-A",
-        "hello",
+    session_id, pending = await runtime.get_or_create_session(
+        identity="user-1",
+        context_id="context-A",
+        title="hello",
         preferred_session_id="session-X",
+        create_session=lambda: asyncio.sleep(0, result="unused"),
     )
     assert session_id == "session-X"
     assert pending is True
 
     with pytest.raises(PermissionError, match="not owned by you"):
-        await executor._get_or_create_session(
-            "user-2",
-            "context-B",
-            "hello",
+        await runtime.get_or_create_session(
+            identity="user-2",
+            context_id="context-B",
+            title="hello",
             preferred_session_id="session-X",
+            create_session=lambda: asyncio.sleep(0, result="unused"),
         )
 
-    await executor._release_preferred_session_claim(identity="user-1", session_id="session-X")
+    await runtime.release_preferred_session_claim(identity="user-1", session_id="session-X")

@@ -18,6 +18,7 @@ from codex_a2a.contracts.extensions import (
     SESSION_QUERY_METHODS,
     build_capability_snapshot,
 )
+from codex_a2a.execution.directory_policy import resolve_and_validate_directory
 from codex_a2a.execution.executor import CodexAgentExecutor
 from codex_a2a.jsonrpc.application import CodexSessionQueryJSONRPCApplication
 from codex_a2a.jsonrpc.hooks import SessionGuardHooks
@@ -82,11 +83,11 @@ def create_app(settings: Settings) -> FastAPI:
         protocol_version=settings.a2a_protocol_version,
         supported_methods=list(capability_snapshot.supported_jsonrpc_methods),
         guard_hooks=SessionGuardHooks(
-            directory_resolver=executor.resolve_directory,
-            session_claim=executor.claim_session,
-            session_claim_finalize=executor.finalize_session_claim,
-            session_claim_release=executor.release_session_claim,
-            session_owner_matcher=executor.session_owner_matches,
+            directory_resolver=lambda requested: resolve_and_validate_directory(client, requested),
+            session_claim=executor._session_runtime.claim_session,
+            session_claim_finalize=executor._session_runtime.finalize_session_claim,
+            session_claim_release=executor._session_runtime.release_session_claim,
+            session_owner_matcher=executor._session_runtime.session_owner_matches,
         ),
     )
     app = A2AFastAPI(

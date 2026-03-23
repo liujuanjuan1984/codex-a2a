@@ -1171,7 +1171,7 @@ async def test_interrupt_callback_extension_masks_owner_mismatch_as_not_found(mo
         request.state.user_identity = "user-1"
         return await call_next(request)
 
-    await app.state.codex_executor.finalize_session_claim(
+    await app.state.codex_executor._session_runtime.finalize_session_claim(
         identity="other-user",
         session_id="ses-owned",
     )
