@@ -10,6 +10,7 @@ from a2a.server.apps.rest.rest_adapter import RESTAdapter
 from a2a.server.tasks.inmemory_task_store import InMemoryTaskStore
 from fastapi import FastAPI
 
+from codex_a2a.client import A2AClientManager
 from codex_a2a.config import Settings
 from codex_a2a.contracts.extensions import (
     INTERRUPT_CALLBACK_METHODS,
@@ -33,6 +34,7 @@ from .http_middlewares import install_http_middlewares
 def create_app(settings: Settings) -> FastAPI:
     install_log_record_factory()
     client = CodexClient(settings)
+    a2a_client_manager = A2AClientManager(settings)
     executor = CodexAgentExecutor(
         client,
         streaming_enabled=True,
@@ -40,6 +42,7 @@ def create_app(settings: Settings) -> FastAPI:
         session_cache_ttl_seconds=settings.a2a_session_cache_ttl_seconds,
         session_cache_maxsize=settings.a2a_session_cache_maxsize,
         stream_idle_diagnostic_seconds=settings.a2a_stream_idle_diagnostic_seconds,
+        a2a_client_manager=a2a_client_manager,
     )
     task_store = InMemoryTaskStore()
     handler = CodexRequestHandler(
@@ -53,6 +56,7 @@ def create_app(settings: Settings) -> FastAPI:
         if callable(startup_preflight):
             await startup_preflight()
         yield
+        await a2a_client_manager.close_all()
         await client.close()
 
     runtime_profile = build_runtime_profile(settings)
@@ -90,6 +94,7 @@ def create_app(settings: Settings) -> FastAPI:
     jsonrpc_app.add_routes_to_app(app)
     app.state.codex_client = client
     app.state.codex_executor = executor
+    app.state.a2a_client_manager = a2a_client_manager
 
     rest_adapter = RESTAdapter(
         agent_card=agent_card,

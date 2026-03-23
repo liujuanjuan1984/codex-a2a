@@ -183,6 +183,16 @@ Current implementation note:
   default `1.0`; `0` means best-effort cancel without waiting
 - `A2A_STREAM_IDLE_DIAGNOSTIC_SECONDS`: threshold before the server emits a
   stream idle diagnostic log, default `60.0`
+- `A2A_CLIENT_TIMEOUT_SECONDS`: default outbound A2A client request timeout in
+  seconds, default `30.0`
+- `A2A_CLIENT_CARD_FETCH_TIMEOUT_SECONDS`: timeout for outbound Agent Card
+  fetches, default `5.0`
+- `A2A_CLIENT_USE_CLIENT_PREFERENCE`: whether outbound transport negotiation
+  should prefer the local client ordering, default `false`
+- `A2A_CLIENT_BEARER_TOKEN`: optional bearer token injected into outbound A2A
+  requests, including Agent Card fetches when configured
+- `A2A_CLIENT_SUPPORTED_TRANSPORTS`: comma-separated outbound transport
+  preference list, default `JSONRPC,HTTP+JSON`
 - `A2A_INTERRUPT_REQUEST_TTL_SECONDS`: TTL for pending interrupt callbacks
   before they become expired, default `3600`
 - `A2A_EXECUTION_SANDBOX_MODE`: declarative sandbox mode for machine-readable
