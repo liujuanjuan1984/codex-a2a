@@ -172,8 +172,6 @@ Current implementation note:
   legacy in-memory behavior
 - `A2A_DATABASE_AUTO_CREATE`: automatically create persistence tables on
   startup, default `true`
-- `A2A_DATABASE_TASK_TABLE_NAME`: task table name for the database-backed task
-  store, default `tasks`
 - `A2A_ENABLE_HEALTH_ENDPOINT`: enable the authenticated lightweight `/health` probe, default `true`
 - `A2A_ENABLE_SESSION_SHELL`: expose `codex.sessions.shell` on JSON-RPC extensions, default `true`
 - `A2A_LOG_LEVEL`: `DEBUG/INFO/WARNING/ERROR`, default `INFO`

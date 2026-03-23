@@ -57,14 +57,12 @@ def test_settings_parse_task_store_configuration() -> None:
         "A2A_BEARER_TOKEN": "test",
         "A2A_DATABASE_URL": "sqlite+aiosqlite:////tmp/tasks.db",
         "A2A_DATABASE_AUTO_CREATE": "false",
-        "A2A_DATABASE_TASK_TABLE_NAME": "a2a_tasks",
     }
     with mock.patch.dict(os.environ, env, clear=True):
         settings = Settings.from_env()
 
     assert settings.a2a_database_url == "sqlite+aiosqlite:////tmp/tasks.db"
     assert settings.a2a_database_auto_create is False
-    assert settings.a2a_database_task_table_name == "a2a_tasks"
 
 
 def test_settings_parse_execution_environment_flags() -> None:
@@ -136,17 +134,6 @@ def test_settings_reject_invalid_execution_sandbox_mode() -> None:
         with pytest.raises(ValidationError) as excinfo:
             Settings.from_env()
     assert "A2A_EXECUTION_SANDBOX_MODE" in str(excinfo.value)
-
-
-def test_settings_reject_empty_database_task_table_name() -> None:
-    env = {
-        "A2A_BEARER_TOKEN": "test",
-        "A2A_DATABASE_TASK_TABLE_NAME": "   ",
-    }
-    with mock.patch.dict(os.environ, env, clear=True):
-        with pytest.raises(ValidationError) as excinfo:
-            Settings.from_env()
-    assert "A2A_DATABASE_TASK_TABLE_NAME" in str(excinfo.value)
 
 
 def test_settings_parse_a2a_client_transport_and_timeouts() -> None:

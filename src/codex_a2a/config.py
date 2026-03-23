@@ -169,10 +169,6 @@ class Settings(BaseSettings):
         alias="A2A_DATABASE_URL",
     )
     a2a_database_auto_create: bool = Field(default=True, alias="A2A_DATABASE_AUTO_CREATE")
-    a2a_database_task_table_name: str = Field(
-        default="tasks",
-        alias="A2A_DATABASE_TASK_TABLE_NAME",
-    )
 
     # Session cache settings
     a2a_session_cache_ttl_seconds: int = Field(default=3600, alias="A2A_SESSION_CACHE_TTL_SECONDS")
@@ -332,14 +328,6 @@ class Settings(BaseSettings):
             allowed=_FILESYSTEM_SCOPES,
             env_name="A2A_EXECUTION_WRITE_ACCESS_SCOPE",
         )
-
-    @field_validator("a2a_database_task_table_name")
-    @classmethod
-    def validate_task_store_table_name(cls, value: str) -> str:
-        normalized = value.strip()
-        if not normalized:
-            raise ValueError("A2A_DATABASE_TASK_TABLE_NAME must not be empty")
-        return normalized
 
     @field_validator("a2a_client_supported_transports", mode="before")
     @classmethod

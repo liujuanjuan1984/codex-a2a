@@ -47,7 +47,7 @@ def build_task_store_runtime(settings: Settings) -> TaskStoreRuntime:
     task_store = DatabaseTaskStore(
         engine=engine,
         create_table=settings.a2a_database_auto_create,
-        table_name=settings.a2a_database_task_table_name,
+        table_name="tasks",
     )
 
     async def _startup() -> None:
