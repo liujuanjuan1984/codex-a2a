@@ -78,6 +78,15 @@ class SessionClaimSnapshot:
     pending_identity: str | None
 
 
+@dataclass(frozen=True)
+class SessionBindingSnapshot:
+    identity: str
+    context_id: str
+    session_id: str | None
+    owner_identity: str | None
+    pending_identity: str | None
+
+
 class SessionRuntime:
     def __init__(
         self,
@@ -129,6 +138,24 @@ class SessionRuntime:
     async def bound_session_for(self, *, identity: str, context_id: str) -> str | None:
         async with self._lock:
             return self._sessions.get((identity, context_id))
+
+    async def binding_snapshot(
+        self,
+        *,
+        identity: str,
+        context_id: str,
+    ) -> SessionBindingSnapshot:
+        async with self._lock:
+            session_id = self._sessions.get((identity, context_id))
+            owner_identity = self._session_owners.get(session_id) if session_id else None
+            pending_identity = self._pending_session_claims.get(session_id) if session_id else None
+        return SessionBindingSnapshot(
+            identity=identity,
+            context_id=context_id,
+            session_id=session_id,
+            owner_identity=owner_identity,
+            pending_identity=pending_identity,
+        )
 
     async def session_claim_snapshot(self, *, session_id: str) -> SessionClaimSnapshot:
         async with self._lock:
