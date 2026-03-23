@@ -62,7 +62,9 @@ def extract_directory_from_metadata(
     if directory is None:
         return None, None
     try:
-        return app._guard_hooks.resolve_directory(directory), None
+        if app._guard_hooks.directory_resolver is None:
+            return directory, None
+        return app._guard_hooks.directory_resolver(directory), None
     except ValueError as exc:
         return None, app._generate_error_response(
             request_id,

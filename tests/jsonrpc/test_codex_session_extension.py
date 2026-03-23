@@ -39,7 +39,7 @@ def _build_extension_app(
         **SESSION_CONTROL_METHODS,
         **INTERRUPT_CALLBACK_METHODS,
     }
-    guard_hooks = SessionGuardHooks.from_legacy(
+    guard_hooks = SessionGuardHooks(
         session_claim=session_claim,
         session_claim_finalize=session_claim_finalize,
         session_claim_release=session_claim_release,

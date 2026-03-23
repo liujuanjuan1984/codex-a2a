@@ -16,36 +16,3 @@ class SessionGuardHooks:
     session_claim_finalize: SessionFinalizeHook | None = None
     session_claim_release: SessionFinalizeHook | None = None
     session_owner_matcher: SessionOwnerMatcher | None = None
-
-    @classmethod
-    def from_legacy(
-        cls,
-        *,
-        directory_resolver: DirectoryResolver | None = None,
-        session_claim: SessionClaimHook | None = None,
-        session_claim_finalize: SessionFinalizeHook | None = None,
-        session_claim_release: SessionFinalizeHook | None = None,
-        session_owner_matcher: SessionOwnerMatcher | None = None,
-    ) -> SessionGuardHooks:
-        return cls(
-            directory_resolver=directory_resolver,
-            session_claim=session_claim,
-            session_claim_finalize=session_claim_finalize,
-            session_claim_release=session_claim_release,
-            session_owner_matcher=session_owner_matcher,
-        )
-
-    def missing_session_control_hooks(self) -> tuple[str, ...]:
-        missing: list[str] = []
-        if self.session_claim is None:
-            missing.append("session_claim")
-        if self.session_claim_finalize is None:
-            missing.append("session_claim_finalize")
-        if self.session_claim_release is None:
-            missing.append("session_claim_release")
-        return tuple(missing)
-
-    def resolve_directory(self, directory: str | None) -> str | None:
-        if directory is None or self.directory_resolver is None:
-            return directory
-        return self.directory_resolver(directory)

@@ -57,7 +57,13 @@ class CodexSessionQueryJSONRPCApplication(A2AFastAPIApplication):
         self._validate_guard_hooks()
 
     def _validate_guard_hooks(self) -> None:
-        missing_for_session_control = list(self._guard_hooks.missing_session_control_hooks())
+        missing_for_session_control: list[str] = []
+        if self._guard_hooks.session_claim is None:
+            missing_for_session_control.append("session_claim")
+        if self._guard_hooks.session_claim_finalize is None:
+            missing_for_session_control.append("session_claim_finalize")
+        if self._guard_hooks.session_claim_release is None:
+            missing_for_session_control.append("session_claim_release")
         if missing_for_session_control:
             missing = ", ".join(missing_for_session_control)
             raise ValueError(
