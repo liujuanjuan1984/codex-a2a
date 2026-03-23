@@ -66,12 +66,6 @@ class CodexAgentExecutor(AgentExecutor):
             session_cache_ttl_seconds=session_cache_ttl_seconds,
             session_cache_maxsize=session_cache_maxsize,
         )
-        self._sessions = self._session_runtime.session_bindings
-        self._session_owners = self._session_runtime.session_owners
-        self._pending_session_claims = self._session_runtime.pending_session_claims
-        self._running_requests = self._session_runtime.running_requests
-        self._running_stop_events = self._session_runtime.running_stop_events
-        self._running_identities = self._session_runtime.running_identities
 
     def _resolve_and_validate_directory(self, requested: str | None) -> str | None:
         return resolve_and_validate_directory(self._client, requested)

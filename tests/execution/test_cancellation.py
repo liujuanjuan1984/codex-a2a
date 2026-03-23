@@ -73,10 +73,11 @@ async def test_cancel_interrupts_running_execute_and_keeps_queue_open():
         await asyncio.wait_for(execute_task, timeout=1.0)
 
     assert send_cancelled.is_set()
-    assert executor._sessions.get(("user-1", "context-A")) is None
-    assert ("task-1", "context-A") not in executor._running_requests
-    assert ("task-1", "context-A") not in executor._running_stop_events
-    assert ("task-1", "context-A") not in executor._running_identities
+    runtime = executor._session_runtime
+    assert await runtime.bound_session_for(identity="user-1", context_id="context-A") is None
+    assert (
+        await runtime.running_execution_snapshot(task_id="task-1", context_id="context-A") is None
+    )
 
 
 @pytest.mark.asyncio
