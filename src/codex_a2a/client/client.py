@@ -28,6 +28,7 @@ from .errors import (
     map_a2a_sdk_error,
 )
 from .payload_text import extract_text_from_payload
+from .request_context import build_call_context, split_request_metadata
 from .types import A2ACancelTaskRequest, A2AClientEvent, A2AGetTaskRequest, A2ASendRequest
 
 
@@ -152,7 +153,7 @@ class A2AClient:
             task_id=task_id,
             message_id=message_id,
         )
-        request_metadata, extra_headers = self._split_request_metadata(metadata)
+        request_metadata, extra_headers = split_request_metadata(metadata)
 
         configuration_kwargs: dict[str, Any] = {"blocking": blocking}
         if accepted_output_modes is not None:
@@ -165,7 +166,7 @@ class A2AClient:
                 request,
                 configuration=request_configuration,
                 request_metadata=request_metadata or {},
-                context=self._build_call_context(extra_headers),
+                context=build_call_context(extra_headers),
                 extensions=extensions,
             ):
                 yield item
@@ -192,11 +193,11 @@ class A2AClient:
     async def get_task(self, request: A2AGetTaskRequest) -> Task:
         client = await self._get_client()
         sdk_client = cast(Any, client)
-        request_metadata, extra_headers = self._split_request_metadata(request.metadata)
+        request_metadata, extra_headers = split_request_metadata(request.metadata)
         try:
             return await sdk_client.get_task(
                 request.to_task_query(),
-                context=self._build_call_context(extra_headers),
+                context=build_call_context(extra_headers),
                 request_metadata=request_metadata or {},
             )
         except Exception as exc:
@@ -218,11 +219,11 @@ class A2AClient:
     async def cancel(self, request: A2ACancelTaskRequest) -> Task:
         client = await self._get_client()
         sdk_client = cast(Any, client)
-        request_metadata, extra_headers = self._split_request_metadata(request.metadata)
+        request_metadata, extra_headers = split_request_metadata(request.metadata)
         try:
             return await sdk_client.cancel_task(
                 request.to_task_id(),
-                context=self._build_call_context(extra_headers),
+                context=build_call_context(extra_headers),
                 request_metadata=request_metadata or {},
             )
         except Exception as exc:
@@ -319,25 +320,3 @@ class A2AClient:
             parts=[Part(root=TextPart(text=text))],
             metadata=None,
         )
-
-    def _split_request_metadata(
-        self,
-        metadata: Mapping[str, Any] | None,
-    ) -> tuple[dict[str, Any] | None, dict[str, str] | None]:
-        request_metadata: dict[str, Any] = {}
-        extra_headers: dict[str, str] = {}
-        for key, value in dict(metadata or {}).items():
-            if isinstance(key, str) and key.lower() == "authorization":
-                if value is not None:
-                    extra_headers["Authorization"] = str(value)
-                continue
-            request_metadata[key] = value
-        return request_metadata or None, extra_headers or None
-
-    def _build_call_context(
-        self,
-        extra_headers: Mapping[str, str] | None,
-    ) -> ClientCallContext | None:
-        if not extra_headers:
-            return None
-        return ClientCallContext(state={"headers": dict(extra_headers)})

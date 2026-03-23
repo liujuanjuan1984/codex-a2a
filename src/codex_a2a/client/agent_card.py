@@ -61,9 +61,7 @@ def build_agent_card_request_kwargs(config: A2AClientConfig) -> dict[str, Any]:
     }
     if config.default_headers:
         http_kwargs["headers"] = {
-            key: str(value)
-            for key, value in config.default_headers.items()
-            if value is not None
+            key: str(value) for key, value in config.default_headers.items() if value is not None
         }
     return http_kwargs
 
