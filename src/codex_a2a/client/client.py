@@ -1,23 +1,68 @@
 from __future__ import annotations
 
+import asyncio
+from collections.abc import AsyncIterator, Mapping
+from typing import Any
+from uuid import uuid4
+
 import httpx
 
 from a2a.client import A2ACardResolver, Client, ClientConfig, ClientFactory
-from a2a.types import AgentCard, Message, Task
-from a2a.types import MessageSendConfiguration
+from a2a.client.middleware import ClientCallContext, ClientCallInterceptor
+from a2a.types import (
+    AgentCard,
+    Message,
+    MessageSendConfiguration,
+    Part,
+    Role,
+    Task,
+    TextPart,
+)
 
 from .config import A2AClientConfig
 from .errors import (
     A2AClientConfigError,
-    A2AClientLifecycleError,
     A2AClientError,
+    A2AClientLifecycleError,
+    A2AUnsupportedBindingError,
     map_a2a_sdk_error,
 )
 from .types import A2ACancelTaskRequest, A2AGetTaskRequest, A2ASendRequest
 
 
+class _HeaderInterceptor(ClientCallInterceptor):
+    def __init__(self, default_headers: Mapping[str, str] | None = None) -> None:
+        self._default_headers = {
+            key: value for key, value in dict(default_headers or {}).items() if value is not None
+        }
+
+    async def intercept(
+        self,
+        _method_name: str,
+        _request_payload: dict[str, Any],
+        http_kwargs: dict[str, Any],
+        _agent_card: object | None,
+        context: ClientCallContext | None,
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
+        headers = dict(http_kwargs.get("headers") or {})
+        headers.update(self._default_headers)
+
+        if context is not None:
+            dynamic_headers = getattr(context.state, "headers", None)
+            if dynamic_headers is None and isinstance(context.state, Mapping):
+                dynamic_headers = context.state.get("headers")
+            if isinstance(dynamic_headers, Mapping):
+                for key, value in dynamic_headers.items():
+                    if isinstance(key, str) and value is not None:
+                        headers[key] = str(value)
+
+        if headers:
+            http_kwargs["headers"] = headers
+        return _request_payload, http_kwargs
+
+
 class A2AClient:
-    """Minimal client facade for consuming A2A agents."""
+    """Factory-style facade for lightweight A2A client bootstrap and calls."""
 
     def __init__(
         self,
@@ -42,18 +87,22 @@ class A2AClient:
         self._card_resolver_factory = card_resolver_factory
         self._client_factory_type = client_factory_type
         self._client_config = ClientConfig(
-            streaming=False,
+            streaming=True,
             supported_transports=list(config.supported_transports),
             use_client_preference=config.use_client_preference,
             httpx_client=self._httpx_client,
             accepted_output_modes=config.accepted_output_modes,
             extensions=config.extensions,
         )
+        self._lock = asyncio.Lock()
 
     def _build_timeout(self) -> httpx.Timeout | None:
         if self._config.request_timeout_seconds is None:
             return None
         return httpx.Timeout(self._config.request_timeout_seconds)
+
+    def _build_card_timeout(self) -> httpx.Timeout:
+        return httpx.Timeout(self._config.card_fetch_timeout_seconds)
 
     @property
     def is_closed(self) -> bool:
@@ -64,50 +113,6 @@ class A2AClient:
 
     async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
         await self.close()
-
-    async def get_agent_card(self) -> AgentCard:
-        return await self._get_agent_card()
-
-    async def send(self, request: A2ASendRequest) -> Task | Message:
-        client = await self._get_client()
-        message = request.to_message()
-        configuration: MessageSendConfiguration = request.to_send_configuration()
-
-        response: Task | Message | None = None
-        try:
-            async for item in client.send_message(
-                message,
-                configuration=configuration,
-                request_metadata=request.metadata,
-            ):
-                if isinstance(item, tuple):
-                    response = item[0]
-                else:
-                    response = item
-        except Exception as exc:
-            raise map_a2a_sdk_error(exc) from exc
-
-        if response is None:
-            raise A2AClientError("A2A send_message returned no response")
-        return response
-
-    async def get_task(self, request: A2AGetTaskRequest) -> Task:
-        client = await self._get_client()
-        try:
-            return await client.get_task(
-                request.to_task_query(),
-            )
-        except Exception as exc:
-            raise map_a2a_sdk_error(exc) from exc
-
-    async def cancel(self, request: A2ACancelTaskRequest) -> Task:
-        client = await self._get_client()
-        try:
-            return await client.cancel_task(
-                request.to_task_id(),
-            )
-        except Exception as exc:
-            raise map_a2a_sdk_error(exc) from exc
 
     async def close(self) -> None:
         if self._closed:
@@ -123,6 +128,125 @@ class A2AClient:
 
         self._card = None
 
+    async def get_agent_card(self) -> AgentCard:
+        return await self._get_agent_card()
+
+    async def send_message(
+        self,
+        text: str,
+        *,
+        context_id: str | None = None,
+        task_id: str | None = None,
+        message_id: str | None = None,
+        metadata: Mapping[str, Any] | None = None,
+        extensions: list[str] | None = None,
+        accepted_output_modes: list[str] | None = None,
+        history_length: int | None = None,
+        blocking: bool = True,
+    ) -> AsyncIterator[Task | Message]:
+        client = await self._get_client()
+        request = self._build_user_message(
+            text=text,
+            context_id=context_id,
+            task_id=task_id,
+            message_id=message_id,
+        )
+        request_metadata, extra_headers = self._split_request_metadata(metadata)
+
+        configuration_kwargs: dict[str, Any] = {"blocking": blocking}
+        if accepted_output_modes is not None:
+            configuration_kwargs["acceptedOutputModes"] = accepted_output_modes
+        if history_length is not None:
+            configuration_kwargs["historyLength"] = history_length
+        request_configuration = MessageSendConfiguration(**configuration_kwargs)
+        try:
+            async for item in client.send_message(
+                request,
+                configuration=request_configuration,
+                request_metadata=request_metadata or {},
+                context=self._build_call_context(extra_headers),
+                extensions=extensions,
+            ):
+                yield item
+        except Exception as exc:
+            raise map_a2a_sdk_error(exc, operation="message/send") from exc
+
+    async def send(self, request: A2ASendRequest) -> Task | Message:
+        last_event: Task | Message | None = None
+        async for item in self.send_message(
+            request.text,
+            context_id=request.context_id,
+            task_id=request.task_id,
+            message_id=request.message_id,
+            metadata=request.metadata,
+            accepted_output_modes=request.accepted_output_modes,
+            history_length=request.history_length,
+            blocking=request.blocking,
+        ):
+            last_event = item
+        if last_event is None:
+            raise A2AClientError("A2A send_message returned no response")
+        return last_event
+
+    async def get_task(self, request: A2AGetTaskRequest) -> Task:
+        client = await self._get_client()
+        request_metadata, extra_headers = self._split_request_metadata(request.metadata)
+        try:
+            return await client.get_task(
+                request.to_task_query(),
+                context=self._build_call_context(extra_headers),
+                request_metadata=request_metadata or {},
+            )
+        except Exception as exc:
+            raise map_a2a_sdk_error(exc, operation="tasks/get") from exc
+
+    async def get_task_by_id(self, task_id: str, *, metadata: Mapping[str, Any] | None = None) -> Task:
+        return await self.get_task(
+            A2AGetTaskRequest(
+                task_id=task_id,
+                metadata=dict(metadata) if metadata is not None else None,
+            )
+        )
+
+    async def cancel(self, request: A2ACancelTaskRequest) -> Task:
+        client = await self._get_client()
+        request_metadata, extra_headers = self._split_request_metadata(request.metadata)
+        try:
+            return await client.cancel_task(
+                request.to_task_id(),
+                context=self._build_call_context(extra_headers),
+                request_metadata=request_metadata or {},
+            )
+        except Exception as exc:
+            raise map_a2a_sdk_error(exc, operation="tasks/cancel") from exc
+
+    async def cancel_task(self, task_id: str, *, metadata: Mapping[str, Any] | None = None) -> Task:
+        return await self.cancel(
+            A2ACancelTaskRequest(task_id=task_id, metadata=dict(metadata) if metadata else None)
+        )
+
+    @staticmethod
+    def extract_text(event: Task | Message | Any) -> str:
+        task_or_message = event
+        if isinstance(task_or_message, tuple):
+            if not task_or_message:
+                return ""
+            task_or_message = task_or_message[0]
+
+        if isinstance(task_or_message, tuple):
+            if not task_or_message:
+                return ""
+            task_or_message = task_or_message[0]
+
+        if isinstance(task_or_message, Task):
+            status = getattr(task_or_message, "status", None)
+            status_message = getattr(status, "message", None) if status is not None else None
+            if status_message is not None:
+                return A2AClient._extract_text_from_parts(getattr(status_message, "parts", None))
+            return ""
+
+        return A2AClient._extract_text_from_parts(getattr(task_or_message, "parts", None))
+
     async def _get_agent_card(self) -> AgentCard:
         if self._card is not None:
             return self._card
@@ -136,21 +260,108 @@ class A2AClient:
             self._config.agent_card_path,
         )
         try:
-            self._card = await resolver.get_agent_card()
+            try:
+                self._card = await resolver.get_agent_card(
+                    http_kwargs={"timeout": self._build_card_timeout()}
+                )
+            except TypeError:
+                self._card = await resolver.get_agent_card()
         except Exception as exc:
-            raise map_a2a_sdk_error(exc) from exc
+            raise map_a2a_sdk_error(exc, operation="agent_card") from exc
         return self._card
 
     async def _get_client(self) -> Client:
         if self._closed:
             raise A2AClientLifecycleError("client is closed")
-        if self._sdk_client is not None:
-            return self._sdk_client
+        async with self._lock:
+            if self._sdk_client is not None:
+                return self._sdk_client
+            return await self._build_client()
 
+    async def _build_client(self) -> Client:
         card = await self._get_agent_card()
         try:
             factory = self._client_factory_type(self._client_config)
-            self._sdk_client = factory.create(card)
-            return self._sdk_client
+        except ValueError as exc:
+            raise A2AUnsupportedBindingError(
+                f"Unable to initialize A2A client with transport preference: {exc}"
+            ) from exc
         except Exception as exc:
-            raise map_a2a_sdk_error(exc) from exc
+            raise A2AClientError(f"Unable to initialize A2A client factory: {exc}") from exc
+
+        interceptors = self._build_interceptors()
+        try:
+            self._sdk_client = factory.create(card, interceptors=interceptors)
+        except TypeError:
+            self._sdk_client = factory.create(card)
+        if self._sdk_client is None:
+            raise A2AClientError("Failed to initialize A2A client")
+        return self._sdk_client
+
+    async def _ensure_httpx_client(self) -> httpx.AsyncClient:
+        if self._httpx_client is None:
+            self._httpx_client = httpx.AsyncClient(timeout=self._build_timeout())
+            self._owns_http_client = True
+        return self._httpx_client
+
+    def _build_interceptors(self) -> list[ClientCallInterceptor]:
+        return [_HeaderInterceptor(self._config.default_headers)]
+
+    @staticmethod
+    def _extract_text_from_parts(parts: Any) -> str:
+        if parts is None:
+            return ""
+        if not isinstance(parts, list):
+            return ""
+        texts: list[str] = []
+        for part in parts:
+            root = getattr(part, "root", part)
+            if not isinstance(root, object):
+                continue
+            text = getattr(root, "text", None)
+            if isinstance(text, str):
+                texts.append(text)
+                continue
+            text = getattr(part, "text", None)
+            if isinstance(text, str):
+                texts.append(text)
+        return "".join(texts).strip()
+
+    def _build_user_message(
+        self,
+        *,
+        text: str,
+        context_id: str | None,
+        task_id: str | None,
+        message_id: str | None,
+    ) -> Message:
+        return Message(
+            message_id=message_id or f"msg-{uuid4().hex[:12]}",
+            role=Role.user,
+            context_id=context_id,
+            task_id=task_id,
+            parts=[Part(root=TextPart(text=text))],
+            metadata=None,
+        )
+
+    def _split_request_metadata(
+        self,
+        metadata: Mapping[str, Any] | None,
+    ) -> tuple[dict[str, Any] | None, dict[str, str] | None]:
+        request_metadata: dict[str, Any] = {}
+        extra_headers: dict[str, str] = {}
+        for key, value in dict(metadata or {}).items():
+            if isinstance(key, str) and key.lower() == "authorization":
+                if value is not None:
+                    extra_headers["Authorization"] = str(value)
+                continue
+            request_metadata[key] = value
+        return request_metadata or None, extra_headers or None
+
+    def _build_call_context(
+        self,
+        extra_headers: Mapping[str, str] | None,
+    ) -> ClientCallContext | None:
+        if not extra_headers:
+            return None
+        return ClientCallContext(state={"headers": dict(extra_headers)})

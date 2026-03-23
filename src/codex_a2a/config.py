@@ -56,6 +56,37 @@ def _parse_str_list(value: Any) -> Any:
     return value
 
 
+def _normalize_client_transport(value: str) -> str:
+    normalized = value.strip().upper()
+    if normalized in {"JSONRPC", "JSON-RPC", "JSON_RPC"}:
+        return "JSONRPC"
+    if normalized in {"HTTP+JSON", "HTTP_JSON", "HTTP-JSON", "HTTPJSON"}:
+        return "HTTP+JSON"
+    if normalized in {"GRPC"}:
+        return "GRPC"
+    return normalized
+
+
+def _normalize_client_transports(value: Any) -> Any:
+    if value is None:
+        return ["JSONRPC", "HTTP+JSON"]
+    if isinstance(value, str):
+        raw_values = [item.strip() for item in value.split(",") if item.strip()]
+    elif isinstance(value, (list, tuple, set)):
+        raw_values = [str(item).strip() for item in value if str(item).strip()]
+    else:
+        raise ValueError(
+            "A2A_CLIENT_SUPPORTED_TRANSPORTS must be a comma-separated string or list"
+        )
+
+    normalized = [_normalize_client_transport(item) for item in raw_values]
+    parsed = [transport for transport in normalized if transport]
+    for transport in parsed:
+        if transport not in {"JSONRPC", "HTTP+JSON", "GRPC"}:
+            raise ValueError("A2A_CLIENT_SUPPORTED_TRANSPORTS contains unsupported transport")
+    return parsed or ["JSONRPC", "HTTP+JSON"]
+
+
 def _validate_choice(value: str, *, allowed: set[str], env_name: str) -> str:
     if value not in allowed:
         allowed_values = ", ".join(sorted(allowed))
@@ -146,6 +177,23 @@ class Settings(BaseSettings):
     a2a_stream_idle_diagnostic_seconds: float = Field(
         default=60.0,
         alias="A2A_STREAM_IDLE_DIAGNOSTIC_SECONDS",
+    )
+    a2a_client_timeout_seconds: float = Field(default=30.0, alias="A2A_CLIENT_TIMEOUT_SECONDS")
+    a2a_client_card_fetch_timeout_seconds: float = Field(
+        default=5.0,
+        alias="A2A_CLIENT_CARD_FETCH_TIMEOUT_SECONDS",
+    )
+    a2a_client_use_client_preference: bool = Field(
+        default=False,
+        alias="A2A_CLIENT_USE_CLIENT_PREFERENCE",
+    )
+    a2a_client_bearer_token: str | None = Field(
+        default=None,
+        alias="A2A_CLIENT_BEARER_TOKEN",
+    )
+    a2a_client_supported_transports: Annotated[list[str], NoDecode] = Field(
+        default_factory=lambda: ["JSONRPC", "HTTP+JSON"],
+        alias="A2A_CLIENT_SUPPORTED_TRANSPORTS",
     )
     a2a_interrupt_request_ttl_seconds: int = Field(
         default=3600,
@@ -277,6 +325,18 @@ class Settings(BaseSettings):
             allowed=_FILESYSTEM_SCOPES,
             env_name="A2A_EXECUTION_WRITE_ACCESS_SCOPE",
         )
+
+    @field_validator("a2a_client_supported_transports", mode="before")
+    @classmethod
+    def parse_a2a_client_supported_transports(cls, value: Any) -> Any:
+        return _normalize_client_transports(value)
+
+    @field_validator("a2a_client_timeout_seconds", "a2a_client_card_fetch_timeout_seconds")
+    @classmethod
+    def validate_a2a_client_timeout_seconds(cls, value: float) -> float:
+        if value <= 0:
+            raise ValueError("A2A_CLIENT_*_TIMEOUT_SECONDS must be > 0")
+        return value
 
     @classmethod
     def from_env(cls) -> Settings:

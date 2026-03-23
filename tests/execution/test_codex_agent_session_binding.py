@@ -1,8 +1,19 @@
 import asyncio
+from unittest.mock import AsyncMock
+from unittest.mock import MagicMock
 
 import pytest
-from a2a.types import Task
+from a2a.types import (
+    Artifact,
+    Part,
+    Task,
+    TaskArtifactUpdateEvent,
+    TaskState,
+    TaskStatus,
+    TextPart,
+)
 
+from codex_a2a.client import A2AClient
 from codex_a2a.execution.executor import CodexAgentExecutor
 from codex_a2a.upstream.client import CodexMessage
 from tests.support.context import DummyEventQueue, make_request_context
@@ -169,3 +180,184 @@ async def test_agent_includes_usage_in_non_stream_task_metadata() -> None:
     assert usage["input_tokens"] == 7
     assert usage["output_tokens"] == 3
     assert usage["total_tokens"] == 10
+
+
+@pytest.mark.asyncio
+async def test_agent_handles_a2a_call_tool() -> None:
+    class _MockA2AClient:
+        extract_text = staticmethod(A2AClient.extract_text)
+
+        async def send_message(self, text: str):
+            task = Task(
+                id="remote-task",
+                context_id="remote-ctx",
+                status=TaskStatus(state=TaskState.working),
+            )
+            yield (
+                task,
+                TaskArtifactUpdateEvent(
+                    task_id="remote-task",
+                    context_id="remote-ctx",
+                    artifact=Artifact(
+                        artifact_id="a1",
+                        name="response",
+                        parts=[Part(root=TextPart(text=f"remote response to {text}"))],
+                    ),
+                ),
+            )
+
+        async def close(self) -> None:
+            pass
+
+    class _MockManager:
+        async def get_client(self, _agent_url: str) -> _MockA2AClient:
+            return _MockA2AClient()
+
+    raw_response = {
+        "parts": [
+            {
+                "type": "tool",
+                "tool": "a2a_call",
+                "callID": "call-1",
+                "state": {
+                    "status": "calling",
+                    "input": {"url": "http://remote", "message": "hello remote"},
+                },
+            }
+        ]
+    }
+
+    client = DummyChatCodexClient()
+    executor = CodexAgentExecutor(client, streaming_enabled=False, a2a_client_manager=_MockManager())
+    result = await executor._maybe_handle_tools(raw_response)
+
+    assert result is not None
+    assert len(result) == 1
+    assert result[0]["call_id"] == "call-1"
+    assert "remote response to hello remote" in result[0]["output"]
+
+
+@pytest.mark.asyncio
+async def test_agent_supports_tool_loop_and_merges_stream_output() -> None:
+    class ToolLoopClient(DummyChatCodexClient):
+        def __init__(self) -> None:
+            super().__init__()
+            self.call_count = 0
+
+        async def send_message(self, *args, **kwargs) -> CodexMessage:
+            del args, kwargs
+            self.call_count += 1
+            if self.call_count == 1:
+                return CodexMessage(
+                    text="call tool",
+                    session_id="session",
+                    message_id="m-1",
+                    raw={
+                        "parts": [
+                            {
+                                "type": "tool",
+                                "tool": "a2a_call",
+                                "callID": "tool-1",
+                                "state": {
+                                    "status": "calling",
+                                    "input": {"url": "http://tool", "message": "payload"},
+                                },
+                            }
+                        ]
+                    },
+                )
+            return CodexMessage(
+                text="done",
+                session_id="session",
+                message_id="m-2",
+                raw={},
+            )
+
+    class _MockManager:
+        async def get_client(self, _agent_url: str):
+            async def _send_message(_text: str):
+                task = Task(
+                    id="remote-task",
+                    context_id="remote-ctx",
+                    status=TaskStatus(state=TaskState.working),
+                )
+                yield (
+                    task,
+                    TaskArtifactUpdateEvent(
+                        task_id="remote-task",
+                        context_id="remote-ctx",
+                        artifact=Artifact(
+                            artifact_id="a1",
+                            name="response",
+                            parts=[Part(root=TextPart(text="streamed tool output"))],
+                        ),
+                    ),
+                )
+
+            return MagicMock(
+                send_message=_send_message,
+                extract_text=A2AClient.extract_text,
+                close=AsyncMock(),
+            )
+
+    client = ToolLoopClient()
+    executor = CodexAgentExecutor(
+        client,
+        streaming_enabled=False,
+        a2a_client_manager=_MockManager(),
+    )
+    queue = DummyEventQueue()
+
+    await executor.execute(
+        make_request_context(task_id="t1", context_id="c1", text="start"),
+        queue,
+    )
+
+    assert client.call_count == 2
+    task = next(event for event in queue.events if isinstance(event, Task))
+    assert task.status.message is not None
+    assert task.status.message.parts[0].root.text == "done"
+
+
+def test_executor_merge_streamed_a2a_tool_output() -> None:
+    assert CodexAgentExecutor._merge_streamed_tool_output("hello", "hello world") == "hello world"
+    assert (
+        CodexAgentExecutor._merge_streamed_tool_output("hello world", "from peer")
+        == "hello world\nfrom peer"
+    )
+    assert CodexAgentExecutor._merge_streamed_tool_output("hello world", "world") == "hello world"
+
+
+@pytest.mark.asyncio
+async def test_agent_handles_a2a_call_tool_input_validation_errors() -> None:
+    client = DummyChatCodexClient()
+    executor = CodexAgentExecutor(client, streaming_enabled=False)
+
+    raw_response = {
+        "parts": [
+            {
+                "type": "tool",
+                "tool": "a2a_call",
+                "callID": "c1",
+                "state": {"status": "calling", "input": {"url": "h", "message": "m"}},
+            }
+        ]
+    }
+    result = await executor._maybe_handle_tools(raw_response)
+    assert result is not None
+    assert result[0]["error"] == "A2A client manager is not available"
+
+    class _MockManager:
+        async def get_client(self, _agent_url: str):
+            return MagicMock()
+
+    executor = CodexAgentExecutor(client, streaming_enabled=False, a2a_client_manager=_MockManager())
+    raw_response["parts"][0]["state"]["input"] = "invalid"
+    result = await executor._maybe_handle_tools(raw_response)
+    assert result is not None
+    assert result[0]["error"] == "Invalid input format"
+
+    raw_response["parts"][0]["state"]["input"] = {"url": "http://x"}
+    result = await executor._maybe_handle_tools(raw_response)
+    assert result is not None
+    assert result[0]["error"] == "Missing url or message"

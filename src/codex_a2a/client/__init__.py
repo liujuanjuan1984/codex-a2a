@@ -2,11 +2,17 @@
 
 from .client import A2AClient
 from .config import A2AClientConfig
+from .manager import A2AClientManager
 from .errors import (
     A2AClientError,
     A2AClientLifecycleError,
     A2AClientProtocolError,
     A2AClientRequestError,
+    A2AAgentUnavailableError,
+    A2AClientResetRequiredError,
+    A2AUnsupportedBindingError,
+    A2AUnsupportedOperationError,
+    A2APeerProtocolError,
 )
 from .types import (
     A2ACancelTaskRequest,
@@ -16,11 +22,17 @@ from .types import (
 
 __all__ = [
     "A2AClient",
+    "A2AClientManager",
     "A2AClientConfig",
     "A2AClientError",
     "A2AClientLifecycleError",
     "A2AClientProtocolError",
     "A2AClientRequestError",
+    "A2AAgentUnavailableError",
+    "A2AClientResetRequiredError",
+    "A2AUnsupportedBindingError",
+    "A2AUnsupportedOperationError",
+    "A2APeerProtocolError",
     "A2ACancelTaskRequest",
     "A2AGetTaskRequest",
     "A2ASendRequest",

@@ -121,3 +121,22 @@ def test_settings_reject_invalid_execution_sandbox_mode() -> None:
         with pytest.raises(ValidationError) as excinfo:
             Settings.from_env()
     assert "A2A_EXECUTION_SANDBOX_MODE" in str(excinfo.value)
+
+
+def test_settings_parse_a2a_client_transport_and_timeouts() -> None:
+    env = {
+        "A2A_BEARER_TOKEN": "test",
+        "A2A_CLIENT_TIMEOUT_SECONDS": "41",
+        "A2A_CLIENT_CARD_FETCH_TIMEOUT_SECONDS": "7",
+        "A2A_CLIENT_USE_CLIENT_PREFERENCE": "true",
+        "A2A_CLIENT_BEARER_TOKEN": "peer-token",
+        "A2A_CLIENT_SUPPORTED_TRANSPORTS": "http-json,json-rpc",
+    }
+    with mock.patch.dict(os.environ, env, clear=True):
+        settings = Settings.from_env()
+
+    assert settings.a2a_client_timeout_seconds == 41.0
+    assert settings.a2a_client_card_fetch_timeout_seconds == 7.0
+    assert settings.a2a_client_use_client_preference is True
+    assert settings.a2a_client_bearer_token == "peer-token"
+    assert settings.a2a_client_supported_transports == ["HTTP+JSON", "JSONRPC"]

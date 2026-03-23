@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pytest
+import httpx
 from a2a.types import (
     AgentCard,
     AgentCapabilities,
@@ -11,7 +12,11 @@ from a2a.types import (
     TaskState,
     TaskStatus,
 )
-from codex_a2a.client import A2AClient, A2AClientConfig
+from codex_a2a.client import (
+    A2AClient,
+    A2AClientConfig,
+    A2AUnsupportedBindingError,
+)
 from codex_a2a.client.types import A2ACancelTaskRequest, A2AGetTaskRequest, A2ASendRequest
 
 
@@ -31,6 +36,25 @@ class _MockAgentCardResolver:
 
     async def get_agent_card(self, *_, **__) -> AgentCard:
         _MockAgentCardResolver.calls += 1
+        return AgentCard(
+            name="mock",
+            description="mock agent",
+            url="https://example.org",
+            version="1.0.0",
+            capabilities=AgentCapabilities(),
+            default_input_modes=["text/plain"],
+            default_output_modes=["text/plain"],
+            skills=[],
+        )
+
+
+class _MockAgentCardResolverWithTimeout:
+    def __init__(self, *_args, **_kwargs) -> None:
+        self.http_kwargs = {}
+
+    async def get_agent_card(self, http_kwargs=None, **_kwargs) -> AgentCard:
+        if http_kwargs is not None:
+            self.http_kwargs = dict(http_kwargs)
         return AgentCard(
             name="mock",
             description="mock agent",
@@ -120,3 +144,54 @@ async def test_get_agent_card_uses_resolver_and_cached() -> None:
     assert card.url == "https://example.org"
     assert card_second.url == "https://example.org"
     assert _MockAgentCardResolver.calls == 1
+
+
+@pytest.mark.asyncio
+async def test_get_agent_card_passes_card_fetch_timeout_to_resolver() -> None:
+    resolver = _MockAgentCardResolverWithTimeout()
+
+    class _Factory:
+        last_instance: _MockAgentCardResolverWithTimeout | None = None
+
+        def __call__(self, *_args, **_kwargs) -> _MockAgentCardResolverWithTimeout:
+            _Factory.last_instance = resolver
+            return resolver
+
+    client = A2AClient(
+        A2AClientConfig(
+            agent_url="https://example.org",
+            card_fetch_timeout_seconds=7.5,
+        ),
+        httpx_client=_MockAsyncHttpClient(),
+        card_resolver_factory=_Factory(),
+    )
+    try:
+        await client.get_agent_card()
+    finally:
+        await client.close()
+
+    assert _Factory.last_instance is resolver
+    timeout = resolver.http_kwargs.get("timeout")
+    assert timeout is not None
+    assert isinstance(timeout, httpx.Timeout)
+    assert timeout.connect == 7.5
+
+
+@pytest.mark.asyncio
+async def test_build_client_maps_unsupported_transport_binding() -> None:
+    class _RejectingFactory:
+        def __init__(self, *_args, **_kwargs) -> None:
+            pass
+
+        def create(self, *_args, **_kwargs):
+            raise ValueError("No shared transport found")
+
+    client = A2AClient(
+        A2AClientConfig(agent_url="https://example.org"),
+        httpx_client=_MockAsyncHttpClient(),
+        card_resolver_factory=_MockAgentCardResolver,
+        client_factory_type=_RejectingFactory,
+    )
+
+    with pytest.raises(A2AUnsupportedBindingError):
+        await client._build_client()
