@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import httpx
 import pytest
 from a2a.types import (
     AgentCapabilities,
@@ -21,7 +20,6 @@ from a2a.types import (
 from codex_a2a.client import (
     A2AClient,
     A2AClientConfig,
-    A2AClientConfigError,
     A2AUnsupportedBindingError,
 )
 from codex_a2a.client.types import A2ACancelTaskRequest, A2AGetTaskRequest, A2ASendRequest
@@ -43,46 +41,6 @@ class _MockAgentCardResolver:
 
     async def get_agent_card(self, *_, **__) -> AgentCard:
         _MockAgentCardResolver.calls += 1
-        return AgentCard(
-            name="mock",
-            description="mock agent",
-            url="https://example.org",
-            version="1.0.0",
-            capabilities=AgentCapabilities(),
-            default_input_modes=["text/plain"],
-            default_output_modes=["text/plain"],
-            skills=[],
-        )
-
-
-class _MockAgentCardResolverWithTimeout:
-    def __init__(self, *_args, **_kwargs) -> None:
-        self.http_kwargs = {}
-
-    async def get_agent_card(self, http_kwargs=None, **_kwargs) -> AgentCard:
-        if http_kwargs is not None:
-            self.http_kwargs = dict(http_kwargs)
-        return AgentCard(
-            name="mock",
-            description="mock agent",
-            url="https://example.org",
-            version="1.0.0",
-            capabilities=AgentCapabilities(),
-            default_input_modes=["text/plain"],
-            default_output_modes=["text/plain"],
-            skills=[],
-        )
-
-
-class _CapturingAgentCardResolver:
-    last_base_url: str | None = None
-    last_agent_card_path: str | None = None
-
-    def __init__(self, _httpx_client, base_url: str, agent_card_path: str) -> None:
-        _CapturingAgentCardResolver.last_base_url = base_url
-        _CapturingAgentCardResolver.last_agent_card_path = agent_card_path
-
-    async def get_agent_card(self, *_, **__) -> AgentCard:
         return AgentCard(
             name="mock",
             description="mock agent",
@@ -172,68 +130,6 @@ async def test_get_agent_card_uses_resolver_and_cached() -> None:
     assert card.url == "https://example.org"
     assert card_second.url == "https://example.org"
     assert _MockAgentCardResolver.calls == 1
-
-
-@pytest.mark.asyncio
-async def test_get_agent_card_passes_card_fetch_timeout_to_resolver() -> None:
-    resolver = _MockAgentCardResolverWithTimeout()
-
-    class _Factory:
-        last_instance: _MockAgentCardResolverWithTimeout | None = None
-
-        def __call__(self, *_args, **_kwargs) -> _MockAgentCardResolverWithTimeout:
-            _Factory.last_instance = resolver
-            return resolver
-
-    client = A2AClient(
-        A2AClientConfig(
-            agent_url="https://example.org",
-            card_fetch_timeout_seconds=7.5,
-            default_headers={"Authorization": "Bearer peer-token"},
-        ),
-        httpx_client=_MockAsyncHttpClient(),
-        card_resolver_factory=_Factory(),
-    )
-    try:
-        await client.get_agent_card()
-    finally:
-        await client.close()
-
-    assert _Factory.last_instance is resolver
-    timeout = resolver.http_kwargs.get("timeout")
-    assert timeout is not None
-    assert isinstance(timeout, httpx.Timeout)
-    assert timeout.connect == 7.5
-    assert resolver.http_kwargs["headers"] == {"Authorization": "Bearer peer-token"}
-
-
-@pytest.mark.asyncio
-async def test_get_agent_card_normalizes_explicit_well_known_path() -> None:
-    _CapturingAgentCardResolver.last_base_url = None
-    _CapturingAgentCardResolver.last_agent_card_path = None
-    client = A2AClient(
-        A2AClientConfig(agent_url="https://ops.example.com/tenant/.well-known/agent-card.json"),
-        httpx_client=_MockAsyncHttpClient(),
-        card_resolver_factory=_CapturingAgentCardResolver,
-    )
-
-    card = await client.get_agent_card()
-
-    assert card.url == "https://example.org"
-    assert _CapturingAgentCardResolver.last_base_url == "https://ops.example.com/tenant"
-    assert _CapturingAgentCardResolver.last_agent_card_path == "/.well-known/agent-card.json"
-
-
-@pytest.mark.asyncio
-async def test_get_agent_card_rejects_relative_agent_url() -> None:
-    client = A2AClient(
-        A2AClientConfig(agent_url="/relative/path"),
-        httpx_client=_MockAsyncHttpClient(),
-        card_resolver_factory=_MockAgentCardResolver,
-    )
-
-    with pytest.raises(A2AClientConfigError, match="absolute URL"):
-        await client.get_agent_card()
 
 
 @pytest.mark.asyncio

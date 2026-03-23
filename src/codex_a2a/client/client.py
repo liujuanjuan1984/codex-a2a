@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 from collections.abc import AsyncIterator, Mapping
 from typing import Any, cast
-from urllib.parse import urlsplit, urlunsplit
 from uuid import uuid4
 
 import httpx
@@ -18,12 +17,8 @@ from a2a.types import (
     Task,
     TextPart,
 )
-from a2a.utils.constants import (
-    AGENT_CARD_WELL_KNOWN_PATH,
-    EXTENDED_AGENT_CARD_PATH,
-    PREV_AGENT_CARD_WELL_KNOWN_PATH,
-)
 
+from .agent_card import build_agent_card_request_kwargs, resolve_agent_card_endpoint
 from .config import A2AClientConfig
 from .errors import (
     A2AClientConfigError,
@@ -106,9 +101,6 @@ class A2AClient:
         if self._config.request_timeout_seconds is None:
             return None
         return httpx.Timeout(self._config.request_timeout_seconds)
-
-    def _build_card_timeout(self) -> httpx.Timeout:
-        return httpx.Timeout(self._config.card_fetch_timeout_seconds)
 
     @property
     def is_closed(self) -> bool:
@@ -246,49 +238,6 @@ class A2AClient:
         extracted = extract_text_from_payload(event)
         return extracted or ""
 
-    def _resolve_agent_card_endpoint(self) -> tuple[str, str]:
-        resolved_url = self._config.resolved_agent_url()
-        parsed_url = urlsplit(resolved_url)
-        if not parsed_url.scheme or not parsed_url.netloc:
-            raise A2AClientConfigError(f"agent_url must be absolute URL: {resolved_url}")
-
-        normalized_no_leading = (parsed_url.path or "").rstrip("/").lstrip("/")
-        candidate_paths = (
-            AGENT_CARD_WELL_KNOWN_PATH,
-            PREV_AGENT_CARD_WELL_KNOWN_PATH,
-            EXTENDED_AGENT_CARD_PATH,
-        )
-
-        base_path = normalized_no_leading
-        agent_card_path = self._config.agent_card_path
-        for candidate_path in candidate_paths:
-            card_suffix = candidate_path.lstrip("/")
-            if normalized_no_leading.endswith(card_suffix):
-                base_path = normalized_no_leading[: -len(card_suffix)].rstrip("/")
-                agent_card_path = candidate_path
-                break
-
-        base_url = urlunsplit(
-            (
-                parsed_url.scheme,
-                parsed_url.netloc,
-                f"/{base_path}" if base_path else "",
-                "",
-                "",
-            )
-        ).rstrip("/")
-        return base_url, agent_card_path
-
-    def _build_card_request_kwargs(self) -> dict[str, Any]:
-        http_kwargs: dict[str, Any] = {"timeout": self._build_card_timeout()}
-        if self._config.default_headers:
-            http_kwargs["headers"] = {
-                key: str(value)
-                for key, value in self._config.default_headers.items()
-                if value is not None
-            }
-        return http_kwargs
-
     async def _get_agent_card(self) -> AgentCard:
         if self._card is not None:
             return self._card
@@ -296,16 +245,16 @@ class A2AClient:
         if self._closed:
             raise A2AClientLifecycleError("client is closed")
 
-        base_url, agent_card_path = self._resolve_agent_card_endpoint()
+        endpoint = resolve_agent_card_endpoint(self._config)
         resolver = self._card_resolver_factory(
             self._httpx_client,
-            base_url,
-            agent_card_path,
+            endpoint.base_url,
+            endpoint.agent_card_path,
         )
         try:
             try:
                 self._card = await resolver.get_agent_card(
-                    http_kwargs=self._build_card_request_kwargs()
+                    http_kwargs=build_agent_card_request_kwargs(self._config)
                 )
             except TypeError:
                 self._card = await resolver.get_agent_card()
