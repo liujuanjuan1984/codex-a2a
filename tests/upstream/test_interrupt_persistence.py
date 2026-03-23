@@ -4,8 +4,8 @@ import asyncio
 
 import pytest
 
-from codex_a2a.upstream.client import CodexClient
 from codex_a2a.server.runtime_state import build_runtime_state_runtime
+from codex_a2a.upstream.client import CodexClient
 from tests.support.settings import make_settings
 
 
@@ -14,8 +14,7 @@ async def test_interrupt_requests_restore_after_client_rebuild(tmp_path) -> None
     settings = make_settings(
         a2a_bearer_token="test-token",
         codex_timeout=1.0,
-        a2a_task_store_backend="database",
-        a2a_task_store_database_url=f"sqlite+aiosqlite:///{(tmp_path / 'runtime.db').resolve()}",
+        a2a_database_url=f"sqlite+aiosqlite:///{(tmp_path / 'runtime.db').resolve()}",
     )
     runtime_state = build_runtime_state_runtime(settings)
     await runtime_state.startup()
@@ -57,8 +56,7 @@ async def test_expired_interrupt_requests_are_not_restored(tmp_path, monkeypatch
         a2a_bearer_token="test-token",
         codex_timeout=1.0,
         a2a_interrupt_request_ttl_seconds=5,
-        a2a_task_store_backend="database",
-        a2a_task_store_database_url=f"sqlite+aiosqlite:///{(tmp_path / 'runtime.db').resolve()}",
+        a2a_database_url=f"sqlite+aiosqlite:///{(tmp_path / 'runtime.db').resolve()}",
     )
     runtime_state = build_runtime_state_runtime(settings)
     await runtime_state.startup()

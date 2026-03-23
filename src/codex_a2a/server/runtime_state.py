@@ -3,12 +3,16 @@ from __future__ import annotations
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any
 
-from sqlalchemy import Float, JSON, String, delete, select
+from sqlalchemy import JSON, Float, String, delete, select
 from sqlalchemy.engine import make_url
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 from codex_a2a.config import Settings
@@ -74,27 +78,19 @@ async def _noop() -> None:
     return None
 
 
-def _default_database_url(settings: Settings) -> str:
-    base_path = (
-        Path(settings.codex_workspace_root).expanduser()
-        if settings.codex_workspace_root
-        else Path.cwd()
-    )
-    db_path = (base_path / ".codex-a2a" / "tasks.db").resolve()
-    return f"sqlite+aiosqlite:///{db_path}"
-
-
 class RuntimeStateStore:
-    def __init__(self, engine: AsyncEngine) -> None:
+    def __init__(self, engine: AsyncEngine, *, auto_create: bool) -> None:
         self._engine = engine
         self._session_maker = async_sessionmaker(self._engine, expire_on_commit=False)
+        self._auto_create = auto_create
         self._initialized = False
 
     async def initialize(self) -> None:
         if self._initialized:
             return
-        async with self._engine.begin() as conn:
-            await conn.run_sync(_Base.metadata.create_all)
+        if self._auto_create:
+            async with self._engine.begin() as conn:
+                await conn.run_sync(_Base.metadata.create_all)
         self._initialized = True
 
     async def dispose(self) -> None:
@@ -110,7 +106,9 @@ class RuntimeStateStore:
 
     async def _purge_expired_session_state(self, session: AsyncSession) -> None:
         now = time.monotonic()
-        await session.execute(delete(_SessionBindingRow).where(_SessionBindingRow.expires_at <= now))
+        await session.execute(
+            delete(_SessionBindingRow).where(_SessionBindingRow.expires_at <= now)
+        )
         await session.execute(delete(_SessionOwnerRow).where(_SessionOwnerRow.expires_at <= now))
         await session.execute(
             delete(_PendingSessionClaimRow).where(_PendingSessionClaimRow.expires_at <= now)
@@ -259,9 +257,7 @@ class RuntimeStateStore:
                     _PendingInterruptRequestRow.created_at <= cutoff
                 )
             )
-            rows = (
-                await session.scalars(select(_PendingInterruptRequestRow))
-            ).all()
+            rows = (await session.scalars(select(_PendingInterruptRequestRow))).all()
 
         return [
             PersistedInterruptRequest(
@@ -280,27 +276,27 @@ class RuntimeStateStore:
 
 
 def build_runtime_state_runtime(settings: Settings) -> RuntimeStateRuntime:
-    if settings.a2a_task_store_backend == "memory":
+    if not settings.a2a_database_url:
         return RuntimeStateRuntime(state_store=None, startup=_noop, shutdown=_noop)
 
-    database_url = settings.a2a_task_store_database_url or _default_database_url(settings)
-    url = make_url(database_url)
-
-    if url.drivername.startswith("sqlite"):
-        database_path = url.database
-        if database_path and database_path != ":memory:" and not database_path.startswith("file:"):
-            path = Path(database_path)
-            if not path.is_absolute():
-                path = (Path.cwd() / path).resolve()
-            path.parent.mkdir(parents=True, exist_ok=True)
-
+    url = make_url(settings.a2a_database_url)
     engine = create_async_engine(
-        database_url,
+        settings.a2a_database_url,
         pool_pre_ping=not url.drivername.startswith("sqlite"),
     )
-    state_store = RuntimeStateStore(engine)
+    state_store = RuntimeStateStore(
+        engine,
+        auto_create=settings.a2a_database_auto_create,
+    )
+
+    async def _startup() -> None:
+        await state_store.initialize()
+
+    async def _shutdown() -> None:
+        await state_store.dispose()
+
     return RuntimeStateRuntime(
         state_store=state_store,
-        startup=state_store.initialize,
-        shutdown=state_store.dispose,
+        startup=_startup,
+        shutdown=_shutdown,
     )

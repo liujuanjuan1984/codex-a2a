@@ -15,7 +15,6 @@ def test_build_task_store_runtime_uses_memory_backend_when_configured() -> None:
     runtime = build_task_store_runtime(
         make_settings(
             a2a_bearer_token="test-token",
-            a2a_task_store_backend="memory",
         )
     )
 
@@ -27,8 +26,7 @@ async def test_database_task_store_persists_tasks_across_runtime_rebuilds(tmp_pa
     database_url = f"sqlite+aiosqlite:///{(tmp_path / 'tasks.db').resolve()}"
     settings = make_settings(
         a2a_bearer_token="test-token",
-        a2a_task_store_backend="database",
-        a2a_task_store_database_url=database_url,
+        a2a_database_url=database_url,
     )
 
     first_runtime = build_task_store_runtime(settings)

@@ -21,25 +21,15 @@ async def _noop() -> None:
     return None
 
 
-def _default_database_url(settings: Settings) -> str:
-    base_path = (
-        Path(settings.codex_workspace_root).expanduser()
-        if settings.codex_workspace_root
-        else Path.cwd()
-    )
-    db_path = (base_path / ".codex-a2a" / "tasks.db").resolve()
-    return f"sqlite+aiosqlite:///{db_path}"
-
-
 def build_task_store_runtime(settings: Settings) -> TaskStoreRuntime:
-    if settings.a2a_task_store_backend == "memory":
+    if not settings.a2a_database_url:
         return TaskStoreRuntime(task_store=InMemoryTaskStore(), startup=_noop, shutdown=_noop)
 
     from a2a.server.tasks.database_task_store import DatabaseTaskStore
     from sqlalchemy.engine import make_url
     from sqlalchemy.ext.asyncio import create_async_engine
 
-    database_url = settings.a2a_task_store_database_url or _default_database_url(settings)
+    database_url = settings.a2a_database_url
     url = make_url(database_url)
 
     if url.drivername.startswith("sqlite"):
@@ -56,8 +46,8 @@ def build_task_store_runtime(settings: Settings) -> TaskStoreRuntime:
     )
     task_store = DatabaseTaskStore(
         engine=engine,
-        create_table=settings.a2a_task_store_create_table,
-        table_name=settings.a2a_task_store_table_name,
+        create_table=settings.a2a_database_auto_create,
+        table_name=settings.a2a_database_task_table_name,
     )
 
     async def _startup() -> None:

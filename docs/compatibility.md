@@ -62,11 +62,12 @@ semantics.
 
 Task durability is deployment-dependent:
 
-- `A2A_TASK_STORE_BACKEND=database` preserves task lookup/cancel/resubscribe
-  state across process restarts according to the configured database backend.
+- `A2A_DATABASE_URL=<sqlalchemy-async-url>` preserves task
+  lookup/cancel/resubscribe state across process restarts according to the
+  configured database backend.
 - The same database-backed mode also preserves session-binding ownership state
   and pending interrupt callback requests that still fall within their TTL.
-- `A2A_TASK_STORE_BACKEND=memory` keeps the legacy single-process in-memory
+- Leaving `A2A_DATABASE_URL` unset keeps the legacy single-process in-memory
   behavior and should be treated as non-durable.
 
 ## Deployment Profile

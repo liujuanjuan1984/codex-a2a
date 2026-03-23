@@ -11,8 +11,7 @@ from tests.support.settings import make_settings
 async def test_session_binding_and_owner_restore_from_database(tmp_path) -> None:
     settings = make_settings(
         a2a_bearer_token="test-token",
-        a2a_task_store_backend="database",
-        a2a_task_store_database_url=f"sqlite+aiosqlite:///{(tmp_path / 'runtime.db').resolve()}",
+        a2a_database_url=f"sqlite+aiosqlite:///{(tmp_path / 'runtime.db').resolve()}",
     )
     runtime_state = build_runtime_state_runtime(settings)
     await runtime_state.startup()
@@ -50,8 +49,7 @@ async def test_session_binding_and_owner_restore_from_database(tmp_path) -> None
 async def test_pending_session_claim_restore_from_database(tmp_path) -> None:
     settings = make_settings(
         a2a_bearer_token="test-token",
-        a2a_task_store_backend="database",
-        a2a_task_store_database_url=f"sqlite+aiosqlite:///{(tmp_path / 'runtime.db').resolve()}",
+        a2a_database_url=f"sqlite+aiosqlite:///{(tmp_path / 'runtime.db').resolve()}",
     )
     runtime_state = build_runtime_state_runtime(settings)
     await runtime_state.startup()
