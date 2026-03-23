@@ -75,6 +75,4 @@ def test_session_extension_guard_hook_bundle_fails_when_incomplete() -> None:
         return True
 
     with pytest.raises(ValueError, match="missing required session control hooks"):
-        _build_extension_app(
-            guard_hooks=SessionGuardHooks(session_owner_matcher=owner_matcher)
-        )
+        _build_extension_app(guard_hooks=SessionGuardHooks(session_owner_matcher=owner_matcher))

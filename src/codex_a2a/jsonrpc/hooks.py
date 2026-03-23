@@ -44,3 +44,8 @@ class SessionGuardHooks:
         if self.session_claim_release is None:
             missing.append("session_claim_release")
         return tuple(missing)
+
+    def resolve_directory(self, directory: str | None) -> str | None:
+        if directory is None or self.directory_resolver is None:
+            return directory
+        return self.directory_resolver(directory)

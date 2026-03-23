@@ -35,12 +35,7 @@ class CodexSessionQueryJSONRPCApplication(A2AFastAPIApplication):
         methods: dict[str, str],
         protocol_version: str,
         supported_methods: list[str],
-        guard_hooks: SessionGuardHooks | None = None,
-        directory_resolver=None,
-        session_claim=None,
-        session_claim_finalize=None,
-        session_claim_release=None,
-        session_owner_matcher=None,
+        guard_hooks: SessionGuardHooks,
         **kwargs: Any,
     ):
         super().__init__(*args, **kwargs)
@@ -67,18 +62,7 @@ class CodexSessionQueryJSONRPCApplication(A2AFastAPIApplication):
         }
         if self._method_shell is not None:
             self._extension_method_set.add(self._method_shell)
-        self._guard_hooks = guard_hooks or SessionGuardHooks.from_legacy(
-            directory_resolver=directory_resolver,
-            session_claim=session_claim,
-            session_claim_finalize=session_claim_finalize,
-            session_claim_release=session_claim_release,
-            session_owner_matcher=session_owner_matcher,
-        )
-        self._directory_resolver = self._guard_hooks.directory_resolver
-        self._session_claim = self._guard_hooks.session_claim
-        self._session_claim_finalize = self._guard_hooks.session_claim_finalize
-        self._session_claim_release = self._guard_hooks.session_claim_release
-        self._session_owner_matcher = self._guard_hooks.session_owner_matcher
+        self._guard_hooks = guard_hooks
         self._validate_guard_hooks()
 
     def _validate_guard_hooks(self) -> None:
