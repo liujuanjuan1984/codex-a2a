@@ -5,7 +5,7 @@ import logging
 import uuid
 from collections.abc import Mapping
 from contextlib import suppress
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from a2a.server.agent_execution import AgentExecutor, RequestContext
 from a2a.server.events.event_queue import EventQueue
@@ -42,6 +42,9 @@ from codex_a2a.upstream.client import CodexClient
 
 from .output_mapping import enqueue_artifact_update, extract_token_usage, merge_token_usage
 
+if TYPE_CHECKING:
+    from codex_a2a.server.runtime_state import RuntimeStateStore
+
 logger = logging.getLogger(__name__)
 
 
@@ -56,6 +59,7 @@ class CodexAgentExecutor(AgentExecutor):
         session_cache_maxsize: int = 10_000,
         stream_idle_diagnostic_seconds: float | None = None,
         a2a_client_manager: Any | None = None,
+        session_state_store: RuntimeStateStore | None = None,
     ) -> None:
         self._client = client
         self._streaming_enabled = streaming_enabled
@@ -65,6 +69,7 @@ class CodexAgentExecutor(AgentExecutor):
         self._session_runtime = SessionRuntime(
             session_cache_ttl_seconds=session_cache_ttl_seconds,
             session_cache_maxsize=session_cache_maxsize,
+            state_store=session_state_store,
         )
 
     def _resolve_and_validate_directory(self, requested: str | None) -> str | None:

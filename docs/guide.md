@@ -225,6 +225,9 @@ Configuration note:
 - The service configuration layer only accepts `CODEX_*` names for Codex-facing settings.
 - `A2A_TASK_STORE_BACKEND=memory` preserves the legacy single-process ephemeral
   task-store behavior.
+- `A2A_TASK_STORE_BACKEND=database` also persists session-binding ownership
+  state and pending interrupt callback requests needed for cross-restart
+  recovery.
 
 Codex prerequisite note:
 - `codex-a2a` assumes the local `codex` runtime is already usable.

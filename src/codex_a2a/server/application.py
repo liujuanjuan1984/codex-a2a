@@ -27,6 +27,7 @@ from codex_a2a.server.agent_card import build_agent_card
 from codex_a2a.server.call_context import IdentityAwareCallContextBuilder
 from codex_a2a.server.openapi import patch_openapi_contract
 from codex_a2a.server.request_handler import CodexRequestHandler
+from codex_a2a.server.runtime_state import build_runtime_state_runtime
 from codex_a2a.server.task_store import build_task_store_runtime
 from codex_a2a.upstream.client import CodexClient
 
@@ -35,7 +36,17 @@ from .http_middlewares import install_http_middlewares
 
 def create_app(settings: Settings) -> FastAPI:
     install_log_record_factory()
-    client = CodexClient(settings)
+    runtime_state_runtime = build_runtime_state_runtime(settings)
+    if runtime_state_runtime.state_store is None:
+        client = CodexClient(settings)
+    else:
+        try:
+            client = CodexClient(
+                settings,
+                interrupt_request_store=runtime_state_runtime.state_store,
+            )
+        except TypeError:
+            client = CodexClient(settings)
     a2a_client_manager = A2AClientManager(settings)
     executor = CodexAgentExecutor(
         client,
@@ -45,6 +56,7 @@ def create_app(settings: Settings) -> FastAPI:
         session_cache_maxsize=settings.a2a_session_cache_maxsize,
         stream_idle_diagnostic_seconds=settings.a2a_stream_idle_diagnostic_seconds,
         a2a_client_manager=a2a_client_manager,
+        session_state_store=runtime_state_runtime.state_store,
     )
     task_store_runtime = build_task_store_runtime(settings)
     task_store = task_store_runtime.task_store
@@ -56,7 +68,11 @@ def create_app(settings: Settings) -> FastAPI:
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
         await task_store_runtime.startup()
+        await runtime_state_runtime.startup()
         try:
+            restore_interrupts = getattr(client, "restore_persisted_interrupt_requests", None)
+            if callable(restore_interrupts):
+                await restore_interrupts()
             startup_preflight = getattr(client, "startup_preflight", None)
             if callable(startup_preflight):
                 await startup_preflight()
@@ -64,6 +80,7 @@ def create_app(settings: Settings) -> FastAPI:
         finally:
             await a2a_client_manager.close_all()
             await client.close()
+            await runtime_state_runtime.shutdown()
             await task_store_runtime.shutdown()
 
     runtime_profile = build_runtime_profile(settings)
