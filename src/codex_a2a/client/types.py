@@ -72,12 +72,6 @@ class A2ACancelTaskRequest(BaseModel):
         return TaskIdParams(id=self.task_id, metadata=self.metadata)
 
 
-class A2ASendResult(BaseModel):
-    """Normalized payload from a send request."""
-
-    final: Task | Message | None = None
-
-
 A2AClientEvent = (
     Task | Message | tuple[Task, TaskStatusUpdateEvent | TaskArtifactUpdateEvent | None]
 )

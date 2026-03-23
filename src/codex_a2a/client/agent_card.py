@@ -22,7 +22,7 @@ class AgentCardEndpoint:
 
 
 def resolve_agent_card_endpoint(config: A2AClientConfig) -> AgentCardEndpoint:
-    resolved_url = config.resolved_agent_url()
+    resolved_url = config.agent_url.rstrip("/")
     parsed_url = urlsplit(resolved_url)
     if not parsed_url.scheme or not parsed_url.netloc:
         raise A2AClientConfigError(f"agent_url must be absolute URL: {resolved_url}")
