@@ -14,6 +14,7 @@ from fastapi.responses import JSONResponse
 from starlette.requests import Request
 from starlette.responses import Response
 
+from codex_a2a.jsonrpc.hooks import SessionGuardHooks
 from codex_a2a.jsonrpc.interrupts import handle_interrupt_callback_request
 from codex_a2a.jsonrpc.session_control import handle_session_control_request
 from codex_a2a.jsonrpc.session_query import handle_session_query_request
@@ -34,6 +35,7 @@ class CodexSessionQueryJSONRPCApplication(A2AFastAPIApplication):
         methods: dict[str, str],
         protocol_version: str,
         supported_methods: list[str],
+        guard_hooks: SessionGuardHooks | None = None,
         directory_resolver=None,
         session_claim=None,
         session_claim_finalize=None,
@@ -65,21 +67,22 @@ class CodexSessionQueryJSONRPCApplication(A2AFastAPIApplication):
         }
         if self._method_shell is not None:
             self._extension_method_set.add(self._method_shell)
-        self._directory_resolver = directory_resolver
-        self._session_claim = session_claim
-        self._session_claim_finalize = session_claim_finalize
-        self._session_claim_release = session_claim_release
-        self._session_owner_matcher = session_owner_matcher
+        self._guard_hooks = guard_hooks or SessionGuardHooks.from_legacy(
+            directory_resolver=directory_resolver,
+            session_claim=session_claim,
+            session_claim_finalize=session_claim_finalize,
+            session_claim_release=session_claim_release,
+            session_owner_matcher=session_owner_matcher,
+        )
+        self._directory_resolver = self._guard_hooks.directory_resolver
+        self._session_claim = self._guard_hooks.session_claim
+        self._session_claim_finalize = self._guard_hooks.session_claim_finalize
+        self._session_claim_release = self._guard_hooks.session_claim_release
+        self._session_owner_matcher = self._guard_hooks.session_owner_matcher
         self._validate_guard_hooks()
 
     def _validate_guard_hooks(self) -> None:
-        missing_for_session_control: list[str] = []
-        if self._session_claim is None:
-            missing_for_session_control.append("session_claim")
-        if self._session_claim_finalize is None:
-            missing_for_session_control.append("session_claim_finalize")
-        if self._session_claim_release is None:
-            missing_for_session_control.append("session_claim_release")
+        missing_for_session_control = list(self._guard_hooks.missing_session_control_hooks())
         if missing_for_session_control:
             missing = ", ".join(missing_for_session_control)
             raise ValueError(
@@ -87,7 +90,7 @@ class CodexSessionQueryJSONRPCApplication(A2AFastAPIApplication):
                 f"{missing}"
             )
 
-        if self._session_owner_matcher is None:
+        if self._guard_hooks.session_owner_matcher is None:
             raise ValueError(
                 "CodexSessionQueryJSONRPCApplication missing required interrupt ownership "
                 "hook: session_owner_matcher"

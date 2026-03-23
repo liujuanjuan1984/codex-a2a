@@ -94,8 +94,7 @@ async def test_running_execution_snapshot_tracks_and_clears_request() -> None:
 
     await runtime.untrack_running_request(task_id="task-1", context_id="context-A")
     assert (
-        await runtime.running_execution_snapshot(task_id="task-1", context_id="context-A")
-        is None
+        await runtime.running_execution_snapshot(task_id="task-1", context_id="context-A") is None
     )
 
     running_task.cancel()
