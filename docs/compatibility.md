@@ -60,6 +60,13 @@ Current example: terminal `tasks/resubscribe` replay-once behavior is published
 as a service-level contract, not as a claim about generic A2A runtime
 semantics.
 
+Task durability is deployment-dependent:
+
+- `A2A_TASK_STORE_BACKEND=database` preserves task lookup/cancel/resubscribe
+  state across process restarts according to the configured database backend.
+- `A2A_TASK_STORE_BACKEND=memory` keeps the legacy single-process in-memory
+  behavior and should be treated as non-durable.
+
 ## Deployment Profile
 
 The current service profile is intentionally:

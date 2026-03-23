@@ -166,6 +166,13 @@ Current implementation note:
 - `A2A_HOST`: bind host, default `127.0.0.1`
 - `A2A_PORT`: bind port, default `8000`
 - `A2A_BEARER_TOKEN`: required; service fails fast if unset
+- `A2A_TASK_STORE_BACKEND`: `database|memory`, default `database`
+- `A2A_TASK_STORE_DATABASE_URL`: optional SQLAlchemy async database URL; when
+  unset and backend=`database`, the service uses local SQLite at
+  `<workspace-or-cwd>/.codex-a2a/tasks.db`
+- `A2A_TASK_STORE_CREATE_TABLE`: create the task table automatically on
+  startup, default `true`
+- `A2A_TASK_STORE_TABLE_NAME`: task table name, default `tasks`
 - `A2A_ENABLE_HEALTH_ENDPOINT`: enable the authenticated lightweight `/health` probe, default `true`
 - `A2A_ENABLE_SESSION_SHELL`: expose `codex.sessions.shell` on JSON-RPC extensions, default `true`
 - `A2A_LOG_LEVEL`: `DEBUG/INFO/WARNING/ERROR`, default `INFO`
@@ -216,6 +223,8 @@ Current implementation note:
 
 Configuration note:
 - The service configuration layer only accepts `CODEX_*` names for Codex-facing settings.
+- `A2A_TASK_STORE_BACKEND=memory` preserves the legacy single-process ephemeral
+  task-store behavior.
 
 Codex prerequisite note:
 - `codex-a2a` assumes the local `codex` runtime is already usable.

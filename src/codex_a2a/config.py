@@ -41,6 +41,10 @@ _APPROVAL_ESCALATION_BEHAVIORS = {
     "fallback_only",
     "restricted",
 }
+_TASK_STORE_BACKENDS = {
+    "memory",
+    "database",
+}
 
 
 def _parse_str_list(value: Any) -> Any:
@@ -164,6 +168,13 @@ class Settings(BaseSettings):
     a2a_host: str = Field(default="127.0.0.1", alias="A2A_HOST")
     a2a_port: int = Field(default=8000, alias="A2A_PORT")
     a2a_bearer_token: str = Field(..., min_length=1, alias="A2A_BEARER_TOKEN")
+    a2a_task_store_backend: str = Field(default="database", alias="A2A_TASK_STORE_BACKEND")
+    a2a_task_store_database_url: str | None = Field(
+        default=None,
+        alias="A2A_TASK_STORE_DATABASE_URL",
+    )
+    a2a_task_store_create_table: bool = Field(default=True, alias="A2A_TASK_STORE_CREATE_TABLE")
+    a2a_task_store_table_name: str = Field(default="tasks", alias="A2A_TASK_STORE_TABLE_NAME")
 
     # Session cache settings
     a2a_session_cache_ttl_seconds: int = Field(default=3600, alias="A2A_SESSION_CACHE_TTL_SECONDS")
@@ -323,6 +334,24 @@ class Settings(BaseSettings):
             allowed=_FILESYSTEM_SCOPES,
             env_name="A2A_EXECUTION_WRITE_ACCESS_SCOPE",
         )
+
+    @field_validator("a2a_task_store_backend")
+    @classmethod
+    def validate_task_store_backend(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        return _validate_choice(
+            normalized,
+            allowed=_TASK_STORE_BACKENDS,
+            env_name="A2A_TASK_STORE_BACKEND",
+        )
+
+    @field_validator("a2a_task_store_table_name")
+    @classmethod
+    def validate_task_store_table_name(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("A2A_TASK_STORE_TABLE_NAME must not be empty")
+        return normalized
 
     @field_validator("a2a_client_supported_transports", mode="before")
     @classmethod

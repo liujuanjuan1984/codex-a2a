@@ -52,6 +52,23 @@ def test_settings_parse_ops_flags_and_timeouts():
         assert settings.a2a_interrupt_request_ttl_seconds == 90
 
 
+def test_settings_parse_task_store_configuration() -> None:
+    env = {
+        "A2A_BEARER_TOKEN": "test",
+        "A2A_TASK_STORE_BACKEND": "memory",
+        "A2A_TASK_STORE_DATABASE_URL": "sqlite+aiosqlite:////tmp/tasks.db",
+        "A2A_TASK_STORE_CREATE_TABLE": "false",
+        "A2A_TASK_STORE_TABLE_NAME": "a2a_tasks",
+    }
+    with mock.patch.dict(os.environ, env, clear=True):
+        settings = Settings.from_env()
+
+    assert settings.a2a_task_store_backend == "memory"
+    assert settings.a2a_task_store_database_url == "sqlite+aiosqlite:////tmp/tasks.db"
+    assert settings.a2a_task_store_create_table is False
+    assert settings.a2a_task_store_table_name == "a2a_tasks"
+
+
 def test_settings_parse_execution_environment_flags() -> None:
     env = {
         "A2A_BEARER_TOKEN": "test",
@@ -121,6 +138,17 @@ def test_settings_reject_invalid_execution_sandbox_mode() -> None:
         with pytest.raises(ValidationError) as excinfo:
             Settings.from_env()
     assert "A2A_EXECUTION_SANDBOX_MODE" in str(excinfo.value)
+
+
+def test_settings_reject_invalid_task_store_backend() -> None:
+    env = {
+        "A2A_BEARER_TOKEN": "test",
+        "A2A_TASK_STORE_BACKEND": "redis",
+    }
+    with mock.patch.dict(os.environ, env, clear=True):
+        with pytest.raises(ValidationError) as excinfo:
+            Settings.from_env()
+    assert "A2A_TASK_STORE_BACKEND" in str(excinfo.value)
 
 
 def test_settings_parse_a2a_client_transport_and_timeouts() -> None:

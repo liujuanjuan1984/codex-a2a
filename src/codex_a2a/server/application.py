@@ -7,7 +7,6 @@ from typing import Any
 import uvicorn
 from a2a.server.apps.jsonrpc.fastapi_app import A2AFastAPI
 from a2a.server.apps.rest.rest_adapter import RESTAdapter
-from a2a.server.tasks.inmemory_task_store import InMemoryTaskStore
 from fastapi import FastAPI
 
 from codex_a2a.client import A2AClientManager
@@ -28,6 +27,7 @@ from codex_a2a.server.agent_card import build_agent_card
 from codex_a2a.server.call_context import IdentityAwareCallContextBuilder
 from codex_a2a.server.openapi import patch_openapi_contract
 from codex_a2a.server.request_handler import CodexRequestHandler
+from codex_a2a.server.task_store import build_task_store_runtime
 from codex_a2a.upstream.client import CodexClient
 
 from .http_middlewares import install_http_middlewares
@@ -46,7 +46,8 @@ def create_app(settings: Settings) -> FastAPI:
         stream_idle_diagnostic_seconds=settings.a2a_stream_idle_diagnostic_seconds,
         a2a_client_manager=a2a_client_manager,
     )
-    task_store = InMemoryTaskStore()
+    task_store_runtime = build_task_store_runtime(settings)
+    task_store = task_store_runtime.task_store
     handler = CodexRequestHandler(
         agent_executor=executor,
         task_store=task_store,
@@ -54,12 +55,16 @@ def create_app(settings: Settings) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
-        startup_preflight = getattr(client, "startup_preflight", None)
-        if callable(startup_preflight):
-            await startup_preflight()
-        yield
-        await a2a_client_manager.close_all()
-        await client.close()
+        await task_store_runtime.startup()
+        try:
+            startup_preflight = getattr(client, "startup_preflight", None)
+            if callable(startup_preflight):
+                await startup_preflight()
+            yield
+        finally:
+            await a2a_client_manager.close_all()
+            await client.close()
+            await task_store_runtime.shutdown()
 
     runtime_profile = build_runtime_profile(settings)
     capability_snapshot = build_capability_snapshot(runtime_profile=runtime_profile)
@@ -99,6 +104,7 @@ def create_app(settings: Settings) -> FastAPI:
     app.state.codex_client = client
     app.state.codex_executor = executor
     app.state.a2a_client_manager = a2a_client_manager
+    app.state.task_store = task_store
 
     rest_adapter = RESTAdapter(
         agent_card=agent_card,
