@@ -66,12 +66,6 @@ class CodexAgentExecutor(AgentExecutor):
             session_cache_ttl_seconds=session_cache_ttl_seconds,
             session_cache_maxsize=session_cache_maxsize,
         )
-        self._sessions = self._session_runtime.session_bindings
-        self._session_owners = self._session_runtime.session_owners
-        self._pending_session_claims = self._session_runtime.pending_session_claims
-        self._running_requests = self._session_runtime.running_requests
-        self._running_stop_events = self._session_runtime.running_stop_events
-        self._running_identities = self._session_runtime.running_identities
 
     def _resolve_and_validate_directory(self, requested: str | None) -> str | None:
         return resolve_and_validate_directory(self._client, requested)
@@ -164,14 +158,17 @@ class CodexAgentExecutor(AgentExecutor):
             )
 
         try:
-            session_id, pending_preferred_claim = await self._get_or_create_session(
-                identity,
-                context_id,
-                user_text,
+            session_id, pending_preferred_claim = await self._session_runtime.get_or_create_session(
+                identity=identity,
+                context_id=context_id,
+                title=user_text,
                 preferred_session_id=bound_session_id,
-                directory=directory,
+                create_session=lambda: self._client.create_session(
+                    title=user_text,
+                    directory=directory,
+                ),
             )
-            session_lock = await self._get_session_lock(session_id)
+            session_lock = await self._session_runtime.get_session_lock(session_id)
             await session_lock.acquire()
             await event_queue.enqueue_event(
                 TaskStatusUpdateEvent(
@@ -209,7 +206,7 @@ class CodexAgentExecutor(AgentExecutor):
                     **send_kwargs,
                 )
                 if pending_preferred_claim:
-                    await self._finalize_preferred_session_binding(
+                    await self._session_runtime.finalize_preferred_session_binding(
                         identity=identity,
                         context_id=context_id,
                         session_id=session_id,
@@ -279,7 +276,7 @@ class CodexAgentExecutor(AgentExecutor):
         finally:
             if pending_preferred_claim and session_id:
                 with suppress(Exception):
-                    await self._release_preferred_session_claim(
+                    await self._session_runtime.release_preferred_session_claim(
                         identity=identity,
                         session_id=session_id,
                     )
@@ -453,72 +450,6 @@ class CodexAgentExecutor(AgentExecutor):
                         message=f"Cancel failed: {exc}",
                         streaming_request=False,
                     )
-
-    async def _get_or_create_session(
-        self,
-        identity: str,
-        context_id: str,
-        title: str,
-        *,
-        preferred_session_id: str | None = None,
-        directory: str | None = None,
-    ) -> tuple[str, bool]:
-        return await self._session_runtime.get_or_create_session(
-            identity=identity,
-            context_id=context_id,
-            title=title,
-            preferred_session_id=preferred_session_id,
-            create_session=lambda: self._client.create_session(title=title, directory=directory),
-        )
-
-    async def _finalize_preferred_session_binding(
-        self,
-        *,
-        identity: str,
-        context_id: str,
-        session_id: str,
-    ) -> None:
-        await self._session_runtime.finalize_preferred_session_binding(
-            identity=identity,
-            context_id=context_id,
-            session_id=session_id,
-        )
-
-    async def _release_preferred_session_claim(self, *, identity: str, session_id: str) -> None:
-        await self._session_runtime.release_preferred_session_claim(
-            identity=identity,
-            session_id=session_id,
-        )
-
-    async def claim_session(self, *, identity: str, session_id: str) -> bool:
-        return await self._session_runtime.claim_session(
-            identity=identity,
-            session_id=session_id,
-        )
-
-    async def finalize_session_claim(self, *, identity: str, session_id: str) -> None:
-        await self._session_runtime.finalize_session_claim(
-            identity=identity,
-            session_id=session_id,
-        )
-
-    async def release_session_claim(self, *, identity: str, session_id: str) -> None:
-        await self._session_runtime.release_session_claim(
-            identity=identity,
-            session_id=session_id,
-        )
-
-    async def session_owner_matches(self, *, identity: str, session_id: str) -> bool | None:
-        return await self._session_runtime.session_owner_matches(
-            identity=identity,
-            session_id=session_id,
-        )
-
-    def resolve_directory(self, requested: str | None) -> str | None:
-        return self._resolve_and_validate_directory(requested)
-
-    async def _get_session_lock(self, session_id: str) -> asyncio.Lock:
-        return await self._session_runtime.get_session_lock(session_id)
 
     async def _emit_error(
         self,

@@ -17,9 +17,6 @@ class A2AClientConfig(BaseModel):
     accepted_output_modes: list[str] = Field(default_factory=list)
     extensions: list[str] = Field(default_factory=list)
 
-    def resolved_agent_url(self) -> str:
-        return self.agent_url.rstrip("/")
-
     @field_validator("card_fetch_timeout_seconds")
     @classmethod
     def validate_card_fetch_timeout(cls, value: float) -> float:

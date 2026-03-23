@@ -21,15 +21,6 @@ class A2AClientManager:
     ) -> None:
         self._settings = settings
         self._client_factory = client_factory
-        self.client_settings = {
-            "request_timeout_seconds": settings.a2a_client_timeout_seconds,
-            "card_fetch_timeout_seconds": settings.a2a_client_card_fetch_timeout_seconds,
-            "use_client_preference": settings.a2a_client_use_client_preference,
-            "supported_transports": list(settings.a2a_client_supported_transports),
-            "default_headers": {"Authorization": f"Bearer {settings.a2a_client_bearer_token}"}
-            if settings.a2a_client_bearer_token
-            else {},
-        }
         self._clients: dict[str, A2AClient] = {}
         self._lock = asyncio.Lock()
 

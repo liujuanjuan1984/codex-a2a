@@ -72,9 +72,12 @@ async def handle_session_control_request(
     identity = getattr(request.state, "user_identity", None)
     pending_claim = False
     claim_finalized = False
-    if isinstance(identity, str) and identity and app._session_claim is not None:
+    guard_hooks = app._guard_hooks
+    if isinstance(identity, str) and identity and guard_hooks.session_claim is not None:
         try:
-            pending_claim = await app._session_claim(identity=identity, session_id=session_id)
+            pending_claim = await guard_hooks.session_claim(
+                identity=identity, session_id=session_id
+            )
         except PermissionError:
             return session_forbidden_response(app, base_request.id, session_id=session_id)
 
@@ -110,8 +113,12 @@ async def handle_session_control_request(
                 )
             result = {"item": item}
 
-        if pending_claim and isinstance(identity, str) and app._session_claim_finalize is not None:
-            await app._session_claim_finalize(identity=identity, session_id=session_id)
+        if (
+            pending_claim
+            and isinstance(identity, str)
+            and guard_hooks.session_claim_finalize is not None
+        ):
+            await guard_hooks.session_claim_finalize(identity=identity, session_id=session_id)
             claim_finalized = True
     except PermissionError:
         return session_forbidden_response(app, base_request.id, session_id=session_id)
@@ -158,9 +165,9 @@ async def handle_session_control_request(
             pending_claim
             and not claim_finalized
             and isinstance(identity, str)
-            and app._session_claim_release is not None
+            and guard_hooks.session_claim_release is not None
         ):
-            await app._session_claim_release(identity=identity, session_id=session_id)
+            await guard_hooks.session_claim_release(identity=identity, session_id=session_id)
 
     if base_request.id is None:
         return Response(status_code=204)

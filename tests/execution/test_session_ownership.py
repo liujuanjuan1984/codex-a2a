@@ -5,7 +5,7 @@ import pytest
 from a2a.server.events.event_queue import EventQueue
 
 from codex_a2a.execution.executor import CodexAgentExecutor
-from codex_a2a.execution.session_runtime import TTLCache
+from codex_a2a.execution.session_runtime import SessionRuntime, TTLCache
 from codex_a2a.upstream.client import CodexClient
 from tests.support.context import configure_mock_client_runtime, make_request_context_mock
 
@@ -39,6 +39,7 @@ def mock_client():
 async def test_identity_isolation(mock_client):
     executor = CodexAgentExecutor(mock_client, streaming_enabled=False)
     event_queue = AsyncMock(spec=EventQueue)
+    runtime = executor._session_runtime
 
     # User 1, Context A
     context1 = make_request_context_mock(
@@ -50,7 +51,7 @@ async def test_identity_isolation(mock_client):
 
     await executor.execute(context1, event_queue)
     mock_client.create_session.assert_called_once()
-    assert executor._sessions.get(("user-1", "context-A")) == "session-1"
+    assert await runtime.bound_session_for(identity="user-1", context_id="context-A") == "session-1"
 
     # User 2, Context A (Same context ID, different user)
     context2 = make_request_context_mock(
@@ -63,9 +64,9 @@ async def test_identity_isolation(mock_client):
     await executor.execute(context2, event_queue)
     # Should create a NEW session for user-2
     assert mock_client.create_session.call_count == 2
-    assert executor._sessions.get(("user-2", "context-A")) == "session-2"
+    assert await runtime.bound_session_for(identity="user-2", context_id="context-A") == "session-2"
     # User 1's session should still be there
-    assert executor._sessions.get(("user-1", "context-A")) == "session-1"
+    assert await runtime.bound_session_for(identity="user-1", context_id="context-A") == "session-1"
 
 
 @pytest.mark.asyncio
@@ -82,7 +83,8 @@ async def test_session_hijack_prevention(mock_client):
     )
 
     await executor.execute(context1, event_queue)
-    assert executor._session_owners.get("session-1") == "user-1"
+    snapshot = await executor._session_runtime.session_claim_snapshot(session_id="session-1")
+    assert snapshot.owner_identity == "user-1"
 
     # User 2 tries to bind to session-1 via metadata
     context2 = make_request_context_mock(
@@ -145,6 +147,7 @@ async def test_concurrent_session_create_isolated_by_identity():
     executor = CodexAgentExecutor(client, streaming_enabled=False)
     event_queue_1 = AsyncMock(spec=EventQueue)
     event_queue_2 = AsyncMock(spec=EventQueue)
+    runtime = executor._session_runtime
 
     await asyncio.gather(
         executor.execute(
@@ -168,24 +171,25 @@ async def test_concurrent_session_create_isolated_by_identity():
     )
 
     assert client.create_session.call_count == 2
-    assert executor._sessions.get(("user-1", "context-A")) == "session-1"
-    assert executor._sessions.get(("user-2", "context-A")) == "session-2"
+    assert await runtime.bound_session_for(identity="user-1", context_id="context-A") == "session-1"
+    assert await runtime.bound_session_for(identity="user-2", context_id="context-A") == "session-2"
 
 
-def test_session_owner_cache_is_bounded():
-    executor = CodexAgentExecutor(
-        AsyncMock(spec=CodexClient),
-        streaming_enabled=False,
+@pytest.mark.asyncio
+async def test_session_owner_cache_is_bounded():
+    runtime = SessionRuntime(
         session_cache_ttl_seconds=3600,
         session_cache_maxsize=2,
     )
 
-    executor._session_owners.set("session-1", "user-1")
-    executor._session_owners.set("session-2", "user-2")
-    executor._session_owners.set("session-3", "user-3")
+    await runtime.finalize_session_claim(identity="user-1", session_id="session-1")
+    await runtime.finalize_session_claim(identity="user-2", session_id="session-2")
+    await runtime.finalize_session_claim(identity="user-3", session_id="session-3")
 
     # Cache is bounded by maxsize and should not grow unbounded.
-    assert len(executor._session_owners._store) <= 2
+    assert await runtime.session_owner_matches(identity="user-1", session_id="session-1") is None
+    assert await runtime.session_owner_matches(identity="user-2", session_id="session-2") is True
+    assert await runtime.session_owner_matches(identity="user-3", session_id="session-3") is True
 
 
 def test_owner_cache_refresh_on_get_extends_ttl():
@@ -256,8 +260,9 @@ async def test_preferred_session_claim_is_released_on_upstream_failure():
 
     await executor.execute(context, event_queue)
 
-    assert executor._session_owners.get("session-X") is None
-    assert executor._pending_session_claims.get("session-X") is None
+    snapshot = await executor._session_runtime.session_claim_snapshot(session_id="session-X")
+    assert snapshot.owner_identity is None
+    assert snapshot.pending_identity is None
 
 
 @pytest.mark.asyncio
@@ -290,29 +295,33 @@ async def test_preferred_session_claim_is_released_on_upstream_cancellation():
     with pytest.raises(asyncio.CancelledError):
         await executor.execute(context, event_queue)
 
-    assert executor._session_owners.get("session-X") is None
-    assert executor._pending_session_claims.get("session-X") is None
+    snapshot = await executor._session_runtime.session_claim_snapshot(session_id="session-X")
+    assert snapshot.owner_identity is None
+    assert snapshot.pending_identity is None
 
 
 @pytest.mark.asyncio
 async def test_pending_preferred_session_claim_blocks_other_identity():
     executor = CodexAgentExecutor(AsyncMock(spec=CodexClient), streaming_enabled=False)
+    runtime = executor._session_runtime
 
-    session_id, pending = await executor._get_or_create_session(
-        "user-1",
-        "context-A",
-        "hello",
+    session_id, pending = await runtime.get_or_create_session(
+        identity="user-1",
+        context_id="context-A",
+        title="hello",
         preferred_session_id="session-X",
+        create_session=lambda: asyncio.sleep(0, result="unused"),
     )
     assert session_id == "session-X"
     assert pending is True
 
     with pytest.raises(PermissionError, match="not owned by you"):
-        await executor._get_or_create_session(
-            "user-2",
-            "context-B",
-            "hello",
+        await runtime.get_or_create_session(
+            identity="user-2",
+            context_id="context-B",
+            title="hello",
             preferred_session_id="session-X",
+            create_session=lambda: asyncio.sleep(0, result="unused"),
         )
 
-    await executor._release_preferred_session_claim(identity="user-1", session_id="session-X")
+    await runtime.release_preferred_session_claim(identity="user-1", session_id="session-X")

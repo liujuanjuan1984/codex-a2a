@@ -71,6 +71,22 @@ class RunningExecutionSnapshot:
     inflight_create: asyncio.Task[str] | None
 
 
+@dataclass(frozen=True)
+class SessionClaimSnapshot:
+    session_id: str
+    owner_identity: str | None
+    pending_identity: str | None
+
+
+@dataclass(frozen=True)
+class SessionBindingSnapshot:
+    identity: str
+    context_id: str
+    session_id: str | None
+    owner_identity: str | None
+    pending_identity: str | None
+
+
 class SessionRuntime:
     def __init__(
         self,
@@ -95,29 +111,62 @@ class SessionRuntime:
         self._running_identities: dict[tuple[str, str], str] = {}
         self._lock = asyncio.Lock()
 
-    @property
-    def session_bindings(self) -> TTLCache:
-        return self._sessions
+    async def bound_session_for(self, *, identity: str, context_id: str) -> str | None:
+        async with self._lock:
+            return self._sessions.get((identity, context_id))
 
-    @property
-    def session_owners(self) -> TTLCache:
-        return self._session_owners
+    async def binding_snapshot(
+        self,
+        *,
+        identity: str,
+        context_id: str,
+    ) -> SessionBindingSnapshot:
+        async with self._lock:
+            session_id = self._sessions.get((identity, context_id))
+            owner_identity = self._session_owners.get(session_id) if session_id else None
+            pending_identity = self._pending_session_claims.get(session_id) if session_id else None
+        return SessionBindingSnapshot(
+            identity=identity,
+            context_id=context_id,
+            session_id=session_id,
+            owner_identity=owner_identity,
+            pending_identity=pending_identity,
+        )
 
-    @property
-    def pending_session_claims(self) -> dict[str, str]:
-        return self._pending_session_claims
+    async def session_claim_snapshot(self, *, session_id: str) -> SessionClaimSnapshot:
+        async with self._lock:
+            owner_identity = self._session_owners.get(session_id)
+            pending_identity = self._pending_session_claims.get(session_id)
+        return SessionClaimSnapshot(
+            session_id=session_id,
+            owner_identity=owner_identity,
+            pending_identity=pending_identity,
+        )
 
-    @property
-    def running_requests(self) -> dict[tuple[str, str], asyncio.Task[Any]]:
-        return self._running_requests
-
-    @property
-    def running_stop_events(self) -> dict[tuple[str, str], asyncio.Event]:
-        return self._running_stop_events
-
-    @property
-    def running_identities(self) -> dict[tuple[str, str], str]:
-        return self._running_identities
+    async def running_execution_snapshot(
+        self,
+        *,
+        task_id: str,
+        context_id: str,
+    ) -> RunningExecutionSnapshot | None:
+        execution_key = (task_id, context_id)
+        async with self._lock:
+            identity = self._running_identities.get(execution_key)
+            task = self._running_requests.get(execution_key)
+            stop_event = self._running_stop_events.get(execution_key)
+            if identity is None and task is None and stop_event is None:
+                return None
+            inflight_create = (
+                self._inflight_session_creates.get((identity, context_id))
+                if identity is not None
+                else None
+            )
+        return RunningExecutionSnapshot(
+            identity=identity or "",
+            task=task,
+            stop_event=stop_event,
+            inflight_create=inflight_create,
+        )
 
     async def track_running_request(
         self,

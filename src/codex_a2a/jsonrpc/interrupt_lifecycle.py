@@ -66,11 +66,12 @@ async def validate_interrupt_owner(
     response_id: str | int | None,
 ) -> Response | None:
     identity = getattr(request.state, "user_identity", None)
+    owner_matcher = app._guard_hooks.session_owner_matcher
     if not isinstance(identity, str) or not identity.strip():
         return None
-    if binding is None or not binding.session_id or app._session_owner_matcher is None:
+    if binding is None or not binding.session_id or owner_matcher is None:
         return None
-    matches = await app._session_owner_matcher(
+    matches = await owner_matcher(
         identity=identity.strip(),
         session_id=binding.session_id,
     )

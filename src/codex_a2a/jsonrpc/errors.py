@@ -61,10 +61,10 @@ def extract_directory_from_metadata(
 ) -> tuple[str | None, Response | None]:
     if directory is None:
         return None, None
-    if app._directory_resolver is None:
-        return directory, None
     try:
-        return app._directory_resolver(directory), None
+        if app._guard_hooks.directory_resolver is None:
+            return directory, None
+        return app._guard_hooks.directory_resolver(directory), None
     except ValueError as exc:
         return None, app._generate_error_response(
             request_id,
