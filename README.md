@@ -2,28 +2,41 @@
 
 > Expose Codex through A2A.
 
-`codex-a2a` adds an A2A service layer to the local Codex runtime, with
-auth, streaming, session continuity, interrupt handling, and a clear
-deployment boundary.
+`codex-a2a` adds an A2A runtime layer to the local Codex runtime, with
+auth, streaming, session continuity, interrupt handling, a built-in
+outbound A2A client, and a clear deployment boundary.
 
 ## What This Is
 
-- An A2A adapter service for the local Codex runtime.
-- Use it when you need a stable A2A endpoint for apps, gateways, or A2A
-  clients.
+- An A2A adapter service for the local Codex runtime, with inbound runtime
+  exposure plus outbound peer calling.
+- It supports both roles in one process: serving as an A2A Server and hosting
+  an embedded A2A Client for `a2a_call` and CLI-driven peer calls.
+
+## Architecture
 
 ```mermaid
 flowchart TD
-    Client["a2a-client-hub / any A2A client"]
+    External["A2A Clients / a2a-client-hub / Gateways"]
 
-    subgraph ServerSide["Server-side"]
-        Adapter["codex-a2a\nA2A adapter service"]
-        Runtime["Codex app-server / CLI runtime"]
-
-        Adapter <--> Runtime
+    subgraph Adapter["codex-a2a Runtime"]
+        Ingress["Inbound A2A Surface\nHTTP+JSON + JSON-RPC"]
+        Codex["Codex Runtime / Executor"]
+        Outbound["Embedded A2A Client\nCLI call + a2a_call"]
     end
 
-    Client <--> Adapter
+    subgraph Peers["Peer A2A Services"]
+        PeerA2A["Peer A2A Agent"]
+        PeerRuntime["Peer Runtime"]
+        PeerA2A --> PeerRuntime
+    end
+
+    External -->|message/send,\nmessage:stream| Ingress
+    Ingress -->|task execution| Codex
+    Codex -->|stream events / tool results| Ingress
+    Codex -->|a2a_call tool| Outbound
+    Outbound -->|message/send,\nmessage:stream| PeerA2A
+    PeerA2A -->|task / stream result| Outbound
 ```
 
 ## Quick Start
@@ -65,17 +78,53 @@ CODEX_WORKSPACE_ROOT=/abs/path/to/workspace codex-a2a
 
 Agent Card: `http://127.0.0.1:8000/.well-known/agent-card.json`
 
-## What You Get
+## Capabilities
 
-- A2A HTTP+JSON and JSON-RPC entrypoints for Codex
+- A2A HTTP+JSON endpoints such as `/v1/message:send` and
+  `/v1/message:stream`
+- A2A JSON-RPC support on `POST /`
+- Embedded client access through `codex-a2a call`
+- Autonomous outbound peer calls through the `a2a_call` tool
 - SSE streaming with normalized `text`, `reasoning`, and `tool_call` blocks
-- session continuation and session query extensions
-- interrupt lifecycle mapping and callback validation
-- bearer-token auth, payload logging controls, and secret-handling guardrails
-- released-CLI startup and source-based runtime paths
+- Session continuity and session query extensions
+- Interrupt lifecycle mapping and callback validation
+- Transport selection, Agent Card discovery, timeout control, and bearer-token
+  auth for outbound A2A calls
+- Payload logging controls, secret-handling guardrails, and released-CLI
+  startup / source-based runtime paths
 
 Detailed protocol contracts, examples, and extension docs live in
 [Usage Guide](docs/guide.md).
+
+## Peering Node / Outbound Access
+
+`codex-a2a` supports a "Peering Node" architecture where one process can both
+expose an inbound A2A surface and call peer A2A services outbound.
+
+### CLI Client
+
+Call another A2A agent directly from the command line:
+
+```bash
+codex-a2a call http://other-agent:8000 "How are you?" --token your-outbound-token
+```
+
+### Outbound Agent Calls
+
+The server can autonomously execute `a2a_call(url, message)` tool calls emitted
+by the Codex runtime. Results are fetched through A2A and returned back into
+the local execution flow as tool results.
+
+For authenticated peers, configure `A2A_CLIENT_BEARER_TOKEN` for server-side
+outbound calls. CLI calls can continue using `--token` or
+`A2A_CLIENT_BEARER_TOKEN`.
+
+Server-side outbound client settings are wired through runtime config:
+`A2A_CLIENT_TIMEOUT_SECONDS`,
+`A2A_CLIENT_CARD_FETCH_TIMEOUT_SECONDS`,
+`A2A_CLIENT_USE_CLIENT_PREFERENCE`,
+`A2A_CLIENT_BEARER_TOKEN`, and
+`A2A_CLIENT_SUPPORTED_TRANSPORTS`.
 
 ## When To Use It
 
@@ -84,29 +133,33 @@ Use this project when:
 - you want to keep Codex as the runtime
 - you need A2A transports and Agent Card discovery
 - you want a thin service boundary instead of building your own adapter
+- you want inbound serving and outbound peer access in one deployable unit
 
 Look elsewhere if:
 
 - you need hard multi-tenant isolation inside one shared runtime
 - you want this project to manage your process supervisor or host bootstrap
-- you want a general client integration layer rather than a server wrapper
+- you want a general client integration layer rather than a runtime adapter
 
 ## Recommended Client Side
 
-If you want a client-side integration layer to consume this service, prefer
+If you want a broader application-facing client integration layer, prefer
 [a2a-client-hub](https://github.com/liujuanjuan1984/a2a-client-hub).
 
-It is a better place for client concerns such as A2A consumption, upstream
-adapter normalization, and application-facing integration, while
-`codex-a2a` stays focused on the server/runtime boundary around Codex.
+It is a better place for higher-level client concerns such as A2A consumption,
+upstream adapter normalization, and application-facing integration, while
+`codex-a2a` stays focused on the runtime boundary around Codex plus embedded
+peer calling.
 
 ## Deployment Boundary
 
 This repository improves the service boundary around Codex, but it does not
 turn Codex into a hardened multi-tenant platform.
 
-- `A2A_BEARER_TOKEN` protects the A2A surface.
+- `A2A_BEARER_TOKEN` protects the inbound A2A surface.
 - Provider auth and default model configuration remain on the Codex side.
+- Use `A2A_CLIENT_BEARER_TOKEN` for server-side outbound peer calls initiated
+  by `a2a_call`.
 - One deployed instance should be treated as a single-tenant trust boundary.
 - For mutually untrusted tenants, run separate instances with isolated users,
   workspaces, credentials, and ports.
