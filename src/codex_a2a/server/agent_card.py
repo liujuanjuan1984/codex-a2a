@@ -41,6 +41,11 @@ def _build_agent_card_description(settings: Settings, runtime_profile: RuntimePr
     )
     parts: list[str] = [base, summary]
     parts.append(
+        "This repository currently ships as an alpha project; treat the declared "
+        "machine-readable A2A contract surfaces as compatibility-sensitive rather "
+        "than the full internal implementation."
+    )
+    parts.append(
         "Within one codex-a2a instance, all consumers share the same "
         "underlying Codex workspace/environment."
     )

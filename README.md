@@ -6,6 +6,11 @@
 auth, streaming, session continuity, interrupt handling, a built-in
 outbound A2A client, and a clear deployment boundary.
 
+This repository currently ships as an alpha project. Within that alpha line,
+the intended stable interoperability surface is the declared A2A core method
+set plus the machine-readable extension contracts published through Agent Card
+and OpenAPI metadata.
+
 ## What This Is
 
 - An A2A adapter service for the local Codex runtime, with inbound runtime

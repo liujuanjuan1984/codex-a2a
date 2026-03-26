@@ -20,6 +20,8 @@ def test_agent_card_description_reflects_actual_transport_capabilities() -> None
     assert "tasks/get, tasks/cancel" in card.description
     assert "machine-readable wire contract" in card.description
     assert "machine-readable compatibility profile" in card.description
+    assert "alpha project" in card.description
+    assert "compatibility-sensitive" in card.description
     assert "all consumers share the same underlying Codex workspace/environment" in card.description
     assert "single-tenant, self-hosted coding workflows" in card.description
 
