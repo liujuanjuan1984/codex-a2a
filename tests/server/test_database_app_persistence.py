@@ -122,7 +122,7 @@ async def test_database_backend_persists_task_session_and_interrupt_state_across
             )
             self._pending_request_ids.add(request_id)
 
-        def resolve_interrupt_request(self, request_id: str):
+        async def resolve_interrupt_request(self, request_id: str):
             if request_id not in self._pending_request_ids:
                 return "missing", None
             from codex_a2a.upstream.interrupts import InterruptRequestBinding
@@ -137,7 +137,7 @@ async def test_database_backend_persists_task_session_and_interrupt_state_across
                 ),
             )
 
-        def discard_interrupt_request(self, request_id: str) -> None:
+        async def discard_interrupt_request(self, request_id: str) -> None:
             self._pending_request_ids.discard(request_id)
 
         async def permission_reply(
@@ -156,7 +156,7 @@ async def test_database_backend_persists_task_session_and_interrupt_state_across
                     "directory": directory,
                 }
             )
-            self.discard_interrupt_request(request_id)
+            await self.discard_interrupt_request(request_id)
             if self._interrupt_request_store is not None:
                 await self._interrupt_request_store.delete_interrupt_request(request_id=request_id)
             return True

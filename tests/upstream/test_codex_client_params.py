@@ -202,7 +202,8 @@ async def test_question_reply_builds_answer_map() -> None:
     ]
 
 
-def test_interrupt_request_status_uses_configured_ttl(monkeypatch) -> None:
+@pytest.mark.asyncio
+async def test_interrupt_request_status_uses_configured_ttl(monkeypatch) -> None:
     client = CodexClient(
         make_settings(
             a2a_bearer_token="t-1",
@@ -222,12 +223,12 @@ def test_interrupt_request_status_uses_configured_ttl(monkeypatch) -> None:
     )
 
     monkeypatch.setattr("codex_a2a.upstream.interrupts.time.monotonic", lambda: 14.0)
-    assert client.resolve_interrupt_request("req-1")[0] == "active"
+    assert (await client.resolve_interrupt_request("req-1"))[0] == "active"
 
     monkeypatch.setattr("codex_a2a.upstream.interrupts.time.monotonic", lambda: 15.0)
-    assert client.resolve_interrupt_request("req-1")[0] == "expired"
-    assert client.resolve_interrupt_request("req-1")[0] == "missing"
-    assert "200" not in client._pending_server_requests
+    assert (await client.resolve_interrupt_request("req-1"))[0] == "expired"
+    assert (await client.resolve_interrupt_request("req-1"))[0] == "missing"
+    assert "req-1" not in client._pending_server_requests
 
 
 @pytest.mark.asyncio

@@ -925,7 +925,7 @@ async def test_interrupt_callback_extension_permission_reply(monkeypatch):
         assert dummy.permission_reply_calls[0]["request_id"] == "perm-1"
         assert dummy.permission_reply_calls[0]["reply"] == "once"
         assert dummy.permission_reply_calls[0]["directory"] == "/workspace"
-        status, _ = dummy.resolve_interrupt_request("perm-1")
+        status, _ = await dummy.resolve_interrupt_request("perm-1")
         assert status == "missing"
 
 
@@ -1003,8 +1003,8 @@ async def test_interrupt_callback_extension_question_reply_and_reject(monkeypatc
         reject_payload = reject_resp.json()
         assert reject_payload["result"]["ok"] is True
         assert dummy.question_reject_calls[0]["request_id"] == "q-2"
-        assert dummy.resolve_interrupt_request("q-1")[0] == "missing"
-        assert dummy.resolve_interrupt_request("q-2")[0] == "missing"
+        assert (await dummy.resolve_interrupt_request("q-1"))[0] == "missing"
+        assert (await dummy.resolve_interrupt_request("q-2"))[0] == "missing"
 
 
 @pytest.mark.asyncio
@@ -1050,7 +1050,7 @@ async def test_interrupt_callback_extension_maps_404_to_interrupt_not_found(monk
         payload = resp.json()
         assert payload["error"]["code"] == -32004
         assert payload["error"]["data"]["type"] == "INTERRUPT_REQUEST_NOT_FOUND"
-        assert dummy.resolve_interrupt_request("perm-404")[0] == "missing"
+        assert (await dummy.resolve_interrupt_request("perm-404"))[0] == "missing"
 
 
 @pytest.mark.asyncio
@@ -1115,7 +1115,7 @@ async def test_interrupt_callback_extension_returns_expired_for_stale_request(mo
         payload = resp.json()
         assert payload["error"]["code"] == -32007
         assert payload["error"]["data"]["type"] == "INTERRUPT_REQUEST_EXPIRED"
-        assert dummy.resolve_interrupt_request("perm-expired")[0] == "missing"
+        assert (await dummy.resolve_interrupt_request("perm-expired"))[0] == "missing"
 
 
 @pytest.mark.asyncio
@@ -1150,7 +1150,7 @@ async def test_interrupt_callback_extension_rejects_interrupt_type_mismatch(monk
         assert payload["error"]["data"]["expected_interrupt_type"] == "question"
         assert payload["error"]["data"]["actual_interrupt_type"] == "permission"
         assert dummy.question_reply_calls == []
-        assert dummy.resolve_interrupt_request("perm-type")[0] == "active"
+        assert (await dummy.resolve_interrupt_request("perm-type"))[0] == "active"
 
 
 @pytest.mark.asyncio
@@ -1193,4 +1193,4 @@ async def test_interrupt_callback_extension_masks_owner_mismatch_as_not_found(mo
         assert payload["error"]["code"] == -32004
         assert payload["error"]["data"]["type"] == "INTERRUPT_REQUEST_NOT_FOUND"
         assert dummy.permission_reply_calls == []
-        assert dummy.resolve_interrupt_request("perm-owned")[0] == "active"
+        assert (await dummy.resolve_interrupt_request("perm-owned"))[0] == "active"

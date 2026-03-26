@@ -951,7 +951,7 @@ class CodexClient:
             interrupt_request_ttl_seconds=self._interrupt_request_ttl_seconds,
         )
 
-    def resolve_interrupt_request(
+    async def resolve_interrupt_request(
         self, request_id: str
     ) -> tuple[str, InterruptRequestBinding | None]:
         request_key = request_id.strip()
@@ -960,35 +960,24 @@ class CodexClient:
             return "missing", None
         status = self._interrupt_request_status(pending.binding)
         if status == "expired":
-            self._pending_server_requests.pop(request_key, None)
-            self._schedule_interrupt_request_delete(request_key)
+            await self.discard_interrupt_request(request_key)
             return status, pending.binding
         return status, pending.binding
 
-    def discard_interrupt_request(self, request_id: str) -> None:
+    async def discard_interrupt_request(self, request_id: str) -> None:
         request_key = request_id.strip()
         self._pending_server_requests.pop(request_key, None)
-        self._schedule_interrupt_request_delete(request_key)
+        if self._interrupt_request_store is not None:
+            await self._interrupt_request_store.delete_interrupt_request(request_id=request_key)
 
-    def _schedule_interrupt_request_delete(self, request_id: str) -> None:
-        if self._interrupt_request_store is None:
-            return
-        try:
-            loop = asyncio.get_running_loop()
-        except RuntimeError:
-            return
-        loop.create_task(
-            self._interrupt_request_store.delete_interrupt_request(request_id=request_id)
-        )
-
-    def _require_pending_interrupt_request(
+    async def _require_pending_interrupt_request(
         self,
         request_id: str,
         *,
         expected_interrupt_type: str,
     ) -> _PendingInterruptRequest:
         request_key = request_id.strip()
-        status, binding = self.resolve_interrupt_request(request_key)
+        status, binding = await self.resolve_interrupt_request(request_key)
         if status == "missing":
             raise InterruptRequestError(
                 error_type="INTERRUPT_REQUEST_NOT_FOUND",
@@ -1038,7 +1027,7 @@ class CodexClient:
                 },
             }
         )
-        self.discard_interrupt_request(request_id)
+        await self.discard_interrupt_request(request_id)
 
     async def permission_reply(
         self,
@@ -1050,7 +1039,7 @@ class CodexClient:
     ) -> bool:
         del message, directory
         normalized = (reply or "").strip().lower()
-        pending = self._require_pending_interrupt_request(
+        pending = await self._require_pending_interrupt_request(
             request_id,
             expected_interrupt_type="permission",
         )
@@ -1077,7 +1066,7 @@ class CodexClient:
         directory: str | None = None,
     ) -> bool:
         del directory
-        pending = self._require_pending_interrupt_request(
+        pending = await self._require_pending_interrupt_request(
             request_id,
             expected_interrupt_type="question",
         )
@@ -1108,7 +1097,7 @@ class CodexClient:
         directory: str | None = None,
     ) -> bool:
         del directory
-        pending = self._require_pending_interrupt_request(
+        pending = await self._require_pending_interrupt_request(
             request_id,
             expected_interrupt_type="question",
         )
@@ -1124,5 +1113,5 @@ class CodexClient:
                 },
             }
         )
-        self.discard_interrupt_request(request_id)
+        await self.discard_interrupt_request(request_id)
         return True

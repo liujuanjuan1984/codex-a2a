@@ -33,13 +33,13 @@ async def test_interrupt_requests_restore_after_client_rebuild(tmp_path) -> None
 
         client_2 = CodexClient(settings, interrupt_request_store=runtime_state.state_store)
         await client_2.restore_persisted_interrupt_requests()
-        status, binding = client_2.resolve_interrupt_request("100")
-        client_2.discard_interrupt_request("100")
+        status, binding = await client_2.resolve_interrupt_request("100")
+        await client_2.discard_interrupt_request("100")
         await asyncio.sleep(0)
 
         client_3 = CodexClient(settings, interrupt_request_store=runtime_state.state_store)
         await client_3.restore_persisted_interrupt_requests()
-        missing_status, missing_binding = client_3.resolve_interrupt_request("100")
+        missing_status, missing_binding = await client_3.resolve_interrupt_request("100")
     finally:
         await runtime_state.shutdown()
 
@@ -75,7 +75,7 @@ async def test_expired_interrupt_requests_are_not_restored(tmp_path, monkeypatch
         monkeypatch.setattr("codex_a2a.upstream.interrupts.time.monotonic", lambda: 16.0)
         client_2 = CodexClient(settings, interrupt_request_store=runtime_state.state_store)
         await client_2.restore_persisted_interrupt_requests()
-        status, binding = client_2.resolve_interrupt_request("200")
+        status, binding = await client_2.resolve_interrupt_request("200")
     finally:
         await runtime_state.shutdown()
 

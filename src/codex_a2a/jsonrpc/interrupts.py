@@ -74,7 +74,7 @@ async def handle_interrupt_callback_request(
         base_request.method,
         permission_method=app._method_reply_permission,
     )
-    binding, binding_error = resolve_interrupt_binding(
+    binding, binding_error = await resolve_interrupt_binding(
         app,
         request_id=request_id,
         response_id=base_request.id,
@@ -117,13 +117,12 @@ async def handle_interrupt_callback_request(
         else:
             await app._codex_client.question_reject(request_id, directory=directory)
             result = {"ok": True, "request_id": request_id}
-        app._codex_client.discard_interrupt_request(request_id)
     except InterruptRequestError as exc:
         return interrupt_error_from_exception(app, base_request.id, exc)
     except httpx.HTTPStatusError as exc:
         upstream_status = exc.response.status_code
         if upstream_status == 404:
-            app._codex_client.discard_interrupt_request(request_id)
+            await app._codex_client.discard_interrupt_request(request_id)
             return interrupt_error_response(
                 app,
                 base_request.id,
