@@ -106,7 +106,7 @@ async def test_database_backend_persists_task_session_and_interrupt_state_across
                 request_id=request_id,
                 interrupt_type=interrupt_type,
                 session_id=session_id,
-                created_at=time.monotonic(),
+                created_at=time.time(),
             )
             await self._interrupt_request_store.save_interrupt_request(
                 request_id=request_id,

@@ -66,6 +66,8 @@ Task durability is deployment-dependent:
   lookup/cancel/resubscribe state across process restarts.
 - The same database-backed mode also preserves session-binding ownership state
   and pending interrupt callback requests that still fall within their TTL.
+  Session-binding and ownership persistence are independent from the in-memory
+  session cache TTL.
 - Leaving `A2A_DATABASE_URL` unset keeps the legacy single-process in-memory
   task behavior and should be treated as non-durable.
 

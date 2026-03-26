@@ -61,7 +61,7 @@ async def test_expired_interrupt_requests_are_not_restored(tmp_path, monkeypatch
     runtime_state = build_runtime_state_runtime(settings)
     await runtime_state.startup()
     try:
-        monkeypatch.setattr("codex_a2a.upstream.client.time.monotonic", lambda: 10.0)
+        monkeypatch.setattr("codex_a2a.upstream.client.time.time", lambda: 10.0)
         client_1 = CodexClient(settings, interrupt_request_store=runtime_state.state_store)
         await client_1._handle_server_request(
             {
@@ -71,8 +71,8 @@ async def test_expired_interrupt_requests_are_not_restored(tmp_path, monkeypatch
             }
         )
 
-        monkeypatch.setattr("codex_a2a.server.runtime_state.time.monotonic", lambda: 16.0)
-        monkeypatch.setattr("codex_a2a.upstream.interrupts.time.monotonic", lambda: 16.0)
+        monkeypatch.setattr("codex_a2a.server.runtime_state.time.time", lambda: 16.0)
+        monkeypatch.setattr("codex_a2a.upstream.interrupts.time.time", lambda: 16.0)
         client_2 = CodexClient(settings, interrupt_request_store=runtime_state.state_store)
         await client_2.restore_persisted_interrupt_requests()
         status, binding = await client_2.resolve_interrupt_request("200")

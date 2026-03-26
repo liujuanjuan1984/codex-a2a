@@ -163,6 +163,6 @@ def interrupt_request_status(
     interrupt_request_ttl_seconds: int,
 ) -> str:
     expires_at = binding.created_at + float(interrupt_request_ttl_seconds)
-    if expires_at <= time.monotonic():
+    if expires_at <= time.time():
         return "expired"
     return "active"
