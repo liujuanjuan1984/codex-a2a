@@ -252,11 +252,9 @@ Install once:
 uv tool install codex-a2a
 ```
 
-Before starting the runtime:
-
-- verify `codex` itself is installed and available on `PATH` (or set `CODEX_CLI_BIN`)
-- verify your Codex provider/model/auth setup already works outside this repository
-- `codex-a2a` does not provision Codex providers, login state, or API keys
+Apply the same Codex prerequisites from [README.md](../README.md) before
+starting the runtime. This guide keeps the fuller example with explicit model
+and timeout overrides.
 
 Run against a workspace root:
 

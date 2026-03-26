@@ -163,9 +163,6 @@ This repository improves the service boundary around Codex, but it does not
 turn Codex into a hardened multi-tenant platform.
 
 - `A2A_BEARER_TOKEN` protects the inbound A2A surface.
-- Provider auth and default model configuration remain on the Codex side.
-- Outbound peer-call auth is configured separately from the inbound
-  `A2A_BEARER_TOKEN`.
 - One deployed instance should be treated as a single-tenant trust boundary.
 - For mutually untrusted tenants, run separate instances with isolated users,
   workspaces, credentials, and ports.
@@ -174,6 +171,7 @@ Read before deployment:
 
 - [SECURITY.md](SECURITY.md)
 - [Usage Guide](docs/guide.md)
+- [Compatibility Guide](docs/compatibility.md)
 
 ## Release Model
 
