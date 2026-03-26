@@ -5,6 +5,11 @@ on:
     tags:
       - "v*"
   workflow_dispatch:
+    inputs:
+      tag_name:
+        description: "Existing tag to publish"
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -16,19 +21,26 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag_name || github.ref_name }}
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.13"
 
       - name: Setup uv
-        uses: astral-sh/setup-uv@v4
+        uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
+
+      - name: Resolve release tag
+        id: release_tag
+        run: echo "tag=${RELEASE_TAG}" >> "$GITHUB_OUTPUT"
+        env:
+          RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag_name || github.ref_name }}
 
       - name: Build package artifacts
         run: uv build --no-sources
@@ -53,12 +65,13 @@ jobs:
 
           wheel = pathlib.Path(os.environ["WHEEL_PATH"]).name
           version = wheel.removeprefix("codex_a2a-").split("-py3", 1)[0]
-          tag = os.environ["GITHUB_REF_NAME"].removeprefix("v")
+          tag = os.environ["RELEASE_TAG"].removeprefix("v")
           if version != tag:
               raise SystemExit(f"Wheel version {version!r} does not match tag {tag!r}")
           print(f"Validated release version: {version}")
           PY
         env:
+          RELEASE_TAG: ${{ steps.release_tag.outputs.tag }}
           WHEEL_PATH: ${{ steps.wheel.outputs.wheel_path }}
 
       - name: Smoke test wheel install
@@ -70,9 +83,12 @@ jobs:
         uses: pypa/gh-action-pypi-publish@release/v1
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          generate_release_notes: true
-          files: |
-            dist/*.tar.gz
-            dist/*.whl
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.release_tag.outputs.tag }}
+        run: |
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" dist/*.tar.gz dist/*.whl --clobber
+          else
+            gh release create "$RELEASE_TAG" dist/*.tar.gz dist/*.whl --generate-notes --verify-tag
+          fi
