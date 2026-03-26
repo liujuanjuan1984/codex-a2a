@@ -21,6 +21,18 @@ def test_build_task_store_runtime_uses_memory_backend_when_configured() -> None:
     assert isinstance(runtime.task_store, InMemoryTaskStore)
 
 
+def test_build_task_store_runtime_allows_explicit_memory_backend_override() -> None:
+    runtime = build_task_store_runtime(
+        make_settings(
+            a2a_bearer_token="test-token",
+            a2a_task_store_backend="memory",
+            a2a_database_url="sqlite+aiosqlite:////tmp/should-not-be-used.db",
+        )
+    )
+
+    assert isinstance(runtime.task_store, InMemoryTaskStore)
+
+
 @pytest.mark.asyncio
 async def test_database_task_store_persists_tasks_across_runtime_rebuilds(tmp_path: Path) -> None:
     database_url = f"sqlite+aiosqlite:///{(tmp_path / 'tasks.db').resolve()}"
@@ -53,3 +65,17 @@ async def test_database_task_store_persists_tasks_across_runtime_rebuilds(tmp_pa
     assert restored.id == "task-1"
     assert restored.context_id == "ctx-1"
     assert restored.status.state == TaskState.working
+
+
+@pytest.mark.asyncio
+async def test_explicit_database_backend_uses_database_runtime(tmp_path: Path) -> None:
+    database_url = f"sqlite+aiosqlite:///{(tmp_path / 'tasks-explicit.db').resolve()}"
+    settings = make_settings(
+        a2a_bearer_token="test-token",
+        a2a_task_store_backend="database",
+        a2a_database_url=database_url,
+    )
+
+    runtime = build_task_store_runtime(settings)
+
+    assert isinstance(runtime.task_store, DatabaseTaskStore)

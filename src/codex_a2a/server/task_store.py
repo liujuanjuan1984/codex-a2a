@@ -22,7 +22,10 @@ async def _noop() -> None:
 
 
 def build_task_store_runtime(settings: Settings) -> TaskStoreRuntime:
-    if not settings.a2a_database_url:
+    use_database_backend = settings.a2a_task_store_backend == "database" or (
+        settings.a2a_task_store_backend == "auto" and settings.a2a_database_url is not None
+    )
+    if not use_database_backend:
         return TaskStoreRuntime(task_store=InMemoryTaskStore(), startup=_noop, shutdown=_noop)
 
     from a2a.server.tasks.database_task_store import DatabaseTaskStore
@@ -30,6 +33,8 @@ def build_task_store_runtime(settings: Settings) -> TaskStoreRuntime:
     from sqlalchemy.ext.asyncio import create_async_engine
 
     database_url = settings.a2a_database_url
+    if database_url is None:  # pragma: no cover - guarded by Settings validation
+        raise ValueError("Database task store requires A2A_DATABASE_URL to be configured")
     url = make_url(database_url)
 
     if url.drivername.startswith("sqlite"):

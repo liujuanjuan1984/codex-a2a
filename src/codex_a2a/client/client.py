@@ -140,7 +140,7 @@ class A2AClient:
     async def __aenter__(self) -> A2AClient:
         return self
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
+    async def __aexit__(self, _exc_type, _exc_val, _exc_tb) -> None:
         await self.close()
 
     async def close(self) -> None:
@@ -326,12 +326,6 @@ class A2AClient:
         if self._sdk_client is None:
             raise A2AClientError("Failed to initialize A2A client")
         return self._sdk_client
-
-    async def _ensure_httpx_client(self) -> httpx.AsyncClient:
-        if self._httpx_client is None:
-            self._httpx_client = httpx.AsyncClient(timeout=self._build_timeout())
-            self._owns_http_client = True
-        return self._httpx_client
 
     def _build_interceptors(self) -> list[ClientCallInterceptor]:
         return [_HeaderInterceptor(self._config.default_headers)]
