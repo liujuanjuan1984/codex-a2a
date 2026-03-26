@@ -129,13 +129,8 @@ HTTP Basic auth. These outbound credentials apply to the peer specified by
 environment variables so secrets do not land in shell history or process
 arguments.
 
-Server-side outbound client settings are wired through runtime config:
-`A2A_CLIENT_TIMEOUT_SECONDS`,
-`A2A_CLIENT_CARD_FETCH_TIMEOUT_SECONDS`,
-`A2A_CLIENT_USE_CLIENT_PREFERENCE`,
-`A2A_CLIENT_BEARER_TOKEN`,
-`A2A_CLIENT_BASIC_AUTH`, and
-`A2A_CLIENT_SUPPORTED_TRANSPORTS`.
+Detailed outbound client settings and protocol examples live in the
+[Usage Guide](docs/guide.md).
 
 ## When To Use It
 
@@ -169,8 +164,8 @@ turn Codex into a hardened multi-tenant platform.
 
 - `A2A_BEARER_TOKEN` protects the inbound A2A surface.
 - Provider auth and default model configuration remain on the Codex side.
-- Use `A2A_CLIENT_BEARER_TOKEN` or `A2A_CLIENT_BASIC_AUTH` for server-side
-  outbound peer calls initiated by `a2a_call`.
+- Outbound peer-call auth is configured separately from the inbound
+  `A2A_BEARER_TOKEN`.
 - One deployed instance should be treated as a single-tenant trust boundary.
 - For mutually untrusted tenants, run separate instances with isolated users,
   workspaces, credentials, and ports.

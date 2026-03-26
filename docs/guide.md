@@ -230,14 +230,6 @@ Current implementation note:
 
 Configuration note:
 - The service configuration layer only accepts `CODEX_*` names for Codex-facing settings.
-- `A2A_DATABASE_URL` defaults to a local SQLite file so the task store and
-  runtime state are persisted by default.
-- Setting `A2A_DATABASE_URL` explicitly lets operators move that persistence to
-  another async SQLAlchemy backend.
-- The same database also persists session-binding ownership state and pending
-  interrupt callback requests needed for cross-restart recovery.
-  Persisted session binding and ownership state do not expire with
-  `A2A_SESSION_CACHE_TTL_SECONDS`.
 - Outbound auth prefers `A2A_CLIENT_BEARER_TOKEN` when both bearer and basic
   credentials are configured; otherwise it uses `A2A_CLIENT_BASIC_AUTH`.
 
