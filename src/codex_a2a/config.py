@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from typing import Annotated, Any, Literal, cast
+from typing import Annotated, Any, cast
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 from codex_a2a import __version__
@@ -41,7 +41,6 @@ _APPROVAL_ESCALATION_BEHAVIORS = {
     "fallback_only",
     "restricted",
 }
-TaskStoreBackend = Literal["auto", "memory", "database"]
 
 
 def _parse_str_list(value: Any) -> Any:
@@ -170,10 +169,6 @@ class Settings(BaseSettings):
         alias="A2A_DATABASE_URL",
     )
     a2a_database_auto_create: bool = Field(default=True, alias="A2A_DATABASE_AUTO_CREATE")
-    a2a_task_store_backend: TaskStoreBackend = Field(
-        default="auto",
-        alias="A2A_TASK_STORE_BACKEND",
-    )
 
     # Session cache settings
     a2a_session_cache_ttl_seconds: int = Field(default=3600, alias="A2A_SESSION_CACHE_TTL_SECONDS")
@@ -345,12 +340,6 @@ class Settings(BaseSettings):
         if value <= 0:
             raise ValueError("A2A_CLIENT_*_TIMEOUT_SECONDS must be > 0")
         return value
-
-    @model_validator(mode="after")
-    def validate_task_store_configuration(self) -> Settings:
-        if self.a2a_task_store_backend == "database" and not self.a2a_database_url:
-            raise ValueError("A2A_DATABASE_URL is required when A2A_TASK_STORE_BACKEND=database")
-        return self
 
     @classmethod
     def from_env(cls) -> Settings:

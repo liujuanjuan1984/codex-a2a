@@ -131,7 +131,6 @@ async def test_create_app_shares_database_engine_across_runtime_components(monke
     settings = make_settings(
         a2a_bearer_token="test-token",
         a2a_database_url="sqlite+aiosqlite:////tmp/shared-engine.db",
-        a2a_task_store_backend="database",
     )
     shared_engine = SimpleNamespace(dispose=AsyncMock())
     state_store = object()

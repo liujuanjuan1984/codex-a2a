@@ -166,17 +166,10 @@ Current implementation note:
 - `A2A_HOST`: bind host, default `127.0.0.1`
 - `A2A_PORT`: bind port, default `8000`
 - `A2A_BEARER_TOKEN`: required; service fails fast if unset
-- `A2A_TASK_STORE_BACKEND`: task-store backend selector:
-  - `auto` (default): use the database task store when `A2A_DATABASE_URL` is
-    configured, otherwise keep the legacy in-memory task store
-  - `memory`: always use the in-memory task store even if
-    `A2A_DATABASE_URL` is configured
-  - `database`: require `A2A_DATABASE_URL` and persist tasks in the database
 - `A2A_DATABASE_URL`: optional SQLAlchemy async database URL shared by the
-  database task store and runtime-state persistence; in `auto` mode it also
-  switches task persistence on, and it always backs session-binding ownership
-  state plus pending interrupt callback requests when runtime-state persistence
-  is enabled
+  database task store and runtime-state persistence; when configured it enables
+  database-backed task persistence and also backs session-binding ownership
+  state plus pending interrupt callback requests for cross-restart recovery
 - `A2A_DATABASE_AUTO_CREATE`: automatically create persistence tables on
   startup, default `true`
 - `A2A_ENABLE_HEALTH_ENDPOINT`: enable the authenticated lightweight `/health` probe, default `true`
@@ -229,11 +222,8 @@ Current implementation note:
 
 Configuration note:
 - The service configuration layer only accepts `CODEX_*` names for Codex-facing settings.
-- The default `A2A_TASK_STORE_BACKEND=auto` preserves the current behavior:
-  leaving `A2A_DATABASE_URL` unset keeps the legacy single-process in-memory
+- Leaving `A2A_DATABASE_URL` unset keeps the legacy single-process in-memory
   task store, while setting it enables database-backed task persistence.
-- `A2A_TASK_STORE_BACKEND=memory` keeps task state ephemeral even if
-  `A2A_DATABASE_URL` is present.
 - Setting `A2A_DATABASE_URL` also persists session-binding ownership state and
   pending interrupt callback requests needed for cross-restart recovery.
 

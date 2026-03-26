@@ -24,9 +24,7 @@ async def _noop() -> None:
 
 
 def task_store_uses_database(settings: Settings) -> bool:
-    return settings.a2a_task_store_backend == "database" or (
-        settings.a2a_task_store_backend == "auto" and settings.a2a_database_url is not None
-    )
+    return settings.a2a_database_url is not None
 
 
 def build_task_store_runtime(

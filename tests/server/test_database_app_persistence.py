@@ -169,7 +169,6 @@ async def test_database_backend_persists_task_session_and_interrupt_state_across
     settings = make_settings(
         a2a_bearer_token="test-token",
         a2a_database_url=database_url,
-        a2a_task_store_backend="database",
     )
     request_identity = (
         f"bearer:{hashlib.sha256(settings.a2a_bearer_token.encode()).hexdigest()[:12]}"
