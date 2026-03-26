@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+from unittest.mock import AsyncMock
+
 import pytest
 
 from codex_a2a.execution.session_runtime import SessionRuntime
+from codex_a2a.server.database import build_database_engine
 from codex_a2a.server.runtime_state import build_runtime_state_runtime
 from tests.support.settings import make_settings
 
@@ -77,6 +80,25 @@ async def test_pending_session_claim_restore_from_database(tmp_path) -> None:
     assert restored.owner_identity is None
     assert finalized.owner_identity == "user-2"
     assert finalized.pending_identity is None
+
+
+@pytest.mark.asyncio
+async def test_runtime_state_runtime_does_not_dispose_shared_engine(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = make_settings(
+        a2a_bearer_token="test-token",
+        a2a_database_url=f"sqlite+aiosqlite:///{(tmp_path / 'shared-runtime.db').resolve()}",
+    )
+    engine = build_database_engine(settings)
+    dispose_spy = AsyncMock()
+    monkeypatch.setattr(type(engine), "dispose", dispose_spy)
+
+    runtime_state = build_runtime_state_runtime(settings, engine=engine)
+    await runtime_state.shutdown()
+
+    dispose_spy.assert_not_awaited()
 
 
 async def _return_session(session_id: str) -> str:

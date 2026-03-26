@@ -6,17 +6,17 @@ from dataclasses import dataclass
 from typing import Any
 
 from sqlalchemy import JSON, Float, String, delete, select
-from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
     async_sessionmaker,
-    create_async_engine,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 from codex_a2a.config import Settings
 from codex_a2a.upstream.interrupts import InterruptRequestBinding
+
+from .database import build_database_engine
 
 
 class _Base(DeclarativeBase):
@@ -275,17 +275,17 @@ class RuntimeStateStore:
         ]
 
 
-def build_runtime_state_runtime(settings: Settings) -> RuntimeStateRuntime:
+def build_runtime_state_runtime(
+    settings: Settings,
+    *,
+    engine: AsyncEngine | None = None,
+) -> RuntimeStateRuntime:
     if not settings.a2a_database_url:
         return RuntimeStateRuntime(state_store=None, startup=_noop, shutdown=_noop)
 
-    url = make_url(settings.a2a_database_url)
-    engine = create_async_engine(
-        settings.a2a_database_url,
-        pool_pre_ping=not url.drivername.startswith("sqlite"),
-    )
+    resolved_engine = engine or build_database_engine(settings)
     state_store = RuntimeStateStore(
-        engine,
+        resolved_engine,
         auto_create=settings.a2a_database_auto_create,
     )
 
@@ -293,7 +293,8 @@ def build_runtime_state_runtime(settings: Settings) -> RuntimeStateRuntime:
         await state_store.initialize()
 
     async def _shutdown() -> None:
-        await state_store.dispose()
+        if engine is None:
+            await state_store.dispose()
 
     return RuntimeStateRuntime(
         state_store=state_store,

@@ -25,6 +25,7 @@ from codex_a2a.logging_context import install_log_record_factory
 from codex_a2a.profile.runtime import build_runtime_profile
 from codex_a2a.server.agent_card import build_agent_card
 from codex_a2a.server.call_context import IdentityAwareCallContextBuilder
+from codex_a2a.server.database import build_database_engine
 from codex_a2a.server.openapi import patch_openapi_contract
 from codex_a2a.server.request_handler import CodexRequestHandler
 from codex_a2a.server.runtime_state import build_runtime_state_runtime
@@ -36,7 +37,10 @@ from .http_middlewares import install_http_middlewares
 
 def create_app(settings: Settings) -> FastAPI:
     install_log_record_factory()
-    runtime_state_runtime = build_runtime_state_runtime(settings)
+    shared_database_engine = (
+        build_database_engine(settings) if settings.a2a_database_url is not None else None
+    )
+    runtime_state_runtime = build_runtime_state_runtime(settings, engine=shared_database_engine)
     if runtime_state_runtime.state_store is None:
         client = CodexClient(settings)
     else:
@@ -58,7 +62,7 @@ def create_app(settings: Settings) -> FastAPI:
         a2a_client_manager=a2a_client_manager,
         session_state_store=runtime_state_runtime.state_store,
     )
-    task_store_runtime = build_task_store_runtime(settings)
+    task_store_runtime = build_task_store_runtime(settings, engine=shared_database_engine)
     task_store = task_store_runtime.task_store
     handler = CodexRequestHandler(
         agent_executor=executor,
@@ -82,6 +86,8 @@ def create_app(settings: Settings) -> FastAPI:
             await client.close()
             await runtime_state_runtime.shutdown()
             await task_store_runtime.shutdown()
+            if shared_database_engine is not None:
+                await shared_database_engine.dispose()
 
     runtime_profile = build_runtime_profile(settings)
     capability_snapshot = build_capability_snapshot(runtime_profile=runtime_profile)
