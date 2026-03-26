@@ -69,11 +69,13 @@ Before starting the runtime:
 Self-start the released CLI against a workspace root:
 
 ```bash
-export A2A_BEARER_TOKEN="$(python -c 'import secrets; print(secrets.token_hex(24))')"
+A2A_BEARER_TOKEN="$(python -c 'import secrets; print(secrets.token_hex(24))')" \
 A2A_HOST=127.0.0.1 \
 A2A_PORT=8000 \
 A2A_PUBLIC_URL=http://127.0.0.1:8000 \
-CODEX_WORKSPACE_ROOT=/abs/path/to/workspace codex-a2a
+A2A_DATABASE_URL=sqlite+aiosqlite:///./codex-a2a.db \
+CODEX_WORKSPACE_ROOT=/abs/path/to/workspace \
+codex-a2a
 ```
 
 Agent Card: `http://127.0.0.1:8000/.well-known/agent-card.json`
@@ -88,7 +90,7 @@ Agent Card: `http://127.0.0.1:8000/.well-known/agent-card.json`
 - SSE streaming with normalized `text`, `reasoning`, and `tool_call` blocks
 - Session continuity and session query extensions
 - Interrupt lifecycle mapping and callback validation
-- Transport selection, Agent Card discovery, timeout control, and bearer-token
+- Transport selection, Agent Card discovery, timeout control, and bearer/basic
   auth for outbound A2A calls
 - Payload logging controls, secret-handling guardrails, and released-CLI
   startup / source-based runtime paths
@@ -106,7 +108,11 @@ expose an inbound A2A surface and call peer A2A services outbound.
 Call another A2A agent directly from the command line:
 
 ```bash
-codex-a2a call http://other-agent:8000 "How are you?" --token your-outbound-token
+A2A_CLIENT_BEARER_TOKEN=your-outbound-token \
+codex-a2a call http://other-agent:8000 "How are you?"
+
+A2A_CLIENT_BASIC_AUTH="user:pass" \
+codex-a2a call http://other-agent:8000 "How are you?"
 ```
 
 ### Outbound Agent Calls
@@ -116,15 +122,15 @@ by the Codex runtime. Results are fetched through A2A and returned back into
 the local execution flow as tool results.
 
 For authenticated peers, configure `A2A_CLIENT_BEARER_TOKEN` for server-side
-outbound calls. CLI calls can continue using `--token` or
-`A2A_CLIENT_BEARER_TOKEN`.
+outbound calls, or `A2A_CLIENT_BASIC_AUTH` for peer services protected by
+HTTP Basic auth. These outbound credentials apply to the peer specified by
+`codex-a2a call` or `a2a_call(url, message)`, not to this service's inbound
+`A2A_BEARER_TOKEN`. The CLI intentionally reads outbound credentials from
+environment variables so secrets do not land in shell history or process
+arguments.
 
-Server-side outbound client settings are wired through runtime config:
-`A2A_CLIENT_TIMEOUT_SECONDS`,
-`A2A_CLIENT_CARD_FETCH_TIMEOUT_SECONDS`,
-`A2A_CLIENT_USE_CLIENT_PREFERENCE`,
-`A2A_CLIENT_BEARER_TOKEN`, and
-`A2A_CLIENT_SUPPORTED_TRANSPORTS`.
+Detailed outbound client settings and protocol examples live in the
+[Usage Guide](docs/guide.md).
 
 ## When To Use It
 
@@ -157,9 +163,6 @@ This repository improves the service boundary around Codex, but it does not
 turn Codex into a hardened multi-tenant platform.
 
 - `A2A_BEARER_TOKEN` protects the inbound A2A surface.
-- Provider auth and default model configuration remain on the Codex side.
-- Use `A2A_CLIENT_BEARER_TOKEN` for server-side outbound peer calls initiated
-  by `a2a_call`.
 - One deployed instance should be treated as a single-tenant trust boundary.
 - For mutually untrusted tenants, run separate instances with isolated users,
   workspaces, credentials, and ports.
@@ -168,6 +171,7 @@ Read before deployment:
 
 - [SECURITY.md](SECURITY.md)
 - [Usage Guide](docs/guide.md)
+- [Compatibility Guide](docs/compatibility.md)
 
 ## Release Model
 

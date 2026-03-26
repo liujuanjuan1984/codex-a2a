@@ -25,6 +25,15 @@ def test_readme_documents_released_cli_installation_via_uv_tool() -> None:
     assert "does not provision Codex providers, login state, or API keys for you" in README_TEXT
     assert "Startup fails fast if the local `codex` runtime is missing" in README_TEXT
     assert "CODEX_WORKSPACE_ROOT=/abs/path/to/workspace" in README_TEXT  # pragma: allowlist secret
+    assert "A2A_DATABASE_URL=sqlite+aiosqlite:///./codex-a2a.db" in README_TEXT
+    assert (
+        "A2A_BEARER_TOKEN=\"$(python -c 'import secrets; print(secrets.token_hex(24))')\" \\"
+        in README_TEXT
+    )
+    assert "CODEX_WORKSPACE_ROOT=/abs/path/to/workspace \\\ncodex-a2a" in README_TEXT
+    assert "export A2A_HOST=127.0.0.1" not in README_TEXT
+    assert "A2A_CLIENT_BASIC_AUTH" in README_TEXT
+    assert "--token your-outbound-token" not in README_TEXT
     assert "codex-a2a deploy" not in README_TEXT
     assert "GH_TOKEN" not in README_TEXT
     assert "create a PR from the working branch" in README_TEXT

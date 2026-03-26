@@ -42,3 +42,14 @@ def test_build_agent_card_request_kwargs_includes_timeout_and_headers() -> None:
     assert isinstance(timeout, httpx.Timeout)
     assert timeout.connect == 7.5
     assert http_kwargs["headers"] == {"Authorization": "Bearer peer-token"}
+
+
+def test_build_agent_card_request_kwargs_supports_basic_auth_header() -> None:
+    config = A2AClientConfig(
+        agent_url="https://example.org",
+        default_headers={"Authorization": "Basic dXNlcjpwYXNz"},
+    )
+
+    http_kwargs = build_agent_card_request_kwargs(config)
+
+    assert http_kwargs["headers"] == {"Authorization": "Basic dXNlcjpwYXNz"}

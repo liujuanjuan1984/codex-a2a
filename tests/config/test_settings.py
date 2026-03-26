@@ -31,6 +31,7 @@ def test_settings_valid():
         assert settings.codex_timeout == 300.0
         assert settings.codex_model_reasoning_effort == "high"
         assert settings.codex_workspace_root == "/tmp/workspace"
+        assert settings.a2a_database_url == "sqlite+aiosqlite:///./codex-a2a.db"
         assert settings.a2a_version == __version__
 
 
@@ -141,6 +142,7 @@ def test_settings_parse_a2a_client_transport_and_timeouts() -> None:
         "A2A_CLIENT_CARD_FETCH_TIMEOUT_SECONDS": "7",
         "A2A_CLIENT_USE_CLIENT_PREFERENCE": "true",
         "A2A_CLIENT_BEARER_TOKEN": "peer-token",
+        "A2A_CLIENT_BASIC_AUTH": "user:pass",
         "A2A_CLIENT_SUPPORTED_TRANSPORTS": "http-json,json-rpc",
     }
     with mock.patch.dict(os.environ, env, clear=True):
@@ -150,4 +152,28 @@ def test_settings_parse_a2a_client_transport_and_timeouts() -> None:
     assert settings.a2a_client_card_fetch_timeout_seconds == 7.0
     assert settings.a2a_client_use_client_preference is True
     assert settings.a2a_client_bearer_token == "peer-token"
+    assert settings.a2a_client_basic_auth == "user:pass"
     assert settings.a2a_client_supported_transports == ["HTTP+JSON", "JSONRPC"]
+
+
+def test_settings_accept_pre_encoded_basic_auth() -> None:
+    env = {
+        "A2A_BEARER_TOKEN": "test",
+        "A2A_CLIENT_BASIC_AUTH": "dXNlcjpwYXNz",
+    }
+    with mock.patch.dict(os.environ, env, clear=True):
+        settings = Settings.from_env()
+
+    assert settings.a2a_client_basic_auth == "dXNlcjpwYXNz"
+
+
+def test_settings_reject_invalid_basic_auth() -> None:
+    env = {
+        "A2A_BEARER_TOKEN": "test",
+        "A2A_CLIENT_BASIC_AUTH": "not-basic-auth",
+    }
+    with mock.patch.dict(os.environ, env, clear=True):
+        with pytest.raises(ValidationError) as excinfo:
+            Settings.from_env()
+
+    assert "A2A_CLIENT_BASIC_AUTH" in str(excinfo.value)

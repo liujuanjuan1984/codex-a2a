@@ -8,18 +8,26 @@ from collections.abc import Sequence
 
 from . import __version__
 from .client import A2AClient, A2AClientConfig
+from .client.request_context import build_default_headers
 from .client.types import A2ASendRequest
 
 
-async def run_call(agent_url: str, text: str, token: str | None = None) -> int:
+async def run_call(
+    agent_url: str,
+    text: str,
+    bearer_token: str | None = None,
+    basic_auth: str | None = None,
+) -> int:
     metadata: dict[str, object] = {}
-    if token:
-        metadata["authorization"] = f"Bearer {token}"
+    authorization_headers = build_default_headers(bearer_token, basic_auth)
+    authorization = authorization_headers.get("Authorization")
+    if authorization:
+        metadata["authorization"] = authorization
 
     client = A2AClient(
         A2AClientConfig(
             agent_url=agent_url,
-            default_headers={"Authorization": f"Bearer {token}"} if token else {},
+            default_headers=authorization_headers,
             request_timeout_seconds=None,
         )
     )
@@ -83,11 +91,6 @@ def build_parser() -> argparse.ArgumentParser:
     )
     call_parser.add_argument("agent_url", help="A2A endpoint URL.")
     call_parser.add_argument("text", help="Message text.")
-    call_parser.add_argument(
-        "--token",
-        help="Bearer token for the request.",
-        default=os.environ.get("A2A_CLIENT_BEARER_TOKEN"),
-    )
     return parser
 
 
@@ -109,7 +112,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             run_call(
                 namespace.agent_url,
                 namespace.text,
-                namespace.token,
+                bearer_token=os.environ.get("A2A_CLIENT_BEARER_TOKEN"),
+                basic_auth=os.environ.get("A2A_CLIENT_BASIC_AUTH"),
             )
         )
 

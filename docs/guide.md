@@ -166,12 +166,13 @@ Current implementation note:
 - `A2A_HOST`: bind host, default `127.0.0.1`
 - `A2A_PORT`: bind port, default `8000`
 - `A2A_BEARER_TOKEN`: required; service fails fast if unset
-- `A2A_DATABASE_URL`: optional SQLAlchemy async database URL shared by the
-  database task store and runtime-state persistence; when configured it enables
-  database-backed task persistence and also backs session-binding ownership
-  state plus pending interrupt callback requests for cross-restart recovery.
-  In this mode, persisted session binding and ownership state are retained
-  independently from the in-memory session cache TTL.
+- `A2A_DATABASE_URL`: SQLAlchemy async database URL shared by the database
+  task store and runtime-state persistence, default
+  `sqlite+aiosqlite:///./codex-a2a.db`. This enables database-backed task
+  persistence and also backs session-binding ownership state plus pending
+  interrupt callback requests for cross-restart recovery. Persisted session
+  binding and ownership state are retained independently from the in-memory
+  session cache TTL.
 - `A2A_ENABLE_HEALTH_ENDPOINT`: enable the authenticated lightweight `/health` probe, default `true`
 - `A2A_ENABLE_SESSION_SHELL`: expose `codex.sessions.shell` on JSON-RPC extensions, default `true`
 - `A2A_LOG_LEVEL`: `DEBUG/INFO/WARNING/ERROR`, default `INFO`
@@ -197,7 +198,13 @@ Current implementation note:
 - `A2A_CLIENT_USE_CLIENT_PREFERENCE`: whether outbound transport negotiation
   should prefer the local client ordering, default `false`
 - `A2A_CLIENT_BEARER_TOKEN`: optional bearer token injected into outbound A2A
-  requests, including Agent Card fetches when configured
+  requests, including Agent Card fetches when configured. This applies to the
+  target peer service used by `codex-a2a call` or `a2a_call(url, message)`,
+  not to this service's inbound `A2A_BEARER_TOKEN`.
+- `A2A_CLIENT_BASIC_AUTH`: optional Basic auth credential injected into
+  outbound A2A requests when bearer auth is not configured. Accepts
+  `username:password` or its base64-encoded form. This also applies to the
+  target peer service, not to inbound auth on this runtime.
 - `A2A_CLIENT_SUPPORTED_TRANSPORTS`: comma-separated outbound transport
   preference list, default `JSONRPC,HTTP+JSON`
 - `A2A_INTERRUPT_REQUEST_TTL_SECONDS`: TTL for pending interrupt callbacks
@@ -223,12 +230,8 @@ Current implementation note:
 
 Configuration note:
 - The service configuration layer only accepts `CODEX_*` names for Codex-facing settings.
-- Leaving `A2A_DATABASE_URL` unset keeps the legacy single-process in-memory
-  task store, while setting it enables database-backed task persistence.
-- Setting `A2A_DATABASE_URL` also persists session-binding ownership state and
-  pending interrupt callback requests needed for cross-restart recovery.
-  Persisted session binding and ownership state do not expire with
-  `A2A_SESSION_CACHE_TTL_SECONDS`.
+- Outbound auth prefers `A2A_CLIENT_BEARER_TOKEN` when both bearer and basic
+  credentials are configured; otherwise it uses `A2A_CLIENT_BASIC_AUTH`.
 
 Codex prerequisite note:
 - `codex-a2a` assumes the local `codex` runtime is already usable.
@@ -249,19 +252,18 @@ Install once:
 uv tool install codex-a2a
 ```
 
-Before starting the runtime:
-
-- verify `codex` itself is installed and available on `PATH` (or set `CODEX_CLI_BIN`)
-- verify your Codex provider/model/auth setup already works outside this repository
-- `codex-a2a` does not provision Codex providers, login state, or API keys
+Apply the same Codex prerequisites from [README.md](../README.md) before
+starting the runtime. This guide keeps the fuller example with explicit model
+and timeout overrides.
 
 Run against a workspace root:
 
 ```bash
-export A2A_BEARER_TOKEN="$(python -c 'import secrets; print(secrets.token_hex(24))')"
+A2A_BEARER_TOKEN="$(python -c 'import secrets; print(secrets.token_hex(24))')" \
 A2A_HOST=127.0.0.1 \
 A2A_PORT=8000 \
 A2A_PUBLIC_URL=http://127.0.0.1:8000 \
+A2A_DATABASE_URL=sqlite+aiosqlite:///./codex-a2a.db \
 CODEX_WORKSPACE_ROOT=/abs/path/to/workspace \
 CODEX_MODEL_ID=gpt-5.1-codex \
 CODEX_TIMEOUT=300 \

@@ -13,14 +13,25 @@ from codex_a2a.server.task_store import build_task_store_runtime
 from tests.support.settings import make_settings
 
 
-def test_build_task_store_runtime_uses_memory_backend_when_configured() -> None:
+def test_build_task_store_runtime_uses_memory_backend_when_database_disabled() -> None:
+    runtime = build_task_store_runtime(
+        make_settings(
+            a2a_bearer_token="test-token",
+            a2a_database_url=None,
+        )
+    )
+
+    assert isinstance(runtime.task_store, InMemoryTaskStore)
+
+
+def test_build_task_store_runtime_uses_database_backend_by_default() -> None:
     runtime = build_task_store_runtime(
         make_settings(
             a2a_bearer_token="test-token",
         )
     )
 
-    assert isinstance(runtime.task_store, InMemoryTaskStore)
+    assert isinstance(runtime.task_store, DatabaseTaskStore)
 
 
 @pytest.mark.asyncio
