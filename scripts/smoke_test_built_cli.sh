@@ -115,7 +115,7 @@ server_pid="$!"
 
 health_url="http://127.0.0.1:${port}/health"
 for _ in $(seq 1 50); do
-  if curl -fsS -H "Authorization: Bearer ${bearer_token}" "${health_url}" >/dev/null; then
+  if curl -fsS -H "Authorization: Bearer ${bearer_token}" "${health_url}" >/dev/null 2>&1; then
     exit 0
   fi
   sleep 0.2
