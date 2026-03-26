@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import sqlite3
 from unittest.mock import AsyncMock
 
 import pytest
@@ -125,6 +126,88 @@ async def test_database_binding_survives_session_cache_ttl_expiry(tmp_path) -> N
 
 
 @pytest.mark.asyncio
+async def test_new_runtime_state_schema_omits_binding_and_owner_expires_at_columns(
+    tmp_path,
+) -> None:
+    database_path = (tmp_path / "runtime.db").resolve()
+    settings = make_settings(
+        a2a_bearer_token="test-token",
+        a2a_database_url=f"sqlite+aiosqlite:///{database_path}",
+    )
+    runtime_state = build_runtime_state_runtime(settings)
+    await runtime_state.startup()
+    await runtime_state.shutdown()
+
+    binding_columns = _sqlite_columns(database_path, "a2a_session_bindings")
+    owner_columns = _sqlite_columns(database_path, "a2a_session_owners")
+    pending_claim_columns = _sqlite_columns(database_path, "a2a_pending_session_claims")
+
+    assert "expires_at" not in binding_columns
+    assert "expires_at" not in owner_columns
+    assert "expires_at" in pending_claim_columns
+
+
+@pytest.mark.asyncio
+async def test_runtime_state_supports_legacy_binding_schema_with_expires_at_columns(
+    tmp_path,
+) -> None:
+    database_path = (tmp_path / "legacy-runtime.db").resolve()
+    connection = sqlite3.connect(database_path)
+    try:
+        connection.execute(
+            """
+            CREATE TABLE a2a_session_bindings (
+                identity TEXT NOT NULL,
+                context_id TEXT NOT NULL,
+                session_id TEXT NOT NULL,
+                expires_at FLOAT NOT NULL,
+                PRIMARY KEY (identity, context_id)
+            )
+            """
+        )
+        connection.execute(
+            """
+            CREATE TABLE a2a_session_owners (
+                session_id TEXT NOT NULL PRIMARY KEY,
+                owner_identity TEXT NOT NULL,
+                expires_at FLOAT NOT NULL
+            )
+            """
+        )
+        connection.commit()
+    finally:
+        connection.close()
+
+    settings = make_settings(
+        a2a_bearer_token="test-token",
+        a2a_database_url=f"sqlite+aiosqlite:///{database_path}",
+    )
+    runtime_state = build_runtime_state_runtime(settings)
+    await runtime_state.startup()
+    try:
+        runtime = SessionRuntime(
+            session_cache_ttl_seconds=3600,
+            session_cache_maxsize=1000,
+            state_store=runtime_state.state_store,
+        )
+        session_id, pending = await runtime.get_or_create_session(
+            identity="user-1",
+            context_id="ctx-legacy",
+            title="hello",
+            preferred_session_id=None,
+            create_session=lambda: _return_session("session-legacy"),
+        )
+        restored = await runtime.binding_snapshot(identity="user-1", context_id="ctx-legacy")
+    finally:
+        await runtime_state.shutdown()
+
+    assert session_id == "session-legacy"
+    assert pending is False
+    assert restored.session_id == "session-legacy"
+    assert restored.owner_identity == "user-1"
+
+
+@pytest.mark.asyncio
 async def test_runtime_state_runtime_does_not_dispose_shared_engine(
     tmp_path,
     monkeypatch: pytest.MonkeyPatch,
@@ -145,3 +228,12 @@ async def test_runtime_state_runtime_does_not_dispose_shared_engine(
 
 async def _return_session(session_id: str) -> str:
     return session_id
+
+
+def _sqlite_columns(database_path, table_name: str) -> set[str]:  # noqa: ANN001
+    connection = sqlite3.connect(database_path)
+    try:
+        rows = connection.execute(f"PRAGMA table_info({table_name})").fetchall()
+        return {str(row[1]) for row in rows}
+    finally:
+        connection.close()
