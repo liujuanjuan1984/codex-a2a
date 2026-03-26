@@ -518,8 +518,13 @@ def build_session_binding_extension_params(
                 "message to that upstream session."
             ),
             (
-                "Otherwise, the server will create a new upstream session and cache "
-                "the (identity, contextId)->session_id mapping in memory with TTL."
+                "Otherwise, the server will reuse any persisted binding when "
+                "available or create a new upstream session."
+            ),
+            (
+                "When no database state store is configured, the "
+                "(identity, contextId)->session_id mapping remains an in-memory "
+                "TTL cache."
             ),
         ],
     }

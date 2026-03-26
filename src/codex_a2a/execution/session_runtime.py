@@ -96,9 +96,11 @@ class SessionRuntime:
         *,
         session_cache_ttl_seconds: int,
         session_cache_maxsize: int,
+        pending_session_claim_ttl_seconds: int = 30,
         state_store: RuntimeStateStore | None = None,
     ) -> None:
         self._session_cache_ttl_seconds = int(session_cache_ttl_seconds)
+        self._pending_session_claim_ttl_seconds = int(pending_session_claim_ttl_seconds)
         self._sessions = TTLCache(
             ttl_seconds=session_cache_ttl_seconds,
             maxsize=session_cache_maxsize,
@@ -108,7 +110,10 @@ class SessionRuntime:
             maxsize=session_cache_maxsize,
             refresh_on_get=True,
         )
-        self._pending_session_claims: dict[str, str] = {}
+        self._pending_session_claims = TTLCache(
+            ttl_seconds=pending_session_claim_ttl_seconds,
+            maxsize=session_cache_maxsize if session_cache_maxsize > 0 else 10_000,
+        )
         self._inflight_session_creates: dict[tuple[str, str], asyncio.Task[str]] = {}
         self._session_locks: dict[str, asyncio.Lock] = {}
         self._running_requests: dict[tuple[str, str], asyncio.Task[Any]] = {}
@@ -141,7 +146,6 @@ class SessionRuntime:
                 identity=identity,
                 context_id=context_id,
                 session_id=session_id,
-                ttl_seconds=self._session_cache_ttl_seconds,
             )
 
     async def _delete_bound_session(self, *, identity: str, context_id: str) -> None:
@@ -164,7 +168,6 @@ class SessionRuntime:
             await self._state_store.save_session_owner(
                 session_id=session_id,
                 identity=identity,
-                ttl_seconds=self._session_cache_ttl_seconds,
             )
 
     async def _load_pending_claim(self, *, session_id: str) -> str | None:
@@ -173,20 +176,20 @@ class SessionRuntime:
             return pending
         restored = await self._state_store.load_pending_session_claim(session_id=session_id)
         if restored is not None:
-            self._pending_session_claims[session_id] = restored
+            self._pending_session_claims.set(session_id, restored)
         return restored
 
     async def _persist_pending_claim(self, *, session_id: str, identity: str) -> None:
-        self._pending_session_claims[session_id] = identity
+        self._pending_session_claims.set(session_id, identity)
         if self._state_store is not None:
             await self._state_store.save_pending_session_claim(
                 session_id=session_id,
                 identity=identity,
-                ttl_seconds=self._session_cache_ttl_seconds,
+                ttl_seconds=self._pending_session_claim_ttl_seconds,
             )
 
     async def _delete_pending_claim(self, *, session_id: str) -> None:
-        self._pending_session_claims.pop(session_id, None)
+        self._pending_session_claims.pop(session_id)
         if self._state_store is not None:
             await self._state_store.delete_pending_session_claim(session_id=session_id)
 

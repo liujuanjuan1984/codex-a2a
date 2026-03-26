@@ -129,7 +129,7 @@ async def test_permission_reply_maps_to_codex_decision() -> None:
             request_id="100",
             interrupt_type="permission",
             session_id="thr-1",
-            created_at=time.monotonic(),
+            created_at=time.time(),
         ),
         rpc_request_id=100,
         params={"threadId": "thr-1"},
@@ -164,7 +164,7 @@ async def test_question_reply_builds_answer_map() -> None:
             request_id="200",
             interrupt_type="question",
             session_id="thr-2",
-            created_at=time.monotonic(),
+            created_at=time.time(),
         ),
         rpc_request_id=200,
         params={
@@ -222,10 +222,10 @@ async def test_interrupt_request_status_uses_configured_ttl(monkeypatch) -> None
         params={"threadId": "thr-1"},
     )
 
-    monkeypatch.setattr("codex_a2a.upstream.interrupts.time.monotonic", lambda: 14.0)
+    monkeypatch.setattr("codex_a2a.upstream.interrupts.time.time", lambda: 14.0)
     assert (await client.resolve_interrupt_request("req-1"))[0] == "active"
 
-    monkeypatch.setattr("codex_a2a.upstream.interrupts.time.monotonic", lambda: 15.0)
+    monkeypatch.setattr("codex_a2a.upstream.interrupts.time.time", lambda: 15.0)
     assert (await client.resolve_interrupt_request("req-1"))[0] == "expired"
     assert (await client.resolve_interrupt_request("req-1"))[0] == "missing"
     assert "req-1" not in client._pending_server_requests

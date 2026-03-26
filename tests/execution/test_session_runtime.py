@@ -100,3 +100,21 @@ async def test_running_execution_snapshot_tracks_and_clears_request() -> None:
     running_task.cancel()
     with pytest.raises(asyncio.CancelledError):
         await running_task
+
+
+@pytest.mark.asyncio
+async def test_pending_session_claim_expires_independently_from_session_cache_ttl() -> None:
+    runtime = SessionRuntime(
+        session_cache_ttl_seconds=3600,
+        session_cache_maxsize=10,
+        pending_session_claim_ttl_seconds=1,
+    )
+
+    claimed = await runtime.claim_session(identity="user-1", session_id="session-X")
+    assert claimed is True
+
+    await asyncio.sleep(1.1)
+
+    claim = await runtime.session_claim_snapshot(session_id="session-X")
+    assert claim.owner_identity is None
+    assert claim.pending_identity is None

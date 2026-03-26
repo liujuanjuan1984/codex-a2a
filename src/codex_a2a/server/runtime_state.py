@@ -5,58 +5,65 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any
 
-from sqlalchemy import JSON, Float, String, delete, select
+from sqlalchemy import (
+    JSON,
+    Column,
+    Float,
+    MetaData,
+    String,
+    Table,
+    and_,
+    delete,
+    insert,
+    select,
+    update,
+)
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
     async_sessionmaker,
 )
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 from codex_a2a.config import Settings
 from codex_a2a.upstream.interrupts import InterruptRequestBinding
 
 from .database import build_database_engine
 
+_STATE_METADATA = MetaData()
 
-class _Base(DeclarativeBase):
-    pass
+_SESSION_BINDINGS = Table(
+    "a2a_session_bindings",
+    _STATE_METADATA,
+    Column("identity", String, primary_key=True),
+    Column("context_id", String, primary_key=True),
+    Column("session_id", String, nullable=False),
+)
 
+_SESSION_OWNERS = Table(
+    "a2a_session_owners",
+    _STATE_METADATA,
+    Column("session_id", String, primary_key=True),
+    Column("owner_identity", String, nullable=False),
+)
 
-class _SessionBindingRow(_Base):
-    __tablename__ = "a2a_session_bindings"
+_PENDING_SESSION_CLAIMS = Table(
+    "a2a_pending_session_claims",
+    _STATE_METADATA,
+    Column("session_id", String, primary_key=True),
+    Column("pending_identity", String, nullable=False),
+    Column("expires_at", Float, nullable=False),
+)
 
-    identity: Mapped[str] = mapped_column(String, primary_key=True)
-    context_id: Mapped[str] = mapped_column(String, primary_key=True)
-    session_id: Mapped[str] = mapped_column(String, nullable=False)
-    expires_at: Mapped[float] = mapped_column(Float, nullable=False)
-
-
-class _SessionOwnerRow(_Base):
-    __tablename__ = "a2a_session_owners"
-
-    session_id: Mapped[str] = mapped_column(String, primary_key=True)
-    owner_identity: Mapped[str] = mapped_column(String, nullable=False)
-    expires_at: Mapped[float] = mapped_column(Float, nullable=False)
-
-
-class _PendingSessionClaimRow(_Base):
-    __tablename__ = "a2a_pending_session_claims"
-
-    session_id: Mapped[str] = mapped_column(String, primary_key=True)
-    pending_identity: Mapped[str] = mapped_column(String, nullable=False)
-    expires_at: Mapped[float] = mapped_column(Float, nullable=False)
-
-
-class _PendingInterruptRequestRow(_Base):
-    __tablename__ = "a2a_pending_interrupt_requests"
-
-    request_id: Mapped[str] = mapped_column(String, primary_key=True)
-    interrupt_type: Mapped[str] = mapped_column(String, nullable=False)
-    session_id: Mapped[str] = mapped_column(String, nullable=False)
-    created_at: Mapped[float] = mapped_column(Float, nullable=False)
-    rpc_request_id: Mapped[str | int] = mapped_column(JSON, nullable=False)
-    params: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+_PENDING_INTERRUPT_REQUESTS = Table(
+    "a2a_pending_interrupt_requests",
+    _STATE_METADATA,
+    Column("request_id", String, primary_key=True),
+    Column("interrupt_type", String, nullable=False),
+    Column("session_id", String, nullable=False),
+    Column("created_at", Float, nullable=False),
+    Column("rpc_request_id", JSON, nullable=False),
+    Column("params", JSON, nullable=False),
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -88,7 +95,7 @@ class RuntimeStateStore:
         if self._initialized:
             return
         async with self._engine.begin() as conn:
-            await conn.run_sync(_Base.metadata.create_all)
+            await conn.run_sync(_STATE_METADATA.create_all)
         self._initialized = True
 
     async def dispose(self) -> None:
@@ -100,29 +107,26 @@ class RuntimeStateStore:
 
     @staticmethod
     def _expires_at(*, ttl_seconds: int) -> float:
-        return time.monotonic() + float(ttl_seconds)
+        return time.time() + float(ttl_seconds)
 
-    async def _purge_expired_session_state(self, session: AsyncSession) -> None:
-        now = time.monotonic()
+    async def _purge_expired_pending_claims(self, session: AsyncSession) -> None:
+        now = time.time()
         await session.execute(
-            delete(_SessionBindingRow).where(_SessionBindingRow.expires_at <= now)
-        )
-        await session.execute(delete(_SessionOwnerRow).where(_SessionOwnerRow.expires_at <= now))
-        await session.execute(
-            delete(_PendingSessionClaimRow).where(_PendingSessionClaimRow.expires_at <= now)
+            delete(_PENDING_SESSION_CLAIMS).where(_PENDING_SESSION_CLAIMS.c.expires_at <= now)
         )
 
     async def load_session_binding(self, *, identity: str, context_id: str) -> str | None:
         await self._ensure_initialized()
         async with self._session_maker.begin() as session:
-            await self._purge_expired_session_state(session)
-            row = await session.scalar(
-                select(_SessionBindingRow).where(
-                    _SessionBindingRow.identity == identity,
-                    _SessionBindingRow.context_id == context_id,
+            result = await session.execute(
+                select(_SESSION_BINDINGS.c.session_id).where(
+                    and_(
+                        _SESSION_BINDINGS.c.identity == identity,
+                        _SESSION_BINDINGS.c.context_id == context_id,
+                    )
                 )
             )
-            return row.session_id if row is not None else None
+            return result.scalar_one_or_none()
 
     async def save_session_binding(
         self,
@@ -130,59 +134,94 @@ class RuntimeStateStore:
         identity: str,
         context_id: str,
         session_id: str,
-        ttl_seconds: int,
     ) -> None:
         await self._ensure_initialized()
+        values = {
+            "identity": identity,
+            "context_id": context_id,
+            "session_id": session_id,
+        }
         async with self._session_maker.begin() as session:
-            await session.merge(
-                _SessionBindingRow(
-                    identity=identity,
-                    context_id=context_id,
-                    session_id=session_id,
-                    expires_at=self._expires_at(ttl_seconds=ttl_seconds),
+            existing = await session.execute(
+                select(_SESSION_BINDINGS.c.session_id).where(
+                    and_(
+                        _SESSION_BINDINGS.c.identity == identity,
+                        _SESSION_BINDINGS.c.context_id == context_id,
+                    )
                 )
             )
+            if existing.scalar_one_or_none() is None:
+                await session.execute(insert(_SESSION_BINDINGS).values(**values))
+            else:
+                await session.execute(
+                    update(_SESSION_BINDINGS)
+                    .where(
+                        and_(
+                            _SESSION_BINDINGS.c.identity == identity,
+                            _SESSION_BINDINGS.c.context_id == context_id,
+                        )
+                    )
+                    .values(**values)
+                )
 
     async def delete_session_binding(self, *, identity: str, context_id: str) -> None:
         await self._ensure_initialized()
         async with self._session_maker.begin() as session:
             await session.execute(
-                delete(_SessionBindingRow).where(
-                    _SessionBindingRow.identity == identity,
-                    _SessionBindingRow.context_id == context_id,
+                delete(_SESSION_BINDINGS).where(
+                    and_(
+                        _SESSION_BINDINGS.c.identity == identity,
+                        _SESSION_BINDINGS.c.context_id == context_id,
+                    )
                 )
             )
 
     async def load_session_owner(self, *, session_id: str) -> str | None:
         await self._ensure_initialized()
         async with self._session_maker.begin() as session:
-            await self._purge_expired_session_state(session)
-            row = await session.get(_SessionOwnerRow, session_id)
-            return row.owner_identity if row is not None else None
+            result = await session.execute(
+                select(_SESSION_OWNERS.c.owner_identity).where(
+                    _SESSION_OWNERS.c.session_id == session_id
+                )
+            )
+            return result.scalar_one_or_none()
 
     async def save_session_owner(
         self,
         *,
         session_id: str,
         identity: str,
-        ttl_seconds: int,
     ) -> None:
         await self._ensure_initialized()
+        values = {
+            "session_id": session_id,
+            "owner_identity": identity,
+        }
         async with self._session_maker.begin() as session:
-            await session.merge(
-                _SessionOwnerRow(
-                    session_id=session_id,
-                    owner_identity=identity,
-                    expires_at=self._expires_at(ttl_seconds=ttl_seconds),
+            existing = await session.execute(
+                select(_SESSION_OWNERS.c.session_id).where(
+                    _SESSION_OWNERS.c.session_id == session_id
                 )
             )
+            if existing.scalar_one_or_none() is None:
+                await session.execute(insert(_SESSION_OWNERS).values(**values))
+            else:
+                await session.execute(
+                    update(_SESSION_OWNERS)
+                    .where(_SESSION_OWNERS.c.session_id == session_id)
+                    .values(**values)
+                )
 
     async def load_pending_session_claim(self, *, session_id: str) -> str | None:
         await self._ensure_initialized()
         async with self._session_maker.begin() as session:
-            await self._purge_expired_session_state(session)
-            row = await session.get(_PendingSessionClaimRow, session_id)
-            return row.pending_identity if row is not None else None
+            await self._purge_expired_pending_claims(session)
+            result = await session.execute(
+                select(_PENDING_SESSION_CLAIMS.c.pending_identity).where(
+                    _PENDING_SESSION_CLAIMS.c.session_id == session_id
+                )
+            )
+            return result.scalar_one_or_none()
 
     async def save_pending_session_claim(
         self,
@@ -192,21 +231,32 @@ class RuntimeStateStore:
         ttl_seconds: int,
     ) -> None:
         await self._ensure_initialized()
+        values = {
+            "session_id": session_id,
+            "pending_identity": identity,
+            "expires_at": self._expires_at(ttl_seconds=ttl_seconds),
+        }
         async with self._session_maker.begin() as session:
-            await session.merge(
-                _PendingSessionClaimRow(
-                    session_id=session_id,
-                    pending_identity=identity,
-                    expires_at=self._expires_at(ttl_seconds=ttl_seconds),
+            existing = await session.execute(
+                select(_PENDING_SESSION_CLAIMS.c.session_id).where(
+                    _PENDING_SESSION_CLAIMS.c.session_id == session_id
                 )
             )
+            if existing.scalar_one_or_none() is None:
+                await session.execute(insert(_PENDING_SESSION_CLAIMS).values(**values))
+            else:
+                await session.execute(
+                    update(_PENDING_SESSION_CLAIMS)
+                    .where(_PENDING_SESSION_CLAIMS.c.session_id == session_id)
+                    .values(**values)
+                )
 
     async def delete_pending_session_claim(self, *, session_id: str) -> None:
         await self._ensure_initialized()
         async with self._session_maker.begin() as session:
             await session.execute(
-                delete(_PendingSessionClaimRow).where(
-                    _PendingSessionClaimRow.session_id == session_id
+                delete(_PENDING_SESSION_CLAIMS).where(
+                    _PENDING_SESSION_CLAIMS.c.session_id == session_id
                 )
             )
 
@@ -221,24 +271,35 @@ class RuntimeStateStore:
         params: dict[str, Any],
     ) -> None:
         await self._ensure_initialized()
+        values = {
+            "request_id": request_id,
+            "interrupt_type": interrupt_type,
+            "session_id": session_id,
+            "created_at": created_at,
+            "rpc_request_id": rpc_request_id,
+            "params": params,
+        }
         async with self._session_maker.begin() as session:
-            await session.merge(
-                _PendingInterruptRequestRow(
-                    request_id=request_id,
-                    interrupt_type=interrupt_type,
-                    session_id=session_id,
-                    created_at=created_at,
-                    rpc_request_id=rpc_request_id,
-                    params=params,
+            existing = await session.execute(
+                select(_PENDING_INTERRUPT_REQUESTS.c.request_id).where(
+                    _PENDING_INTERRUPT_REQUESTS.c.request_id == request_id
                 )
             )
+            if existing.scalar_one_or_none() is None:
+                await session.execute(insert(_PENDING_INTERRUPT_REQUESTS).values(**values))
+            else:
+                await session.execute(
+                    update(_PENDING_INTERRUPT_REQUESTS)
+                    .where(_PENDING_INTERRUPT_REQUESTS.c.request_id == request_id)
+                    .values(**values)
+                )
 
     async def delete_interrupt_request(self, *, request_id: str) -> None:
         await self._ensure_initialized()
         async with self._session_maker.begin() as session:
             await session.execute(
-                delete(_PendingInterruptRequestRow).where(
-                    _PendingInterruptRequestRow.request_id == request_id
+                delete(_PENDING_INTERRUPT_REQUESTS).where(
+                    _PENDING_INTERRUPT_REQUESTS.c.request_id == request_id
                 )
             )
 
@@ -248,26 +309,26 @@ class RuntimeStateStore:
         interrupt_request_ttl_seconds: int,
     ) -> list[PersistedInterruptRequest]:
         await self._ensure_initialized()
-        cutoff = time.monotonic() - float(interrupt_request_ttl_seconds)
+        cutoff = time.time() - float(interrupt_request_ttl_seconds)
         async with self._session_maker.begin() as session:
             await session.execute(
-                delete(_PendingInterruptRequestRow).where(
-                    _PendingInterruptRequestRow.created_at <= cutoff
+                delete(_PENDING_INTERRUPT_REQUESTS).where(
+                    _PENDING_INTERRUPT_REQUESTS.c.created_at <= cutoff
                 )
             )
-            rows = (await session.scalars(select(_PendingInterruptRequestRow))).all()
+            rows = (await session.execute(select(_PENDING_INTERRUPT_REQUESTS))).mappings().all()
 
         return [
             PersistedInterruptRequest(
-                request_id=row.request_id,
+                request_id=row["request_id"],
                 binding=InterruptRequestBinding(
-                    request_id=row.request_id,
-                    interrupt_type=row.interrupt_type,
-                    session_id=row.session_id,
-                    created_at=row.created_at,
+                    request_id=row["request_id"],
+                    interrupt_type=row["interrupt_type"],
+                    session_id=row["session_id"],
+                    created_at=row["created_at"],
                 ),
-                rpc_request_id=row.rpc_request_id,
-                params=dict(row.params),
+                rpc_request_id=row["rpc_request_id"],
+                params=dict(row["params"]),
             )
             for row in rows
         ]
