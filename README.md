@@ -123,7 +123,9 @@ the local execution flow as tool results.
 
 For authenticated peers, configure `A2A_CLIENT_BEARER_TOKEN` for server-side
 outbound calls, or `A2A_CLIENT_BASIC_AUTH` for peer services protected by
-HTTP Basic auth. The CLI intentionally reads outbound credentials from
+HTTP Basic auth. These outbound credentials apply to the peer specified by
+`codex-a2a call` or `a2a_call(url, message)`, not to this service's inbound
+`A2A_BEARER_TOKEN`. The CLI intentionally reads outbound credentials from
 environment variables so secrets do not land in shell history or process
 arguments.
 

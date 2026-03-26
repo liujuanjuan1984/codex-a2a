@@ -198,10 +198,13 @@ Current implementation note:
 - `A2A_CLIENT_USE_CLIENT_PREFERENCE`: whether outbound transport negotiation
   should prefer the local client ordering, default `false`
 - `A2A_CLIENT_BEARER_TOKEN`: optional bearer token injected into outbound A2A
-  requests, including Agent Card fetches when configured
+  requests, including Agent Card fetches when configured. This applies to the
+  target peer service used by `codex-a2a call` or `a2a_call(url, message)`,
+  not to this service's inbound `A2A_BEARER_TOKEN`.
 - `A2A_CLIENT_BASIC_AUTH`: optional Basic auth credential injected into
   outbound A2A requests when bearer auth is not configured. Accepts
-  `username:password` or its base64-encoded form.
+  `username:password` or its base64-encoded form. This also applies to the
+  target peer service, not to inbound auth on this runtime.
 - `A2A_CLIENT_SUPPORTED_TRANSPORTS`: comma-separated outbound transport
   preference list, default `JSONRPC,HTTP+JSON`
 - `A2A_INTERRUPT_REQUEST_TTL_SECONDS`: TTL for pending interrupt callbacks
