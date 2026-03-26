@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from codex_a2a.server.runtime_state import RuntimeStateStore
+    from codex_a2a.server.runtime_state import SessionStateRepository
 
 
 class TTLCache:
@@ -97,7 +97,7 @@ class SessionRuntime:
         session_cache_ttl_seconds: int,
         session_cache_maxsize: int,
         pending_session_claim_ttl_seconds: int = 30,
-        state_store: RuntimeStateStore | None = None,
+        state_store: SessionStateRepository | None = None,
     ) -> None:
         self._session_cache_ttl_seconds = int(session_cache_ttl_seconds)
         self._pending_session_claim_ttl_seconds = int(pending_session_claim_ttl_seconds)

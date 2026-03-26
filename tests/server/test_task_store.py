@@ -24,10 +24,13 @@ def test_build_task_store_runtime_uses_memory_backend_when_database_disabled() -
     assert isinstance(runtime.task_store, InMemoryTaskStore)
 
 
-def test_build_task_store_runtime_uses_database_backend_by_default() -> None:
+def test_build_task_store_runtime_uses_database_backend_when_database_enabled(
+    tmp_path: Path,
+) -> None:
     runtime = build_task_store_runtime(
         make_settings(
             a2a_bearer_token="test-token",
+            a2a_database_url=f"sqlite+aiosqlite:///{(tmp_path / 'default-runtime.db').resolve()}",
         )
     )
 

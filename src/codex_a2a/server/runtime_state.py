@@ -3,7 +3,7 @@ from __future__ import annotations
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Protocol
 
 from sqlalchemy import (
     JSON,
@@ -72,6 +72,62 @@ class PersistedInterruptRequest:
     binding: InterruptRequestBinding
     rpc_request_id: str | int
     params: dict[str, Any]
+
+
+class SessionStateRepository(Protocol):
+    async def load_session_binding(self, *, identity: str, context_id: str) -> str | None: ...
+
+    async def save_session_binding(
+        self,
+        *,
+        identity: str,
+        context_id: str,
+        session_id: str,
+    ) -> None: ...
+
+    async def delete_session_binding(self, *, identity: str, context_id: str) -> None: ...
+
+    async def load_session_owner(self, *, session_id: str) -> str | None: ...
+
+    async def save_session_owner(
+        self,
+        *,
+        session_id: str,
+        identity: str,
+    ) -> None: ...
+
+    async def load_pending_session_claim(self, *, session_id: str) -> str | None: ...
+
+    async def save_pending_session_claim(
+        self,
+        *,
+        session_id: str,
+        identity: str,
+        ttl_seconds: int,
+    ) -> None: ...
+
+    async def delete_pending_session_claim(self, *, session_id: str) -> None: ...
+
+
+class InterruptRequestRepository(Protocol):
+    async def save_interrupt_request(
+        self,
+        *,
+        request_id: str,
+        interrupt_type: str,
+        session_id: str,
+        created_at: float,
+        rpc_request_id: str | int,
+        params: dict[str, Any],
+    ) -> None: ...
+
+    async def delete_interrupt_request(self, *, request_id: str) -> None: ...
+
+    async def load_interrupt_requests(
+        self,
+        *,
+        interrupt_request_ttl_seconds: int,
+    ) -> list[PersistedInterruptRequest]: ...
 
 
 @dataclass(slots=True)
