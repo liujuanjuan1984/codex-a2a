@@ -1,6 +1,12 @@
 from __future__ import annotations
 
-from codex_a2a.client.request_context import build_call_context, split_request_metadata
+import pytest
+
+from codex_a2a.client.request_context import (
+    build_call_context,
+    build_default_headers,
+    split_request_metadata,
+)
 
 
 def test_split_request_metadata_separates_authorization_header() -> None:
@@ -28,3 +34,22 @@ def test_build_call_context_returns_header_state() -> None:
 
 def test_build_call_context_returns_none_without_headers() -> None:
     assert build_call_context(None) is None
+
+
+def test_build_default_headers_prefers_bearer_over_basic_auth() -> None:
+    assert build_default_headers("peer-token", "user:pass") == {
+        "Authorization": "Bearer peer-token"
+    }
+
+
+def test_build_default_headers_encodes_basic_auth() -> None:
+    assert build_default_headers(None, "user:pass") == {"Authorization": "Basic dXNlcjpwYXNz"}
+
+
+def test_build_default_headers_accepts_pre_encoded_basic_auth() -> None:
+    assert build_default_headers(None, "dXNlcjpwYXNz") == {"Authorization": "Basic dXNlcjpwYXNz"}
+
+
+def test_build_default_headers_rejects_invalid_basic_auth() -> None:
+    with pytest.raises(ValueError, match="A2A_CLIENT_BASIC_AUTH"):
+        build_default_headers(None, "not-basic-auth")

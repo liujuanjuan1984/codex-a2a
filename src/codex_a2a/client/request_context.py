@@ -5,6 +5,19 @@ from typing import Any
 
 from a2a.client.middleware import ClientCallContext
 
+from .auth import encode_basic_auth
+
+
+def build_default_headers(
+    bearer_token: str | None,
+    basic_auth: str | None = None,
+) -> dict[str, str]:
+    if bearer_token:
+        return {"Authorization": f"Bearer {bearer_token}"}
+    if basic_auth:
+        return {"Authorization": f"Basic {encode_basic_auth(basic_auth)}"}
+    return {}
+
 
 def split_request_metadata(
     metadata: Mapping[str, Any] | None,
@@ -28,4 +41,4 @@ def build_call_context(
     return ClientCallContext(state={"headers": dict(extra_headers)})
 
 
-__all__ = ["build_call_context", "split_request_metadata"]
+__all__ = ["build_call_context", "build_default_headers", "split_request_metadata"]

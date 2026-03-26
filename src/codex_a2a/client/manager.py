@@ -8,6 +8,7 @@ from codex_a2a.config import Settings
 
 from .client import A2AClient
 from .config import A2AClientConfig
+from .request_context import build_default_headers
 
 
 class A2AClientManager:
@@ -25,11 +26,10 @@ class A2AClientManager:
         self._lock = asyncio.Lock()
 
     def _build_headers(self) -> dict[str, str]:
-        headers: dict[str, str] = {}
-        token = self._settings.a2a_client_bearer_token
-        if token:
-            headers["Authorization"] = f"Bearer {token}"
-        return headers
+        return build_default_headers(
+            self._settings.a2a_client_bearer_token,
+            self._settings.a2a_client_basic_auth,
+        )
 
     def _build_config(self, agent_url: str) -> A2AClientConfig:
         return A2AClientConfig(

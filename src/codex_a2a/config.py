@@ -6,6 +6,7 @@ from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 from codex_a2a import __version__
+from codex_a2a.client.auth import validate_basic_auth
 
 _SANDBOX_MODES = {
     "unknown",
@@ -165,7 +166,7 @@ class Settings(BaseSettings):
     a2a_port: int = Field(default=8000, alias="A2A_PORT")
     a2a_bearer_token: str = Field(..., min_length=1, alias="A2A_BEARER_TOKEN")
     a2a_database_url: str | None = Field(
-        default=None,
+        default="sqlite+aiosqlite:///./codex-a2a.db",
         alias="A2A_DATABASE_URL",
     )
 
@@ -192,6 +193,10 @@ class Settings(BaseSettings):
     a2a_client_bearer_token: str | None = Field(
         default=None,
         alias="A2A_CLIENT_BEARER_TOKEN",
+    )
+    a2a_client_basic_auth: str | None = Field(
+        default=None,
+        alias="A2A_CLIENT_BASIC_AUTH",
     )
     a2a_client_supported_transports: Annotated[list[str], NoDecode] = Field(
         default_factory=lambda: ["JSONRPC", "HTTP+JSON"],
@@ -338,6 +343,14 @@ class Settings(BaseSettings):
     def validate_a2a_client_timeout_seconds(cls, value: float) -> float:
         if value <= 0:
             raise ValueError("A2A_CLIENT_*_TIMEOUT_SECONDS must be > 0")
+        return value
+
+    @field_validator("a2a_client_basic_auth")
+    @classmethod
+    def validate_a2a_client_basic_auth(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
+        validate_basic_auth(value)
         return value
 
     @classmethod

@@ -46,6 +46,18 @@ async def test_manager_normalizes_config_and_transports() -> None:
 
 
 @pytest.mark.asyncio
+async def test_manager_uses_basic_auth_when_bearer_is_absent() -> None:
+    settings = make_settings(
+        a2a_client_basic_auth="user:pass",
+    )
+    factory = _Factory()
+    manager = A2AClientManager(settings, client_factory=factory)
+    client = await manager.get_client("https://peer.example.com/")
+
+    assert client.config.default_headers == {"Authorization": "Basic dXNlcjpwYXNz"}
+
+
+@pytest.mark.asyncio
 async def test_manager_caches_client_by_normalized_url() -> None:
     settings = make_settings()
     factory = _Factory()
