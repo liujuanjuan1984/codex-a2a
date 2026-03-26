@@ -170,8 +170,6 @@ Current implementation note:
   database task store and runtime-state persistence; when configured it enables
   database-backed task persistence and also backs session-binding ownership
   state plus pending interrupt callback requests for cross-restart recovery
-- `A2A_DATABASE_AUTO_CREATE`: automatically create persistence tables on
-  startup, default `true`
 - `A2A_ENABLE_HEALTH_ENDPOINT`: enable the authenticated lightweight `/health` probe, default `true`
 - `A2A_ENABLE_SESSION_SHELL`: expose `codex.sessions.shell` on JSON-RPC extensions, default `true`
 - `A2A_LOG_LEVEL`: `DEBUG/INFO/WARNING/ERROR`, default `INFO`

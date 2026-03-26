@@ -79,18 +79,16 @@ async def _noop() -> None:
 
 
 class RuntimeStateStore:
-    def __init__(self, engine: AsyncEngine, *, auto_create: bool) -> None:
+    def __init__(self, engine: AsyncEngine) -> None:
         self._engine = engine
         self._session_maker = async_sessionmaker(self._engine, expire_on_commit=False)
-        self._auto_create = auto_create
         self._initialized = False
 
     async def initialize(self) -> None:
         if self._initialized:
             return
-        if self._auto_create:
-            async with self._engine.begin() as conn:
-                await conn.run_sync(_Base.metadata.create_all)
+        async with self._engine.begin() as conn:
+            await conn.run_sync(_Base.metadata.create_all)
         self._initialized = True
 
     async def dispose(self) -> None:
@@ -284,10 +282,7 @@ def build_runtime_state_runtime(
         return RuntimeStateRuntime(state_store=None, startup=_noop, shutdown=_noop)
 
     resolved_engine = engine or build_database_engine(settings)
-    state_store = RuntimeStateStore(
-        resolved_engine,
-        auto_create=settings.a2a_database_auto_create,
-    )
+    state_store = RuntimeStateStore(resolved_engine)
 
     async def _startup() -> None:
         await state_store.initialize()

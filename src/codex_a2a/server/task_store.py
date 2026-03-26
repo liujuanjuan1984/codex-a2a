@@ -40,7 +40,7 @@ def build_task_store_runtime(
     resolved_engine = engine or build_database_engine(settings)
     task_store = DatabaseTaskStore(
         engine=resolved_engine,
-        create_table=settings.a2a_database_auto_create,
+        create_table=True,
         table_name="tasks",
     )
 

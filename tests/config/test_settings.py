@@ -56,13 +56,11 @@ def test_settings_parse_task_store_configuration() -> None:
     env = {
         "A2A_BEARER_TOKEN": "test",
         "A2A_DATABASE_URL": "sqlite+aiosqlite:////tmp/tasks.db",
-        "A2A_DATABASE_AUTO_CREATE": "false",
     }
     with mock.patch.dict(os.environ, env, clear=True):
         settings = Settings.from_env()
 
     assert settings.a2a_database_url == "sqlite+aiosqlite:////tmp/tasks.db"
-    assert settings.a2a_database_auto_create is False
 
 
 def test_settings_parse_execution_environment_flags() -> None:

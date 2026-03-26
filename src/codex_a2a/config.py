@@ -168,7 +168,6 @@ class Settings(BaseSettings):
         default=None,
         alias="A2A_DATABASE_URL",
     )
-    a2a_database_auto_create: bool = Field(default=True, alias="A2A_DATABASE_AUTO_CREATE")
 
     # Session cache settings
     a2a_session_cache_ttl_seconds: int = Field(default=3600, alias="A2A_SESSION_CACHE_TTL_SECONDS")
