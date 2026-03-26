@@ -46,7 +46,7 @@ from codex_a2a.upstream.request_mapping import (
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
-    from codex_a2a.server.runtime_state import RuntimeStateStore
+    from codex_a2a.server.runtime_state import InterruptRequestRepository
 
 
 class _UnsetType:
@@ -63,7 +63,10 @@ class CodexClient:
     """Codex app-server client adapter (stdio JSON-RPC)."""
 
     def __init__(
-        self, settings: Settings, *, interrupt_request_store: RuntimeStateStore | None = None
+        self,
+        settings: Settings,
+        *,
+        interrupt_request_store: InterruptRequestRepository | None = None,
     ) -> None:
         install_log_record_factory()
         self._settings = settings
