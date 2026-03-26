@@ -69,12 +69,13 @@ Before starting the runtime:
 Self-start the released CLI against a workspace root:
 
 ```bash
-export A2A_BEARER_TOKEN="$(python -c 'import secrets; print(secrets.token_hex(24))')"
+A2A_BEARER_TOKEN="$(python -c 'import secrets; print(secrets.token_hex(24))')" \
 A2A_HOST=127.0.0.1 \
 A2A_PORT=8000 \
 A2A_PUBLIC_URL=http://127.0.0.1:8000 \
 A2A_DATABASE_URL=sqlite+aiosqlite:///./codex-a2a.db \
-CODEX_WORKSPACE_ROOT=/abs/path/to/workspace codex-a2a
+CODEX_WORKSPACE_ROOT=/abs/path/to/workspace \
+codex-a2a
 ```
 
 Agent Card: `http://127.0.0.1:8000/.well-known/agent-card.json`
