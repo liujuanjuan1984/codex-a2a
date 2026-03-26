@@ -41,6 +41,8 @@ pip-delete-this-directory.txt
 # Local logs
 logs/
 run/
+.codex-a2a/
+*.db
 
 # Unit test / coverage reports
 htmlcov/

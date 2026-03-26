@@ -52,6 +52,17 @@ def test_settings_parse_ops_flags_and_timeouts():
         assert settings.a2a_interrupt_request_ttl_seconds == 90
 
 
+def test_settings_parse_task_store_configuration() -> None:
+    env = {
+        "A2A_BEARER_TOKEN": "test",
+        "A2A_DATABASE_URL": "sqlite+aiosqlite:////tmp/tasks.db",
+    }
+    with mock.patch.dict(os.environ, env, clear=True):
+        settings = Settings.from_env()
+
+    assert settings.a2a_database_url == "sqlite+aiosqlite:////tmp/tasks.db"
+
+
 def test_settings_parse_execution_environment_flags() -> None:
     env = {
         "A2A_BEARER_TOKEN": "test",

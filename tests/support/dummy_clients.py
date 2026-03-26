@@ -56,7 +56,7 @@ class DummyChatCodexClient:
         for _ in ():
             yield {}
 
-    def discard_interrupt_request(self, request_id: str) -> None:
+    async def discard_interrupt_request(self, request_id: str) -> None:
         del request_id
 
 
@@ -144,6 +144,7 @@ class DummySessionQueryCodexClient:
                 "directory": directory,
             }
         )
+        await self.discard_interrupt_request(request_id)
         return True
 
     async def question_reply(
@@ -160,6 +161,7 @@ class DummySessionQueryCodexClient:
                 "directory": directory,
             }
         )
+        await self.discard_interrupt_request(request_id)
         return True
 
     async def question_reject(
@@ -174,9 +176,10 @@ class DummySessionQueryCodexClient:
                 "directory": directory,
             }
         )
+        await self.discard_interrupt_request(request_id)
         return True
 
-    def discard_interrupt_request(self, request_id: str) -> None:
+    async def discard_interrupt_request(self, request_id: str) -> None:
         self._interrupt_requests.pop(request_id, None)
 
     def prime_interrupt_request(
@@ -194,7 +197,7 @@ class DummySessionQueryCodexClient:
             created_at=created_at,
         )
 
-    def resolve_interrupt_request(
+    async def resolve_interrupt_request(
         self,
         request_id: str,
     ) -> tuple[str, InterruptRequestBinding | None]:

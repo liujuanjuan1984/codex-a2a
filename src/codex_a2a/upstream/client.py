@@ -8,7 +8,7 @@ import os
 import shutil
 import time
 from collections.abc import AsyncIterator
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from codex_a2a import __version__
 from codex_a2a.config import Settings
@@ -45,6 +45,9 @@ from codex_a2a.upstream.request_mapping import (
 
 logger = logging.getLogger(__name__)
 
+if TYPE_CHECKING:
+    from codex_a2a.server.runtime_state import RuntimeStateStore
+
 
 class _UnsetType:
     pass
@@ -59,7 +62,9 @@ _EVENT_QUEUE_MAXSIZE = 2048
 class CodexClient:
     """Codex app-server client adapter (stdio JSON-RPC)."""
 
-    def __init__(self, settings: Settings) -> None:
+    def __init__(
+        self, settings: Settings, *, interrupt_request_store: RuntimeStateStore | None = None
+    ) -> None:
         install_log_record_factory()
         self._settings = settings
         self._workspace_root = settings.codex_workspace_root
@@ -72,6 +77,7 @@ class CodexClient:
         self._model_reasoning_effort = settings.codex_model_reasoning_effort
         self._interrupt_request_ttl_seconds = settings.a2a_interrupt_request_ttl_seconds
         self._log_payloads = settings.a2a_log_payloads
+        self._interrupt_request_store = interrupt_request_store
 
         self._process: asyncio.subprocess.Process | None = None
         self._stdout_task: asyncio.Task[None] | None = None
@@ -88,6 +94,19 @@ class CodexClient:
         self._pending_server_requests: dict[str, _PendingInterruptRequest] = {}
         self._event_subscribers: set[asyncio.Queue[dict[str, Any]]] = set()
         self._turn_trackers: dict[tuple[str, str], _TurnTracker] = {}
+
+    async def restore_persisted_interrupt_requests(self) -> None:
+        if self._interrupt_request_store is None:
+            return
+        restored = await self._interrupt_request_store.load_interrupt_requests(
+            interrupt_request_ttl_seconds=self._interrupt_request_ttl_seconds
+        )
+        for entry in restored:
+            self._pending_server_requests[entry.request_id] = _PendingInterruptRequest(
+                binding=entry.binding,
+                rpc_request_id=entry.rpc_request_id,
+                params=entry.params,
+            )
 
     async def close(self) -> None:
         self._closed = True
@@ -594,6 +613,16 @@ class CodexClient:
                 rpc_request_id=rpc_request_id,
                 params=params,
             )
+            if self._interrupt_request_store is not None:
+                binding = self._pending_server_requests[request_key].binding
+                await self._interrupt_request_store.save_interrupt_request(
+                    request_id=request_key,
+                    interrupt_type=binding.interrupt_type,
+                    session_id=binding.session_id,
+                    created_at=binding.created_at,
+                    rpc_request_id=rpc_request_id,
+                    params=params,
+                )
             await self._enqueue_stream_event(
                 {
                     "type": "permission.asked",
@@ -620,6 +649,16 @@ class CodexClient:
                 rpc_request_id=rpc_request_id,
                 params=params,
             )
+            if self._interrupt_request_store is not None:
+                binding = self._pending_server_requests[request_key].binding
+                await self._interrupt_request_store.save_interrupt_request(
+                    request_id=request_key,
+                    interrupt_type=binding.interrupt_type,
+                    session_id=binding.session_id,
+                    created_at=binding.created_at,
+                    rpc_request_id=rpc_request_id,
+                    params=params,
+                )
             await self._enqueue_stream_event(
                 {
                     "type": "question.asked",
@@ -912,7 +951,7 @@ class CodexClient:
             interrupt_request_ttl_seconds=self._interrupt_request_ttl_seconds,
         )
 
-    def resolve_interrupt_request(
+    async def resolve_interrupt_request(
         self, request_id: str
     ) -> tuple[str, InterruptRequestBinding | None]:
         request_key = request_id.strip()
@@ -921,21 +960,24 @@ class CodexClient:
             return "missing", None
         status = self._interrupt_request_status(pending.binding)
         if status == "expired":
-            self._pending_server_requests.pop(request_key, None)
+            await self.discard_interrupt_request(request_key)
             return status, pending.binding
         return status, pending.binding
 
-    def discard_interrupt_request(self, request_id: str) -> None:
-        self._pending_server_requests.pop(request_id.strip(), None)
+    async def discard_interrupt_request(self, request_id: str) -> None:
+        request_key = request_id.strip()
+        self._pending_server_requests.pop(request_key, None)
+        if self._interrupt_request_store is not None:
+            await self._interrupt_request_store.delete_interrupt_request(request_id=request_key)
 
-    def _require_pending_interrupt_request(
+    async def _require_pending_interrupt_request(
         self,
         request_id: str,
         *,
         expected_interrupt_type: str,
     ) -> _PendingInterruptRequest:
         request_key = request_id.strip()
-        status, binding = self.resolve_interrupt_request(request_key)
+        status, binding = await self.resolve_interrupt_request(request_key)
         if status == "missing":
             raise InterruptRequestError(
                 error_type="INTERRUPT_REQUEST_NOT_FOUND",
@@ -985,7 +1027,7 @@ class CodexClient:
                 },
             }
         )
-        self.discard_interrupt_request(request_id)
+        await self.discard_interrupt_request(request_id)
 
     async def permission_reply(
         self,
@@ -997,7 +1039,7 @@ class CodexClient:
     ) -> bool:
         del message, directory
         normalized = (reply or "").strip().lower()
-        pending = self._require_pending_interrupt_request(
+        pending = await self._require_pending_interrupt_request(
             request_id,
             expected_interrupt_type="permission",
         )
@@ -1024,7 +1066,7 @@ class CodexClient:
         directory: str | None = None,
     ) -> bool:
         del directory
-        pending = self._require_pending_interrupt_request(
+        pending = await self._require_pending_interrupt_request(
             request_id,
             expected_interrupt_type="question",
         )
@@ -1055,7 +1097,7 @@ class CodexClient:
         directory: str | None = None,
     ) -> bool:
         del directory
-        pending = self._require_pending_interrupt_request(
+        pending = await self._require_pending_interrupt_request(
             request_id,
             expected_interrupt_type="question",
         )
@@ -1071,5 +1113,5 @@ class CodexClient:
                 },
             }
         )
-        self.discard_interrupt_request(request_id)
+        await self.discard_interrupt_request(request_id)
         return True

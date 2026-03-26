@@ -60,6 +60,15 @@ Current example: terminal `tasks/resubscribe` replay-once behavior is published
 as a service-level contract, not as a claim about generic A2A runtime
 semantics.
 
+Task durability is deployment-dependent:
+
+- `A2A_DATABASE_URL=<sqlalchemy-async-url>` preserves task
+  lookup/cancel/resubscribe state across process restarts.
+- The same database-backed mode also preserves session-binding ownership state
+  and pending interrupt callback requests that still fall within their TTL.
+- Leaving `A2A_DATABASE_URL` unset keeps the legacy single-process in-memory
+  task behavior and should be treated as non-durable.
+
 ## Deployment Profile
 
 The current service profile is intentionally:

@@ -2,7 +2,8 @@ import asyncio
 import hashlib
 import logging
 import uuid
-from unittest.mock import MagicMock
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock
 
 import httpx
 import pytest
@@ -121,6 +122,69 @@ def test_create_app_propagates_stream_idle_diagnostic_setting(monkeypatch) -> No
     app = app_module.create_app(settings)
 
     assert app.state.codex_executor._stream_idle_diagnostic_seconds == 42.0
+
+
+@pytest.mark.asyncio
+async def test_create_app_shares_database_engine_across_runtime_components(monkeypatch) -> None:
+    import codex_a2a.server.application as app_module
+
+    settings = make_settings(
+        a2a_bearer_token="test-token",
+        a2a_database_url="sqlite+aiosqlite:////tmp/shared-engine.db",
+    )
+    shared_engine = SimpleNamespace(dispose=AsyncMock())
+    state_store = object()
+    task_store = object()
+    runtime_startup = AsyncMock()
+    runtime_shutdown = AsyncMock()
+    task_startup = AsyncMock()
+    task_shutdown = AsyncMock()
+    captured: dict[str, object | None] = {
+        "database_engine_settings": None,
+        "runtime_engine": None,
+        "task_engine": None,
+    }
+
+    monkeypatch.setattr(
+        app_module,
+        "build_database_engine",
+        lambda cfg: captured.__setitem__("database_engine_settings", cfg) or shared_engine,
+    )
+
+    def _build_runtime_state_runtime(_settings, *, engine=None):  # noqa: ANN001
+        captured["runtime_engine"] = engine
+        return SimpleNamespace(
+            state_store=state_store,
+            startup=runtime_startup,
+            shutdown=runtime_shutdown,
+        )
+
+    def _build_task_store_runtime(_settings, *, engine=None):  # noqa: ANN001
+        captured["task_engine"] = engine
+        return SimpleNamespace(
+            task_store=task_store,
+            startup=task_startup,
+            shutdown=task_shutdown,
+        )
+
+    monkeypatch.setattr(app_module, "build_runtime_state_runtime", _build_runtime_state_runtime)
+    monkeypatch.setattr(app_module, "build_task_store_runtime", _build_task_store_runtime)
+    monkeypatch.setattr(app_module, "CodexClient", DummyChatCodexClient)
+
+    app = app_module.create_app(settings)
+
+    assert captured["database_engine_settings"] is settings
+    assert captured["runtime_engine"] is shared_engine
+    assert captured["task_engine"] is shared_engine
+
+    async with app.router.lifespan_context(app):
+        pass
+
+    runtime_startup.assert_awaited_once()
+    task_startup.assert_awaited_once()
+    runtime_shutdown.assert_awaited_once()
+    task_shutdown.assert_awaited_once()
+    shared_engine.dispose.assert_awaited_once()
 
 
 def test_openapi_rest_message_routes_include_schema_examples_and_extension_contracts() -> None:

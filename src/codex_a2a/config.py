@@ -164,6 +164,10 @@ class Settings(BaseSettings):
     a2a_host: str = Field(default="127.0.0.1", alias="A2A_HOST")
     a2a_port: int = Field(default=8000, alias="A2A_PORT")
     a2a_bearer_token: str = Field(..., min_length=1, alias="A2A_BEARER_TOKEN")
+    a2a_database_url: str | None = Field(
+        default=None,
+        alias="A2A_DATABASE_URL",
+    )
 
     # Session cache settings
     a2a_session_cache_ttl_seconds: int = Field(default=3600, alias="A2A_SESSION_CACHE_TTL_SECONDS")

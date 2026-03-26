@@ -17,14 +17,14 @@ if TYPE_CHECKING:
     from codex_a2a.jsonrpc.application import CodexSessionQueryJSONRPCApplication
 
 
-def resolve_interrupt_binding(
+async def resolve_interrupt_binding(
     app: CodexSessionQueryJSONRPCApplication,
     *,
     request_id: str,
     response_id: str | int | None,
     expected_interrupt_type: str,
 ) -> tuple[InterruptRequestBinding | None, Response | None]:
-    interrupt_status, binding = app._codex_client.resolve_interrupt_request(request_id)
+    interrupt_status, binding = await app._codex_client.resolve_interrupt_request(request_id)
     if interrupt_status == "missing":
         return None, interrupt_error_response(
             app,

@@ -4,7 +4,10 @@ import asyncio
 import time
 from collections.abc import Callable, Coroutine
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from codex_a2a.server.runtime_state import RuntimeStateStore
 
 
 class TTLCache:
@@ -93,7 +96,9 @@ class SessionRuntime:
         *,
         session_cache_ttl_seconds: int,
         session_cache_maxsize: int,
+        state_store: RuntimeStateStore | None = None,
     ) -> None:
+        self._session_cache_ttl_seconds = int(session_cache_ttl_seconds)
         self._sessions = TTLCache(
             ttl_seconds=session_cache_ttl_seconds,
             maxsize=session_cache_maxsize,
@@ -110,10 +115,84 @@ class SessionRuntime:
         self._running_stop_events: dict[tuple[str, str], asyncio.Event] = {}
         self._running_identities: dict[tuple[str, str], str] = {}
         self._lock = asyncio.Lock()
+        self._state_store = state_store
+
+    async def _load_bound_session(self, *, identity: str, context_id: str) -> str | None:
+        existing = self._sessions.get((identity, context_id))
+        if existing is not None or self._state_store is None:
+            return existing
+        restored = await self._state_store.load_session_binding(
+            identity=identity, context_id=context_id
+        )
+        if restored is not None:
+            self._sessions.set((identity, context_id), restored)
+        return restored
+
+    async def _persist_bound_session(
+        self,
+        *,
+        identity: str,
+        context_id: str,
+        session_id: str,
+    ) -> None:
+        self._sessions.set((identity, context_id), session_id)
+        if self._state_store is not None:
+            await self._state_store.save_session_binding(
+                identity=identity,
+                context_id=context_id,
+                session_id=session_id,
+                ttl_seconds=self._session_cache_ttl_seconds,
+            )
+
+    async def _delete_bound_session(self, *, identity: str, context_id: str) -> None:
+        self._sessions.pop((identity, context_id))
+        if self._state_store is not None:
+            await self._state_store.delete_session_binding(identity=identity, context_id=context_id)
+
+    async def _load_session_owner(self, *, session_id: str) -> str | None:
+        owner = self._session_owners.get(session_id)
+        if owner is not None or self._state_store is None:
+            return owner
+        restored = await self._state_store.load_session_owner(session_id=session_id)
+        if restored is not None:
+            self._session_owners.set(session_id, restored)
+        return restored
+
+    async def _persist_session_owner(self, *, session_id: str, identity: str) -> None:
+        self._session_owners.set(session_id, identity)
+        if self._state_store is not None:
+            await self._state_store.save_session_owner(
+                session_id=session_id,
+                identity=identity,
+                ttl_seconds=self._session_cache_ttl_seconds,
+            )
+
+    async def _load_pending_claim(self, *, session_id: str) -> str | None:
+        pending = self._pending_session_claims.get(session_id)
+        if pending is not None or self._state_store is None:
+            return pending
+        restored = await self._state_store.load_pending_session_claim(session_id=session_id)
+        if restored is not None:
+            self._pending_session_claims[session_id] = restored
+        return restored
+
+    async def _persist_pending_claim(self, *, session_id: str, identity: str) -> None:
+        self._pending_session_claims[session_id] = identity
+        if self._state_store is not None:
+            await self._state_store.save_pending_session_claim(
+                session_id=session_id,
+                identity=identity,
+                ttl_seconds=self._session_cache_ttl_seconds,
+            )
+
+    async def _delete_pending_claim(self, *, session_id: str) -> None:
+        self._pending_session_claims.pop(session_id, None)
+        if self._state_store is not None:
+            await self._state_store.delete_pending_session_claim(session_id=session_id)
 
     async def bound_session_for(self, *, identity: str, context_id: str) -> str | None:
         async with self._lock:
-            return self._sessions.get((identity, context_id))
+            return await self._load_bound_session(identity=identity, context_id=context_id)
 
     async def binding_snapshot(
         self,
@@ -122,9 +201,13 @@ class SessionRuntime:
         context_id: str,
     ) -> SessionBindingSnapshot:
         async with self._lock:
-            session_id = self._sessions.get((identity, context_id))
-            owner_identity = self._session_owners.get(session_id) if session_id else None
-            pending_identity = self._pending_session_claims.get(session_id) if session_id else None
+            session_id = await self._load_bound_session(identity=identity, context_id=context_id)
+            owner_identity = (
+                await self._load_session_owner(session_id=session_id) if session_id else None
+            )
+            pending_identity = (
+                await self._load_pending_claim(session_id=session_id) if session_id else None
+            )
         return SessionBindingSnapshot(
             identity=identity,
             context_id=context_id,
@@ -135,8 +218,8 @@ class SessionRuntime:
 
     async def session_claim_snapshot(self, *, session_id: str) -> SessionClaimSnapshot:
         async with self._lock:
-            owner_identity = self._session_owners.get(session_id)
-            pending_identity = self._pending_session_claims.get(session_id)
+            owner_identity = await self._load_session_owner(session_id=session_id)
+            pending_identity = await self._load_pending_claim(session_id=session_id)
         return SessionClaimSnapshot(
             session_id=session_id,
             owner_identity=owner_identity,
@@ -202,7 +285,7 @@ class SessionRuntime:
             running_identity = self._running_identities.get(execution_key, identity)
             running_task = self._running_requests.get(execution_key)
             stop_event = self._running_stop_events.get(execution_key)
-            self._sessions.pop((running_identity, context_id))
+            await self._delete_bound_session(identity=running_identity, context_id=context_id)
             inflight_create = self._inflight_session_creates.pop(
                 (running_identity, context_id),
                 None,
@@ -225,8 +308,8 @@ class SessionRuntime:
     ) -> tuple[str, bool]:
         if preferred_session_id:
             async with self._lock:
-                owner = self._session_owners.get(preferred_session_id)
-                pending_owner = self._pending_session_claims.get(preferred_session_id)
+                owner = await self._load_session_owner(session_id=preferred_session_id)
+                pending_owner = await self._load_pending_claim(session_id=preferred_session_id)
                 self._assert_claimable_session(
                     session_id=preferred_session_id,
                     identity=identity,
@@ -234,15 +317,24 @@ class SessionRuntime:
                     pending_owner=pending_owner,
                 )
                 if owner == identity:
-                    self._sessions.set((identity, context_id), preferred_session_id)
+                    await self._persist_bound_session(
+                        identity=identity,
+                        context_id=context_id,
+                        session_id=preferred_session_id,
+                    )
                     return preferred_session_id, False
 
-                self._pending_session_claims[preferred_session_id] = identity
+                await self._persist_pending_claim(
+                    session_id=preferred_session_id, identity=identity
+                )
                 return preferred_session_id, True
 
         cache_key = (identity, context_id)
         async with self._lock:
-            existing = self._sessions.get(cache_key)
+            existing = await self._load_bound_session(
+                identity=identity,
+                context_id=context_id,
+            )
             if existing:
                 return existing, False
             task = self._inflight_session_creates.get(cache_key)
@@ -259,16 +351,20 @@ class SessionRuntime:
             raise
 
         async with self._lock:
-            owner = self._session_owners.get(session_id)
+            owner = await self._load_session_owner(session_id=session_id)
             self._assert_claimable_session(
                 session_id=session_id,
                 identity=identity,
                 owner=owner,
                 pending_owner=None,
             )
-            self._sessions.set(cache_key, session_id)
+            await self._persist_bound_session(
+                identity=identity,
+                context_id=context_id,
+                session_id=session_id,
+            )
             if not owner:
-                self._session_owners.set(session_id, identity)
+                await self._persist_session_owner(session_id=session_id, identity=identity)
             if self._inflight_session_creates.get(cache_key) is task:
                 self._inflight_session_creates.pop(cache_key, None)
         return session_id, False
@@ -281,28 +377,32 @@ class SessionRuntime:
         session_id: str,
     ) -> None:
         async with self._lock:
-            owner = self._session_owners.get(session_id)
-            pending_owner = self._pending_session_claims.get(session_id)
+            owner = await self._load_session_owner(session_id=session_id)
+            pending_owner = await self._load_pending_claim(session_id=session_id)
             self._assert_claimable_session(
                 session_id=session_id,
                 identity=identity,
                 owner=owner,
                 pending_owner=pending_owner,
             )
-            self._session_owners.set(session_id, identity)
-            self._sessions.set((identity, context_id), session_id)
-            if self._pending_session_claims.get(session_id) == identity:
-                self._pending_session_claims.pop(session_id, None)
+            await self._persist_session_owner(session_id=session_id, identity=identity)
+            await self._persist_bound_session(
+                identity=identity,
+                context_id=context_id,
+                session_id=session_id,
+            )
+            if pending_owner == identity:
+                await self._delete_pending_claim(session_id=session_id)
 
     async def release_preferred_session_claim(self, *, identity: str, session_id: str) -> None:
         async with self._lock:
-            if self._pending_session_claims.get(session_id) == identity:
-                self._pending_session_claims.pop(session_id, None)
+            if await self._load_pending_claim(session_id=session_id) == identity:
+                await self._delete_pending_claim(session_id=session_id)
 
     async def claim_session(self, *, identity: str, session_id: str) -> bool:
         async with self._lock:
-            owner = self._session_owners.get(session_id)
-            pending_owner = self._pending_session_claims.get(session_id)
+            owner = await self._load_session_owner(session_id=session_id)
+            pending_owner = await self._load_pending_claim(session_id=session_id)
             self._assert_claimable_session(
                 session_id=session_id,
                 identity=identity,
@@ -311,32 +411,32 @@ class SessionRuntime:
             )
             if owner == identity:
                 return False
-            self._pending_session_claims[session_id] = identity
+            await self._persist_pending_claim(session_id=session_id, identity=identity)
             return True
 
     async def finalize_session_claim(self, *, identity: str, session_id: str) -> None:
         async with self._lock:
-            owner = self._session_owners.get(session_id)
-            pending_owner = self._pending_session_claims.get(session_id)
+            owner = await self._load_session_owner(session_id=session_id)
+            pending_owner = await self._load_pending_claim(session_id=session_id)
             self._assert_claimable_session(
                 session_id=session_id,
                 identity=identity,
                 owner=owner,
                 pending_owner=pending_owner,
             )
-            self._session_owners.set(session_id, identity)
+            await self._persist_session_owner(session_id=session_id, identity=identity)
             if pending_owner == identity:
-                self._pending_session_claims.pop(session_id, None)
+                await self._delete_pending_claim(session_id=session_id)
 
     async def release_session_claim(self, *, identity: str, session_id: str) -> None:
         await self.release_preferred_session_claim(identity=identity, session_id=session_id)
 
     async def session_owner_matches(self, *, identity: str, session_id: str) -> bool | None:
         async with self._lock:
-            owner = self._session_owners.get(session_id)
+            owner = await self._load_session_owner(session_id=session_id)
             if owner:
                 return owner == identity
-            pending_owner = self._pending_session_claims.get(session_id)
+            pending_owner = await self._load_pending_claim(session_id=session_id)
             if pending_owner:
                 return pending_owner == identity
         return None
