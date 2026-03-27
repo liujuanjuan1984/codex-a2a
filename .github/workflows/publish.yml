@@ -43,6 +43,10 @@ jobs:
           RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag_name || github.ref_name }}
 
       - name: Build package artifacts
+        env:
+          PYTHONWARNINGS: >-
+            ignore::UserWarning:vcs_versioning._backends._git,
+            ignore::UserWarning:vcs_versioning.overrides
         run: uv build --no-sources
 
       - name: Capture built wheel path

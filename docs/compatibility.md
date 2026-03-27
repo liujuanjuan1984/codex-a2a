@@ -26,6 +26,14 @@ Machine-readable discovery surfaces must reflect actual runtime behavior:
 If runtime support is not implemented, do not expose it as a supported machine-
 readable capability.
 
+Open-source consumption guidance:
+
+- Treat the core A2A send / stream / task methods as the portable baseline.
+- Treat `urn:a2a:*` entries in this repository as shared repo-family
+  conventions, not as claims that they are part of the A2A core baseline.
+- Treat `codex.*` methods and `metadata.codex.directory` as a Codex-specific
+  control plane layered on top of the portable A2A surface.
+
 ## Normative Sources
 
 When documentation or reference material disagrees, treat these as normative in
@@ -161,6 +169,9 @@ Important note:
 - `urn:a2a:*` extension URIs used here should be read as shared conventions in
   this repository family.
 - They are not a claim that those extensions are part of the A2A core baseline.
+- `codex.*` methods are intentionally product-specific. They improve Codex-aware
+  workflows but should not be assumed to transfer unchanged to unrelated A2A
+  agents.
 
 ## Non-Goals
 

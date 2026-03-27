@@ -1365,6 +1365,16 @@ async def test_ensure_started_passes_reasoning_effort_override_to_codex_cli() ->
     ):
         assert method == "initialize"
         assert _skip_ensure is True
+        assert params == {
+            "clientInfo": {
+                "name": "codex_a2a",
+                "title": "Codex A2A",
+                "version": client.settings.a2a_version,
+            },
+            "capabilities": {
+                "experimentalApi": True,
+            },
+        }
         return {}
 
     async def fake_send_json(payload: dict) -> None:
