@@ -127,7 +127,8 @@ This repository distinguishes between three layers:
   - standard send / stream / task methods
 - shared extensions
   - repo-family conventions such as session binding, stream hints, and
-    interrupt callbacks
+    interrupt callbacks (`permission`, `question`, `permissions`, and
+    `elicitation` reply surfaces)
 - Codex-specific extensions
   - `codex.*` JSON-RPC methods and `metadata.codex.directory`
 

@@ -23,11 +23,15 @@ from codex_a2a.jsonrpc.interrupt_lifecycle import (
     validate_interrupt_owner,
 )
 from codex_a2a.jsonrpc.params import (
+    ElicitationReplyParams,
     JsonRpcParamsValidationError,
     PermissionReplyParams,
+    PermissionsReplyParams,
     QuestionRejectParams,
     QuestionReplyParams,
+    parse_elicitation_reply_params,
     parse_permission_reply_params,
+    parse_permissions_reply_params,
     parse_question_reject_params,
     parse_question_reply_params,
 )
@@ -46,14 +50,24 @@ async def handle_interrupt_callback_request(
     *,
     request: Request,
 ) -> Response:
-    parsed_params: PermissionReplyParams | QuestionReplyParams | QuestionRejectParams
+    parsed_params: (
+        PermissionReplyParams
+        | QuestionReplyParams
+        | QuestionRejectParams
+        | PermissionsReplyParams
+        | ElicitationReplyParams
+    )
     try:
         if base_request.method == app._method_reply_permission:
             parsed_params = parse_permission_reply_params(params)
         elif base_request.method == app._method_reply_question:
             parsed_params = parse_question_reply_params(params)
-        else:
+        elif base_request.method == app._method_reject_question:
             parsed_params = parse_question_reject_params(params)
+        elif base_request.method == app._method_reply_permissions:
+            parsed_params = parse_permissions_reply_params(params)
+        else:
+            parsed_params = parse_elicitation_reply_params(params)
     except JsonRpcParamsValidationError as exc:
         return invalid_params_response(app, base_request.id, exc)
 
@@ -70,10 +84,13 @@ async def handle_interrupt_callback_request(
     if metadata_error is not None:
         return metadata_error
 
-    expected_interrupt_type = interrupt_expected_type(
-        base_request.method,
-        permission_method=app._method_reply_permission,
-    )
+    if base_request.method == app._method_reject_question:
+        expected_interrupt_type = "question"
+    else:
+        expected_interrupt_type = interrupt_expected_type(
+            base_request.method,
+            interrupt_methods_by_type=app._interrupt_methods_by_type,
+        )
     binding, binding_error = await resolve_interrupt_binding(
         app,
         request_id=request_id,
@@ -114,9 +131,43 @@ async def handle_interrupt_callback_request(
                 directory=directory,
             )
             result = {"ok": True, "request_id": request_id, "answers": answers}
-        else:
+        elif base_request.method == app._method_reject_question:
             await app._codex_client.question_reject(request_id, directory=directory)
             result = {"ok": True, "request_id": request_id}
+        elif base_request.method == app._method_reply_permissions:
+            permissions_params = cast(PermissionsReplyParams, parsed_params)
+            permissions = permissions_params.permissions
+            scope = permissions_params.scope
+            await app._codex_client.permissions_reply(
+                request_id,
+                permissions=permissions,
+                scope=scope,
+                directory=directory,
+            )
+            result = {
+                "ok": True,
+                "request_id": request_id,
+                "permissions": permissions,
+            }
+            if scope is not None:
+                result["scope"] = scope
+        else:
+            elicitation_params = cast(ElicitationReplyParams, parsed_params)
+            action = elicitation_params.action
+            content = elicitation_params.content
+            await app._codex_client.elicitation_reply(
+                request_id,
+                action=action,
+                content=content,
+                directory=directory,
+            )
+            result = {
+                "ok": True,
+                "request_id": request_id,
+                "action": action,
+            }
+            if "content" in elicitation_params.model_fields_set:
+                result["content"] = content
     except InterruptRequestError as exc:
         return interrupt_error_from_exception(app, base_request.id, exc)
     except httpx.HTTPStatusError as exc:

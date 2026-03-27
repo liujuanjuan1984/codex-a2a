@@ -391,19 +391,22 @@ described first in [README.md](../README.md) and above in this guide.
   `metadata.shared.usage.cache_tokens.write_tokens`,
   `metadata.shared.usage.raw`, and optional `cost`.
 - Interrupt lifecycle is explicit:
-  - asked events (`permission.asked` / `question.asked`) are mapped to
+  - asked events (`permission.asked` / `question.asked` / `permissions.asked` /
+    `elicitation.asked`) are mapped to
     `TaskStatusUpdateEvent(final=false, state=input-required)` with
     `metadata.shared.interrupt.phase=asked`
   - resolved events (`permission.replied` / `question.replied` /
-    `question.rejected`) are mapped to
+    `question.rejected` / `permissions.replied` / `elicitation.replied` /
+    `elicitation.rejected`) are mapped to
     `TaskStatusUpdateEvent(final=false, state=working)` with
     `metadata.shared.interrupt.phase=resolved` and
     `metadata.shared.interrupt.resolution=replied|rejected`
 - Duplicate or unknown resolved events are suppressed by `request_id`.
 - For Codex app-server approval and `tool/requestUserInput` requests,
-  user-visible approval/question details are normalized into
+  user-visible approval/question/permissions/elicitation details are normalized into
   `metadata.shared.interrupt.details`, including readable `display_message`,
-  resolved `patterns`, and `questions` when available.
+  resolved `patterns`, requested permission subsets, elicitation form/url
+  payloads, and `questions` when available.
 - HTTP streaming responses send transport-level SSE ping comments on a
   default keepalive interval from the underlying SDK / `sse-starlette`
   response without adding synthetic A2A business events.
@@ -568,6 +571,14 @@ clients can reply through JSON-RPC extension methods:
   - required: `answers` (`Array<Array<string>>`)
 - `a2a.interrupt.question.reject`
   - required: `request_id`
+- `a2a.interrupt.permissions.reply`
+  - required: `request_id`
+  - required: `permissions` (`object`, granted subset only)
+  - optional: `scope` (`turn` / `session`)
+- `a2a.interrupt.elicitation.reply`
+  - required: `request_id`
+  - required: `action` (`accept` / `decline` / `cancel`)
+  - optional: `content`
 
 Permission reply example:
 
@@ -582,6 +593,48 @@ curl -sS http://127.0.0.1:8000/ \
     "params": {
       "request_id": "<request_id>",
       "reply": "once"
+    }
+  }'
+```
+
+Permissions reply example:
+
+```bash
+curl -sS http://127.0.0.1:8000/ \
+  -H 'content-type: application/json' \
+  -H "Authorization: Bearer ${A2A_BEARER_TOKEN}" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 4,
+    "method": "a2a.interrupt.permissions.reply",
+    "params": {
+      "request_id": "<request_id>",
+      "permissions": {
+        "fileSystem": {
+          "write": ["/workspace/project"]
+        }
+      },
+      "scope": "session"
+    }
+  }'
+```
+
+Elicitation reply example:
+
+```bash
+curl -sS http://127.0.0.1:8000/ \
+  -H 'content-type: application/json' \
+  -H "Authorization: Bearer ${A2A_BEARER_TOKEN}" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 5,
+    "method": "a2a.interrupt.elicitation.reply",
+    "params": {
+      "request_id": "<request_id>",
+      "action": "accept",
+      "content": {
+        "workspace_root": "/workspace/project"
+      }
     }
   }'
 ```

@@ -3,8 +3,20 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-_INTERRUPT_ASKED_EVENT_TYPES = {"permission.asked", "question.asked"}
-_INTERRUPT_RESOLVED_EVENT_TYPES = {"permission.replied", "question.replied", "question.rejected"}
+_INTERRUPT_ASKED_EVENT_TYPES = {
+    "permission.asked",
+    "question.asked",
+    "permissions.asked",
+    "elicitation.asked",
+}
+_INTERRUPT_RESOLVED_EVENT_TYPES = {
+    "permission.replied",
+    "question.replied",
+    "question.rejected",
+    "permissions.replied",
+    "elicitation.replied",
+    "elicitation.rejected",
+}
 
 
 def _normalized_string(value: Any) -> str | None:
@@ -57,11 +69,13 @@ def extract_interrupt_text_details(props: Mapping[str, Any]) -> dict[str, Any]:
     display_message = _first_nested_string(
         props,
         ("display_message",),
+        ("message",),
         ("description",),
         ("request", "description"),
         ("context", "description"),
         ("reason",),
         ("request", "reason"),
+        ("metadata", "raw", "message"),
         ("metadata", "raw", "description"),
         ("metadata", "raw", "request", "description"),
         ("metadata", "raw", "context", "description"),
@@ -88,6 +102,16 @@ def extract_interrupt_questions(props: Mapping[str, Any]) -> list[Any]:
     if isinstance(raw_nested_questions, list):
         return raw_nested_questions
     return []
+
+
+def extract_interrupt_permissions(props: Mapping[str, Any]) -> dict[str, Any] | None:
+    permissions = _nested_value(props, "permissions")
+    if isinstance(permissions, Mapping):
+        return dict(permissions)
+    raw_permissions = _nested_value(props, "metadata", "raw", "permissions")
+    if isinstance(raw_permissions, Mapping):
+        return dict(raw_permissions)
+    return None
 
 
 def extract_interrupt_patterns(props: Mapping[str, Any]) -> list[str]:
@@ -146,7 +170,7 @@ def diagnose_interrupt_event(event: Mapping[str, Any]) -> str | None:
         if not isinstance(request_id, str) or not request_id.strip():
             return "interrupt resolved event missing request id"
         return None
-    if event_type.startswith("permission.") or event_type.startswith("question."):
+    if event_type.startswith(("permission.", "question.", "permissions.", "elicitation.")):
         return f"unsupported interrupt event type: {event_type}"
     return None
 
@@ -181,6 +205,48 @@ def extract_interrupt_asked_event(event: Mapping[str, Any]) -> dict[str, Any] | 
             "interrupt_type": "permission",
             "details": details,
         }
+    if event_type == "permissions.asked":
+        details = {"permissions": extract_interrupt_permissions(props)}
+        details.update(extract_interrupt_text_details(props))
+        return {
+            "request_id": normalized_request_id,
+            "interrupt_type": "permissions",
+            "details": details,
+        }
+    if event_type == "elicitation.asked":
+        details = {
+            "server_name": _first_nested_string(
+                props,
+                ("server_name",),
+                ("metadata", "raw", "serverName"),
+            ),
+            "mode": _first_nested_string(
+                props,
+                ("mode",),
+                ("metadata", "raw", "mode"),
+            ),
+            "requested_schema": _nested_value(props, "requested_schema")
+            or _nested_value(props, "metadata", "raw", "requestedSchema"),
+            "url": _first_nested_string(
+                props,
+                ("url",),
+                ("metadata", "raw", "url"),
+            ),
+            "elicitation_id": _first_nested_string(
+                props,
+                ("elicitation_id",),
+                ("metadata", "raw", "elicitationId"),
+            ),
+        }
+        meta = _nested_value(props, "meta") or _nested_value(props, "metadata", "raw", "_meta")
+        if isinstance(meta, Mapping):
+            details["meta"] = dict(meta)
+        details.update(extract_interrupt_text_details(props))
+        return {
+            "request_id": normalized_request_id,
+            "interrupt_type": "elicitation",
+            "details": details,
+        }
     details = {"questions": extract_interrupt_questions(props)}
     details.update(extract_interrupt_text_details(props))
     return {
@@ -210,12 +276,33 @@ def extract_interrupt_resolved_event(event: Mapping[str, Any]) -> dict[str, str]
             "interrupt_type": "permission",
             "resolution": "replied",
         }
+    if event_type == "permissions.replied":
+        return {
+            "request_id": normalized_request_id,
+            "event_type": event_type,
+            "interrupt_type": "permissions",
+            "resolution": "replied",
+        }
     if event_type == "question.rejected":
         return {
             "request_id": normalized_request_id,
             "event_type": event_type,
             "interrupt_type": "question",
             "resolution": "rejected",
+        }
+    if event_type == "elicitation.rejected":
+        return {
+            "request_id": normalized_request_id,
+            "event_type": event_type,
+            "interrupt_type": "elicitation",
+            "resolution": "rejected",
+        }
+    if event_type == "elicitation.replied":
+        return {
+            "request_id": normalized_request_id,
+            "event_type": event_type,
+            "interrupt_type": "elicitation",
+            "resolution": "replied",
         }
     return {
         "request_id": normalized_request_id,

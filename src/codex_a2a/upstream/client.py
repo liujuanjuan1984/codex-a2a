@@ -7,7 +7,7 @@ import logging
 import os
 import shutil
 import time
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable, Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -24,7 +24,9 @@ from codex_a2a.upstream.interrupts import (
     InterruptRequestError,
     InterruptRequestTombstone,
     _PendingInterruptRequest,
+    build_codex_elicitation_interrupt_properties,
     build_codex_permission_interrupt_properties,
+    build_codex_permissions_interrupt_properties,
     build_codex_question_interrupt_properties,
     interrupt_request_status,
 )
@@ -728,100 +730,62 @@ class CodexClient:
             "applyPatchApproval",
             "execCommandApproval",
         }:
-            session_id = str(params.get("threadId") or params.get("conversationId") or "").strip()
-            interrupt_context = self._resolve_interrupt_context(
-                session_id=session_id, params=params
-            )
-            rpc_request_id = request_id if isinstance(request_id, str | int) else request_key
-            created_at = time.time()
-            self._pending_server_requests[request_key] = _PendingInterruptRequest(
-                binding=InterruptRequestBinding(
-                    request_id=request_key,
-                    interrupt_type="permission",
-                    session_id=session_id,
-                    created_at=created_at,
-                    expires_at=created_at + float(self._interrupt_request_ttl_seconds),
-                    identity=interrupt_context.identity,
-                    task_id=interrupt_context.task_id,
-                    context_id=interrupt_context.context_id,
-                ),
-                rpc_request_id=rpc_request_id,
+            await self._register_interrupt_request(
+                request_id=request_id,
+                request_key=request_key,
+                method=method,
                 params=params,
-            )
-            self._expired_server_requests.pop(request_key, None)
-            if self._interrupt_request_store is not None:
-                binding = self._pending_server_requests[request_key].binding
-                await self._interrupt_request_store.save_interrupt_request(
-                    request_id=request_key,
-                    interrupt_type=binding.interrupt_type,
-                    session_id=binding.session_id,
-                    identity=binding.identity,
-                    task_id=binding.task_id,
-                    context_id=binding.context_id,
-                    created_at=binding.created_at,
-                    expires_at=binding.expires_at or binding.created_at,
-                    rpc_request_id=rpc_request_id,
-                    params=params,
-                )
-            await self._enqueue_stream_event(
-                {
-                    "type": "permission.asked",
-                    "properties": build_codex_permission_interrupt_properties(
-                        request_key=request_key,
-                        session_id=session_id,
-                        method=method,
-                        params=params,
-                    ),
-                }
+                interrupt_type="permission",
+                asked_event_type="permission.asked",
+                session_id=str(
+                    params.get("threadId") or params.get("conversationId") or ""
+                ).strip(),
+                properties_builder=build_codex_permission_interrupt_properties,
             )
             return
 
         if method == "item/tool/requestUserInput":
-            session_id = str(params.get("threadId") or params.get("conversationId") or "").strip()
-            interrupt_context = self._resolve_interrupt_context(
-                session_id=session_id, params=params
-            )
-            rpc_request_id = request_id if isinstance(request_id, str | int) else request_key
-            created_at = time.time()
-            self._pending_server_requests[request_key] = _PendingInterruptRequest(
-                binding=InterruptRequestBinding(
-                    request_id=request_key,
-                    interrupt_type="question",
-                    session_id=session_id,
-                    created_at=created_at,
-                    expires_at=created_at + float(self._interrupt_request_ttl_seconds),
-                    identity=interrupt_context.identity,
-                    task_id=interrupt_context.task_id,
-                    context_id=interrupt_context.context_id,
-                ),
-                rpc_request_id=rpc_request_id,
+            await self._register_interrupt_request(
+                request_id=request_id,
+                request_key=request_key,
+                method=method,
                 params=params,
+                interrupt_type="question",
+                asked_event_type="question.asked",
+                session_id=str(
+                    params.get("threadId") or params.get("conversationId") or ""
+                ).strip(),
+                properties_builder=build_codex_question_interrupt_properties,
             )
-            self._expired_server_requests.pop(request_key, None)
-            if self._interrupt_request_store is not None:
-                binding = self._pending_server_requests[request_key].binding
-                await self._interrupt_request_store.save_interrupt_request(
-                    request_id=request_key,
-                    interrupt_type=binding.interrupt_type,
-                    session_id=binding.session_id,
-                    identity=binding.identity,
-                    task_id=binding.task_id,
-                    context_id=binding.context_id,
-                    created_at=binding.created_at,
-                    expires_at=binding.expires_at or binding.created_at,
-                    rpc_request_id=rpc_request_id,
-                    params=params,
-                )
-            await self._enqueue_stream_event(
-                {
-                    "type": "question.asked",
-                    "properties": build_codex_question_interrupt_properties(
-                        request_key=request_key,
-                        session_id=session_id,
-                        method=method,
-                        params=params,
-                    ),
-                }
+            return
+
+        if method == "item/permissions/requestApproval":
+            await self._register_interrupt_request(
+                request_id=request_id,
+                request_key=request_key,
+                method=method,
+                params=params,
+                interrupt_type="permissions",
+                asked_event_type="permissions.asked",
+                session_id=str(
+                    params.get("threadId") or params.get("conversationId") or ""
+                ).strip(),
+                properties_builder=build_codex_permissions_interrupt_properties,
+            )
+            return
+
+        if method == "mcpServer/elicitation/request":
+            await self._register_interrupt_request(
+                request_id=request_id,
+                request_key=request_key,
+                method=method,
+                params=params,
+                interrupt_type="elicitation",
+                asked_event_type="elicitation.asked",
+                session_id=str(
+                    params.get("threadId") or params.get("conversationId") or ""
+                ).strip(),
+                properties_builder=build_codex_elicitation_interrupt_properties,
             )
             return
 
@@ -1244,23 +1208,74 @@ class CodexClient:
             )
         return pending
 
+    async def _register_interrupt_request(
+        self,
+        *,
+        request_id: Any,
+        request_key: str,
+        method: str,
+        params: dict[str, Any],
+        interrupt_type: str,
+        asked_event_type: str,
+        session_id: str,
+        properties_builder: Callable[..., dict[str, Any]],
+    ) -> None:
+        interrupt_context = self._resolve_interrupt_context(session_id=session_id, params=params)
+        rpc_request_id = request_id if isinstance(request_id, str | int) else request_key
+        created_at = time.time()
+        self._pending_server_requests[request_key] = _PendingInterruptRequest(
+            binding=InterruptRequestBinding(
+                request_id=request_key,
+                interrupt_type=interrupt_type,
+                session_id=session_id,
+                created_at=created_at,
+                expires_at=created_at + float(self._interrupt_request_ttl_seconds),
+                identity=interrupt_context.identity,
+                task_id=interrupt_context.task_id,
+                context_id=interrupt_context.context_id,
+            ),
+            rpc_request_id=rpc_request_id,
+            params=params,
+        )
+        self._expired_server_requests.pop(request_key, None)
+        if self._interrupt_request_store is not None:
+            binding = self._pending_server_requests[request_key].binding
+            await self._interrupt_request_store.save_interrupt_request(
+                request_id=request_key,
+                interrupt_type=binding.interrupt_type,
+                session_id=binding.session_id,
+                identity=binding.identity,
+                task_id=binding.task_id,
+                context_id=binding.context_id,
+                created_at=binding.created_at,
+                expires_at=binding.expires_at or binding.created_at,
+                rpc_request_id=rpc_request_id,
+                params=params,
+            )
+        await self._enqueue_stream_event(
+            {
+                "type": asked_event_type,
+                "properties": properties_builder(
+                    request_key=request_key,
+                    session_id=session_id,
+                    method=method,
+                    params=params,
+                ),
+            }
+        )
+
     async def _reply_to_server_request(
         self,
         *,
         request_id: str,
         pending: _PendingInterruptRequest,
         result: dict[str, Any],
+        resolved_event_type: str,
     ) -> None:
         await self._send_json_message({"id": pending.rpc_request_id, "result": result})
-
-        resolved_type = (
-            "question.replied"
-            if pending.binding.interrupt_type == "question"
-            else "permission.replied"
-        )
         await self._enqueue_stream_event(
             {
-                "type": resolved_type,
+                "type": resolved_event_type,
                 "properties": {
                     "id": request_id,
                     "requestID": request_id,
@@ -1296,6 +1311,7 @@ class CodexClient:
             request_id=request_id,
             pending=pending,
             result={"decision": decision},
+            resolved_event_type="permission.replied",
         )
         return True
 
@@ -1328,6 +1344,7 @@ class CodexClient:
             request_id=request_id,
             pending=pending,
             result={"answers": answer_map},
+            resolved_event_type="question.replied",
         )
         return True
 
@@ -1355,4 +1372,52 @@ class CodexClient:
             }
         )
         await self.discard_interrupt_request(request_id)
+        return True
+
+    async def permissions_reply(
+        self,
+        request_id: str,
+        *,
+        permissions: Mapping[str, Any],
+        scope: str | None = None,
+        directory: str | None = None,
+    ) -> bool:
+        del directory
+        pending = await self._require_pending_interrupt_request(
+            request_id,
+            expected_interrupt_type="permissions",
+        )
+        result: dict[str, Any] = {"permissions": dict(permissions)}
+        if scope is not None:
+            result["scope"] = scope
+        await self._reply_to_server_request(
+            request_id=request_id,
+            pending=pending,
+            result=result,
+            resolved_event_type="permissions.replied",
+        )
+        return True
+
+    async def elicitation_reply(
+        self,
+        request_id: str,
+        *,
+        action: str,
+        content: Any = None,
+        directory: str | None = None,
+    ) -> bool:
+        del directory
+        pending = await self._require_pending_interrupt_request(
+            request_id,
+            expected_interrupt_type="elicitation",
+        )
+        result: dict[str, Any] = {"action": action, "content": content}
+        await self._reply_to_server_request(
+            request_id=request_id,
+            pending=pending,
+            result=result,
+            resolved_event_type=(
+                "elicitation.replied" if action == "accept" else "elicitation.rejected"
+            ),
+        )
         return True

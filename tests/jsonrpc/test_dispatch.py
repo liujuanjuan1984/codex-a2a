@@ -41,6 +41,8 @@ def test_extension_method_registry_omits_missing_shell_method() -> None:
             "reply_permission": INTERRUPT_CALLBACK_METHODS["reply_permission"],
             "reply_question": INTERRUPT_CALLBACK_METHODS["reply_question"],
             "reject_question": INTERRUPT_CALLBACK_METHODS["reject_question"],
+            "reply_permissions": INTERRUPT_CALLBACK_METHODS["reply_permissions"],
+            "reply_elicitation": INTERRUPT_CALLBACK_METHODS["reply_elicitation"],
         }
     )
 

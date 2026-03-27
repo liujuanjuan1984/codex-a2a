@@ -82,6 +82,67 @@ class QuestionRejectParams(_StrictModel):
         return normalize_non_empty_string(value, message="Missing required params.request_id")
 
 
+class PermissionsReplyParams(_StrictModel):
+    request_id: str
+    permissions: dict[str, Any]
+    scope: Literal["turn", "session"] | None = None
+    metadata: MetadataParams | None = None
+
+    @field_validator("request_id", mode="before")
+    @classmethod
+    def _validate_request_id(cls, value: Any) -> str:
+        return normalize_non_empty_string(value, message="Missing required params.request_id")
+
+    @field_validator("permissions", mode="before")
+    @classmethod
+    def _validate_permissions(cls, value: Any) -> dict[str, Any]:
+        if not isinstance(value, dict):
+            raise ValueError("permissions must be an object")
+        return value
+
+    @field_validator("scope", mode="before")
+    @classmethod
+    def _validate_scope(cls, value: Any) -> str | None:
+        if value is None:
+            return None
+        if not isinstance(value, str):
+            raise ValueError("scope must be one of: turn, session")
+        normalized = value.strip().lower()
+        if normalized not in {"turn", "session"}:
+            raise ValueError("scope must be one of: turn, session")
+        return normalized
+
+
+class ElicitationReplyParams(_StrictModel):
+    request_id: str
+    action: Literal["accept", "decline", "cancel"]
+    content: Any = None
+    metadata: MetadataParams | None = None
+
+    @field_validator("request_id", mode="before")
+    @classmethod
+    def _validate_request_id(cls, value: Any) -> str:
+        return normalize_non_empty_string(value, message="Missing required params.request_id")
+
+    @field_validator("action", mode="before")
+    @classmethod
+    def _validate_action(cls, value: Any) -> str:
+        if not isinstance(value, str):
+            raise ValueError("action must be one of: accept, decline, cancel")
+        normalized = value.strip().lower()
+        if normalized not in {"accept", "decline", "cancel"}:
+            raise ValueError("action must be one of: accept, decline, cancel")
+        return normalized
+
+    @field_validator("content")
+    @classmethod
+    def _validate_content(cls, value: Any, info) -> Any:  # noqa: ANN001
+        action = info.data.get("action")
+        if action in {"decline", "cancel"} and value is not None:
+            raise ValueError("content must be null when action is decline or cancel")
+        return value
+
+
 def _raise_interrupt_validation_error(exc: ValidationError) -> None:
     errors = exc.errors(include_url=False)
     if errors and all(err.get("type") == "extra_forbidden" for err in errors):
@@ -114,6 +175,35 @@ def _raise_interrupt_validation_error(exc: ValidationError) -> None:
         raise JsonRpcParamsValidationError(
             message=message,
             data={"type": "INVALID_FIELD", "field": "answers"},
+        )
+    if loc == ("permissions",):
+        message = str(first.get("msg", "permissions must be an object")).removeprefix(
+            "Value error, "
+        )
+        if first.get("type") == "missing":
+            message = "permissions must be an object"
+        raise JsonRpcParamsValidationError(
+            message=message,
+            data={"type": "INVALID_FIELD", "field": "permissions"},
+        )
+    if loc == ("scope",):
+        raise JsonRpcParamsValidationError(
+            message="scope must be one of: turn, session",
+            data={"type": "INVALID_FIELD", "field": "scope"},
+        )
+    if loc == ("action",):
+        message = str(first.get("msg", "action must be one of: accept, decline, cancel"))
+        message = message.removeprefix("Value error, ")
+        if first.get("type") == "missing":
+            message = "action must be one of: accept, decline, cancel"
+        raise JsonRpcParamsValidationError(
+            message=message,
+            data={"type": "INVALID_FIELD", "field": "action"},
+        )
+    if loc == ("content",):
+        raise JsonRpcParamsValidationError(
+            message="content must be null when action is decline or cancel",
+            data={"type": "INVALID_FIELD", "field": "content"},
         )
     if loc == ("metadata",):
         raise JsonRpcParamsValidationError(
@@ -160,6 +250,22 @@ def parse_question_reply_params(params: dict[str, Any]) -> QuestionReplyParams:
 def parse_question_reject_params(params: dict[str, Any]) -> QuestionRejectParams:
     try:
         return QuestionRejectParams.model_validate(params)
+    except ValidationError as exc:
+        _raise_interrupt_validation_error(exc)
+        raise AssertionError("unreachable") from exc
+
+
+def parse_permissions_reply_params(params: dict[str, Any]) -> PermissionsReplyParams:
+    try:
+        return PermissionsReplyParams.model_validate(params)
+    except ValidationError as exc:
+        _raise_interrupt_validation_error(exc)
+        raise AssertionError("unreachable") from exc
+
+
+def parse_elicitation_reply_params(params: dict[str, Any]) -> ElicitationReplyParams:
+    try:
+        return ElicitationReplyParams.model_validate(params)
     except ValidationError as exc:
         _raise_interrupt_validation_error(exc)
         raise AssertionError("unreachable") from exc

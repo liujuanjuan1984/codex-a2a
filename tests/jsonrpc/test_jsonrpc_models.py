@@ -6,9 +6,11 @@ from codex_a2a.contracts.extensions import (
 )
 from codex_a2a.jsonrpc.params import (
     JsonRpcParamsValidationError,
+    parse_elicitation_reply_params,
     parse_get_session_messages_params,
     parse_list_sessions_params,
     parse_permission_reply_params,
+    parse_permissions_reply_params,
     parse_prompt_async_params,
 )
 
@@ -86,6 +88,38 @@ def test_parse_permission_reply_params_rejects_missing_reply() -> None:
     assert str(exc_info.value) == "reply must be a string"
     assert exc_info.value.data == {"type": "INVALID_FIELD", "field": "reply"}
     assert "fields" not in exc_info.value.data
+
+
+def test_parse_permissions_reply_params_accepts_scope_and_permissions_object() -> None:
+    payload = parse_permissions_reply_params(
+        {
+            "request_id": "perm-2",
+            "permissions": {"fileSystem": {"write": ["/workspace"]}},
+            "scope": "session",
+        }
+    )
+
+    assert payload.request_id == "perm-2"
+    assert payload.permissions == {"fileSystem": {"write": ["/workspace"]}}
+    assert payload.scope == "session"
+
+
+def test_parse_permissions_reply_params_rejects_non_object_permissions() -> None:
+    with pytest.raises(JsonRpcParamsValidationError) as exc_info:
+        parse_permissions_reply_params({"request_id": "perm-2", "permissions": []})
+
+    assert str(exc_info.value) == "permissions must be an object"
+    assert exc_info.value.data == {"type": "INVALID_FIELD", "field": "permissions"}
+
+
+def test_parse_elicitation_reply_params_rejects_non_null_content_for_decline() -> None:
+    with pytest.raises(JsonRpcParamsValidationError) as exc_info:
+        parse_elicitation_reply_params(
+            {"request_id": "eli-1", "action": "decline", "content": {"ignored": True}}
+        )
+
+    assert str(exc_info.value) == "content must be null when action is decline or cancel"
+    assert exc_info.value.data == {"type": "INVALID_FIELD", "field": "content"}
 
 
 def test_parse_list_sessions_params_rejects_non_integer_limit() -> None:
