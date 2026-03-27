@@ -28,7 +28,6 @@ class DiscoveryWatchHandle:
     context_id: str
     events: frozenset[str]
     stop_event: asyncio.Event
-    producer_task: asyncio.Task[None] | None = None
 
 
 class CodexDiscoveryRuntime:
@@ -64,7 +63,11 @@ class CodexDiscoveryRuntime:
                 message=build_assistant_message(
                     task_id,
                     context_id,
-                    "Started Codex discovery watch. Subscribe with tasks/resubscribe to receive invalidation and refresh signals.",
+                    (
+                        "Started Codex discovery watch. Subscribe with "
+                        "tasks/resubscribe to receive invalidation and "
+                        "refresh signals."
+                    ),
                     message_id=f"{task_id}:status:started",
                 ),
             ),
@@ -76,12 +79,11 @@ class CodexDiscoveryRuntime:
                 }
             },
         )
-        producer_task = await self._request_handler.start_background_task_stream(
+        await self._request_handler.start_background_task_stream(
             task=task,
             context=context,
             producer=lambda event_queue: self._run_watch(handle=handle, event_queue=event_queue),
         )
-        handle.producer_task = producer_task
         return {"ok": True, "task_id": task_id, "context_id": context_id}
 
     def _normalize_events(self, request: dict[str, Any] | None) -> frozenset[str]:

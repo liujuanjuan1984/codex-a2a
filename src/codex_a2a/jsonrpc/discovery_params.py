@@ -35,9 +35,7 @@ class SkillsExtraRootsParams(_StrictModel):
         roots: list[str] = []
         for item in value:
             if not isinstance(item, str) or not item.strip():
-                raise ValueError(
-                    "request.extra_user_roots entries must be non-empty strings"
-                )
+                raise ValueError("request.extra_user_roots entries must be non-empty strings")
             roots.append(item.strip())
         return roots
 

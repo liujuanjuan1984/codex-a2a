@@ -146,10 +146,15 @@ async def test_message_send_returns_failed_task_for_task_store_error() -> None:
 @pytest.mark.asyncio
 async def test_message_send_stream_emits_failed_events_for_task_store_error() -> None:
     class _Aggregator:
-        async def consume_and_emit(self, _consumer):
+        def consume_and_emit(self, _consumer):
             del _consumer
+            return self
+
+        def __aiter__(self):
+            return self
+
+        async def __anext__(self):
             raise TaskStoreOperationError("save", "task-1")
-            yield  # pragma: no cover
 
     class _Handler(CodexRequestHandler):
         def __init__(self) -> None:

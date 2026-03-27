@@ -147,9 +147,7 @@ def map_plugin_marketplaces(raw_result: Any) -> dict[str, Any]:
     return {
         "items": items,
         "featured_plugin_ids": [
-            value
-            for value in raw_result.get("featuredPluginIds", [])
-            if isinstance(value, str)
+            value for value in raw_result.get("featuredPluginIds", []) if isinstance(value, str)
         ],
         "marketplace_load_errors": [
             value
