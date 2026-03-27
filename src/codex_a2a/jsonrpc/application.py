@@ -14,7 +14,9 @@ from fastapi.responses import JSONResponse
 from starlette.requests import Request
 from starlette.responses import Response
 
+from codex_a2a.execution.exec_runtime import CodexExecRuntime
 from codex_a2a.jsonrpc.dispatch import ExtensionMethodRegistry
+from codex_a2a.jsonrpc.exec_control import handle_exec_control_request
 from codex_a2a.jsonrpc.hooks import SessionGuardHooks
 from codex_a2a.jsonrpc.interrupts import handle_interrupt_callback_request
 from codex_a2a.jsonrpc.session_control import handle_session_control_request
@@ -33,6 +35,7 @@ class CodexSessionQueryJSONRPCApplication(A2AFastAPIApplication):
         self,
         *args: Any,
         codex_client: CodexClient,
+        exec_runtime: CodexExecRuntime,
         methods: dict[str, str],
         protocol_version: str,
         supported_methods: list[str],
@@ -41,11 +44,16 @@ class CodexSessionQueryJSONRPCApplication(A2AFastAPIApplication):
     ):
         super().__init__(*args, **kwargs)
         self._codex_client = codex_client
+        self._exec_runtime = exec_runtime
         self._method_list_sessions = methods["list_sessions"]
         self._method_get_session_messages = methods["get_session_messages"]
         self._method_prompt_async = methods["prompt_async"]
         self._method_command = methods["command"]
         self._method_shell = methods.get("shell")
+        self._method_exec_start = methods["exec_start"]
+        self._method_exec_write = methods["exec_write"]
+        self._method_exec_resize = methods["exec_resize"]
+        self._method_exec_terminate = methods["exec_terminate"]
         self._method_reply_permission = methods["reply_permission"]
         self._method_reply_question = methods["reply_question"]
         self._method_reject_question = methods["reject_question"]
@@ -115,6 +123,13 @@ class CodexSessionQueryJSONRPCApplication(A2AFastAPIApplication):
             return await handle_session_query_request(self, base_request, params)
         if base_request.method in self._method_registry.session_control_methods:
             return await handle_session_control_request(
+                self,
+                base_request,
+                params,
+                request=request,
+            )
+        if base_request.method in self._method_registry.exec_control_methods:
+            return await handle_exec_control_request(
                 self,
                 base_request,
                 params,

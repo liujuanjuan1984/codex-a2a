@@ -122,6 +122,134 @@ async def test_session_shell_uses_command_exec_without_thread_context() -> None:
 
 
 @pytest.mark.asyncio
+async def test_exec_start_uses_interactive_command_exec_params() -> None:
+    client = CodexClient(
+        make_settings(
+            a2a_bearer_token="t-1",
+            codex_workspace_root="/safe",
+            codex_timeout=1.0,
+        )
+    )
+
+    seen: list[tuple[str, dict | None, float | None | object]] = []
+
+    async def fake_rpc_request(
+        method: str,
+        params: dict | None = None,
+        *,
+        timeout_override=None,  # noqa: ANN001
+        _skip_ensure: bool = False,
+    ):
+        del _skip_ensure
+        seen.append((method, params, timeout_override))
+        return {"stdout": "", "stderr": "", "exitCode": 0}
+
+    client._rpc_request = fake_rpc_request
+
+    result = await client.exec_start(
+        {
+            "command": "bash",
+            "arguments": "-lc 'printf hello'",
+            "processId": "exec-1",
+            "tty": True,
+            "rows": 24,
+            "cols": 80,
+            "outputBytesCap": 4096,
+            "disableOutputCap": False,
+            "timeoutMs": 3000,
+            "disableTimeout": False,
+        }
+    )
+
+    assert result == {"stdout": "", "stderr": "", "exitCode": 0}
+    assert len(seen) == 1
+    method, params, timeout_override = seen[0]
+    assert method == "command/exec"
+    assert params == {
+        "command": ["bash", "-lc", "printf hello"],
+        "processId": "exec-1",
+        "tty": True,
+        "streamStdin": True,
+        "streamStdoutStderr": True,
+        "cwd": "/safe",
+        "size": {"rows": 24, "cols": 80},
+        "outputBytesCap": 4096,
+        "disableOutputCap": False,
+        "timeoutMs": 3000,
+        "disableTimeout": False,
+    }
+    assert timeout_override is not None
+
+
+@pytest.mark.asyncio
+async def test_exec_control_methods_forward_expected_rpc_calls() -> None:
+    client = CodexClient(make_settings(a2a_bearer_token="t-1", codex_timeout=1.0))
+
+    seen: list[tuple[str, dict | None]] = []
+
+    async def fake_rpc_request(
+        method: str,
+        params: dict | None = None,
+        *,
+        timeout_override=None,  # noqa: ANN001
+        _skip_ensure: bool = False,
+    ):
+        del timeout_override, _skip_ensure
+        seen.append((method, params))
+        return {}
+
+    client._rpc_request = fake_rpc_request
+
+    await client.exec_write(process_id="exec-1", delta_base64="cHdkCg==", close_stdin=False)
+    await client.exec_resize(process_id="exec-1", rows=40, cols=120)
+    await client.exec_terminate(process_id="exec-1")
+
+    assert seen == [
+        (
+            "command/exec/write",
+            {"processId": "exec-1", "deltaBase64": "cHdkCg==", "closeStdin": False},
+        ),
+        ("command/exec/resize", {"processId": "exec-1", "size": {"rows": 40, "cols": 120}}),
+        ("command/exec/terminate", {"processId": "exec-1"}),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_command_exec_output_delta_notification_maps_to_exec_stream_event() -> None:
+    client = CodexClient(make_settings(a2a_bearer_token="t-1", codex_timeout=1.0))
+    events: list[dict] = []
+
+    async def fake_enqueue(event: dict) -> None:
+        events.append(event)
+
+    client._enqueue_stream_event = fake_enqueue
+
+    await client._handle_notification(
+        {
+            "method": "command/exec/outputDelta",
+            "params": {
+                "processId": "exec-1",
+                "stream": "stdout",
+                "deltaBase64": "aGVsbG8K",
+                "capReached": True,
+            },
+        }
+    )
+
+    assert events == [
+        {
+            "type": "exec.output.delta",
+            "properties": {
+                "process_id": "exec-1",
+                "stream": "stdout",
+                "delta_base64": "aGVsbG8K",
+                "cap_reached": True,
+            },
+        }
+    ]
+
+
+@pytest.mark.asyncio
 async def test_permission_reply_maps_to_codex_decision() -> None:
     client = CodexClient(make_settings(a2a_bearer_token="t-1", codex_timeout=1.0))
     client._pending_server_requests["100"] = _PendingInterruptRequest(

@@ -62,11 +62,3 @@ _registry = InMemoryMetricsRegistry()
 
 def get_metrics_registry() -> InMemoryMetricsRegistry:
     return _registry
-
-
-def reset_metrics() -> None:
-    _registry.reset()
-
-
-def snapshot_metrics() -> dict[str, dict[str, int]]:
-    return _registry.snapshot()

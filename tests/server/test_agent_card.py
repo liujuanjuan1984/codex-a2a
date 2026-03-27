@@ -1,5 +1,6 @@
 from codex_a2a.contracts.extensions import (
     COMPATIBILITY_PROFILE_EXTENSION_URI,
+    EXEC_CONTROL_EXTENSION_URI,
     INTERRUPT_CALLBACK_EXTENSION_URI,
     SESSION_BINDING_EXTENSION_URI,
     SESSION_QUERY_DEFAULT_LIMIT,
@@ -18,6 +19,7 @@ def test_agent_card_description_reflects_actual_transport_capabilities() -> None
     assert "HTTP+JSON and JSON-RPC transports" in card.description
     assert "message/send, message/stream" in card.description
     assert "tasks/get, tasks/cancel" in card.description
+    assert "interactive exec extensions" in card.description
     assert "machine-readable wire contract" in card.description
     assert "machine-readable compatibility profile" in card.description
     assert "all consumers share the same underlying Codex workspace/environment" in card.description
@@ -187,6 +189,7 @@ def test_agent_card_injects_profile_into_extensions() -> None:
     assert shell_contract["session_binding"] == "ownership_attribution_only"
     assert shell_contract["uses_upstream_session_context"] is False
     assert any("command/exec" in note for note in shell_contract["notes"])
+    assert any("one-shot shell snapshot" in note for note in shell_contract["notes"])
 
     interrupt = ext_by_uri[INTERRUPT_CALLBACK_EXTENSION_URI]
     assert interrupt.params["profile"] == profile
@@ -197,6 +200,16 @@ def test_agent_card_injects_profile_into_extensions() -> None:
     assert interrupt.params["errors"]["business_codes"]["INTERRUPT_TYPE_MISMATCH"] == -32008
     assert "expected_interrupt_type" in interrupt.params["errors"]["error_data_fields"]
     assert "actual_interrupt_type" in interrupt.params["errors"]["error_data_fields"]
+
+    exec_control = ext_by_uri[EXEC_CONTROL_EXTENSION_URI]
+    assert exec_control.params["profile"] == profile
+    assert exec_control.params["supported_metadata"] == ["codex.directory"]
+    assert exec_control.params["provider_private_metadata"] == ["codex.directory"]
+    assert exec_control.params["task_streaming"]["task_stream_method"] == "tasks/resubscribe"
+    start_contract = exec_control.params["method_contracts"]["codex.exec.start"]
+    assert start_contract["execution_binding"] == "standalone_interactive_command_exec"
+    assert start_contract["result"]["fields"] == ["ok", "task_id", "context_id", "process_id"]
+    assert any("codex.sessions.shell" in note for note in start_contract["notes"])
 
     wire_contract = ext_by_uri[WIRE_CONTRACT_EXTENSION_URI]
     assert wire_contract.params["protocol_version"] == "0.3.0"
@@ -242,6 +255,7 @@ def test_agent_card_injects_profile_into_extensions() -> None:
     ]
     assert compatibility.params["extension_taxonomy"]["codex_extensions"] == [
         "urn:codex-a2a:codex-session-query/v1",
+        "urn:codex-a2a:codex-exec/v1",
         "urn:codex-a2a:compatibility-profile/v1",
         "urn:codex-a2a:wire-contract/v1",
     ]
@@ -292,10 +306,15 @@ def test_agent_card_injects_profile_into_extensions() -> None:
         "terminal tasks/resubscribe replay-once behavior" in note
         for note in compatibility.params["consumer_guidance"]
     )
+    assert any("codex.exec.*" in note for note in compatibility.params["consumer_guidance"])
     shell_policy = compatibility.params["method_retention"]["codex.sessions.shell"]
     assert shell_policy["availability"] == "enabled"
     assert shell_policy["retention"] == "deployment-conditional"
     assert shell_policy["toggle"] == "A2A_ENABLE_SESSION_SHELL"
+    exec_policy = compatibility.params["method_retention"]["codex.exec.start"]
+    assert exec_policy["availability"] == "always"
+    assert exec_policy["retention"] == "stable"
+    assert exec_policy["extension_uri"] == "urn:codex-a2a:codex-exec/v1"
 
 
 def test_agent_card_chat_examples_include_project_hint_when_configured() -> None:

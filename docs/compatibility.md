@@ -112,6 +112,12 @@ will be reflected live per request.
   line unless explicitly documented otherwise.
 - Deployment-conditional methods must be declared as conditional rather than
   silently disappearing.
+- `codex.sessions.shell` is compatibility-sensitive as a one-shot shell
+  snapshot contract. Future interactive exec support must use a separate
+  extension family rather than silently widening this method's behavior.
+- `codex.exec.*` is compatibility-sensitive as the standalone interactive exec
+  contract. Changes to handle shapes, task-stream delivery, or lifecycle method
+  names should be treated as wire-level changes.
 
 ## Extension Taxonomy
 

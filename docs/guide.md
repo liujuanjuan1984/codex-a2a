@@ -128,6 +128,11 @@ Retention guidance:
   baseline capabilities.
 - Treat `codex.sessions.shell` as deployment-conditional. Discover it from the
   declared compatibility profile and extension contracts before calling it.
+- Treat `codex.sessions.shell` as a one-shot shell snapshot surface. It is not
+  an interactive shell session and does not imply PTY lifecycle support.
+- Treat `codex.exec.*` as the standalone interactive exec surface. Use it for
+  stdin write, PTY resize, and terminate flows instead of inferring those
+  capabilities from `codex.sessions.shell`.
 - Treat `execution_environment.*` as deployment-configured discovery metadata.
   It does not promise per-request snapshots of temporary approvals, escalations,
   or host-side runtime mutations.
@@ -317,6 +322,14 @@ described first in [README.md](../README.md) and above in this guide.
   ownership, attribution, and traceability. It keeps `session_id` in the A2A
   contract, but the underlying execution still uses Codex `command/exec`
   rather than resuming or creating an upstream Codex thread.
+- `codex.sessions.shell` returns a one-shot shell snapshot only. It does not
+  expose PTY lifecycle methods such as stdin write, resize, or terminate, and
+  it should not be treated as an interactive shell session.
+- `codex.exec.start`, `codex.exec.write`, `codex.exec.resize`, and
+  `codex.exec.terminate` expose a standalone interactive `command/exec`
+  runtime. `codex.exec.start` returns process/task handles immediately, while
+  stdout/stderr deltas and the final result flow through normal A2A task
+  streaming and `tasks/resubscribe`.
 - Session query projections currently use the upstream Codex `session_id` as
   the A2A `contextId`. This is intentional for the current deployment model:
   `contextId` and `metadata.shared.session.id` refer to the same upstream

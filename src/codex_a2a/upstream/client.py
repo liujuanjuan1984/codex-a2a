@@ -40,6 +40,7 @@ from codex_a2a.upstream.notification_mapping import (
     build_tool_call_state_event,
 )
 from codex_a2a.upstream.request_mapping import (
+    build_interactive_exec_params,
     build_shell_exec_params,
     convert_request_parts_to_turn_input,
     format_shell_response,
@@ -235,6 +236,20 @@ class CodexClient:
     @property
     def settings(self) -> Settings:
         return self._settings
+
+    def _resolve_timeout_seconds(
+        self,
+        *,
+        timeout_override: float | None | _UnsetType,
+    ) -> float | None:
+        if isinstance(timeout_override, _UnsetType):
+            return self._request_timeout
+        if timeout_override is None:
+            return None
+        timeout_seconds = float(timeout_override)
+        if timeout_seconds <= 0:
+            return self._request_timeout
+        return timeout_seconds
 
     def _query_params(self, directory: str | None = None) -> dict[str, str]:
         d = directory or self._workspace_root
@@ -488,6 +503,7 @@ class CodexClient:
         params: dict[str, Any] | None = None,
         *,
         _skip_ensure: bool = False,
+        timeout_override: float | None | _UnsetType = _UNSET,
     ) -> Any:
         if not _skip_ensure:
             await self._ensure_started()
@@ -507,8 +523,11 @@ class CodexClient:
             payload["params"] = params
         logger.debug("codex rpc request method=%s request_id=%s", method, request_id)
         await self._send_json_message(payload)
+        timeout_seconds = self._resolve_timeout_seconds(timeout_override=timeout_override)
         try:
-            return await asyncio.wait_for(future, timeout=self._request_timeout)
+            if timeout_seconds is None:
+                return await future
+            return await asyncio.wait_for(future, timeout=timeout_seconds)
         except TimeoutError as exc:
             pending = self._pending_requests.pop(request_id, None)
             with bind_correlation_id(correlation_id):
@@ -607,6 +626,24 @@ class CodexClient:
             event = build_tool_call_output_event(method, params)
             if event is not None:
                 await self._enqueue_stream_event(event)
+            return
+
+        if method == "command/exec/outputDelta":
+            process_id = str(params.get("processId", "")).strip()
+            stream = str(params.get("stream", "")).strip()
+            delta_base64 = params.get("deltaBase64")
+            if process_id and stream and isinstance(delta_base64, str):
+                await self._enqueue_stream_event(
+                    {
+                        "type": "exec.output.delta",
+                        "properties": {
+                            "process_id": process_id,
+                            "stream": stream,
+                            "delta_base64": delta_base64,
+                            "cap_reached": bool(params.get("capReached", False)),
+                        },
+                    }
+                )
             return
 
         if method == "thread/tokenUsage/updated":
@@ -1057,6 +1094,68 @@ class CodexClient:
             ],
             "raw": result,
         }
+
+    async def exec_start(
+        self,
+        request: dict[str, Any],
+        *,
+        directory: str | None = None,
+        timeout_override: float | None | _UnsetType = _UNSET,
+    ) -> dict[str, Any]:
+        result = await self._rpc_request(
+            "command/exec",
+            build_interactive_exec_params(
+                command_text=str(request["command"]).strip(),
+                arguments=request.get("arguments"),
+                process_id=str(request["processId"]).strip(),
+                directory=directory,
+                default_workspace_root=self._workspace_root,
+                tty=bool(request.get("tty", True)),
+                rows=request.get("rows"),
+                cols=request.get("cols"),
+                output_bytes_cap=request.get("outputBytesCap"),
+                disable_output_cap=request.get("disableOutputCap"),
+                timeout_ms=request.get("timeoutMs"),
+                disable_timeout=request.get("disableTimeout"),
+            ),
+            timeout_override=timeout_override,
+        )
+        if not isinstance(result, dict):
+            raise RuntimeError("codex command/exec response missing result object")
+        return result
+
+    async def exec_write(
+        self,
+        *,
+        process_id: str,
+        delta_base64: str | None = None,
+        close_stdin: bool | None = None,
+    ) -> None:
+        params: dict[str, Any] = {"processId": process_id}
+        if delta_base64 is not None:
+            params["deltaBase64"] = delta_base64
+        if close_stdin is not None:
+            params["closeStdin"] = close_stdin
+        await self._rpc_request("command/exec/write", params)
+
+    async def exec_resize(
+        self,
+        *,
+        process_id: str,
+        rows: int,
+        cols: int,
+    ) -> None:
+        await self._rpc_request(
+            "command/exec/resize",
+            {"processId": process_id, "size": {"rows": rows, "cols": cols}},
+        )
+
+    async def exec_terminate(
+        self,
+        *,
+        process_id: str,
+    ) -> None:
+        await self._rpc_request("command/exec/terminate", {"processId": process_id})
 
     def _interrupt_request_status(
         self,
