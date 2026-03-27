@@ -8,6 +8,7 @@ import os
 import shutil
 import time
 from collections.abc import AsyncIterator
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from codex_a2a import __version__
@@ -18,8 +19,10 @@ from codex_a2a.logging_context import (
     install_log_record_factory,
 )
 from codex_a2a.upstream.interrupts import (
+    INTERRUPT_REQUEST_TOMBSTONE_TTL_SECONDS,
     InterruptRequestBinding,
     InterruptRequestError,
+    InterruptRequestTombstone,
     _PendingInterruptRequest,
     build_codex_permission_interrupt_properties,
     build_codex_question_interrupt_properties,
@@ -59,6 +62,13 @@ _DEFAULT_CLIENT_TITLE = "Codex A2A"
 _EVENT_QUEUE_MAXSIZE = 2048
 
 
+@dataclass(frozen=True)
+class _InterruptExecutionContext:
+    identity: str | None
+    task_id: str | None
+    context_id: str | None
+
+
 class CodexClient:
     """Codex app-server client adapter (stdio JSON-RPC)."""
 
@@ -79,6 +89,7 @@ class CodexClient:
         self._default_model = settings.codex_model
         self._model_reasoning_effort = settings.codex_model_reasoning_effort
         self._interrupt_request_ttl_seconds = settings.a2a_interrupt_request_ttl_seconds
+        self._interrupt_request_tombstone_ttl_seconds = INTERRUPT_REQUEST_TOMBSTONE_TTL_SECONDS
         self._log_payloads = settings.a2a_log_payloads
         self._interrupt_request_store = interrupt_request_store
 
@@ -95,21 +106,97 @@ class CodexClient:
         self._next_request_id = 1
         self._pending_requests: dict[str, _PendingRpcRequest] = {}
         self._pending_server_requests: dict[str, _PendingInterruptRequest] = {}
+        self._expired_server_requests: dict[str, InterruptRequestTombstone] = {}
+        self._active_interrupt_contexts: dict[str, _InterruptExecutionContext] = {}
         self._event_subscribers: set[asyncio.Queue[dict[str, Any]]] = set()
         self._turn_trackers: dict[tuple[str, str], _TurnTracker] = {}
 
     async def restore_persisted_interrupt_requests(self) -> None:
         if self._interrupt_request_store is None:
             return
-        restored = await self._interrupt_request_store.load_interrupt_requests(
-            interrupt_request_ttl_seconds=self._interrupt_request_ttl_seconds
-        )
+        restored = await self._interrupt_request_store.load_interrupt_requests()
         for entry in restored:
             self._pending_server_requests[entry.request_id] = _PendingInterruptRequest(
                 binding=entry.binding,
                 rpc_request_id=entry.rpc_request_id,
                 params=entry.params,
             )
+
+    @staticmethod
+    def _optional_string(value: Any) -> str | None:
+        if not isinstance(value, str):
+            return None
+        normalized = value.strip()
+        return normalized or None
+
+    def bind_interrupt_context(
+        self,
+        *,
+        session_id: str,
+        identity: str | None,
+        task_id: str | None,
+        context_id: str | None,
+    ) -> None:
+        normalized_session_id = session_id.strip()
+        if not normalized_session_id:
+            return
+        self._active_interrupt_contexts[normalized_session_id] = _InterruptExecutionContext(
+            identity=self._optional_string(identity),
+            task_id=self._optional_string(task_id),
+            context_id=self._optional_string(context_id),
+        )
+
+    def release_interrupt_context(self, *, session_id: str) -> None:
+        normalized_session_id = session_id.strip()
+        if not normalized_session_id:
+            return
+        self._active_interrupt_contexts.pop(normalized_session_id, None)
+
+    def _resolve_interrupt_context(
+        self,
+        *,
+        session_id: str,
+        params: dict[str, Any],
+    ) -> _InterruptExecutionContext:
+        active_context = self._active_interrupt_contexts.get(session_id)
+        return _InterruptExecutionContext(
+            identity=(
+                self._optional_string(params.get("identity"))
+                or self._optional_string(params.get("userIdentity"))
+                or (active_context.identity if active_context is not None else None)
+            ),
+            task_id=(
+                self._optional_string(params.get("task_id"))
+                or self._optional_string(params.get("taskId"))
+                or (active_context.task_id if active_context is not None else None)
+            ),
+            context_id=(
+                self._optional_string(params.get("context_id"))
+                or self._optional_string(params.get("contextId"))
+                or (active_context.context_id if active_context is not None else None)
+            ),
+        )
+
+    def _purge_expired_interrupt_tombstones(self) -> None:
+        now = time.time()
+        expired = [
+            request_id
+            for request_id, tombstone in self._expired_server_requests.items()
+            if tombstone.expires_at <= now
+        ]
+        for request_id in expired:
+            self._expired_server_requests.pop(request_id, None)
+
+    def _remember_interrupt_tombstone(self, request_id: str) -> None:
+        ttl_seconds = self._interrupt_request_tombstone_ttl_seconds
+        self._pending_server_requests.pop(request_id, None)
+        if ttl_seconds <= 0:
+            self._expired_server_requests.pop(request_id, None)
+            return
+        self._expired_server_requests[request_id] = InterruptRequestTombstone(
+            request_id=request_id,
+            expires_at=time.time() + ttl_seconds,
+        )
 
     async def close(self) -> None:
         self._closed = True
@@ -605,24 +692,37 @@ class CodexClient:
             "execCommandApproval",
         }:
             session_id = str(params.get("threadId") or params.get("conversationId") or "").strip()
+            interrupt_context = self._resolve_interrupt_context(
+                session_id=session_id, params=params
+            )
             rpc_request_id = request_id if isinstance(request_id, str | int) else request_key
+            created_at = time.time()
             self._pending_server_requests[request_key] = _PendingInterruptRequest(
                 binding=InterruptRequestBinding(
                     request_id=request_key,
                     interrupt_type="permission",
                     session_id=session_id,
-                    created_at=time.time(),
+                    created_at=created_at,
+                    expires_at=created_at + float(self._interrupt_request_ttl_seconds),
+                    identity=interrupt_context.identity,
+                    task_id=interrupt_context.task_id,
+                    context_id=interrupt_context.context_id,
                 ),
                 rpc_request_id=rpc_request_id,
                 params=params,
             )
+            self._expired_server_requests.pop(request_key, None)
             if self._interrupt_request_store is not None:
                 binding = self._pending_server_requests[request_key].binding
                 await self._interrupt_request_store.save_interrupt_request(
                     request_id=request_key,
                     interrupt_type=binding.interrupt_type,
                     session_id=binding.session_id,
+                    identity=binding.identity,
+                    task_id=binding.task_id,
+                    context_id=binding.context_id,
                     created_at=binding.created_at,
+                    expires_at=binding.expires_at or binding.created_at,
                     rpc_request_id=rpc_request_id,
                     params=params,
                 )
@@ -641,24 +741,37 @@ class CodexClient:
 
         if method == "item/tool/requestUserInput":
             session_id = str(params.get("threadId") or params.get("conversationId") or "").strip()
+            interrupt_context = self._resolve_interrupt_context(
+                session_id=session_id, params=params
+            )
             rpc_request_id = request_id if isinstance(request_id, str | int) else request_key
+            created_at = time.time()
             self._pending_server_requests[request_key] = _PendingInterruptRequest(
                 binding=InterruptRequestBinding(
                     request_id=request_key,
                     interrupt_type="question",
                     session_id=session_id,
-                    created_at=time.time(),
+                    created_at=created_at,
+                    expires_at=created_at + float(self._interrupt_request_ttl_seconds),
+                    identity=interrupt_context.identity,
+                    task_id=interrupt_context.task_id,
+                    context_id=interrupt_context.context_id,
                 ),
                 rpc_request_id=rpc_request_id,
                 params=params,
             )
+            self._expired_server_requests.pop(request_key, None)
             if self._interrupt_request_store is not None:
                 binding = self._pending_server_requests[request_key].binding
                 await self._interrupt_request_store.save_interrupt_request(
                     request_id=request_key,
                     interrupt_type=binding.interrupt_type,
                     session_id=binding.session_id,
+                    identity=binding.identity,
+                    task_id=binding.task_id,
+                    context_id=binding.context_id,
                     created_at=binding.created_at,
+                    expires_at=binding.expires_at or binding.created_at,
                     rpc_request_id=rpc_request_id,
                     params=params,
                 )
@@ -958,18 +1071,44 @@ class CodexClient:
         self, request_id: str
     ) -> tuple[str, InterruptRequestBinding | None]:
         request_key = request_id.strip()
-        pending = self._pending_server_requests.get(request_key)
-        if pending is None:
+        if not request_key:
             return "missing", None
-        status = self._interrupt_request_status(pending.binding)
-        if status == "expired":
-            await self.discard_interrupt_request(request_key)
+        self._purge_expired_interrupt_tombstones()
+        pending = self._pending_server_requests.get(request_key)
+        if pending is not None:
+            status = self._interrupt_request_status(pending.binding)
+            if status == "expired":
+                self._remember_interrupt_tombstone(request_key)
+                if self._interrupt_request_store is not None:
+                    await self._interrupt_request_store.expire_interrupt_request(
+                        request_id=request_key
+                    )
+                return "expired", None
             return status, pending.binding
-        return status, pending.binding
+        if request_key in self._expired_server_requests:
+            return "expired", None
+        if self._interrupt_request_store is None:
+            return "missing", None
+        status, persisted = await self._interrupt_request_store.resolve_interrupt_request(
+            request_id=request_key
+        )
+        if status == "active" and persisted is not None:
+            pending = _PendingInterruptRequest(
+                binding=persisted.binding,
+                rpc_request_id=persisted.rpc_request_id,
+                params=persisted.params,
+            )
+            self._pending_server_requests[request_key] = pending
+            return "active", pending.binding
+        if status == "expired":
+            self._remember_interrupt_tombstone(request_key)
+            return "expired", None
+        return "missing", None
 
     async def discard_interrupt_request(self, request_id: str) -> None:
         request_key = request_id.strip()
         self._pending_server_requests.pop(request_key, None)
+        self._expired_server_requests.pop(request_key, None)
         if self._interrupt_request_store is not None:
             await self._interrupt_request_store.delete_interrupt_request(request_id=request_key)
 

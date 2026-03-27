@@ -1115,7 +1115,7 @@ async def test_interrupt_callback_extension_returns_expired_for_stale_request(mo
         payload = resp.json()
         assert payload["error"]["code"] == -32007
         assert payload["error"]["data"]["type"] == "INTERRUPT_REQUEST_EXPIRED"
-        assert (await dummy.resolve_interrupt_request("perm-expired"))[0] == "missing"
+        assert (await dummy.resolve_interrupt_request("perm-expired"))[0] == "expired"
 
 
 @pytest.mark.asyncio
