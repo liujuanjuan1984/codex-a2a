@@ -64,6 +64,9 @@ Task-store resilience is also service-level behavior in this deployment:
 
 - Once a task reaches a terminal state, later conflicting persistence writes are
   dropped on a first-terminal-state-wins basis.
+- In the default SQLite-backed deployment, terminal-task persistence is guarded
+  with an atomic database upsert instead of a process-local read-before-write
+  check.
 - Task-store I/O failures are surfaced as stable service errors instead of
   leaking backend-specific exceptions through request handlers.
 

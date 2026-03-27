@@ -7,9 +7,13 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+from a2a.server.tasks.database_task_store import DatabaseTaskStore
 from a2a.server.tasks.inmemory_task_store import InMemoryTaskStore
 from a2a.server.tasks.task_store import TaskStore
 from a2a.types import Task, TaskState
+from sqlalchemy import or_, select
+from sqlalchemy.dialects.postgresql import insert as postgresql_insert
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from codex_a2a.config import Settings
@@ -33,6 +37,8 @@ _TERMINAL_TASK_STATES = frozenset(
         TaskState.unknown,
     }
 )
+_TERMINAL_TASK_STATE_VALUES = tuple(state.value for state in _TERMINAL_TASK_STATES)
+_ATOMIC_TERMINAL_GUARD_DIALECTS = frozenset({"postgresql", "sqlite"})
 
 
 class TaskStoreOperationError(RuntimeError):
@@ -161,8 +167,21 @@ class PolicyAwareTaskStore(TaskStoreDecorator):
         super().__init__(inner)
         self._write_policy = write_policy or FirstTerminalStateWinsPolicy()
         self._save_lock = asyncio.Lock()
+        self._atomic_guard_fallback_logged = False
 
     async def save(
+        self,
+        task: Task,
+        context: ServerCallContext | None = None,
+    ) -> None:
+        raw_task_store = unwrap_task_store(self._inner)
+        if isinstance(raw_task_store, DatabaseTaskStore):
+            await self._save_database_task(raw_task_store, task, context)
+            return
+
+        await self._save_with_read_before_write(task, context)
+
+    async def _save_with_read_before_write(
         self,
         task: Task,
         context: ServerCallContext | None = None,
@@ -170,19 +189,96 @@ class PolicyAwareTaskStore(TaskStoreDecorator):
         async with self._save_lock:
             existing = await self._inner.get(task.id, context)
             decision = self._write_policy.evaluate(existing=existing, incoming=task)
-            if existing is not None and existing.status.state in _TERMINAL_TASK_STATES:
-                logger.warning(
-                    "Received task persistence after terminal state task_id=%s existing_state=%s "
-                    "incoming_state=%s persist=%s reason=%s",
-                    task.id,
-                    existing.status.state,
-                    task.status.state,
-                    decision.persist,
-                    decision.reason or "accepted",
-                )
+            self._log_terminal_persistence_decision(
+                existing=existing, incoming=task, decision=decision
+            )
             if not decision.persist:
                 return
             await self._inner.save(task, context)
+
+    async def _save_database_task(
+        self,
+        task_store: DatabaseTaskStore,
+        task: Task,
+        context: ServerCallContext | None = None,
+    ) -> None:
+        dialect_name = task_store.engine.dialect.name
+        if dialect_name not in _ATOMIC_TERMINAL_GUARD_DIALECTS:
+            if not self._atomic_guard_fallback_logged:
+                logger.warning(
+                    "Database-backed task store dialect does not support atomic terminal guard; "
+                    "falling back to read-before-write policy dialect=%s",
+                    dialect_name,
+                )
+                self._atomic_guard_fallback_logged = True
+            await self._save_with_read_before_write(task, context)
+            return
+
+        try:
+            if await self._persist_with_atomic_terminal_guard(task_store, task):
+                return
+            existing = await self._load_task_from_database(task_store, task.id)
+            decision = self._write_policy.evaluate(existing=existing, incoming=task)
+            self._log_terminal_persistence_decision(
+                existing=existing, incoming=task, decision=decision
+            )
+            if not decision.persist:
+                return
+            raise RuntimeError(
+                "Atomic task persistence was skipped without an authoritative terminal task."
+            )
+        except TaskStoreOperationError:
+            raise
+        except Exception as exc:
+            raise TaskStoreOperationError("save", task.id) from exc
+
+    async def _persist_with_atomic_terminal_guard(
+        self,
+        task_store: DatabaseTaskStore,
+        task: Task,
+    ) -> bool:
+        await task_store._ensure_initialized()
+        statement = _build_atomic_task_save_statement(
+            task=task,
+            task_table=task_store.task_model.__table__,
+            dialect_name=task_store.engine.dialect.name,
+        )
+        async with task_store.async_session_maker.begin() as session:
+            result = await session.execute(statement)
+        return result.scalar_one_or_none() is not None
+
+    async def _load_task_from_database(
+        self,
+        task_store: DatabaseTaskStore,
+        task_id: str,
+    ) -> Task | None:
+        await task_store._ensure_initialized()
+        async with task_store.async_session_maker() as session:
+            stmt = select(task_store.task_model).where(task_store.task_model.id == task_id)
+            result = await session.execute(stmt)
+            task_model = result.scalar_one_or_none()
+        if task_model is None:
+            return None
+        return task_store._from_orm(task_model)
+
+    def _log_terminal_persistence_decision(
+        self,
+        *,
+        existing: Task | None,
+        incoming: Task,
+        decision: TaskPersistenceDecision,
+    ) -> None:
+        if existing is None or existing.status.state not in _TERMINAL_TASK_STATES:
+            return
+        logger.warning(
+            "Received task persistence after terminal state task_id=%s existing_state=%s "
+            "incoming_state=%s persist=%s reason=%s",
+            incoming.id,
+            existing.status.state,
+            incoming.status.state,
+            decision.persist,
+            decision.reason or "accepted",
+        )
 
 
 class GuardedTaskStore(PolicyAwareTaskStore):
@@ -217,6 +313,52 @@ def unwrap_task_store(task_store: TaskStore) -> TaskStore:
     if isinstance(inner, TaskStore):
         return unwrap_task_store(inner)
     return task_store
+
+
+def _build_atomic_task_save_statement(
+    *,
+    task: Task,
+    task_table: Any,
+    dialect_name: str,
+):
+    insert = _resolve_atomic_insert_factory(dialect_name)
+    values = _task_row_values(task)
+    status_state = task_table.c.status["state"].as_string()
+    persist_guard = or_(
+        task_table.c.status.is_(None),
+        status_state.is_(None),
+        status_state.not_in(_TERMINAL_TASK_STATE_VALUES),
+    )
+    return (
+        insert(task_table)
+        .values(**values)
+        .on_conflict_do_update(
+            index_elements=[task_table.c.id],
+            set_={key: value for key, value in values.items() if key != "id"},
+            where=persist_guard,
+        )
+        .returning(task_table.c.id)
+    )
+
+
+def _resolve_atomic_insert_factory(dialect_name: str):
+    if dialect_name == "sqlite":
+        return sqlite_insert
+    if dialect_name == "postgresql":
+        return postgresql_insert
+    raise ValueError(f"Unsupported atomic task persistence dialect: {dialect_name}")
+
+
+def _task_row_values(task: Task) -> dict[str, Any]:
+    return {
+        "id": task.id,
+        "context_id": task.context_id,
+        "kind": task.kind,
+        "status": task.status,
+        "artifacts": task.artifacts,
+        "history": task.history,
+        "metadata": task.metadata,
+    }
 
 
 @dataclass(slots=True)

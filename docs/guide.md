@@ -172,7 +172,9 @@ Current implementation note:
   persistence and also backs session-binding ownership state plus pending
   interrupt callback requests for cross-restart recovery. Persisted session
   binding and ownership state are retained independently from the in-memory
-  session cache TTL.
+  session cache TTL. In the default SQLite-backed deployment, terminal-task
+  persistence also uses an atomic database upsert so late conflicting writes do
+  not depend on a process-local pre-read.
 - `A2A_ENABLE_HEALTH_ENDPOINT`: enable the authenticated lightweight `/health` probe, default `true`
 - `A2A_ENABLE_SESSION_SHELL`: expose `codex.sessions.shell` on JSON-RPC extensions, default `true`
 - `A2A_LOG_LEVEL`: `DEBUG/INFO/WARNING/ERROR`, default `INFO`
@@ -621,6 +623,9 @@ Terminal-task note:
   contract so clients do not mistake it for a generic A2A baseline rule.
 - If the task store is unavailable while loading subscribe state, the service
   returns a controlled failure instead of exposing backend exception details.
+- In the default SQLite-backed deployment, terminal-task persistence is also
+  database-guarded so late conflicting writes are dropped without relying on a
+  process-local stale snapshot check.
 
 ## Development Setup
 

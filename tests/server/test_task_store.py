@@ -156,6 +156,110 @@ async def test_guarded_task_store_drops_late_terminal_mutation() -> None:
     assert restored.metadata is None
 
 
+@pytest.mark.asyncio
+async def test_guarded_database_task_store_keeps_first_terminal_state_across_independent_runtimes(
+    tmp_path: Path,
+) -> None:
+    database_url = f"sqlite+aiosqlite:///{(tmp_path / 'terminal-guard.db').resolve()}"
+    settings = make_settings(
+        a2a_bearer_token="test-token",
+        a2a_database_url=database_url,
+    )
+    first_runtime = build_task_store_runtime(settings)
+    second_runtime = build_task_store_runtime(settings)
+    await first_runtime.startup()
+    await second_runtime.startup()
+    try:
+        await first_runtime.task_store.save(
+            Task(
+                id="task-1",
+                context_id="ctx-1",
+                status=TaskStatus(state=TaskState.working),
+            )
+        )
+        await first_runtime.task_store.save(
+            Task(
+                id="task-1",
+                context_id="ctx-1",
+                status=TaskStatus(state=TaskState.input_required),
+            )
+        )
+        await second_runtime.task_store.save(
+            Task(
+                id="task-1",
+                context_id="ctx-1",
+                status=TaskStatus(state=TaskState.failed),
+            )
+        )
+
+        restored = await first_runtime.task_store.get("task-1")
+    finally:
+        await first_runtime.shutdown()
+        await second_runtime.shutdown()
+
+    assert restored is not None
+    assert restored.status.state == TaskState.input_required
+
+
+@pytest.mark.asyncio
+async def test_guarded_database_task_store_does_not_depend_on_stale_read_before_terminal_drop(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    database_url = f"sqlite+aiosqlite:///{(tmp_path / 'stale-read-guard.db').resolve()}"
+    settings = make_settings(
+        a2a_bearer_token="test-token",
+        a2a_database_url=database_url,
+    )
+    authoritative = Task(
+        id="task-1",
+        context_id="ctx-1",
+        status=TaskStatus(state=TaskState.input_required),
+    )
+    late_mutation = Task(
+        id="task-1",
+        context_id="ctx-1",
+        status=TaskStatus(state=TaskState.input_required),
+        metadata={"codex": {"late_mutation": True}},
+    )
+    stale_snapshot = Task(
+        id="task-1",
+        context_id="ctx-1",
+        status=TaskStatus(state=TaskState.working),
+    )
+
+    first_runtime = build_task_store_runtime(settings)
+    second_runtime = build_task_store_runtime(settings)
+    await first_runtime.startup()
+    await second_runtime.startup()
+    try:
+        await first_runtime.task_store.save(stale_snapshot)
+        await first_runtime.task_store.save(authoritative)
+
+        raw_second = unwrap_task_store(second_runtime.task_store)
+        assert isinstance(raw_second, DatabaseTaskStore)
+        original_get = DatabaseTaskStore.get.__get__(raw_second, DatabaseTaskStore)
+
+        async def _stale_get(task_id: str, context=None) -> Task | None:  # noqa: ANN001
+            del context
+            if task_id == "task-1":
+                return stale_snapshot
+            return None
+
+        monkeypatch.setattr(raw_second, "get", _stale_get)
+        await second_runtime.task_store.save(late_mutation)
+        monkeypatch.setattr(raw_second, "get", original_get)
+
+        restored = await first_runtime.task_store.get("task-1")
+    finally:
+        await first_runtime.shutdown()
+        await second_runtime.shutdown()
+
+    assert restored is not None
+    assert restored.status.state == TaskState.input_required
+    assert restored.metadata is None
+
+
 class _BrokenTaskStore(TaskStore):
     async def save(self, task: Task, context=None) -> None:  # noqa: ANN001
         del task, context
