@@ -7,7 +7,7 @@ from codex_a2a.contracts.extensions import (
     INTERRUPT_CALLBACK_METHODS,
     SESSION_CONTROL_METHODS,
     SESSION_QUERY_METHODS,
-    build_supported_jsonrpc_methods,
+    build_capability_snapshot,
 )
 from codex_a2a.jsonrpc.application import CodexSessionQueryJSONRPCApplication
 from codex_a2a.jsonrpc.hooks import SessionGuardHooks
@@ -35,8 +35,10 @@ def _build_extension_app(
         exec_runtime=MagicMock(),
         methods=methods,
         protocol_version=settings.a2a_protocol_version,
-        supported_methods=build_supported_jsonrpc_methods(
-            runtime_profile=build_runtime_profile(settings)
+        supported_methods=list(
+            build_capability_snapshot(
+                runtime_profile=build_runtime_profile(settings)
+            ).supported_jsonrpc_methods
         ),
         guard_hooks=guard_hooks,
     )

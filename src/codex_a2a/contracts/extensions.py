@@ -375,11 +375,6 @@ def build_capability_snapshot(*, runtime_profile: RuntimeProfile) -> CapabilityS
     )
 
 
-def build_supported_jsonrpc_methods(*, runtime_profile: RuntimeProfile) -> list[str]:
-    snapshot = build_capability_snapshot(runtime_profile=runtime_profile)
-    return list(snapshot.supported_jsonrpc_methods)
-
-
 def build_wire_contract_extension_params(
     *,
     protocol_version: str,

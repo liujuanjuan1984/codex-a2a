@@ -17,8 +17,7 @@ from codex_a2a.metrics import (
     INTERRUPT_REQUESTS_TOTAL,
     INTERRUPT_RESOLVED_TOTAL,
     TOOL_CALL_CHUNKS_EMITTED_TOTAL,
-    reset_metrics,
-    snapshot_metrics,
+    get_metrics_registry,
 )
 from codex_a2a.server.request_handler import CodexRequestHandler
 from tests.server.test_request_handler import _make_message_send_params
@@ -32,9 +31,9 @@ async def _empty_async_stream() -> None:
 
 @pytest.fixture(autouse=True)
 def reset_metrics_state() -> Iterator[None]:
-    reset_metrics()
+    get_metrics_registry().reset()
     yield
-    reset_metrics()
+    get_metrics_registry().reset()
 
 
 @pytest.mark.asyncio
@@ -70,14 +69,16 @@ async def test_stream_request_metrics_track_total_and_active() -> None:
     stream = handler.on_message_send_stream(_make_message_send_params())
     first_event = await stream.__anext__()
     assert isinstance(first_event, Task)
-    assert snapshot_metrics()["counters"][A2A_STREAM_REQUESTS_TOTAL] == 1
-    assert snapshot_metrics()["gauges"][A2A_STREAM_ACTIVE] == 1
+    snapshot = get_metrics_registry().snapshot()
+    assert snapshot["counters"][A2A_STREAM_REQUESTS_TOTAL] == 1
+    assert snapshot["gauges"][A2A_STREAM_ACTIVE] == 1
 
     await stream.aclose()
     await asyncio.sleep(0)
 
-    assert snapshot_metrics()["counters"][A2A_STREAM_REQUESTS_TOTAL] == 1
-    assert snapshot_metrics()["gauges"][A2A_STREAM_ACTIVE] == 0
+    snapshot = get_metrics_registry().snapshot()
+    assert snapshot["counters"][A2A_STREAM_REQUESTS_TOTAL] == 1
+    assert snapshot["gauges"][A2A_STREAM_ACTIVE] == 0
 
 
 @pytest.mark.asyncio
@@ -135,7 +136,7 @@ async def test_streaming_metrics_capture_tool_call_and_interrupt_events() -> Non
         completion_event=asyncio.Event(),
     )
 
-    snapshot = snapshot_metrics()
+    snapshot = get_metrics_registry().snapshot()
     assert snapshot["counters"][INTERRUPT_REQUESTS_TOTAL] == 1
     assert snapshot["counters"][INTERRUPT_RESOLVED_TOTAL] == 1
     assert snapshot["counters"][TOOL_CALL_CHUNKS_EMITTED_TOTAL] == 1
@@ -176,4 +177,4 @@ async def test_streaming_retry_metric_increments_once_per_retry(monkeypatch) -> 
         completion_event=asyncio.Event(),
     )
 
-    assert snapshot_metrics()["counters"][CODEX_STREAM_RETRIES_TOTAL] == 1
+    assert get_metrics_registry().snapshot()["counters"][CODEX_STREAM_RETRIES_TOTAL] == 1
