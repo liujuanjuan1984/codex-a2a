@@ -15,6 +15,7 @@ from sqlalchemy import (
     and_,
     delete,
     insert,
+    inspect,
     select,
     update,
 )
@@ -25,7 +26,10 @@ from sqlalchemy.ext.asyncio import (
 )
 
 from codex_a2a.config import Settings
-from codex_a2a.upstream.interrupts import InterruptRequestBinding
+from codex_a2a.upstream.interrupts import (
+    INTERRUPT_REQUEST_TOMBSTONE_TTL_SECONDS,
+    InterruptRequestBinding,
+)
 
 from .database import build_database_engine
 
@@ -60,10 +64,23 @@ _PENDING_INTERRUPT_REQUESTS = Table(
     Column("request_id", String, primary_key=True),
     Column("interrupt_type", String, nullable=False),
     Column("session_id", String, nullable=False),
+    Column("identity", String, nullable=True),
+    Column("task_id", String, nullable=True),
+    Column("context_id", String, nullable=True),
     Column("created_at", Float, nullable=False),
+    Column("expires_at", Float, nullable=True),
+    Column("tombstone_expires_at", Float, nullable=True),
     Column("rpc_request_id", JSON, nullable=False),
     Column("params", JSON, nullable=False),
 )
+
+_INTERRUPT_REQUEST_SCHEMA_UPDATES = {
+    "identity": "TEXT",
+    "task_id": "TEXT",
+    "context_id": "TEXT",
+    "expires_at": "FLOAT",
+    "tombstone_expires_at": "FLOAT",
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -116,18 +133,26 @@ class InterruptRequestRepository(Protocol):
         request_id: str,
         interrupt_type: str,
         session_id: str,
+        identity: str | None,
+        task_id: str | None,
+        context_id: str | None,
         created_at: float,
+        expires_at: float,
         rpc_request_id: str | int,
         params: dict[str, Any],
     ) -> None: ...
 
-    async def delete_interrupt_request(self, *, request_id: str) -> None: ...
+    async def expire_interrupt_request(self, *, request_id: str) -> None: ...
 
-    async def load_interrupt_requests(
+    async def resolve_interrupt_request(
         self,
         *,
-        interrupt_request_ttl_seconds: int,
-    ) -> list[PersistedInterruptRequest]: ...
+        request_id: str,
+    ) -> tuple[str, PersistedInterruptRequest | None]: ...
+
+    async def delete_interrupt_request(self, *, request_id: str) -> None: ...
+
+    async def load_interrupt_requests(self) -> list[PersistedInterruptRequest]: ...
 
 
 @dataclass(slots=True)
@@ -142,9 +167,17 @@ async def _noop() -> None:
 
 
 class RuntimeStateStore:
-    def __init__(self, engine: AsyncEngine) -> None:
+    def __init__(
+        self,
+        engine: AsyncEngine,
+        *,
+        interrupt_request_tombstone_ttl_seconds: float = INTERRUPT_REQUEST_TOMBSTONE_TTL_SECONDS,
+    ) -> None:
         self._engine = engine
         self._session_maker = async_sessionmaker(self._engine, expire_on_commit=False)
+        self._interrupt_request_tombstone_ttl_seconds = float(
+            interrupt_request_tombstone_ttl_seconds
+        )
         self._initialized = False
 
     async def initialize(self) -> None:
@@ -152,6 +185,7 @@ class RuntimeStateStore:
             return
         async with self._engine.begin() as conn:
             await conn.run_sync(_STATE_METADATA.create_all)
+            await conn.run_sync(self._upgrade_interrupt_request_schema)
         self._initialized = True
 
     async def dispose(self) -> None:
@@ -165,10 +199,84 @@ class RuntimeStateStore:
     def _expires_at(*, ttl_seconds: int) -> float:
         return time.time() + float(ttl_seconds)
 
+    @staticmethod
+    def _upgrade_interrupt_request_schema(sync_conn: Any) -> None:
+        inspector = inspect(sync_conn)
+        existing_columns = {
+            column["name"] for column in inspector.get_columns(_PENDING_INTERRUPT_REQUESTS.name)
+        }
+        for column_name, sql_type in _INTERRUPT_REQUEST_SCHEMA_UPDATES.items():
+            if column_name in existing_columns:
+                continue
+            sync_conn.exec_driver_sql(
+                f"ALTER TABLE {_PENDING_INTERRUPT_REQUESTS.name} "
+                f"ADD COLUMN {column_name} {sql_type}"
+            )
+
+    def _interrupt_request_tombstone_expires_at(self, *, now: float) -> float | None:
+        ttl_seconds = self._interrupt_request_tombstone_ttl_seconds
+        if ttl_seconds <= 0:
+            return None
+        return now + ttl_seconds
+
     async def _purge_expired_pending_claims(self, session: AsyncSession) -> None:
         now = time.time()
         await session.execute(
             delete(_PENDING_SESSION_CLAIMS).where(_PENDING_SESSION_CLAIMS.c.expires_at <= now)
+        )
+
+    async def _purge_expired_interrupt_tombstones(
+        self, session: AsyncSession, *, now: float
+    ) -> None:
+        await session.execute(
+            delete(_PENDING_INTERRUPT_REQUESTS).where(
+                and_(
+                    _PENDING_INTERRUPT_REQUESTS.c.tombstone_expires_at.is_not(None),
+                    _PENDING_INTERRUPT_REQUESTS.c.tombstone_expires_at <= now,
+                )
+            )
+        )
+
+    async def _set_interrupt_request_tombstone(
+        self,
+        session: AsyncSession,
+        *,
+        request_id: str,
+        now: float,
+    ) -> None:
+        tombstone_expires_at = self._interrupt_request_tombstone_expires_at(now=now)
+        if tombstone_expires_at is None:
+            await session.execute(
+                delete(_PENDING_INTERRUPT_REQUESTS).where(
+                    _PENDING_INTERRUPT_REQUESTS.c.request_id == request_id
+                )
+            )
+            return
+        await session.execute(
+            update(_PENDING_INTERRUPT_REQUESTS)
+            .where(_PENDING_INTERRUPT_REQUESTS.c.request_id == request_id)
+            .values(tombstone_expires_at=tombstone_expires_at)
+        )
+
+    @staticmethod
+    def _persisted_interrupt_request_from_row(row: Any) -> PersistedInterruptRequest:
+        expires_at = row.get("expires_at")
+        if expires_at is None:
+            expires_at = row["created_at"]
+        return PersistedInterruptRequest(
+            request_id=row["request_id"],
+            binding=InterruptRequestBinding(
+                request_id=row["request_id"],
+                interrupt_type=row["interrupt_type"],
+                session_id=row["session_id"],
+                created_at=row["created_at"],
+                expires_at=expires_at,
+                identity=row.get("identity"),
+                task_id=row.get("task_id"),
+                context_id=row.get("context_id"),
+            ),
+            rpc_request_id=row["rpc_request_id"],
+            params=dict(row["params"]),
         )
 
     async def load_session_binding(self, *, identity: str, context_id: str) -> str | None:
@@ -322,7 +430,11 @@ class RuntimeStateStore:
         request_id: str,
         interrupt_type: str,
         session_id: str,
+        identity: str | None,
+        task_id: str | None,
+        context_id: str | None,
         created_at: float,
+        expires_at: float,
         rpc_request_id: str | int,
         params: dict[str, Any],
     ) -> None:
@@ -331,7 +443,12 @@ class RuntimeStateStore:
             "request_id": request_id,
             "interrupt_type": interrupt_type,
             "session_id": session_id,
+            "identity": identity,
+            "task_id": task_id,
+            "context_id": context_id,
             "created_at": created_at,
+            "expires_at": expires_at,
+            "tombstone_expires_at": None,
             "rpc_request_id": rpc_request_id,
             "params": params,
         }
@@ -350,6 +467,46 @@ class RuntimeStateStore:
                     .values(**values)
                 )
 
+    async def expire_interrupt_request(self, *, request_id: str) -> None:
+        await self._ensure_initialized()
+        now = time.time()
+        async with self._session_maker.begin() as session:
+            await self._purge_expired_interrupt_tombstones(session, now=now)
+            await self._set_interrupt_request_tombstone(session, request_id=request_id, now=now)
+
+    async def resolve_interrupt_request(
+        self,
+        *,
+        request_id: str,
+    ) -> tuple[str, PersistedInterruptRequest | None]:
+        await self._ensure_initialized()
+        now = time.time()
+        async with self._session_maker.begin() as session:
+            await self._purge_expired_interrupt_tombstones(session, now=now)
+            row = (
+                (
+                    await session.execute(
+                        select(_PENDING_INTERRUPT_REQUESTS).where(
+                            _PENDING_INTERRUPT_REQUESTS.c.request_id == request_id
+                        )
+                    )
+                )
+                .mappings()
+                .one_or_none()
+            )
+            if row is None:
+                return "missing", None
+            tombstone_expires_at = row.get("tombstone_expires_at")
+            if isinstance(tombstone_expires_at, (float, int)) and tombstone_expires_at > now:
+                return "expired", None
+            expires_at = row.get("expires_at")
+            if expires_at is None:
+                expires_at = row["created_at"]
+            if expires_at <= now:
+                await self._set_interrupt_request_tombstone(session, request_id=request_id, now=now)
+                return "expired", None
+            return "active", self._persisted_interrupt_request_from_row(row)
+
     async def delete_interrupt_request(self, *, request_id: str) -> None:
         await self._ensure_initialized()
         async with self._session_maker.begin() as session:
@@ -359,35 +516,30 @@ class RuntimeStateStore:
                 )
             )
 
-    async def load_interrupt_requests(
-        self,
-        *,
-        interrupt_request_ttl_seconds: int,
-    ) -> list[PersistedInterruptRequest]:
+    async def load_interrupt_requests(self) -> list[PersistedInterruptRequest]:
         await self._ensure_initialized()
-        cutoff = time.time() - float(interrupt_request_ttl_seconds)
+        now = time.time()
         async with self._session_maker.begin() as session:
-            await session.execute(
-                delete(_PENDING_INTERRUPT_REQUESTS).where(
-                    _PENDING_INTERRUPT_REQUESTS.c.created_at <= cutoff
-                )
-            )
+            await self._purge_expired_interrupt_tombstones(session, now=now)
             rows = (await session.execute(select(_PENDING_INTERRUPT_REQUESTS))).mappings().all()
 
-        return [
-            PersistedInterruptRequest(
-                request_id=row["request_id"],
-                binding=InterruptRequestBinding(
-                    request_id=row["request_id"],
-                    interrupt_type=row["interrupt_type"],
-                    session_id=row["session_id"],
-                    created_at=row["created_at"],
-                ),
-                rpc_request_id=row["rpc_request_id"],
-                params=dict(row["params"]),
-            )
-            for row in rows
-        ]
+            restored: list[PersistedInterruptRequest] = []
+            for row in rows:
+                tombstone_expires_at = row.get("tombstone_expires_at")
+                if isinstance(tombstone_expires_at, (float, int)) and tombstone_expires_at > now:
+                    continue
+                expires_at = row.get("expires_at")
+                if expires_at is None:
+                    expires_at = row["created_at"]
+                if expires_at <= now:
+                    await self._set_interrupt_request_tombstone(
+                        session,
+                        request_id=row["request_id"],
+                        now=now,
+                    )
+                    continue
+                restored.append(self._persisted_interrupt_request_from_row(row))
+            return restored
 
 
 def build_runtime_state_runtime(

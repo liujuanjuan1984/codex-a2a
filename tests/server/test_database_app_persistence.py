@@ -43,7 +43,7 @@ async def test_database_backend_persists_task_session_and_interrupt_state_across
             self.directory = settings.codex_workspace_root
             self.stream_timeout = None
             self._interrupt_request_store = interrupt_request_store
-            self._pending_request_ids: set[str] = set()
+            self._pending_requests: dict[str, object] = {}
 
         async def close(self) -> None:
             return None
@@ -54,10 +54,8 @@ async def test_database_backend_persists_task_session_and_interrupt_state_across
         async def restore_persisted_interrupt_requests(self) -> None:
             if self._interrupt_request_store is None:
                 return
-            restored = await self._interrupt_request_store.load_interrupt_requests(
-                interrupt_request_ttl_seconds=self.settings.a2a_interrupt_request_ttl_seconds
-            )
-            self._pending_request_ids = {entry.request_id for entry in restored}
+            restored = await self._interrupt_request_store.load_interrupt_requests()
+            self._pending_requests = {entry.request_id: entry.binding for entry in restored}
 
         async def create_session(
             self,
@@ -98,47 +96,55 @@ async def test_database_backend_persists_task_session_and_interrupt_state_across
             identity: str | None = None,
             ttl_seconds: float | None = None,
         ) -> None:
-            del ttl_seconds
             assert self._interrupt_request_store is not None
             from codex_a2a.upstream.interrupts import InterruptRequestBinding
 
+            created_at = time.time()
+            resolved_ttl_seconds = (
+                float(ttl_seconds)
+                if ttl_seconds is not None
+                else float(self.settings.a2a_interrupt_request_ttl_seconds)
+            )
             binding = InterruptRequestBinding(
                 request_id=request_id,
                 interrupt_type=interrupt_type,
                 session_id=session_id,
-                created_at=time.time(),
+                created_at=created_at,
+                expires_at=created_at + resolved_ttl_seconds,
+                identity=identity,
+                task_id=task_id,
+                context_id=context_id,
             )
             await self._interrupt_request_store.save_interrupt_request(
                 request_id=request_id,
                 interrupt_type=interrupt_type,
                 session_id=session_id,
+                identity=identity,
+                task_id=task_id,
+                context_id=context_id,
                 created_at=binding.created_at,
+                expires_at=binding.expires_at or binding.created_at,
                 rpc_request_id=request_id,
-                params={
-                    "task_id": task_id,
-                    "context_id": context_id,
-                    "identity": identity,
-                },
+                params={},
             )
-            self._pending_request_ids.add(request_id)
+            self._pending_requests[request_id] = binding
 
         async def resolve_interrupt_request(self, request_id: str):
-            if request_id not in self._pending_request_ids:
-                return "missing", None
-            from codex_a2a.upstream.interrupts import InterruptRequestBinding
-
-            return (
-                "active",
-                InterruptRequestBinding(
-                    request_id=request_id,
-                    interrupt_type="permission",
-                    session_id="ses-1",
-                    created_at=0.0,
-                ),
+            if self._interrupt_request_store is None:
+                binding = self._pending_requests.get(request_id)
+                if binding is None:
+                    return "missing", None
+                return "active", binding
+            status, persisted = await self._interrupt_request_store.resolve_interrupt_request(
+                request_id=request_id
             )
+            if status != "active" or persisted is None:
+                return status, None
+            self._pending_requests[request_id] = persisted.binding
+            return "active", persisted.binding
 
         async def discard_interrupt_request(self, request_id: str) -> None:
-            self._pending_request_ids.discard(request_id)
+            self._pending_requests.pop(request_id, None)
 
         async def permission_reply(
             self,
@@ -218,6 +224,15 @@ async def test_database_backend_persists_task_session_and_interrupt_state_across
         assert pending is False
         assert restored_session_id == "ses-1"
         assert PersistentStateDummyClient.created_sessions == 1
+        (
+            interrupt_status,
+            interrupt_binding,
+        ) = await app2.state.codex_client.resolve_interrupt_request("perm-1")
+        assert interrupt_status == "active"
+        assert interrupt_binding is not None
+        assert interrupt_binding.task_id == "task-1"
+        assert interrupt_binding.context_id == "ctx-1"
+        assert interrupt_binding.identity is None
 
         transport = httpx.ASGITransport(app=app2)
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:

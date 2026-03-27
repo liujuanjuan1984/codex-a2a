@@ -20,6 +20,12 @@ async def test_interrupt_requests_restore_after_client_rebuild(tmp_path) -> None
     await runtime_state.startup()
     try:
         client_1 = CodexClient(settings, interrupt_request_store=runtime_state.state_store)
+        client_1.bind_interrupt_context(
+            session_id="thr-1",
+            identity="user-1",
+            task_id="task-1",
+            context_id="ctx-1",
+        )
         await client_1._handle_server_request(
             {
                 "id": 100,
@@ -46,6 +52,9 @@ async def test_interrupt_requests_restore_after_client_rebuild(tmp_path) -> None
     assert status == "active"
     assert binding is not None
     assert binding.session_id == "thr-1"
+    assert binding.identity == "user-1"
+    assert binding.task_id == "task-1"
+    assert binding.context_id == "ctx-1"
     assert missing_status == "missing"
     assert missing_binding is None
 
@@ -72,12 +81,24 @@ async def test_expired_interrupt_requests_are_not_restored(tmp_path, monkeypatch
         )
 
         monkeypatch.setattr("codex_a2a.server.runtime_state.time.time", lambda: 16.0)
+        monkeypatch.setattr("codex_a2a.upstream.client.time.time", lambda: 16.0)
         monkeypatch.setattr("codex_a2a.upstream.interrupts.time.time", lambda: 16.0)
         client_2 = CodexClient(settings, interrupt_request_store=runtime_state.state_store)
         await client_2.restore_persisted_interrupt_requests()
         status, binding = await client_2.resolve_interrupt_request("200")
+        repeated_status, repeated_binding = await client_2.resolve_interrupt_request("200")
+
+        monkeypatch.setattr("codex_a2a.server.runtime_state.time.time", lambda: 617.0)
+        monkeypatch.setattr("codex_a2a.upstream.client.time.time", lambda: 617.0)
+        monkeypatch.setattr("codex_a2a.upstream.interrupts.time.time", lambda: 617.0)
+        missing_status, missing_binding = await client_2.resolve_interrupt_request("200")
     finally:
         await runtime_state.shutdown()
 
-    assert status == "missing"
+    assert status == "expired"
     assert binding is None
+    assert repeated_status == "expired"
+    assert repeated_binding is None
+    assert missing_status == "missing"
+    assert binding is None
+    assert missing_binding is None

@@ -80,6 +80,7 @@ class DummySessionQueryCodexClient:
         self.question_reply_calls: list[dict[str, Any]] = []
         self.question_reject_calls: list[dict[str, Any]] = []
         self._interrupt_requests: dict[str, InterruptRequestBinding] = {}
+        self._expired_interrupt_requests: set[str] = set()
 
     async def close(self) -> None:
         return None
@@ -181,6 +182,7 @@ class DummySessionQueryCodexClient:
 
     async def discard_interrupt_request(self, request_id: str) -> None:
         self._interrupt_requests.pop(request_id, None)
+        self._expired_interrupt_requests.discard(request_id)
 
     def prime_interrupt_request(
         self,
@@ -189,22 +191,32 @@ class DummySessionQueryCodexClient:
         interrupt_type: str,
         session_id: str = "ses-1",
         created_at: float = 0.0,
+        identity: str | None = None,
+        task_id: str | None = None,
+        context_id: str | None = None,
     ) -> None:
         self._interrupt_requests[request_id] = InterruptRequestBinding(
             request_id=request_id,
             interrupt_type=interrupt_type,
             session_id=session_id,
             created_at=created_at,
+            identity=identity,
+            task_id=task_id,
+            context_id=context_id,
         )
+        self._expired_interrupt_requests.discard(request_id)
 
     async def resolve_interrupt_request(
         self,
         request_id: str,
     ) -> tuple[str, InterruptRequestBinding | None]:
+        if request_id in self._expired_interrupt_requests:
+            return "expired", None
         binding = self._interrupt_requests.get(request_id)
         if binding is None:
             return "missing", None
         if binding.created_at == 0.0:
             return "active", binding
         self._interrupt_requests.pop(request_id, None)
-        return "expired", binding
+        self._expired_interrupt_requests.add(request_id)
+        return "expired", None

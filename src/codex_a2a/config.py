@@ -6,7 +6,6 @@ from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 from codex_a2a import __version__
-from codex_a2a.client.auth import validate_basic_auth
 
 _SANDBOX_MODES = {
     "unknown",
@@ -350,6 +349,8 @@ class Settings(BaseSettings):
     def validate_a2a_client_basic_auth(cls, value: str | None) -> str | None:
         if value is None:
             return value
+        from codex_a2a.client.auth import validate_basic_auth
+
         validate_basic_auth(value)
         return value
 

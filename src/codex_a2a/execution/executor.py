@@ -175,6 +175,14 @@ class CodexAgentExecutor(AgentExecutor):
             )
             session_lock = await self._session_runtime.get_session_lock(session_id)
             await session_lock.acquire()
+            bind_interrupt_context = getattr(self._client, "bind_interrupt_context", None)
+            if callable(bind_interrupt_context):
+                bind_interrupt_context(
+                    session_id=session_id,
+                    identity=identity,
+                    task_id=task_id,
+                    context_id=context_id,
+                )
             await event_queue.enqueue_event(
                 TaskStatusUpdateEvent(
                     task_id=task_id,
@@ -290,6 +298,9 @@ class CodexAgentExecutor(AgentExecutor):
                 stream_task.cancel()
                 with suppress(asyncio.CancelledError):
                     await stream_task
+            release_interrupt_context = getattr(self._client, "release_interrupt_context", None)
+            if callable(release_interrupt_context) and session_id:
+                release_interrupt_context(session_id=session_id)
             if session_lock and session_lock.locked():
                 session_lock.release()
             await self._session_runtime.untrack_running_request(

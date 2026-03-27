@@ -222,11 +222,17 @@ async def test_interrupt_request_status_uses_configured_ttl(monkeypatch) -> None
         params={"threadId": "thr-1"},
     )
 
+    monkeypatch.setattr("codex_a2a.upstream.client.time.time", lambda: 14.0)
     monkeypatch.setattr("codex_a2a.upstream.interrupts.time.time", lambda: 14.0)
     assert (await client.resolve_interrupt_request("req-1"))[0] == "active"
 
+    monkeypatch.setattr("codex_a2a.upstream.client.time.time", lambda: 15.0)
     monkeypatch.setattr("codex_a2a.upstream.interrupts.time.time", lambda: 15.0)
     assert (await client.resolve_interrupt_request("req-1"))[0] == "expired"
+    assert (await client.resolve_interrupt_request("req-1"))[0] == "expired"
+
+    monkeypatch.setattr("codex_a2a.upstream.client.time.time", lambda: 616.0)
+    monkeypatch.setattr("codex_a2a.upstream.interrupts.time.time", lambda: 616.0)
     assert (await client.resolve_interrupt_request("req-1"))[0] == "missing"
     assert "req-1" not in client._pending_server_requests
 

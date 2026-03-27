@@ -96,12 +96,25 @@ class InterruptRequestError(RuntimeError):
         self.actual_interrupt_type = actual_interrupt_type
 
 
+INTERRUPT_REQUEST_TOMBSTONE_TTL_SECONDS = 600.0
+
+
 @dataclass(frozen=True)
 class InterruptRequestBinding:
     request_id: str
     interrupt_type: str
     session_id: str
     created_at: float
+    expires_at: float | None = None
+    identity: str | None = None
+    task_id: str | None = None
+    context_id: str | None = None
+
+
+@dataclass(frozen=True)
+class InterruptRequestTombstone:
+    request_id: str
+    expires_at: float
 
 
 @dataclass
@@ -162,7 +175,9 @@ def interrupt_request_status(
     *,
     interrupt_request_ttl_seconds: int,
 ) -> str:
-    expires_at = binding.created_at + float(interrupt_request_ttl_seconds)
+    expires_at = binding.expires_at
+    if expires_at is None:
+        expires_at = binding.created_at + float(interrupt_request_ttl_seconds)
     if expires_at <= time.time():
         return "expired"
     return "active"
