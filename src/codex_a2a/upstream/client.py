@@ -649,6 +649,50 @@ class CodexClient:
                 )
             return
 
+        if method == "skills/changed":
+            await self._enqueue_stream_event(
+                {
+                    "type": "discovery.skills.changed",
+                    "properties": {},
+                }
+            )
+            return
+
+        if method == "app/list/updated":
+            raw_items = params.get("data")
+            items: list[dict[str, Any]] = []
+            if isinstance(raw_items, list):
+                for app in raw_items:
+                    if not isinstance(app, dict):
+                        continue
+                    app_id = app.get("id")
+                    name = app.get("name")
+                    if not isinstance(app_id, str) or not app_id.strip():
+                        continue
+                    if not isinstance(name, str) or not name.strip():
+                        continue
+                    items.append(
+                        {
+                            "id": app_id.strip(),
+                            "name": name.strip(),
+                            "description": app.get("description"),
+                            "is_accessible": bool(app.get("isAccessible", False)),
+                            "is_enabled": bool(app.get("isEnabled", False)),
+                            "install_url": app.get("installUrl"),
+                            "mention_path": f"app://{app_id.strip()}",
+                            "branding": app.get("branding"),
+                            "labels": app.get("labels"),
+                            "codex": {"raw": app},
+                        }
+                    )
+            await self._enqueue_stream_event(
+                {
+                    "type": "discovery.apps.updated",
+                    "properties": {"items": items},
+                }
+            )
+            return
+
         if method == "thread/tokenUsage/updated":
             thread_id = str(params.get("threadId", "")).strip()
             token_usage = params.get("tokenUsage")
@@ -841,6 +885,18 @@ class CodexClient:
         if not isinstance(session_id, str) or not session_id.strip():
             raise RuntimeError("codex thread/start response missing thread id")
         return session_id.strip()
+
+    async def list_skills(self, *, params: dict[str, Any] | None = None) -> Any:
+        return await self._rpc_request("skills/list", self._merge_params(params))
+
+    async def list_apps(self, *, params: dict[str, Any] | None = None) -> Any:
+        return await self._rpc_request("app/list", self._merge_params(params))
+
+    async def list_plugins(self, *, params: dict[str, Any] | None = None) -> Any:
+        return await self._rpc_request("plugin/list", self._merge_params(params))
+
+    async def read_plugin(self, *, params: dict[str, Any] | None = None) -> Any:
+        return await self._rpc_request("plugin/read", self._merge_params(params))
 
     async def list_sessions(self, *, params: dict[str, Any] | None = None) -> Any:
         query = self._merge_params(params)

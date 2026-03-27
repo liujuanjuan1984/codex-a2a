@@ -15,6 +15,18 @@ from codex_a2a.jsonrpc.control_params import (
     parse_prompt_async_params,
     parse_shell_params,
 )
+from codex_a2a.jsonrpc.discovery_params import (
+    DiscoveryAppsListParams,
+    DiscoveryPluginReadParams,
+    DiscoveryPluginsListParams,
+    DiscoverySkillsListParams,
+    DiscoveryWatchParams,
+    parse_discovery_apps_list_params,
+    parse_discovery_plugin_read_params,
+    parse_discovery_plugins_list_params,
+    parse_discovery_skills_list_params,
+    parse_discovery_watch_params,
+)
 from codex_a2a.jsonrpc.interrupt_params import (
     ElicitationReplyParams,
     PermissionReplyParams,
@@ -35,6 +47,11 @@ from codex_a2a.jsonrpc.query_params import (
 
 __all__ = [
     "CommandControlParams",
+    "DiscoveryAppsListParams",
+    "DiscoveryPluginReadParams",
+    "DiscoveryPluginsListParams",
+    "DiscoverySkillsListParams",
+    "DiscoveryWatchParams",
     "ExecResizeControlParams",
     "ExecStartControlParams",
     "ExecTerminateControlParams",
@@ -49,6 +66,11 @@ __all__ = [
     "QuestionReplyParams",
     "ShellControlParams",
     "parse_command_params",
+    "parse_discovery_apps_list_params",
+    "parse_discovery_plugin_read_params",
+    "parse_discovery_plugins_list_params",
+    "parse_discovery_skills_list_params",
+    "parse_discovery_watch_params",
     "parse_exec_resize_params",
     "parse_exec_start_params",
     "parse_exec_terminate_params",

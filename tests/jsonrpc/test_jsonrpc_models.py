@@ -6,6 +6,11 @@ from codex_a2a.contracts.extensions import (
 )
 from codex_a2a.jsonrpc.params import (
     JsonRpcParamsValidationError,
+    parse_discovery_apps_list_params,
+    parse_discovery_plugin_read_params,
+    parse_discovery_plugins_list_params,
+    parse_discovery_skills_list_params,
+    parse_discovery_watch_params,
     parse_elicitation_reply_params,
     parse_get_session_messages_params,
     parse_list_sessions_params,
@@ -247,3 +252,79 @@ def test_parse_prompt_async_params_rejects_unknown_part_type() -> None:
         "type": "INVALID_FIELD",
         "field": "request.parts[0].type",
     }
+
+
+def test_parse_discovery_param_aliases_preserve_upstream_shapes() -> None:
+    skills = parse_discovery_skills_list_params(
+        {
+            "cwds": ["/workspace/project"],
+            "force_reload": True,
+            "per_cwd_extra_user_roots": [
+                {
+                    "cwd": "/workspace/project",
+                    "extra_user_roots": ["/workspace/shared-skills"],
+                }
+            ],
+        }
+    )
+    apps = parse_discovery_apps_list_params(
+        {
+            "limit": 20,
+            "thread_id": "thr-1",
+            "force_refetch": False,
+        }
+    )
+    plugins = parse_discovery_plugins_list_params(
+        {
+            "cwds": ["/workspace/project"],
+            "force_remote_sync": True,
+        }
+    )
+    plugin = parse_discovery_plugin_read_params(
+        {
+            "marketplace_path": "/workspace/project/.codex/plugins/marketplace.json",
+            "plugin_name": "sample",
+        }
+    )
+
+    assert skills == {
+        "cwds": ["/workspace/project"],
+        "forceReload": True,
+        "perCwdExtraUserRoots": [
+            {
+                "cwd": "/workspace/project",
+                "extraUserRoots": ["/workspace/shared-skills"],
+            }
+        ],
+    }
+    assert apps == {"limit": 20, "threadId": "thr-1", "forceRefetch": False}
+    assert plugins == {
+        "cwds": ["/workspace/project"],
+        "forceRemoteSync": True,
+    }
+    assert plugin == {
+        "marketplacePath": "/workspace/project/.codex/plugins/marketplace.json",
+        "pluginName": "sample",
+    }
+    assert parse_discovery_watch_params({"request": {"events": ["skills.changed"]}}) == {
+        "request": {"events": ["skills.changed"]}
+    }
+
+
+@pytest.mark.parametrize(
+    ("parser", "payload", "field"),
+    [
+        (parse_discovery_skills_list_params, {"cwds": [""]}, "cwds"),
+        (parse_discovery_apps_list_params, {"limit": 0}, "limit"),
+        (
+            parse_discovery_plugin_read_params,
+            {"marketplacePath": "", "pluginName": "sample"},
+            "marketplace_path",
+        ),
+    ],
+)
+def test_parse_discovery_params_reject_invalid_fields(parser, payload, field: str) -> None:
+    with pytest.raises(JsonRpcParamsValidationError) as exc_info:
+        parser(payload)
+
+    assert exc_info.value.data["field"] == field

@@ -122,6 +122,10 @@ will be reflected live per request.
 - `codex.exec.*` is compatibility-sensitive as the standalone interactive exec
   contract. Changes to handle shapes, task-stream delivery, or lifecycle method
   names should be treated as wire-level changes.
+- `codex.discovery.*` is compatibility-sensitive as the stable discovery
+  contract for `skill.path` and `mention_path` identifiers. Changes to
+  normalized item fields, plugin marketplace mapping, or discovery watch task
+  payload kinds should be treated as wire-level changes.
 
 ## Extension Taxonomy
 
@@ -135,6 +139,22 @@ This repository distinguishes between three layers:
     `elicitation` reply surfaces)
 - Codex-specific extensions
   - `codex.*` JSON-RPC methods and `metadata.codex.directory`
+  - this now includes:
+    - session query/control
+    - discovery/query surfaces
+    - discovery watch task bridge
+    - standalone interactive exec
+
+Discovery note:
+
+- `codex.discovery.skills.list`, `codex.discovery.apps.list`,
+  `codex.discovery.plugins.list`, and `codex.discovery.plugins.read` are
+  declared read-only discovery methods.
+- `codex.discovery.watch` is the declared bridge for upstream
+  `skills/changed` and `app/list/updated` notifications.
+- This repository does not claim a generic standalone server-push JSON-RPC
+  transport for those notifications; the compatibility contract is the
+  watch-task bridge published through Agent Card and OpenAPI.
 
 Important note:
 

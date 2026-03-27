@@ -6,6 +6,7 @@ import pytest
 
 from codex_a2a.config import Settings
 from codex_a2a.contracts.extensions import (
+    DISCOVERY_METHODS,
     EXEC_CONTROL_METHODS,
     INTERRUPT_CALLBACK_METHODS,
     SESSION_CONTROL_METHODS,
@@ -38,6 +39,7 @@ def _build_extension_app(
     methods = {
         **SESSION_QUERY_METHODS,
         **SESSION_CONTROL_METHODS,
+        **DISCOVERY_METHODS,
         **EXEC_CONTROL_METHODS,
         **INTERRUPT_CALLBACK_METHODS,
     }
@@ -52,6 +54,7 @@ def _build_extension_app(
         http_handler=MagicMock(),
         codex_client=DummyCodexClient(settings),
         exec_runtime=MagicMock(),
+        discovery_runtime=MagicMock(),
         methods=methods,
         protocol_version=settings.a2a_protocol_version,
         supported_methods=list(

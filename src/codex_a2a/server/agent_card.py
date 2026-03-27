@@ -14,6 +14,7 @@ from a2a.types import (
 from codex_a2a.config import Settings
 from codex_a2a.contracts.extensions import (
     COMPATIBILITY_PROFILE_EXTENSION_URI,
+    DISCOVERY_EXTENSION_URI,
     EXEC_CONTROL_EXTENSION_URI,
     INTERRUPT_CALLBACK_EXTENSION_URI,
     SESSION_BINDING_EXTENSION_URI,
@@ -21,6 +22,7 @@ from codex_a2a.contracts.extensions import (
     STREAMING_EXTENSION_URI,
     WIRE_CONTRACT_EXTENSION_URI,
     build_compatibility_profile_params,
+    build_discovery_extension_params,
     build_exec_control_extension_params,
     build_interrupt_callback_extension_params,
     build_session_binding_extension_params,
@@ -37,9 +39,9 @@ def _build_agent_card_description(settings: Settings, runtime_profile: RuntimePr
         "Supports HTTP+JSON and JSON-RPC transports, standard A2A messaging "
         "(message/send, message/stream), task APIs (tasks/get, tasks/cancel, "
         "tasks/resubscribe; REST mapping: GET /v1/tasks/{id}:subscribe), "
-        "shared session-binding and streaming contracts, Codex session-query "
-        "and interactive exec extensions, shared interrupt callback extensions, "
-        "a machine-readable "
+        "shared session-binding and streaming contracts, Codex session-query, "
+        "discovery, and interactive exec extensions, shared interrupt callback "
+        "extensions, a machine-readable "
         "compatibility profile, and a machine-readable wire contract."
     )
     parts: list[str] = [base, summary]
@@ -90,6 +92,9 @@ def build_agent_card(
         runtime_profile=runtime_profile,
     )
     exec_control_extension_params = build_exec_control_extension_params(
+        runtime_profile=runtime_profile,
+    )
+    discovery_extension_params = build_discovery_extension_params(
         runtime_profile=runtime_profile,
     )
     interrupt_callback_extension_params = build_interrupt_callback_extension_params(
@@ -159,6 +164,15 @@ def build_agent_card(
                     params=session_query_extension_params,
                 ),
                 AgentExtension(
+                    uri=DISCOVERY_EXTENSION_URI,
+                    required=False,
+                    description=(
+                        "Expose read-only skills/apps/plugins discovery plus a task-stream "
+                        "notification bridge for invalidation and refresh signals."
+                    ),
+                    params=discovery_extension_params,
+                ),
+                AgentExtension(
                     uri=EXEC_CONTROL_EXTENSION_URI,
                     required=False,
                     description=(
@@ -220,6 +234,20 @@ def build_agent_card(
                 examples=[
                     "List Codex sessions (method codex.sessions.list).",
                     "List messages for a session (method codex.sessions.messages.list).",
+                ],
+            ),
+            AgentSkill(
+                id="codex.discovery.query",
+                name="Codex Discovery Query",
+                description=(
+                    "Discover skills, apps, and plugins plus stable path identifiers via "
+                    "codex.discovery.* JSON-RPC extension methods."
+                ),
+                tags=["codex", "discovery", "skills", "apps", "plugins"],
+                examples=[
+                    "List available Codex skills (method codex.discovery.skills.list).",
+                    "List available apps or plugins before constructing mention.path values.",
+                    "Start a discovery watch stream (method codex.discovery.watch).",
                 ],
             ),
             AgentSkill(
