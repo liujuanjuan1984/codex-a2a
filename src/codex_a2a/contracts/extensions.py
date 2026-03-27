@@ -197,6 +197,18 @@ INTERRUPT_CALLBACK_METHOD_CONTRACTS: dict[str, InterruptMethodContract] = {
         optional_params=("metadata",),
         notification_response_status=204,
     ),
+    "reply_permissions": InterruptMethodContract(
+        method="a2a.interrupt.permissions.reply",
+        required_params=("request_id", "permissions"),
+        optional_params=("scope", "metadata"),
+        notification_response_status=204,
+    ),
+    "reply_elicitation": InterruptMethodContract(
+        method="a2a.interrupt.elicitation.reply",
+        required_params=("request_id", "action"),
+        optional_params=("content", "metadata"),
+        notification_response_status=204,
+    ),
 }
 
 INTERRUPT_CALLBACK_METHODS: dict[str, str] = {
@@ -874,10 +886,22 @@ def build_interrupt_callback_extension_params(
         "supported_interrupt_events": [
             "permission.asked",
             "question.asked",
+            "permissions.asked",
+            "elicitation.asked",
         ],
         "permission_reply_values": ["once", "always", "reject"],
         "question_reply_contract": {
             "answers": "array of answer arrays (same order as asked questions)"
+        },
+        "permissions_reply_contract": {
+            "permissions": "granted subset object matching the requested permission profile",
+            "scope": "optional persistence scope: turn or session",
+        },
+        "elicitation_reply_contract": {
+            "action": "accept, decline, or cancel",
+            "content": (
+                "structured response payload for accepted elicitations; null for decline/cancel"
+            ),
         },
         "request_id_field": f"{SHARED_INTERRUPT_METADATA_FIELD}.request_id",
         "supported_metadata": ["codex.directory"],

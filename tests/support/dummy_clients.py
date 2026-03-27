@@ -83,6 +83,8 @@ class DummySessionQueryCodexClient:
         self.permission_reply_calls: list[dict[str, Any]] = []
         self.question_reply_calls: list[dict[str, Any]] = []
         self.question_reject_calls: list[dict[str, Any]] = []
+        self.permissions_reply_calls: list[dict[str, Any]] = []
+        self.elicitation_reply_calls: list[dict[str, Any]] = []
         self._interrupt_requests: dict[str, InterruptRequestBinding] = {}
         self._expired_interrupt_requests: set[str] = set()
 
@@ -220,6 +222,44 @@ class DummySessionQueryCodexClient:
         self.question_reject_calls.append(
             {
                 "request_id": request_id,
+                "directory": directory,
+            }
+        )
+        await self.discard_interrupt_request(request_id)
+        return True
+
+    async def permissions_reply(
+        self,
+        request_id: str,
+        *,
+        permissions: dict[str, Any],
+        scope: str | None = None,
+        directory: str | None = None,
+    ) -> bool:
+        self.permissions_reply_calls.append(
+            {
+                "request_id": request_id,
+                "permissions": permissions,
+                "scope": scope,
+                "directory": directory,
+            }
+        )
+        await self.discard_interrupt_request(request_id)
+        return True
+
+    async def elicitation_reply(
+        self,
+        request_id: str,
+        *,
+        action: str,
+        content: Any = None,
+        directory: str | None = None,
+    ) -> bool:
+        self.elicitation_reply_calls.append(
+            {
+                "request_id": request_id,
+                "action": action,
+                "content": content,
                 "directory": directory,
             }
         )

@@ -331,6 +331,98 @@ async def test_question_reply_builds_answer_map() -> None:
 
 
 @pytest.mark.asyncio
+async def test_permissions_reply_maps_to_granted_subset_and_scope() -> None:
+    client = CodexClient(make_settings(a2a_bearer_token="t-1", codex_timeout=1.0))
+    client._pending_server_requests["210"] = _PendingInterruptRequest(
+        binding=InterruptRequestBinding(
+            request_id="210",
+            interrupt_type="permissions",
+            session_id="thr-2",
+            created_at=time.time(),
+        ),
+        rpc_request_id=210,
+        params={"threadId": "thr-2"},
+    )
+
+    sent: list[dict] = []
+    events: list[dict] = []
+
+    async def fake_send_json(payload: dict) -> None:
+        sent.append(payload)
+
+    async def fake_enqueue(event: dict) -> None:
+        events.append(event)
+
+    client._send_json_message = fake_send_json
+    client._enqueue_stream_event = fake_enqueue
+
+    ok = await client.permissions_reply(
+        "210",
+        permissions={"fileSystem": {"write": ["/workspace/project"]}},
+        scope="session",
+    )
+    assert ok is True
+    assert sent == [
+        {
+            "id": 210,
+            "result": {
+                "permissions": {"fileSystem": {"write": ["/workspace/project"]}},
+                "scope": "session",
+            },
+        }
+    ]
+    assert events[-1]["type"] == "permissions.replied"
+    assert events[-1]["properties"]["id"] == "210"
+    assert "210" not in client._pending_server_requests
+
+
+@pytest.mark.asyncio
+async def test_elicitation_reply_maps_to_action_and_content() -> None:
+    client = CodexClient(make_settings(a2a_bearer_token="t-1", codex_timeout=1.0))
+    client._pending_server_requests["220"] = _PendingInterruptRequest(
+        binding=InterruptRequestBinding(
+            request_id="220",
+            interrupt_type="elicitation",
+            session_id="thr-3",
+            created_at=time.time(),
+        ),
+        rpc_request_id=220,
+        params={"threadId": "thr-3"},
+    )
+
+    sent: list[dict] = []
+    events: list[dict] = []
+
+    async def fake_send_json(payload: dict) -> None:
+        sent.append(payload)
+
+    async def fake_enqueue(event: dict) -> None:
+        events.append(event)
+
+    client._send_json_message = fake_send_json
+    client._enqueue_stream_event = fake_enqueue
+
+    ok = await client.elicitation_reply(
+        "220",
+        action="accept",
+        content={"workspace_root": "/workspace/project"},
+    )
+    assert ok is True
+    assert sent == [
+        {
+            "id": 220,
+            "result": {
+                "action": "accept",
+                "content": {"workspace_root": "/workspace/project"},
+            },
+        }
+    ]
+    assert events[-1]["type"] == "elicitation.replied"
+    assert events[-1]["properties"]["id"] == "220"
+    assert "220" not in client._pending_server_requests
+
+
+@pytest.mark.asyncio
 async def test_interrupt_request_status_uses_configured_ttl(monkeypatch) -> None:
     client = CodexClient(
         make_settings(
@@ -906,6 +998,84 @@ async def test_question_request_emits_shared_questions_and_display_message() -> 
         {"header": "Deploy", "id": "q1", "question": "Proceed with deployment?"}
     ]
     assert props["metadata"]["raw"]["prompt"] == "Proceed with deployment?"
+
+
+@pytest.mark.asyncio
+async def test_permissions_request_emits_shared_permissions_details() -> None:
+    client = CodexClient(make_settings(a2a_bearer_token="t-1", codex_timeout=1.0))
+    events: list[dict] = []
+
+    async def fake_enqueue(event: dict) -> None:
+        events.append(event)
+
+    client._enqueue_stream_event = fake_enqueue
+
+    await client._handle_server_request(
+        {
+            "id": 304,
+            "method": "item/permissions/requestApproval",
+            "params": {
+                "threadId": "thr-4",
+                "turnId": "turn-1",
+                "itemId": "item-1",
+                "reason": "Select the writable workspace root.",
+                "permissions": {
+                    "fileSystem": {"write": ["/workspace/project", "/workspace/shared"]}
+                },
+            },
+        }
+    )
+
+    assert len(events) == 1
+    assert events[0]["type"] == "permissions.asked"
+    props = events[0]["properties"]
+    assert props["id"] == "304"
+    assert props["display_message"] == "Select the writable workspace root."
+    assert props["permissions"] == {
+        "fileSystem": {"write": ["/workspace/project", "/workspace/shared"]}
+    }
+
+
+@pytest.mark.asyncio
+async def test_elicitation_request_emits_shared_elicitation_details() -> None:
+    client = CodexClient(make_settings(a2a_bearer_token="t-1", codex_timeout=1.0))
+    events: list[dict] = []
+
+    async def fake_enqueue(event: dict) -> None:
+        events.append(event)
+
+    client._enqueue_stream_event = fake_enqueue
+
+    await client._handle_server_request(
+        {
+            "id": 305,
+            "method": "mcpServer/elicitation/request",
+            "params": {
+                "threadId": "thr-5",
+                "turnId": "turn-2",
+                "serverName": "drive",
+                "mode": "form",
+                "message": "Select the target folder.",
+                "requestedSchema": {
+                    "type": "object",
+                    "properties": {
+                        "folder": {"type": "string", "title": "Folder"},
+                    },
+                },
+                "_meta": {"persist": "session"},
+            },
+        }
+    )
+
+    assert len(events) == 1
+    assert events[0]["type"] == "elicitation.asked"
+    props = events[0]["properties"]
+    assert props["id"] == "305"
+    assert props["display_message"] == "Select the target folder."
+    assert props["server_name"] == "drive"
+    assert props["mode"] == "form"
+    assert props["requested_schema"]["type"] == "object"
+    assert props["meta"] == {"persist": "session"}
 
 
 @pytest.mark.asyncio

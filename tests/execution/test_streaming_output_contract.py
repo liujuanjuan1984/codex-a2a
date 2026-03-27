@@ -844,6 +844,28 @@ def test_extract_interrupt_resolved_event_accepts_request_id_aliases() -> None:
     }
 
 
+def test_extract_interrupt_resolved_event_accepts_permissions_and_elicitation() -> None:
+    permissions = extract_interrupt_resolved_event(
+        {"type": "permissions.replied", "properties": {"requestID": "perm-v2-1"}}
+    )
+    elicitation = extract_interrupt_resolved_event(
+        {"type": "elicitation.rejected", "properties": {"id": "eli-1"}}
+    )
+
+    assert permissions == {
+        "request_id": "perm-v2-1",
+        "event_type": "permissions.replied",
+        "interrupt_type": "permissions",
+        "resolution": "replied",
+    }
+    assert elicitation == {
+        "request_id": "eli-1",
+        "event_type": "elicitation.rejected",
+        "interrupt_type": "elicitation",
+        "resolution": "rejected",
+    }
+
+
 def test_extract_event_session_id_checks_direct_and_nested_properties() -> None:
     assert extract_event_session_id({"properties": {"sessionID": "ses-direct"}}) == "ses-direct"
     assert (

@@ -1013,6 +1013,96 @@ async def test_interrupt_callback_extension_question_reply_and_reject(monkeypatc
 
 
 @pytest.mark.asyncio
+async def test_interrupt_callback_extension_permissions_reply(monkeypatch):
+    import codex_a2a.server.application as app_module
+
+    dummy = DummyCodexClient(
+        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+    )
+    dummy.prime_interrupt_request("perm-v2-1", interrupt_type="permissions")
+    monkeypatch.setattr(app_module, "CodexClient", lambda _settings: dummy)
+    app = app_module.create_app(
+        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+    )
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        headers = {"Authorization": "Bearer t-1"}
+        resp = await client.post(
+            "/",
+            headers=headers,
+            json={
+                "jsonrpc": "2.0",
+                "id": 19,
+                "method": "a2a.interrupt.permissions.reply",
+                "params": {
+                    "request_id": "perm-v2-1",
+                    "permissions": {"fileSystem": {"write": ["/workspace/project"]}},
+                    "scope": "session",
+                    "metadata": {"codex": {"directory": "/workspace"}},
+                },
+            },
+        )
+        payload = resp.json()
+        assert payload.get("error") is None
+        assert payload["result"]["ok"] is True
+        assert payload["result"]["request_id"] == "perm-v2-1"
+        assert payload["result"]["scope"] == "session"
+        assert len(dummy.permissions_reply_calls) == 1
+        assert dummy.permissions_reply_calls[0]["request_id"] == "perm-v2-1"
+        assert dummy.permissions_reply_calls[0]["permissions"] == {
+            "fileSystem": {"write": ["/workspace/project"]}
+        }
+        assert dummy.permissions_reply_calls[0]["scope"] == "session"
+        assert dummy.permissions_reply_calls[0]["directory"] == "/workspace"
+        assert (await dummy.resolve_interrupt_request("perm-v2-1"))[0] == "missing"
+
+
+@pytest.mark.asyncio
+async def test_interrupt_callback_extension_elicitation_reply(monkeypatch):
+    import codex_a2a.server.application as app_module
+
+    dummy = DummyCodexClient(
+        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+    )
+    dummy.prime_interrupt_request("eli-1", interrupt_type="elicitation")
+    monkeypatch.setattr(app_module, "CodexClient", lambda _settings: dummy)
+    app = app_module.create_app(
+        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+    )
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        headers = {"Authorization": "Bearer t-1"}
+        resp = await client.post(
+            "/",
+            headers=headers,
+            json={
+                "jsonrpc": "2.0",
+                "id": 20,
+                "method": "a2a.interrupt.elicitation.reply",
+                "params": {
+                    "request_id": "eli-1",
+                    "action": "accept",
+                    "content": {"workspace_root": "/workspace/project"},
+                },
+            },
+        )
+        payload = resp.json()
+        assert payload.get("error") is None
+        assert payload["result"]["ok"] is True
+        assert payload["result"]["request_id"] == "eli-1"
+        assert payload["result"]["action"] == "accept"
+        assert len(dummy.elicitation_reply_calls) == 1
+        assert dummy.elicitation_reply_calls[0]["request_id"] == "eli-1"
+        assert dummy.elicitation_reply_calls[0]["action"] == "accept"
+        assert dummy.elicitation_reply_calls[0]["content"] == {
+            "workspace_root": "/workspace/project"
+        }
+        assert (await dummy.resolve_interrupt_request("eli-1"))[0] == "missing"
+
+
+@pytest.mark.asyncio
 async def test_interrupt_callback_extension_maps_404_to_interrupt_not_found(monkeypatch):
     import codex_a2a.server.application as app_module
 

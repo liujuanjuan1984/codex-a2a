@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any
 
 from a2a.types import A2AError, InvalidParamsError, JSONRPCError
@@ -20,10 +21,15 @@ ERR_INTERRUPT_EXPIRED = -32007
 ERR_INTERRUPT_TYPE_MISMATCH = -32008
 
 
-def interrupt_expected_type(method: str, *, permission_method: str) -> str:
-    if method == permission_method:
-        return "permission"
-    return "question"
+def interrupt_expected_type(
+    method: str,
+    *,
+    interrupt_methods_by_type: Mapping[str, str],
+) -> str:
+    for interrupt_type, method_name in interrupt_methods_by_type.items():
+        if method == method_name:
+            return interrupt_type
+    raise ValueError(f"Unsupported interrupt callback method: {method}")
 
 
 def invalid_params_response(

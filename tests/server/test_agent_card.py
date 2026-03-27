@@ -196,6 +196,16 @@ def test_agent_card_injects_profile_into_extensions() -> None:
     assert interrupt.params["request_id_field"] == "metadata.shared.interrupt.request_id"
     assert interrupt.params["supported_metadata"] == ["codex.directory"]
     assert interrupt.params["provider_private_metadata"] == ["codex.directory"]
+    assert interrupt.params["methods"]["reply_permissions"] == "a2a.interrupt.permissions.reply"
+    assert interrupt.params["methods"]["reply_elicitation"] == "a2a.interrupt.elicitation.reply"
+    assert "permissions.asked" in interrupt.params["supported_interrupt_events"]
+    assert "elicitation.asked" in interrupt.params["supported_interrupt_events"]
+    assert interrupt.params["permissions_reply_contract"]["scope"] == (
+        "optional persistence scope: turn or session"
+    )
+    assert interrupt.params["elicitation_reply_contract"]["action"] == (
+        "accept, decline, or cancel"
+    )
     assert interrupt.params["errors"]["business_codes"]["INTERRUPT_REQUEST_EXPIRED"] == -32007
     assert interrupt.params["errors"]["business_codes"]["INTERRUPT_TYPE_MISMATCH"] == -32008
     assert "expected_interrupt_type" in interrupt.params["errors"]["error_data_fields"]

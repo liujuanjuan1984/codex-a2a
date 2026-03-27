@@ -40,6 +40,8 @@ class ExtensionMethodRegistry:
                 methods["reply_permission"],
                 methods["reply_question"],
                 methods["reject_question"],
+                methods["reply_permissions"],
+                methods["reply_elicitation"],
             }
         )
         extension_methods = (

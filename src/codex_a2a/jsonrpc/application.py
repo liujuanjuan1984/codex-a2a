@@ -57,6 +57,14 @@ class CodexSessionQueryJSONRPCApplication(A2AFastAPIApplication):
         self._method_reply_permission = methods["reply_permission"]
         self._method_reply_question = methods["reply_question"]
         self._method_reject_question = methods["reject_question"]
+        self._method_reply_permissions = methods["reply_permissions"]
+        self._method_reply_elicitation = methods["reply_elicitation"]
+        self._interrupt_methods_by_type = {
+            "permission": self._method_reply_permission,
+            "question": self._method_reply_question,
+            "permissions": self._method_reply_permissions,
+            "elicitation": self._method_reply_elicitation,
+        }
         self._protocol_version = protocol_version
         self._supported_methods = list(supported_methods)
         self._supported_method_set = set(supported_methods)

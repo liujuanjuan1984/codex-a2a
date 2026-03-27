@@ -80,6 +80,13 @@ def _extract_question_properties_questions(params: dict[str, Any]) -> list[Any]:
     return []
 
 
+def _extract_mapping(params: dict[str, Any], key: str) -> dict[str, Any] | None:
+    value = _mapping_value(params.get(key))
+    if value is None:
+        return None
+    return dict(value)
+
+
 class InterruptRequestError(RuntimeError):
     def __init__(
         self,
@@ -167,6 +174,62 @@ def build_codex_question_interrupt_properties(
     )
     if display_message is not None:
         properties["display_message"] = display_message
+    return properties
+
+
+def build_codex_permissions_interrupt_properties(
+    *, request_key: str, session_id: str, method: str, params: dict[str, Any]
+) -> dict[str, Any]:
+    properties: dict[str, Any] = {
+        "id": request_key,
+        "sessionID": session_id,
+        "metadata": {"method": method, "raw": params},
+    }
+    display_message = _first_nested_string(
+        params,
+        ("reason",),
+        ("description",),
+    )
+    if display_message is not None:
+        properties["display_message"] = display_message
+    permissions = _extract_mapping(params, "permissions")
+    if permissions is not None:
+        properties["permissions"] = permissions
+    return properties
+
+
+def build_codex_elicitation_interrupt_properties(
+    *, request_key: str, session_id: str, method: str, params: dict[str, Any]
+) -> dict[str, Any]:
+    properties: dict[str, Any] = {
+        "id": request_key,
+        "sessionID": session_id,
+        "metadata": {"method": method, "raw": params},
+    }
+    display_message = _first_nested_string(
+        params,
+        ("message",),
+    )
+    if display_message is not None:
+        properties["display_message"] = display_message
+    server_name = _normalized_string(params.get("serverName"))
+    if server_name is not None:
+        properties["server_name"] = server_name
+    mode = _normalized_string(params.get("mode"))
+    if mode is not None:
+        properties["mode"] = mode
+    requested_schema = _extract_mapping(params, "requestedSchema")
+    if requested_schema is not None:
+        properties["requested_schema"] = requested_schema
+    url = _normalized_string(params.get("url"))
+    if url is not None:
+        properties["url"] = url
+    elicitation_id = _normalized_string(params.get("elicitationId"))
+    if elicitation_id is not None:
+        properties["elicitation_id"] = elicitation_id
+    meta = _extract_mapping(params, "_meta")
+    if meta is not None:
+        properties["meta"] = meta
     return properties
 
 

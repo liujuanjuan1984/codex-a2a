@@ -208,6 +208,34 @@ def _build_jsonrpc_extension_openapi_examples(*, session_shell_enabled: bool) ->
                 "params": {"request_id": "req-3"},
             },
         },
+        "permissions_reply": {
+            "summary": "Reply to permissions interrupt request",
+            "value": {
+                "jsonrpc": "2.0",
+                "id": 34,
+                "method": INTERRUPT_CALLBACK_METHODS["reply_permissions"],
+                "params": {
+                    "request_id": "req-4",
+                    "permissions": {
+                        "fileSystem": {"write": ["/workspace/project"]},
+                    },
+                    "scope": "session",
+                },
+            },
+        },
+        "elicitation_reply": {
+            "summary": "Reply to elicitation interrupt request",
+            "value": {
+                "jsonrpc": "2.0",
+                "id": 35,
+                "method": INTERRUPT_CALLBACK_METHODS["reply_elicitation"],
+                "params": {
+                    "request_id": "req-5",
+                    "action": "accept",
+                    "content": {"workspace_root": "/workspace/project"},
+                },
+            },
+        },
     }
     if session_shell_enabled:
         examples["session_shell"] = {

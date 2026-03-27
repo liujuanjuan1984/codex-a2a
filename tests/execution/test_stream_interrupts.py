@@ -83,3 +83,49 @@ def test_extract_question_interrupt_promotes_nested_questions() -> None:
         "interrupt_type": "question",
         "details": {"questions": [{"id": "q1", "question": "Proceed with deployment?"}]},
     }
+
+
+def test_extract_permissions_interrupt_keeps_permissions_and_reason() -> None:
+    event = {
+        "type": "permissions.asked",
+        "properties": {
+            "id": "perm-v2-1",
+            "permissions": {"fileSystem": {"write": ["/workspace/project"]}},
+            "display_message": "Select the writable workspace root.",
+        },
+    }
+
+    assert extract_interrupt_asked_event(event) == {
+        "request_id": "perm-v2-1",
+        "interrupt_type": "permissions",
+        "details": {
+            "permissions": {"fileSystem": {"write": ["/workspace/project"]}},
+            "display_message": "Select the writable workspace root.",
+        },
+    }
+
+
+def test_extract_elicitation_interrupt_promotes_form_details() -> None:
+    event = {
+        "type": "elicitation.asked",
+        "properties": {
+            "id": "eli-1",
+            "server_name": "drive",
+            "mode": "form",
+            "requested_schema": {"type": "object", "properties": {"folder": {"type": "string"}}},
+            "display_message": "Select the target folder.",
+        },
+    }
+
+    assert extract_interrupt_asked_event(event) == {
+        "request_id": "eli-1",
+        "interrupt_type": "elicitation",
+        "details": {
+            "server_name": "drive",
+            "mode": "form",
+            "requested_schema": {"type": "object", "properties": {"folder": {"type": "string"}}},
+            "url": None,
+            "elicitation_id": None,
+            "display_message": "Select the target folder.",
+        },
+    }

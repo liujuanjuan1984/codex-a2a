@@ -224,14 +224,22 @@ def build_agent_card(
                 id="codex.interrupt.callback",
                 name="Codex Interrupt Callback",
                 description=(
-                    "Reply permission/question interrupts emitted during streaming via "
-                    "JSON-RPC methods a2a.interrupt.permission.reply, "
-                    "a2a.interrupt.question.reply, and a2a.interrupt.question.reject."
+                    "Reply permission/question/permissions/elicitation interrupts emitted "
+                    "during streaming via shared JSON-RPC interrupt callback methods."
                 ),
-                tags=["codex", "interrupt", "permission", "question", "shared"],
+                tags=[
+                    "codex",
+                    "interrupt",
+                    "permission",
+                    "question",
+                    "permissions",
+                    "elicitation",
+                    "shared",
+                ],
                 examples=[
                     "Reply once/always/reject to a permission request by request_id.",
                     "Submit answers for a question request by request_id.",
+                    "Grant a permissions subset or answer an elicitation request by request_id.",
                 ],
             ),
             AgentSkill(
