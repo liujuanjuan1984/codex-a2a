@@ -98,6 +98,21 @@ Agent Card: `http://127.0.0.1:8000/.well-known/agent-card.json`
 Detailed protocol contracts, examples, and extension docs live in
 [Usage Guide](docs/guide.md).
 
+## Portable vs Private Surface
+
+For open-source consumers, treat this repository as two layers:
+
+- Portable A2A surface:
+  core A2A send/stream/task methods, Agent Card discovery, and the shared
+  `urn:a2a:*` metadata conventions documented in this repository.
+- Codex-specific control plane:
+  `codex.sessions.*`, `codex.discovery.*`, `codex.exec.*`, and
+  `metadata.codex.directory`.
+
+Generic A2A clients should start from the portable core surface. The Codex-
+specific control plane is useful for Codex-aware clients and coding-agent
+workflows, but it is not advertised as a portable cross-agent baseline.
+
 ## Peering Node / Outbound Access
 
 `codex-a2a` supports a "Peering Node" architecture where one process can both

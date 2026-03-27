@@ -1,6 +1,8 @@
+import tomllib
 from pathlib import Path
 
 PYPROJECT_TEXT = Path("pyproject.toml").read_text()
+PYPROJECT_DATA = tomllib.loads(PYPROJECT_TEXT)
 README_TEXT = Path("README.md").read_text()
 CONTRIBUTING_TEXT = Path("CONTRIBUTING.md").read_text()
 SECURITY_TEXT = Path("SECURITY.md").read_text()
@@ -41,6 +43,8 @@ def test_readme_documents_released_cli_installation_via_uv_tool() -> None:
     assert "[Compatibility Guide](docs/compatibility.md)" in README_TEXT
     assert "[Contributing Guide](CONTRIBUTING.md)" in README_TEXT
     assert "single-tenant trust boundary" in README_TEXT
+    assert "Portable vs Private Surface" in README_TEXT
+    assert "Codex-specific control plane" in README_TEXT
 
 
 def test_publish_workflow_builds_and_smoke_tests_release_artifacts() -> None:
@@ -85,6 +89,15 @@ def test_released_cli_entrypoint_points_to_cli_module() -> None:
     assert "[tool.setuptools.package-data]" not in PYPROJECT_TEXT
 
 
+def test_project_metadata_exposes_open_source_entrypoints_cleanly() -> None:
+    project = PYPROJECT_DATA["project"]
+    assert project["authors"] == [{"name": "liujuanjuan1984@Intelligent-Internet"}]
+    assert project["license"] == "Apache-2.0"
+    assert project["urls"]["Documentation"].endswith("/tree/main/docs")
+    assert project["urls"]["Releases"].endswith("/releases")
+    assert project["urls"]["Security"].endswith("/security/policy")
+
+
 def test_repository_no_longer_ships_deploy_assets() -> None:
     assert not Path("src/codex_a2a/assets").exists()
 
@@ -101,8 +114,24 @@ def test_repository_wrappers_only_keep_remaining_user_or_maintainer_entrypoints(
     assert "uv tool install" in SMOKE_TEST_SCRIPT_TEXT
     assert '--python "${python_bin}"' in SMOKE_TEST_SCRIPT_TEXT
     assert "--python 3.13" not in SMOKE_TEST_SCRIPT_TEXT
+    assert 'export PATH="${tool_bin_dir}:${PATH}"' in SMOKE_TEST_SCRIPT_TEXT
+    assert 'UV_LINK_MODE="copy"' in SMOKE_TEST_SCRIPT_TEXT
     assert "uv run pytest --no-cov" in RUNTIME_MATRIX_SCRIPT_TEXT
     assert 'CODEX_CLI_BIN="${fake_codex_bin}"' in SMOKE_TEST_SCRIPT_TEXT
     assert 'cat >"${fake_codex_bin}"' in SMOKE_TEST_SCRIPT_TEXT
     assert ">/dev/null 2>&1" in SMOKE_TEST_SCRIPT_TEXT
     assert "git clone --depth 1 https://github.com/openai/codex.git" in SYNC_CODEX_DOCS_TEXT
+
+
+def test_validation_and_publish_paths_filter_known_build_warnings() -> None:
+    validate_baseline_text = Path("scripts/validate_baseline.sh").read_text()
+    assert "vcs_versioning._backends._git" in validate_baseline_text
+    assert "vcs_versioning.overrides" in validate_baseline_text
+    assert "vcs_versioning._backends._git" in PUBLISH_WORKFLOW_TEXT
+    assert "vcs_versioning.overrides" in PUBLISH_WORKFLOW_TEXT
+
+
+def test_gitignore_keeps_python_sources_without_unignoring_runtime_caches() -> None:
+    gitignore_text = Path(".gitignore").read_text()
+    assert "!tests/parts/*.py" in gitignore_text
+    assert "!tests/parts/**" not in gitignore_text

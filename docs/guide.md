@@ -62,6 +62,10 @@ Consumer guidance:
 - Treat `supported_methods` in `error.data` as the runtime truth for the
   current deployment, especially when a deployment-conditional method is
   disabled.
+- Treat the core A2A methods as the portable interoperability baseline.
+- Treat `codex.*` methods and `metadata.codex.directory` as a Codex-specific
+  control plane for Codex-aware clients rather than generic A2A portability
+  claims.
 
 ## Compatibility Profile
 
@@ -133,6 +137,10 @@ Retention guidance:
 - Treat `codex.exec.*` as the standalone interactive exec surface. Use it for
   stdin write, PTY resize, and terminate flows instead of inferring those
   capabilities from `codex.sessions.shell`.
+- Generic A2A clients should remain usable without the `codex.*` control plane.
+  Opt into those methods only when you are intentionally integrating with
+  Codex-specific workflows such as session continuation, discovery-backed
+  mentions, or interactive exec.
 - Treat `execution_environment.*` as deployment-configured discovery metadata.
   It does not promise per-request snapshots of temporary approvals, escalations,
   or host-side runtime mutations.

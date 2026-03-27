@@ -52,6 +52,9 @@ codex-a2a = "codex_a2a.cli:main"
 Homepage = "https://github.com/liujuanjuan1984/codex-a2a"
 Repository = "https://github.com/liujuanjuan1984/codex-a2a"
 Issues = "https://github.com/liujuanjuan1984/codex-a2a/issues"
+Documentation = "https://github.com/liujuanjuan1984/codex-a2a/tree/main/docs"
+Releases = "https://github.com/liujuanjuan1984/codex-a2a/releases"
+Security = "https://github.com/liujuanjuan1984/codex-a2a/security/policy"
 
 [tool.ruff]
 line-length = 100

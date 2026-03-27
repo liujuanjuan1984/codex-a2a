@@ -67,8 +67,11 @@ trap 'cleanup $?' EXIT
 
 mkdir -p "${tool_dir}" "${tool_bin_dir}"
 
+export PATH="${tool_bin_dir}:${PATH}"
+
 UV_TOOL_DIR="${tool_dir}" \
 UV_TOOL_BIN_DIR="${tool_bin_dir}" \
+UV_LINK_MODE="copy" \
 uv tool install "${wheel_path}" --python "${python_bin}"
 
 cat >"${fake_codex_bin}" <<'PY'
