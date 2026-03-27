@@ -330,6 +330,17 @@ described first in [README.md](../README.md) and above in this guide.
   runtime. `codex.exec.start` returns process/task handles immediately, while
   stdout/stderr deltas and the final result flow through normal A2A task
   streaming and `tasks/resubscribe`.
+- Rich input is supported on two surfaces:
+  - `codex.sessions.prompt_async.request.parts[]` accepts `text`, `image`,
+    `mention`, and `skill`
+  - core A2A `message/send` and `message/stream` keep standard A2A parts and
+    map `TextPart`, image `FilePart`, and
+    `DataPart(data={"type":"mention"|"skill", ...})` into Codex turn input
+- Image input maps to upstream `turn/start.input[].type=input_image`.
+- `mention.path` and `skill.path` are forwarded verbatim. The service does not
+  guess app or plugin identifiers from display names.
+- `local_image` is not part of the current declared stable rich-input
+  contract.
 - Session query projections currently use the upstream Codex `session_id` as
   the A2A `contextId`. This is intentional for the current deployment model:
   `contextId` and `metadata.shared.session.id` refer to the same upstream

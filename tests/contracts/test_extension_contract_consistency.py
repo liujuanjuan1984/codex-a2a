@@ -311,6 +311,24 @@ def test_guide_mentions_resubscribe_service_level_behavior() -> None:
     assert "terminal `tasks/resubscribe` replay-once behavior" in compatibility_text
 
 
+def test_guide_mentions_declared_rich_input_contract() -> None:
+    guide_text = Path("docs/guide.md").read_text()
+    compatibility_text = Path("docs/compatibility.md").read_text()
+    rich_input = build_session_query_extension_params(
+        runtime_profile=build_runtime_profile(make_settings(a2a_bearer_token="test-token")),
+    )["rich_input"]
+
+    assert "codex.sessions.prompt_async.request.parts[]" in guide_text
+    assert 'DataPart(data={"type":"mention"|"skill", ...})' in guide_text
+    assert "turn/start.input[].type=input_image" in guide_text
+    assert "local_image" in guide_text
+
+    for fragment in rich_input["prompt_async_part_types"]:
+        assert fragment in guide_text
+
+    assert "Rich input mapping is compatibility-sensitive" in compatibility_text
+
+
 def test_guide_environment_variables_match_settings_aliases() -> None:
     import re
 

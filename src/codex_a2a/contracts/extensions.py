@@ -109,6 +109,20 @@ SESSION_QUERY_METHOD_CONTRACTS: dict[str, SessionQueryMethodContract] = {
         ),
         result_fields=("ok", "session_id", "turn_id"),
         notification_response_status=204,
+        notes=(
+            (
+                "request.parts supports structured rich input items with type=text, "
+                "image, mention, and skill."
+            ),
+            (
+                "image parts map to upstream input_image. URL forms pass through "
+                "directly; bytes forms are converted to data URLs."
+            ),
+            (
+                "This contract does not currently declare upstream local_image; "
+                "mention and skill paths are forwarded verbatim."
+            ),
+        ),
     ),
     "command": SessionQueryMethodContract(
         method="codex.sessions.command",
@@ -768,6 +782,46 @@ def build_session_query_extension_params(
         "profile": runtime_profile.summary_dict(),
         "supported_metadata": ["codex.directory"],
         "provider_private_metadata": ["codex.directory"],
+        "rich_input": {
+            "prompt_async_part_types": ["text", "image", "mention", "skill"],
+            "prompt_async_part_contracts": {
+                "text": {"fields": ["type", "text"]},
+                "image": {
+                    "fields": ["type", "url"],
+                    "optional_aliases": ["image_url", "imageUrl"],
+                    "bytes_variant_fields": ["type", "bytes", "mimeType", "name"],
+                    "maps_to": "turn/start.input[].type=input_image",
+                },
+                "mention": {
+                    "fields": ["type", "name", "path"],
+                    "path_examples": ["app://<connector-id>", "plugin://<name>@<marketplace>"],
+                },
+                "skill": {
+                    "fields": ["type", "name", "path"],
+                    "path_examples": ["/abs/path/to/SKILL.md"],
+                },
+            },
+            "core_message_part_mapping": {
+                "TextPart": "text",
+                "FilePart(image only)": "input_image",
+                "DataPart(type=mention|skill)": "mention|skill",
+            },
+            "notes": [
+                (
+                    "Core A2A message/send and message/stream keep the standard A2A part "
+                    "surface and map only image FilePart plus mention/skill DataPart "
+                    "payloads into Codex rich input items."
+                ),
+                (
+                    "mention.path values are forwarded verbatim. The server does not infer "
+                    "app or plugin identifiers from names."
+                ),
+                (
+                    "local_image is not currently declared as part of the stable Codex A2A "
+                    "rich input contract."
+                ),
+            ],
+        },
         "pagination": {
             "mode": SESSION_QUERY_PAGINATION_MODE,
             "default_limit": SESSION_QUERY_DEFAULT_LIMIT,

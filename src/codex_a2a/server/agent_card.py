@@ -153,7 +153,8 @@ def build_agent_card(
                     required=False,
                     description=(
                         "Support Codex session list/history queries via custom JSON-RPC methods "
-                        "on the agent's A2A JSON-RPC interface."
+                        "on the agent's A2A JSON-RPC interface, including structured rich "
+                        "input for codex.sessions.prompt_async."
                     ),
                     params=session_query_extension_params,
                 ),
@@ -201,7 +202,8 @@ def build_agent_card(
                 id="codex.chat",
                 name="Codex Chat",
                 description=(
-                    "Handle message/send and message/stream requests by routing user text to "
+                    "Handle message/send and message/stream requests by routing user text, "
+                    "image FilePart inputs, and codex rich-input DataPart payloads to "
                     "Codex sessions."
                 ),
                 tags=["assistant", "coding", "codex"],

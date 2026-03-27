@@ -5,7 +5,7 @@ from collections.abc import Mapping
 from typing import Any
 from urllib.parse import urlparse
 
-from a2a.types import DataPart, FilePart, Part, TextPart
+from a2a.types import DataPart, FilePart, TextPart
 
 
 class UnsupportedInputError(ValueError):
@@ -102,7 +102,10 @@ def _normalize_prompt_image_part(part: Mapping[str, Any]) -> dict[str, Any]:
             raise UnsupportedInputError(
                 "request.parts[].mimeType must be an image MIME type when bytes is provided"
             )
-        return {"type": "image", "url": _data_url_for_image_bytes(encoded_bytes=encoded_bytes, mime_type=mime_type)}
+        return {
+            "type": "image",
+            "url": _data_url_for_image_bytes(encoded_bytes=encoded_bytes, mime_type=mime_type),
+        }
     raise UnsupportedInputError("request.parts[].url or request.parts[].bytes is required")
 
 
@@ -144,17 +147,13 @@ def build_turn_input_from_normalized_items(items: list[dict[str, Any]]) -> list[
     for item in items:
         item_type = item.get("type")
         if item_type == "text":
-            converted.append(
-                {"type": "text", "text": item["text"], "text_elements": []}
-            )
+            converted.append({"type": "text", "text": item["text"], "text_elements": []})
             continue
         if item_type == "image":
             converted.append({"type": "input_image", "image_url": item["url"]})
             continue
         if item_type in {"mention", "skill"}:
-            converted.append(
-                {"type": item_type, "name": item["name"], "path": item["path"]}
-            )
+            converted.append({"type": item_type, "name": item["name"], "path": item["path"]})
             continue
         raise UnsupportedInputError(f"Unsupported normalized input item type: {item_type}")
     return converted
@@ -262,11 +261,7 @@ def summarize_normalized_items(items: list[dict[str, Any]]) -> str:
 
 
 def is_text_only_normalized_input(items: list[dict[str, Any]], *, user_text: str) -> bool:
-    return (
-        len(items) == 1
-        and items[0].get("type") == "text"
-        and items[0].get("text") == user_text
-    )
+    return len(items) == 1 and items[0].get("type") == "text" and items[0].get("text") == user_text
 
 
 def guess_image_mime_type_from_url(url: str) -> str | None:
