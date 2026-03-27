@@ -6,10 +6,16 @@ from unittest.mock import AsyncMock
 import pytest
 from a2a.server.tasks.database_task_store import DatabaseTaskStore
 from a2a.server.tasks.inmemory_task_store import InMemoryTaskStore
+from a2a.server.tasks.task_store import TaskStore
 from a2a.types import Task, TaskState, TaskStatus
 
 from codex_a2a.server.database import build_database_engine
-from codex_a2a.server.task_store import build_task_store_runtime
+from codex_a2a.server.task_store import (
+    GuardedTaskStore,
+    TaskStoreOperationError,
+    build_task_store_runtime,
+    unwrap_task_store,
+)
 from tests.support.settings import make_settings
 
 
@@ -21,7 +27,8 @@ def test_build_task_store_runtime_uses_memory_backend_when_database_disabled() -
         )
     )
 
-    assert isinstance(runtime.task_store, InMemoryTaskStore)
+    assert isinstance(runtime.task_store, GuardedTaskStore)
+    assert isinstance(unwrap_task_store(runtime.task_store), InMemoryTaskStore)
 
 
 def test_build_task_store_runtime_uses_database_backend_when_database_enabled(
@@ -34,7 +41,8 @@ def test_build_task_store_runtime_uses_database_backend_when_database_enabled(
         )
     )
 
-    assert isinstance(runtime.task_store, DatabaseTaskStore)
+    assert isinstance(runtime.task_store, GuardedTaskStore)
+    assert isinstance(unwrap_task_store(runtime.task_store), DatabaseTaskStore)
 
 
 @pytest.mark.asyncio
@@ -46,7 +54,8 @@ async def test_database_task_store_persists_tasks_across_runtime_rebuilds(tmp_pa
     )
 
     first_runtime = build_task_store_runtime(settings)
-    assert isinstance(first_runtime.task_store, DatabaseTaskStore)
+    assert isinstance(first_runtime.task_store, GuardedTaskStore)
+    assert isinstance(unwrap_task_store(first_runtime.task_store), DatabaseTaskStore)
     await first_runtime.startup()
     try:
         task = Task(
@@ -89,3 +98,217 @@ async def test_task_store_runtime_does_not_dispose_shared_engine(
     await runtime.shutdown()
 
     dispose_spy.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_guarded_task_store_keeps_first_terminal_state() -> None:
+    task_store = GuardedTaskStore(InMemoryTaskStore())
+
+    await task_store.save(
+        Task(
+            id="task-1",
+            context_id="ctx-1",
+            status=TaskStatus(state=TaskState.working),
+        )
+    )
+    await task_store.save(
+        Task(
+            id="task-1",
+            context_id="ctx-1",
+            status=TaskStatus(state=TaskState.input_required),
+        )
+    )
+    await task_store.save(
+        Task(
+            id="task-1",
+            context_id="ctx-1",
+            status=TaskStatus(state=TaskState.failed),
+        )
+    )
+
+    restored = await task_store.get("task-1")
+
+    assert restored is not None
+    assert restored.status.state == TaskState.input_required
+
+
+@pytest.mark.asyncio
+async def test_guarded_task_store_drops_late_terminal_mutation() -> None:
+    task_store = GuardedTaskStore(InMemoryTaskStore())
+    authoritative = Task(
+        id="task-1",
+        context_id="ctx-1",
+        status=TaskStatus(state=TaskState.input_required),
+    )
+    mutated = Task(
+        id="task-1",
+        context_id="ctx-1",
+        status=TaskStatus(state=TaskState.input_required),
+        metadata={"codex": {"late_mutation": True}},
+    )
+
+    await task_store.save(authoritative)
+    await task_store.save(mutated)
+
+    restored = await task_store.get("task-1")
+
+    assert restored is not None
+    assert restored.metadata is None
+
+
+@pytest.mark.asyncio
+async def test_guarded_database_task_store_keeps_first_terminal_state_across_independent_runtimes(
+    tmp_path: Path,
+) -> None:
+    database_url = f"sqlite+aiosqlite:///{(tmp_path / 'terminal-guard.db').resolve()}"
+    settings = make_settings(
+        a2a_bearer_token="test-token",
+        a2a_database_url=database_url,
+    )
+    first_runtime = build_task_store_runtime(settings)
+    second_runtime = build_task_store_runtime(settings)
+    await first_runtime.startup()
+    await second_runtime.startup()
+    try:
+        await first_runtime.task_store.save(
+            Task(
+                id="task-1",
+                context_id="ctx-1",
+                status=TaskStatus(state=TaskState.working),
+            )
+        )
+        await first_runtime.task_store.save(
+            Task(
+                id="task-1",
+                context_id="ctx-1",
+                status=TaskStatus(state=TaskState.input_required),
+            )
+        )
+        await second_runtime.task_store.save(
+            Task(
+                id="task-1",
+                context_id="ctx-1",
+                status=TaskStatus(state=TaskState.failed),
+            )
+        )
+
+        restored = await first_runtime.task_store.get("task-1")
+    finally:
+        await first_runtime.shutdown()
+        await second_runtime.shutdown()
+
+    assert restored is not None
+    assert restored.status.state == TaskState.input_required
+
+
+@pytest.mark.asyncio
+async def test_guarded_database_task_store_does_not_depend_on_stale_read_before_terminal_drop(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    database_url = f"sqlite+aiosqlite:///{(tmp_path / 'stale-read-guard.db').resolve()}"
+    settings = make_settings(
+        a2a_bearer_token="test-token",
+        a2a_database_url=database_url,
+    )
+    authoritative = Task(
+        id="task-1",
+        context_id="ctx-1",
+        status=TaskStatus(state=TaskState.input_required),
+    )
+    late_mutation = Task(
+        id="task-1",
+        context_id="ctx-1",
+        status=TaskStatus(state=TaskState.input_required),
+        metadata={"codex": {"late_mutation": True}},
+    )
+    stale_snapshot = Task(
+        id="task-1",
+        context_id="ctx-1",
+        status=TaskStatus(state=TaskState.working),
+    )
+
+    first_runtime = build_task_store_runtime(settings)
+    second_runtime = build_task_store_runtime(settings)
+    await first_runtime.startup()
+    await second_runtime.startup()
+    try:
+        await first_runtime.task_store.save(stale_snapshot)
+        await first_runtime.task_store.save(authoritative)
+
+        raw_second = unwrap_task_store(second_runtime.task_store)
+        assert isinstance(raw_second, DatabaseTaskStore)
+        original_get = DatabaseTaskStore.get.__get__(raw_second, DatabaseTaskStore)
+
+        async def _stale_get(task_id: str, context=None) -> Task | None:  # noqa: ANN001
+            del context
+            if task_id == "task-1":
+                return stale_snapshot
+            return None
+
+        monkeypatch.setattr(raw_second, "get", _stale_get)
+        await second_runtime.task_store.save(late_mutation)
+        monkeypatch.setattr(raw_second, "get", original_get)
+
+        restored = await first_runtime.task_store.get("task-1")
+    finally:
+        await first_runtime.shutdown()
+        await second_runtime.shutdown()
+
+    assert restored is not None
+    assert restored.status.state == TaskState.input_required
+    assert restored.metadata is None
+
+
+class _BrokenTaskStore(TaskStore):
+    async def save(self, task: Task, context=None) -> None:  # noqa: ANN001
+        del task, context
+        raise RuntimeError("broken save")
+
+    async def get(self, task_id: str, context=None) -> Task | None:  # noqa: ANN001
+        del task_id, context
+        raise RuntimeError("broken get")
+
+    async def delete(self, task_id: str, context=None) -> None:  # noqa: ANN001
+        del task_id, context
+        raise RuntimeError("broken delete")
+
+
+@pytest.mark.asyncio
+async def test_guarded_task_store_wraps_operation_failures() -> None:
+    task = Task(
+        id="task-1",
+        context_id="ctx-1",
+        status=TaskStatus(state=TaskState.working),
+    )
+
+    task_store = GuardedTaskStore(_BrokenTaskStore())
+    with pytest.raises(TaskStoreOperationError, match="Task store get failed for task_id=task-1"):
+        await task_store.get("task-1")
+
+    class _SaveBrokenTaskStore(TaskStore):
+        async def save(self, task: Task, context=None) -> None:  # noqa: ANN001
+            del task, context
+            raise RuntimeError("broken save")
+
+        async def get(self, task_id: str, context=None) -> Task | None:  # noqa: ANN001
+            del context
+            return Task(
+                id=task_id,
+                context_id="ctx-1",
+                status=TaskStatus(state=TaskState.working),
+            )
+
+        async def delete(self, task_id: str, context=None) -> None:  # noqa: ANN001
+            del task_id, context
+
+    task_store = GuardedTaskStore(_SaveBrokenTaskStore())
+    with pytest.raises(TaskStoreOperationError, match="Task store save failed for task_id=task-1"):
+        await task_store.save(task)
+
+    task_store = GuardedTaskStore(_BrokenTaskStore())
+    with pytest.raises(
+        TaskStoreOperationError,
+        match="Task store delete failed for task_id=task-1",
+    ):
+        await task_store.delete("task-1")
