@@ -90,7 +90,9 @@ async def test_exec_write_resize_and_terminate_route_to_exec_runtime(monkeypatch
         make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
 
-    app.state.codex_exec_runtime.write = AsyncMock(return_value={"ok": True, "process_id": "exec-1"})
+    app.state.codex_exec_runtime.write = AsyncMock(
+        return_value={"ok": True, "process_id": "exec-1"}
+    )
     app.state.codex_exec_runtime.resize = AsyncMock(
         return_value={"ok": True, "process_id": "exec-1"}
     )

@@ -9,7 +9,16 @@ import uuid
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
-from a2a.types import Message, Part, Role, Task, TaskState, TaskStatus, TaskStatusUpdateEvent, TextPart
+from a2a.types import (
+    Message,
+    Part,
+    Role,
+    Task,
+    TaskState,
+    TaskStatus,
+    TaskStatusUpdateEvent,
+    TextPart,
+)
 
 from codex_a2a.contracts.runtime_output import build_status_stream_metadata
 from codex_a2a.execution.output_mapping import enqueue_artifact_update
@@ -187,9 +196,7 @@ class CodexExecRuntime:
         try:
             while True:
                 if pending_event_task is None:
-                    pending_event_task = asyncio.create_task(
-                        self._next_stream_event(stream_iter)
-                    )
+                    pending_event_task = asyncio.create_task(self._next_stream_event(stream_iter))
                 done, _ = await asyncio.wait(
                     {exec_task, pending_event_task},
                     return_when=asyncio.FIRST_COMPLETED,
