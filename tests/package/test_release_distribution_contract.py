@@ -91,7 +91,7 @@ def test_released_cli_entrypoint_points_to_cli_module() -> None:
 
 def test_project_metadata_exposes_open_source_entrypoints_cleanly() -> None:
     project = PYPROJECT_DATA["project"]
-    assert project["authors"] == [{"name": "liujuanjuan1984"}]
+    assert project["authors"] == [{"name": "liujuanjuan1984@Intelligent-Internet"}]
     assert project["license"] == "Apache-2.0"
     assert project["urls"]["Documentation"].endswith("/tree/main/docs")
     assert project["urls"]["Releases"].endswith("/releases")
