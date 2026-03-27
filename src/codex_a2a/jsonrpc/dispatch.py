@@ -7,6 +7,8 @@ from dataclasses import dataclass
 class ExtensionMethodRegistry:
     session_query_methods: frozenset[str]
     session_control_methods: frozenset[str]
+    discovery_query_methods: frozenset[str]
+    discovery_control_methods: frozenset[str]
     exec_control_methods: frozenset[str]
     interrupt_callback_methods: frozenset[str]
     extension_methods: frozenset[str]
@@ -27,6 +29,15 @@ class ExtensionMethodRegistry:
         if shell_method is not None:
             session_control.add(shell_method)
         session_control_methods = frozenset(session_control)
+        discovery_query_methods = frozenset(
+            {
+                methods["list_skills"],
+                methods["list_apps"],
+                methods["list_plugins"],
+                methods["read_plugin"],
+            }
+        )
+        discovery_control_methods = frozenset({methods["watch"]})
         exec_control_methods = frozenset(
             {
                 methods["exec_start"],
@@ -47,12 +58,16 @@ class ExtensionMethodRegistry:
         extension_methods = (
             session_query_methods
             | session_control_methods
+            | discovery_query_methods
+            | discovery_control_methods
             | exec_control_methods
             | interrupt_callback_methods
         )
         return cls(
             session_query_methods=session_query_methods,
             session_control_methods=session_control_methods,
+            discovery_query_methods=discovery_query_methods,
+            discovery_control_methods=discovery_control_methods,
             exec_control_methods=exec_control_methods,
             interrupt_callback_methods=interrupt_callback_methods,
             extension_methods=extension_methods,

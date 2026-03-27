@@ -564,6 +564,136 @@ curl -sS http://127.0.0.1:8000/ \
   }'
 ```
 
+## Codex Discovery (A2A Extension)
+
+This service exposes read-only Codex discovery methods through JSON-RPC:
+
+- `codex.discovery.skills.list`
+- `codex.discovery.apps.list`
+- `codex.discovery.plugins.list`
+- `codex.discovery.plugins.read`
+
+Use these methods before constructing rich input:
+
+- `skills.list` returns stable `skill.path` values
+- `apps.list` returns stable `mention_path=app://<id>` values
+- `plugins.list` and `plugins.read` return stable
+  `mention_path=plugin://<plugin>@<marketplace>` values
+
+Result-shape guidance:
+
+- use the normalized stable fields declared in Agent Card / OpenAPI first
+- inspect `codex.raw` only when you need upstream-specific fields outside the
+  declared minimum contract
+- `plugin/list` and `plugin/read` remain upstream experimental; this service
+  exposes a stable minimum subset plus passthrough raw payloads
+
+### Skills List (`codex.discovery.skills.list`)
+
+```bash
+curl -sS http://127.0.0.1:8000/ \
+  -H 'content-type: application/json' \
+  -H "Authorization: Bearer ${A2A_BEARER_TOKEN}" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 11,
+    "method": "codex.discovery.skills.list",
+    "params": {
+      "cwds": ["/workspace/project"],
+      "forceReload": true
+    }
+  }'
+```
+
+### Apps List (`codex.discovery.apps.list`)
+
+```bash
+curl -sS http://127.0.0.1:8000/ \
+  -H 'content-type: application/json' \
+  -H "Authorization: Bearer ${A2A_BEARER_TOKEN}" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 12,
+    "method": "codex.discovery.apps.list",
+    "params": {
+      "limit": 20,
+      "forceRefetch": false
+    }
+  }'
+```
+
+### Plugins List (`codex.discovery.plugins.list`)
+
+```bash
+curl -sS http://127.0.0.1:8000/ \
+  -H 'content-type: application/json' \
+  -H "Authorization: Bearer ${A2A_BEARER_TOKEN}" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 13,
+    "method": "codex.discovery.plugins.list",
+    "params": {
+      "cwds": ["/workspace/project"],
+      "forceRemoteSync": false
+    }
+  }'
+```
+
+### Plugin Read (`codex.discovery.plugins.read`)
+
+```bash
+curl -sS http://127.0.0.1:8000/ \
+  -H 'content-type: application/json' \
+  -H "Authorization: Bearer ${A2A_BEARER_TOKEN}" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 14,
+    "method": "codex.discovery.plugins.read",
+    "params": {
+      "marketplacePath": "/workspace/project/.codex/plugins/marketplace.json",
+      "pluginName": "sample"
+    }
+  }'
+```
+
+### Discovery Watch (`codex.discovery.watch`)
+
+Upstream Codex emits `skills/changed` and `app/list/updated` as server-side
+notifications. This service does not expose a standalone server-push JSON-RPC
+transport, so it bridges those signals through a background A2A task stream.
+
+- start a watch with `codex.discovery.watch`
+- subscribe or re-subscribe through `tasks/resubscribe`
+- consume `DataPart` payloads with:
+  - `kind=skills_changed`
+  - `kind=apps_updated`
+
+Watch start example:
+
+```bash
+curl -sS http://127.0.0.1:8000/ \
+  -H 'content-type: application/json' \
+  -H "Authorization: Bearer ${A2A_BEARER_TOKEN}" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 15,
+    "method": "codex.discovery.watch",
+    "params": {
+      "request": {
+        "events": ["skills.changed", "apps.updated"]
+      }
+    }
+  }'
+```
+
+The JSON-RPC result returns `task_id` and `context_id`. Then use the standard
+task stream:
+
+```bash
+curl -sS http://127.0.0.1:8000/v1/tasks/<task_id>:subscribe \
+  -H "Authorization: Bearer ${A2A_BEARER_TOKEN}"
+```
+
 ## Codex Interrupt Callback (A2A Extension)
 
 When stream metadata reports an interrupt request at `metadata.shared.interrupt`,

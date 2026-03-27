@@ -309,6 +309,71 @@ async def test_command_exec_output_delta_notification_maps_to_exec_stream_event(
 
 
 @pytest.mark.asyncio
+async def test_discovery_notifications_map_to_stream_events() -> None:
+    client = CodexClient(make_settings(a2a_bearer_token="t-1", codex_timeout=1.0))
+    events: list[dict] = []
+
+    async def fake_enqueue(event: dict) -> None:
+        events.append(event)
+
+    client._enqueue_stream_event = fake_enqueue
+
+    await client._handle_notification({"method": "skills/changed", "params": {}})
+    await client._handle_notification(
+        {
+            "method": "app/list/updated",
+            "params": {
+                "data": [
+                    {
+                        "id": "demo-app",
+                        "name": "Demo App",
+                        "description": "Example connector",
+                        "installUrl": "https://example.com/apps/demo-app",
+                        "isAccessible": True,
+                        "isEnabled": True,
+                    }
+                ]
+            },
+        }
+    )
+
+    assert events == [
+        {
+            "type": "discovery.skills.changed",
+            "properties": {},
+        },
+        {
+            "type": "discovery.apps.updated",
+            "properties": {
+                "items": [
+                    {
+                        "id": "demo-app",
+                        "name": "Demo App",
+                        "description": "Example connector",
+                        "is_accessible": True,
+                        "is_enabled": True,
+                        "install_url": "https://example.com/apps/demo-app",
+                        "mention_path": "app://demo-app",
+                        "branding": None,
+                        "labels": None,
+                        "codex": {
+                            "raw": {
+                                "id": "demo-app",
+                                "name": "Demo App",
+                                "description": "Example connector",
+                                "installUrl": "https://example.com/apps/demo-app",
+                                "isAccessible": True,
+                                "isEnabled": True,
+                            }
+                        },
+                    }
+                ]
+            },
+        },
+    ]
+
+
+@pytest.mark.asyncio
 async def test_permission_reply_maps_to_codex_decision() -> None:
     client = CodexClient(make_settings(a2a_bearer_token="t-1", codex_timeout=1.0))
     client._pending_server_requests["100"] = _PendingInterruptRequest(

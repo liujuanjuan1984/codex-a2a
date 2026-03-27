@@ -1,5 +1,6 @@
 from codex_a2a.contracts.extensions import (
     COMPATIBILITY_PROFILE_EXTENSION_URI,
+    DISCOVERY_EXTENSION_URI,
     EXEC_CONTROL_EXTENSION_URI,
     INTERRUPT_CALLBACK_EXTENSION_URI,
     SESSION_BINDING_EXTENSION_URI,
@@ -213,6 +214,20 @@ def test_agent_card_injects_profile_into_extensions() -> None:
     assert any("type=text, image, mention, and skill" in note for note in prompt_contract["notes"])
     assert any("local_image" in note for note in prompt_contract["notes"])
 
+    discovery = ext_by_uri[DISCOVERY_EXTENSION_URI]
+    assert discovery.params["profile"] == profile
+    assert discovery.params["methods"]["list_skills"] == "codex.discovery.skills.list"
+    assert discovery.params["methods"]["list_apps"] == "codex.discovery.apps.list"
+    assert discovery.params["methods"]["list_plugins"] == "codex.discovery.plugins.list"
+    assert discovery.params["methods"]["read_plugin"] == "codex.discovery.plugins.read"
+    assert discovery.params["notification_bridge"]["current_delivery"] == (
+        "codex.discovery.watch task stream"
+    )
+    assert "mention_path" in discovery.params["stable_item_fields"]["app"]
+    apps_contract = discovery.params["method_contracts"]["codex.discovery.apps.list"]
+    assert apps_contract["result"]["fields"] == ["items", "next_cursor"]
+    assert any("mention_path" in note for note in apps_contract["notes"])
+
     interrupt = ext_by_uri[INTERRUPT_CALLBACK_EXTENSION_URI]
     assert interrupt.params["profile"] == profile
     assert interrupt.params["request_id_field"] == "metadata.shared.interrupt.request_id"
@@ -287,6 +302,7 @@ def test_agent_card_injects_profile_into_extensions() -> None:
     ]
     assert compatibility.params["extension_taxonomy"]["codex_extensions"] == [
         "urn:codex-a2a:codex-session-query/v1",
+        "urn:codex-a2a:codex-discovery/v1",
         "urn:codex-a2a:codex-exec/v1",
         "urn:codex-a2a:compatibility-profile/v1",
         "urn:codex-a2a:wire-contract/v1",

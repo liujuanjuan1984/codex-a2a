@@ -79,8 +79,74 @@ class DummySessionQueryCodexClient:
                 "parts": [{"type": "text", "text": "SECRET_HISTORY"}],
             }
         ]
+        self._skills_payload: Any = {
+            "data": [
+                {
+                    "cwd": "/workspace/project",
+                    "skills": [
+                        {
+                            "name": "skill-creator",
+                            "path": "/workspace/project/.codex/skills/skill-creator/SKILL.md",
+                            "description": "Create or update a Codex skill",
+                            "enabled": True,
+                            "scope": "repo",
+                            "interface": {"displayName": "Skill Creator"},
+                        }
+                    ],
+                    "errors": [],
+                }
+            ]
+        }
+        self._apps_payload: Any = {
+            "data": [
+                {
+                    "id": "demo-app",
+                    "name": "Demo App",
+                    "description": "Example connector",
+                    "installUrl": "https://example.com/apps/demo-app",
+                    "isAccessible": True,
+                    "isEnabled": True,
+                }
+            ],
+            "nextCursor": None,
+        }
+        self._plugins_payload: Any = {
+            "marketplaces": [
+                {
+                    "name": "test",
+                    "path": "/workspace/project/.codex/plugins/marketplace.json",
+                    "plugins": [
+                        {
+                            "name": "sample",
+                            "description": "Sample plugin",
+                            "enabled": True,
+                            "interface": {"category": "utility"},
+                        }
+                    ],
+                }
+            ],
+            "featuredPluginIds": ["sample@test"],
+            "marketplaceLoadErrors": [],
+            "remoteSyncError": None,
+        }
+        self._plugin_read_payload: Any = {
+            "plugin": {
+                "name": "sample",
+                "marketplaceName": "test",
+                "marketplacePath": "/workspace/project/.codex/plugins/marketplace.json",
+                "summary": ["Sample plugin"],
+                "skills": [],
+                "apps": [],
+                "mcpServers": [],
+                "interface": {"category": "utility"},
+            }
+        }
         self.last_sessions_params = None
         self.last_messages_params = None
+        self.last_skills_params = None
+        self.last_apps_params = None
+        self.last_plugins_params = None
+        self.last_plugin_read_params = None
         self.last_prompt_async: dict[str, Any] | None = None
         self.last_command: dict[str, Any] | None = None
         self.last_shell: dict[str, Any] | None = None
@@ -107,6 +173,22 @@ class DummySessionQueryCodexClient:
         assert session_id
         self.last_messages_params = params
         return self._messages_payload
+
+    async def list_skills(self, *, params=None):
+        self.last_skills_params = params
+        return self._skills_payload
+
+    async def list_apps(self, *, params=None):
+        self.last_apps_params = params
+        return self._apps_payload
+
+    async def list_plugins(self, *, params=None):
+        self.last_plugins_params = params
+        return self._plugins_payload
+
+    async def read_plugin(self, *, params=None):
+        self.last_plugin_read_params = params
+        return self._plugin_read_payload
 
     async def session_prompt_async(self, session_id: str, *, request=None, directory=None):
         self.last_prompt_async = {

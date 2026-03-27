@@ -14,7 +14,10 @@ from fastapi.responses import JSONResponse
 from starlette.requests import Request
 from starlette.responses import Response
 
+from codex_a2a.execution.discovery_runtime import CodexDiscoveryRuntime
 from codex_a2a.execution.exec_runtime import CodexExecRuntime
+from codex_a2a.jsonrpc.discovery_control import handle_discovery_control_request
+from codex_a2a.jsonrpc.discovery_query import handle_discovery_query_request
 from codex_a2a.jsonrpc.dispatch import ExtensionMethodRegistry
 from codex_a2a.jsonrpc.exec_control import handle_exec_control_request
 from codex_a2a.jsonrpc.hooks import SessionGuardHooks
@@ -36,6 +39,7 @@ class CodexSessionQueryJSONRPCApplication(A2AFastAPIApplication):
         *args: Any,
         codex_client: CodexClient,
         exec_runtime: CodexExecRuntime,
+        discovery_runtime: CodexDiscoveryRuntime,
         methods: dict[str, str],
         protocol_version: str,
         supported_methods: list[str],
@@ -45,11 +49,17 @@ class CodexSessionQueryJSONRPCApplication(A2AFastAPIApplication):
         super().__init__(*args, **kwargs)
         self._codex_client = codex_client
         self._exec_runtime = exec_runtime
+        self._discovery_runtime = discovery_runtime
         self._method_list_sessions = methods["list_sessions"]
         self._method_get_session_messages = methods["get_session_messages"]
         self._method_prompt_async = methods["prompt_async"]
         self._method_command = methods["command"]
         self._method_shell = methods.get("shell")
+        self._method_discovery_skills_list = methods["list_skills"]
+        self._method_discovery_apps_list = methods["list_apps"]
+        self._method_discovery_plugins_list = methods["list_plugins"]
+        self._method_discovery_plugin_read = methods["read_plugin"]
+        self._method_discovery_watch = methods["watch"]
         self._method_exec_start = methods["exec_start"]
         self._method_exec_write = methods["exec_write"]
         self._method_exec_resize = methods["exec_resize"]
@@ -131,6 +141,15 @@ class CodexSessionQueryJSONRPCApplication(A2AFastAPIApplication):
             return await handle_session_query_request(self, base_request, params)
         if base_request.method in self._method_registry.session_control_methods:
             return await handle_session_control_request(
+                self,
+                base_request,
+                params,
+                request=request,
+            )
+        if base_request.method in self._method_registry.discovery_query_methods:
+            return await handle_discovery_query_request(self, base_request, params)
+        if base_request.method in self._method_registry.discovery_control_methods:
+            return await handle_discovery_control_request(
                 self,
                 base_request,
                 params,

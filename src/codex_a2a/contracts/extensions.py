@@ -18,6 +18,7 @@ WIRE_CONTRACT_EXTENSION_URI = "urn:codex-a2a:wire-contract/v1"
 SESSION_BINDING_EXTENSION_URI = "urn:a2a:session-binding/v1"
 STREAMING_EXTENSION_URI = "urn:a2a:stream-hints/v1"
 SESSION_QUERY_EXTENSION_URI = "urn:codex-a2a:codex-session-query/v1"
+DISCOVERY_EXTENSION_URI = "urn:codex-a2a:codex-discovery/v1"
 EXEC_CONTROL_EXTENSION_URI = "urn:codex-a2a:codex-exec/v1"
 INTERRUPT_CALLBACK_EXTENSION_URI = "urn:a2a:interactive-interrupt/v1"
 
@@ -65,6 +66,18 @@ class ExecMethodContract:
     result_fields: tuple[str, ...] = ()
     notification_response_status: int | None = None
     execution_binding: str | None = None
+    notes: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class DiscoveryMethodContract:
+    method: str
+    required_params: tuple[str, ...] = ()
+    optional_params: tuple[str, ...] = ()
+    result_fields: tuple[str, ...] = ()
+    items_type: str | None = None
+    items_field: str | None = None
+    notification_response_status: int | None = None
     notes: tuple[str, ...] = ()
 
 
@@ -190,6 +203,113 @@ SESSION_QUERY_INVALID_PARAMS_DATA_FIELDS: tuple[str, ...] = (
     "fields",
     "supported",
     "unsupported",
+)
+
+DISCOVERY_METHOD_CONTRACTS: dict[str, DiscoveryMethodContract] = {
+    "list_skills": DiscoveryMethodContract(
+        method="codex.discovery.skills.list",
+        optional_params=("cwds", "force_reload", "per_cwd_extra_user_roots"),
+        result_fields=("items",),
+        items_type="DiscoverySkillScope[]",
+        items_field="items",
+        notification_response_status=204,
+        notes=(
+            (
+                "Each item represents one cwd scope and includes normalized skill entries "
+                "with stable fields plus codex.raw passthrough payloads."
+            ),
+            (
+                "Use item.skills[].path directly when constructing rich-input skill items "
+                "for codex.sessions.prompt_async or core A2A DataPart payloads."
+            ),
+        ),
+    ),
+    "list_apps": DiscoveryMethodContract(
+        method="codex.discovery.apps.list",
+        optional_params=("cursor", "limit", "thread_id", "force_refetch"),
+        result_fields=("items", "next_cursor"),
+        items_type="DiscoveryApp[]",
+        items_field="items",
+        notification_response_status=204,
+        notes=(
+            (
+                "Use item.mention_path directly when constructing rich-input mention items "
+                "for app invocation."
+            ),
+        ),
+    ),
+    "list_plugins": DiscoveryMethodContract(
+        method="codex.discovery.plugins.list",
+        optional_params=("cwds", "force_remote_sync"),
+        result_fields=(
+            "items",
+            "featured_plugin_ids",
+            "marketplace_load_errors",
+            "remote_sync_error",
+        ),
+        items_type="DiscoveryPluginMarketplace[]",
+        items_field="items",
+        notification_response_status=204,
+        notes=(
+            (
+                "plugin/list remains upstream experimental; this contract exposes a stable "
+                "minimum subset plus codex.raw passthrough payloads."
+            ),
+            (
+                "Use plugin summaries' mention_path directly when constructing rich-input "
+                "mention items for plugin invocation."
+            ),
+        ),
+    ),
+    "read_plugin": DiscoveryMethodContract(
+        method="codex.discovery.plugins.read",
+        required_params=("marketplace_path", "plugin_name"),
+        result_fields=("item",),
+        notification_response_status=204,
+        notes=(
+            (
+                "plugin/read remains upstream experimental; this contract exposes a stable "
+                "minimum subset plus codex.raw passthrough payloads."
+            ),
+        ),
+    ),
+    "watch": DiscoveryMethodContract(
+        method="codex.discovery.watch",
+        optional_params=("request.events",),
+        result_fields=("ok", "task_id", "context_id"),
+        notification_response_status=204,
+        notes=(
+            (
+                "Use this method to bridge upstream skills/changed and app/list/updated "
+                "notifications into the normal A2A task stream."
+            ),
+            (
+                "Watch results are delivered through tasks/resubscribe as DataPart payloads "
+                "with kind=skills_changed or kind=apps_updated."
+            ),
+        ),
+    ),
+}
+
+DISCOVERY_METHODS: dict[str, str] = {
+    key: contract.method for key, contract in DISCOVERY_METHOD_CONTRACTS.items()
+}
+
+DISCOVERY_ERROR_BUSINESS_CODES: dict[str, int] = {
+    "UPSTREAM_UNREACHABLE": -32002,
+    "UPSTREAM_HTTP_ERROR": -32003,
+    "UPSTREAM_PAYLOAD_ERROR": -32005,
+}
+DISCOVERY_ERROR_DATA_FIELDS: tuple[str, ...] = (
+    "type",
+    "method",
+    "upstream_status",
+    "detail",
+)
+DISCOVERY_INVALID_PARAMS_DATA_FIELDS: tuple[str, ...] = (
+    "type",
+    "field",
+    "fields",
 )
 
 INTERRUPT_CALLBACK_METHOD_CONTRACTS: dict[str, InterruptMethodContract] = {
@@ -362,6 +482,7 @@ class CapabilitySnapshot:
     extension_jsonrpc_methods: tuple[str, ...]
     session_query_method_keys: tuple[str, ...]
     session_query_methods: tuple[str, ...]
+    discovery_methods: tuple[str, ...]
     exec_control_methods: tuple[str, ...]
     conditional_methods: dict[str, dict[str, str]]
 
@@ -382,9 +503,11 @@ def build_capability_snapshot(*, runtime_profile: RuntimeProfile) -> CapabilityS
             "toggle": "A2A_ENABLE_SESSION_SHELL",
         }
     session_query_methods = tuple(SESSION_QUERY_METHODS[key] for key in session_query_method_keys)
+    discovery_methods = tuple(DISCOVERY_METHODS.values())
     exec_control_methods = tuple(EXEC_CONTROL_METHODS.values())
     extension_jsonrpc_methods = (
         *session_query_methods,
+        *discovery_methods,
         *exec_control_methods,
         *INTERRUPT_CALLBACK_METHODS.values(),
     )
@@ -396,6 +519,7 @@ def build_capability_snapshot(*, runtime_profile: RuntimeProfile) -> CapabilityS
         extension_jsonrpc_methods=extension_jsonrpc_methods,
         session_query_method_keys=tuple(session_query_method_keys),
         session_query_methods=session_query_methods,
+        discovery_methods=discovery_methods,
         exec_control_methods=exec_control_methods,
         conditional_methods=conditional_methods,
     )
@@ -439,6 +563,7 @@ def build_wire_contract_extension_params(
                 SESSION_BINDING_EXTENSION_URI,
                 STREAMING_EXTENSION_URI,
                 SESSION_QUERY_EXTENSION_URI,
+                DISCOVERY_EXTENSION_URI,
                 EXEC_CONTROL_EXTENSION_URI,
                 INTERRUPT_CALLBACK_EXTENSION_URI,
             ],
@@ -487,6 +612,17 @@ def build_compatibility_profile_params(
         }
         for method in CORE_JSONRPC_METHODS
     }
+    method_retention.update(
+        {
+            method: {
+                "surface": "extension",
+                "availability": "always",
+                "retention": "stable",
+                "extension_uri": DISCOVERY_EXTENSION_URI,
+            }
+            for method in snapshot.discovery_methods
+        }
+    )
     method_retention.update(
         {
             method: {
@@ -544,6 +680,11 @@ def build_compatibility_profile_params(
             "availability": "always",
             "retention": "stable",
         },
+        DISCOVERY_EXTENSION_URI: {
+            "surface": "jsonrpc-extension",
+            "availability": "always",
+            "retention": "stable",
+        },
         EXEC_CONTROL_EXTENSION_URI: {
             "surface": "jsonrpc-extension",
             "availability": "always",
@@ -576,6 +717,7 @@ def build_compatibility_profile_params(
             ],
             "codex_extensions": [
                 SESSION_QUERY_EXTENSION_URI,
+                DISCOVERY_EXTENSION_URI,
                 EXEC_CONTROL_EXTENSION_URI,
                 COMPATIBILITY_PROFILE_EXTENSION_URI,
                 WIRE_CONTRACT_EXTENSION_URI,
@@ -603,6 +745,10 @@ def build_compatibility_profile_params(
                 "Treat codex.* methods and codex.directory metadata as Codex-specific "
                 "extensions or provider-private operational surfaces rather than portable "
                 "A2A baseline capabilities."
+            ),
+            (
+                "Use codex.discovery.* methods to discover stable skill.path and "
+                "mention.path identifiers before constructing rich input items."
             ),
             (
                 "codex.sessions.shell is deployment-conditional: discover it from the "
@@ -856,6 +1002,134 @@ def build_session_query_extension_params(
                 ),
                 "metadata.shared.session.id carries the same upstream session identity explicitly",
             ],
+        },
+    }
+
+
+def build_discovery_extension_params(
+    *,
+    runtime_profile: RuntimeProfile,
+) -> dict[str, Any]:
+    snapshot = build_capability_snapshot(runtime_profile=runtime_profile)
+    active_method_contracts = {
+        key: contract
+        for key, contract in DISCOVERY_METHOD_CONTRACTS.items()
+        if contract.method in snapshot.discovery_methods
+    }
+    method_contracts: dict[str, Any] = {}
+
+    for contract in active_method_contracts.values():
+        method_contract_doc: dict[str, Any] = {
+            "params": _build_method_contract_params(
+                required=contract.required_params,
+                optional=contract.optional_params,
+                unsupported=(),
+            ),
+            "result": {"fields": list(contract.result_fields)},
+        }
+        if contract.items_type:
+            method_contract_doc["result"]["items_type"] = contract.items_type
+        if contract.items_field:
+            method_contract_doc["result"]["items_field"] = contract.items_field
+        if contract.notification_response_status is not None:
+            method_contract_doc["notification_response_status"] = (
+                contract.notification_response_status
+            )
+        if contract.notes:
+            method_contract_doc["notes"] = list(contract.notes)
+        method_contracts[contract.method] = method_contract_doc
+
+    return {
+        "methods": dict(DISCOVERY_METHODS),
+        "profile": runtime_profile.summary_dict(),
+        "method_contracts": method_contracts,
+        "stable_item_fields": {
+            "skill": [
+                "name",
+                "path",
+                "description",
+                "enabled",
+                "scope",
+                "interface",
+                "codex.raw",
+            ],
+            "app": [
+                "id",
+                "name",
+                "description",
+                "is_accessible",
+                "is_enabled",
+                "install_url",
+                "mention_path",
+                "codex.raw",
+            ],
+            "plugin_marketplace": [
+                "marketplace_name",
+                "marketplace_path",
+                "interface",
+                "plugins",
+                "codex.raw",
+            ],
+            "plugin_summary": [
+                "name",
+                "description",
+                "enabled",
+                "mention_path",
+                "interface",
+                "codex.raw",
+            ],
+            "plugin_detail": [
+                "name",
+                "marketplace_name",
+                "marketplace_path",
+                "mention_path",
+                "summary",
+                "skills",
+                "apps",
+                "mcp_servers",
+                "codex.raw",
+            ],
+        },
+        "notification_bridge": {
+            "upstream_notifications": ["skills/changed", "app/list/updated"],
+            "current_delivery": "codex.discovery.watch task stream",
+            "notes": [
+                (
+                    "This service does not expose a standalone server-push JSON-RPC transport. "
+                    "Use codex.discovery.watch plus tasks/resubscribe to receive invalidation "
+                    "and refresh signals."
+                )
+            ],
+        },
+        "task_streaming": {
+            "task_stream_method": TASKS_RESUBSCRIBE_METHOD,
+            "http_subscribe_endpoint": TASKS_SUBSCRIBE_HTTP_ENDPOINT,
+            "watch_method": DISCOVERY_METHODS["watch"],
+            "supported_events": ["skills.changed", "apps.updated"],
+            "data_part_payloads": {
+                "skills.changed": {"kind": "skills_changed", "source": "skills/changed"},
+                "apps.updated": {
+                    "kind": "apps_updated",
+                    "source": "app/list/updated",
+                    "items_field": "items",
+                },
+            },
+        },
+        "consumer_guidance": [
+            "Use codex.discovery.skills.list to obtain stable skill.path values.",
+            (
+                "Use codex.discovery.apps.list or codex.discovery.plugins.list to obtain "
+                "stable mention_path values."
+            ),
+            (
+                "Prefer stable normalized fields for portability; inspect codex.raw only for "
+                "provider-specific details not covered by the declared contract."
+            ),
+        ],
+        "errors": {
+            "business_codes": dict(DISCOVERY_ERROR_BUSINESS_CODES),
+            "error_data_fields": list(DISCOVERY_ERROR_DATA_FIELDS),
+            "invalid_params_data_fields": list(DISCOVERY_INVALID_PARAMS_DATA_FIELDS),
         },
     }
 

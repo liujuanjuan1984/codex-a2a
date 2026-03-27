@@ -5,6 +5,7 @@ import pytest
 
 from codex_a2a.contracts.extensions import (
     COMPATIBILITY_PROFILE_EXTENSION_URI,
+    DISCOVERY_EXTENSION_URI,
     EXEC_CONTROL_EXTENSION_URI,
     INTERRUPT_CALLBACK_EXTENSION_URI,
     SESSION_BINDING_EXTENSION_URI,
@@ -15,6 +16,7 @@ from codex_a2a.contracts.extensions import (
     WIRE_CONTRACT_EXTENSION_URI,
     build_capability_snapshot,
     build_compatibility_profile_params,
+    build_discovery_extension_params,
     build_exec_control_extension_params,
     build_interrupt_callback_extension_params,
     build_session_binding_extension_params,
@@ -117,6 +119,20 @@ def test_session_query_extension_ssot_matches_agent_card_contract_when_shell_dis
     assert session_query.params["pagination"]["behavior"] == "mixed"
 
 
+def test_discovery_extension_ssot_matches_agent_card_contract() -> None:
+    settings = make_settings(a2a_bearer_token="test-token")
+    runtime_profile = build_runtime_profile(settings)
+    card = build_agent_card(settings)
+    ext_by_uri = {ext.uri: ext for ext in card.capabilities.extensions or []}
+
+    discovery = ext_by_uri[DISCOVERY_EXTENSION_URI]
+    expected = build_discovery_extension_params(runtime_profile=runtime_profile)
+
+    assert discovery.params == expected, (
+        "Discovery extension drifted from extension_contracts SSOT."
+    )
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("method", "params"),
@@ -204,6 +220,7 @@ def test_openapi_jsonrpc_contract_extension_matches_ssot() -> None:
     session_binding = contract["session_binding"]
     streaming = contract["streaming"]
     session_query = contract["session_query"]
+    discovery = contract["discovery"]
     interrupt_callback = contract["interrupt_callback"]
     exec_control = contract["exec_control"]
     wire_contract = contract["wire_contract"]
@@ -213,6 +230,9 @@ def test_openapi_jsonrpc_contract_extension_matches_ssot() -> None:
     )
     expected_streaming = build_streaming_extension_params()
     expected_session_query = build_session_query_extension_params(
+        runtime_profile=runtime_profile,
+    )
+    expected_discovery = build_discovery_extension_params(
         runtime_profile=runtime_profile,
     )
     expected_interrupt_callback = build_interrupt_callback_extension_params(
@@ -239,6 +259,9 @@ def test_openapi_jsonrpc_contract_extension_matches_ssot() -> None:
     assert session_query == expected_session_query, (
         "OpenAPI session query contract drifted from extension_contracts SSOT."
     )
+    assert discovery == expected_discovery, (
+        "OpenAPI discovery contract drifted from extension_contracts SSOT."
+    )
     assert interrupt_callback == expected_interrupt_callback, (
         "OpenAPI interrupt callback contract drifted from extension_contracts SSOT."
     )
@@ -263,6 +286,7 @@ def test_openapi_and_agent_card_extension_contracts_match() -> None:
     assert post_contract["session_binding"] == ext_by_uri[SESSION_BINDING_EXTENSION_URI].params
     assert post_contract["streaming"] == ext_by_uri[STREAMING_EXTENSION_URI].params
     assert post_contract["session_query"] == ext_by_uri[SESSION_QUERY_EXTENSION_URI].params
+    assert post_contract["discovery"] == ext_by_uri[DISCOVERY_EXTENSION_URI].params
     assert post_contract["exec_control"] == ext_by_uri[EXEC_CONTROL_EXTENSION_URI].params
     assert (
         post_contract["interrupt_callback"] == ext_by_uri[INTERRUPT_CALLBACK_EXTENSION_URI].params
@@ -329,6 +353,26 @@ def test_guide_mentions_declared_rich_input_contract() -> None:
     assert "Rich input mapping is compatibility-sensitive" in compatibility_text
 
 
+def test_guide_mentions_declared_discovery_contract() -> None:
+    guide_text = Path("docs/guide.md").read_text()
+    compatibility_text = Path("docs/compatibility.md").read_text()
+    discovery_contract = build_discovery_extension_params(
+        runtime_profile=build_runtime_profile(make_settings(a2a_bearer_token="test-token")),
+    )
+
+    assert "codex.discovery.skills.list" in guide_text
+    assert "codex.discovery.apps.list" in guide_text
+    assert "codex.discovery.plugins.list" in guide_text
+    assert "codex.discovery.plugins.read" in guide_text
+    assert "codex.discovery.watch" in guide_text
+    assert "skills_changed" in guide_text
+    assert "apps_updated" in guide_text
+    assert "watch-task bridge" in compatibility_text
+
+    for fragment in discovery_contract["task_streaming"]["supported_events"]:
+        assert fragment in guide_text
+
+
 def test_guide_environment_variables_match_settings_aliases() -> None:
     import re
 
@@ -355,10 +399,14 @@ def test_openapi_jsonrpc_examples_match_declared_extension_contracts() -> None:
     post = openapi["paths"]["/"]["post"]
     extension_contracts = post["x-a2a-extension-contracts"]
     session_method_contracts = extension_contracts["session_query"]["method_contracts"]
+    discovery_method_contracts = extension_contracts["discovery"]["method_contracts"]
     exec_method_contracts = extension_contracts["exec_control"]["method_contracts"]
     interrupt_method_contracts = extension_contracts["interrupt_callback"]["method_contracts"]
     declared_extension_methods = (
-        set(session_method_contracts) | set(exec_method_contracts) | set(interrupt_method_contracts)
+        set(session_method_contracts)
+        | set(discovery_method_contracts)
+        | set(exec_method_contracts)
+        | set(interrupt_method_contracts)
     )
     examples = post["requestBody"]["content"]["application/json"]["examples"]
 
@@ -375,6 +423,7 @@ def test_openapi_jsonrpc_examples_match_declared_extension_contracts() -> None:
         params = payload.get("params", {})
         method_contract = (
             session_method_contracts.get(method)
+            or discovery_method_contracts.get(method)
             or exec_method_contracts.get(method)
             or interrupt_method_contracts[method]
         )

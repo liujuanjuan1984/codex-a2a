@@ -1,4 +1,5 @@
 from codex_a2a.contracts.extensions import (
+    DISCOVERY_METHODS,
     EXEC_CONTROL_METHODS,
     INTERRUPT_CALLBACK_METHODS,
     SESSION_CONTROL_METHODS,
@@ -12,6 +13,7 @@ def test_extension_method_registry_partitions_methods() -> None:
         {
             **SESSION_QUERY_METHODS,
             **SESSION_CONTROL_METHODS,
+            **DISCOVERY_METHODS,
             **EXEC_CONTROL_METHODS,
             **INTERRUPT_CALLBACK_METHODS,
         }
@@ -24,6 +26,15 @@ def test_extension_method_registry_partitions_methods() -> None:
         }
     )
     assert registry.session_control_methods == frozenset(SESSION_CONTROL_METHODS.values())
+    assert registry.discovery_query_methods == frozenset(
+        {
+            DISCOVERY_METHODS["list_skills"],
+            DISCOVERY_METHODS["list_apps"],
+            DISCOVERY_METHODS["list_plugins"],
+            DISCOVERY_METHODS["read_plugin"],
+        }
+    )
+    assert registry.discovery_control_methods == frozenset({DISCOVERY_METHODS["watch"]})
     assert registry.exec_control_methods == frozenset(EXEC_CONTROL_METHODS.values())
     assert registry.interrupt_callback_methods == frozenset(INTERRUPT_CALLBACK_METHODS.values())
     assert registry.is_extension_method(SESSION_CONTROL_METHODS["command"]) is True
@@ -37,6 +48,7 @@ def test_extension_method_registry_omits_missing_shell_method() -> None:
             "get_session_messages": SESSION_QUERY_METHODS["get_session_messages"],
             "prompt_async": SESSION_CONTROL_METHODS["prompt_async"],
             "command": SESSION_CONTROL_METHODS["command"],
+            **DISCOVERY_METHODS,
             **EXEC_CONTROL_METHODS,
             "reply_permission": INTERRUPT_CALLBACK_METHODS["reply_permission"],
             "reply_question": INTERRUPT_CALLBACK_METHODS["reply_question"],
@@ -52,6 +64,15 @@ def test_extension_method_registry_omits_missing_shell_method() -> None:
             SESSION_CONTROL_METHODS["command"],
         }
     )
+    assert registry.discovery_query_methods == frozenset(
+        {
+            DISCOVERY_METHODS["list_skills"],
+            DISCOVERY_METHODS["list_apps"],
+            DISCOVERY_METHODS["list_plugins"],
+            DISCOVERY_METHODS["read_plugin"],
+        }
+    )
+    assert registry.discovery_control_methods == frozenset({DISCOVERY_METHODS["watch"]})
     assert registry.exec_control_methods == frozenset(EXEC_CONTROL_METHODS.values())
     assert registry.is_extension_method(SESSION_CONTROL_METHODS["command"]) is True
     assert registry.is_extension_method("tasks/send") is False
