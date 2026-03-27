@@ -12,6 +12,7 @@ class DummyChatCodexClient:
     def __init__(self, settings: Settings | None = None) -> None:
         self.created_sessions = 0
         self.sent_session_ids: list[str] = []
+        self.sent_inputs: list[dict[str, Any]] = []
         self.stream_timeout = None
         self.directory = None
         self.settings = settings or make_settings(
@@ -39,11 +40,18 @@ class DummyChatCodexClient:
         session_id: str,
         text: str,
         *,
+        input_items: list[dict[str, Any]] | None = None,
         directory: str | None = None,
         timeout_override=None,  # noqa: ANN001
     ) -> CodexMessage:
         del directory, timeout_override
         self.sent_session_ids.append(session_id)
+        self.sent_inputs.append(
+            {
+                "text": text,
+                "input_items": input_items,
+            }
+        )
         return CodexMessage(
             text=f"echo:{text}",
             session_id=session_id,

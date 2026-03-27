@@ -3,23 +3,13 @@ from __future__ import annotations
 import shlex
 from typing import Any
 
+from codex_a2a.input_mapping import (
+    convert_request_parts_to_turn_input as _convert_request_parts_to_turn_input,
+)
+
 
 def convert_request_parts_to_turn_input(request: dict[str, Any]) -> list[dict[str, Any]]:
-    parts = request.get("parts")
-    if not isinstance(parts, list):
-        raise RuntimeError("request.parts must be an array")
-    converted: list[dict[str, Any]] = []
-    for part in parts:
-        if not isinstance(part, dict):
-            raise RuntimeError("request.parts items must be objects")
-        part_type = part.get("type")
-        if part_type != "text":
-            raise RuntimeError("Only text request.parts are currently supported")
-        text = part.get("text")
-        if not isinstance(text, str):
-            raise RuntimeError("request.parts[].text must be a string")
-        converted.append({"type": "text", "text": text, "text_elements": []})
-    return converted
+    return _convert_request_parts_to_turn_input(request)
 
 
 def format_shell_response(result: dict[str, Any]) -> str:

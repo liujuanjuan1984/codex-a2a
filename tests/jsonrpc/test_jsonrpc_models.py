@@ -37,6 +37,44 @@ def test_parse_prompt_async_params_preserves_aliases() -> None:
     assert payload.metadata.codex.directory == "/workspace"
 
 
+def test_parse_prompt_async_params_accepts_rich_input_parts() -> None:
+    payload = parse_prompt_async_params(
+        {
+            "session_id": "s-1",
+            "request": {
+                "parts": [
+                    {"type": "text", "text": "Summarize the screenshot."},
+                    {
+                        "type": "image",
+                        "url": "https://example.com/screenshot.png",
+                    },
+                    {
+                        "type": "mention",
+                        "name": "Demo App",
+                        "path": "app://demo-app",
+                    },
+                    {
+                        "type": "skill",
+                        "name": "skill-creator",
+                        "path": "/tmp/skill-creator/SKILL.md",
+                    },
+                ]
+            },
+        }
+    )
+
+    assert payload.request.model_dump(by_alias=True, exclude_none=True)["parts"] == [
+        {"type": "text", "text": "Summarize the screenshot."},
+        {"type": "image", "url": "https://example.com/screenshot.png"},
+        {"type": "mention", "name": "Demo App", "path": "app://demo-app"},
+        {
+            "type": "skill",
+            "name": "skill-creator",
+            "path": "/tmp/skill-creator/SKILL.md",
+        },
+    ]
+
+
 @pytest.mark.parametrize(
     ("payload", "message", "data"),
     [
@@ -193,3 +231,19 @@ def test_parse_prompt_async_params_only_uses_fields_for_unsupported_fields() -> 
         "field": "request.parts[0].text",
     }
     assert "fields" not in invalid_type_exc.value.data
+
+
+def test_parse_prompt_async_params_rejects_unknown_part_type() -> None:
+    with pytest.raises(JsonRpcParamsValidationError) as exc_info:
+        parse_prompt_async_params(
+            {
+                "session_id": "s-1",
+                "request": {"parts": [{"type": "file", "path": "/tmp/x"}]},
+            }
+        )
+
+    assert str(exc_info.value) == "request.parts[].type must be one of: text, image, mention, skill"
+    assert exc_info.value.data == {
+        "type": "INVALID_FIELD",
+        "field": "request.parts[0].type",
+    }

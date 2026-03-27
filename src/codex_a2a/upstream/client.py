@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Any
 
 from codex_a2a import __version__
 from codex_a2a.config import Settings
+from codex_a2a.input_mapping import build_turn_input_from_normalized_items
 from codex_a2a.logging_context import (
     bind_correlation_id,
     get_correlation_id,
@@ -926,6 +927,7 @@ class CodexClient:
         session_id: str,
         text: str,
         *,
+        input_items: list[dict[str, Any]] | None = None,
         directory: str | None = None,
         timeout_override: float | None | _UnsetType = _UNSET,
     ) -> CodexMessage:
@@ -939,9 +941,15 @@ class CodexClient:
             if timeout_seconds <= 0:
                 timeout_seconds = self._request_timeout
 
+        input_payload = (
+            build_turn_input_from_normalized_items(input_items)
+            if input_items is not None
+            else [{"type": "text", "text": text, "text_elements": []}]
+        )
+
         params: dict[str, Any] = {
             "threadId": session_id,
-            "input": [{"type": "text", "text": text, "text_elements": []}],
+            "input": input_payload,
         }
         if directory:
             params["cwd"] = directory

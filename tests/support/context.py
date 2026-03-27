@@ -72,13 +72,14 @@ def make_request_context(
     task_id: str,
     context_id: str,
     text: str,
+    parts: list[Part] | None = None,
     metadata: dict[str, Any] | None = None,
     message_id: str = "req-1",
 ) -> RequestContext:
     message = Message(
         message_id=message_id,
         role=Role.user,
-        parts=[Part(root=TextPart(text=text))],
+        parts=parts if parts is not None else [Part(root=TextPart(text=text))],
     )
     params = MessageSendParams(message=message, metadata=metadata)
     return RequestContext(request=params, task_id=task_id, context_id=context_id)

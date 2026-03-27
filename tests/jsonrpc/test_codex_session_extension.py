@@ -615,6 +615,79 @@ async def test_session_control_prompt_async_returns_turn_handle(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_session_control_prompt_async_accepts_rich_input(monkeypatch):
+    import codex_a2a.server.application as app_module
+
+    dummy = DummyCodexClient(
+        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+    )
+    monkeypatch.setattr(app_module, "CodexClient", lambda _settings: dummy)
+    app = app_module.create_app(
+        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+    )
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        headers = {"Authorization": "Bearer t-1"}
+        resp = await client.post(
+            "/",
+            headers=headers,
+            json={
+                "jsonrpc": "2.0",
+                "id": 211,
+                "method": "codex.sessions.prompt_async",
+                "params": {
+                    "session_id": "s-1",
+                    "request": {
+                        "parts": [
+                            {"type": "text", "text": "Use the app to summarize."},
+                            {
+                                "type": "image",
+                                "url": "https://example.com/screenshot.png",
+                            },
+                            {
+                                "type": "mention",
+                                "name": "Demo App",
+                                "path": "app://demo-app",
+                            },
+                            {
+                                "type": "skill",
+                                "name": "skill-creator",
+                                "path": "/tmp/skill-creator/SKILL.md",
+                            },
+                        ],
+                    },
+                },
+            },
+        )
+        payload = resp.json()
+        assert payload["result"] == {"ok": True, "session_id": "s-1", "turn_id": "turn-1"}
+        assert dummy.last_prompt_async == {
+            "session_id": "s-1",
+            "request": {
+                "parts": [
+                    {"type": "text", "text": "Use the app to summarize."},
+                    {
+                        "type": "image",
+                        "url": "https://example.com/screenshot.png",
+                    },
+                    {
+                        "type": "mention",
+                        "name": "Demo App",
+                        "path": "app://demo-app",
+                    },
+                    {
+                        "type": "skill",
+                        "name": "skill-creator",
+                        "path": "/tmp/skill-creator/SKILL.md",
+                    },
+                ],
+            },
+            "directory": None,
+        }
+
+
+@pytest.mark.asyncio
 async def test_session_control_command_maps_response_to_a2a_message(monkeypatch):
     import codex_a2a.server.application as app_module
 
