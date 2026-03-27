@@ -326,11 +326,20 @@ described first in [README.md](../README.md) and above in this guide.
 - `tasks/resubscribe` remains part of the core A2A method baseline, but this
   deployment's terminal-task replay-once policy is a declared service-level
   behavior rather than a generic A2A guarantee.
+- Task persistence also applies a service-level resilience policy: once a task
+  has been durably stored in a terminal state, later conflicting writes are
+  dropped instead of overwriting that terminal snapshot.
 
 ### Streaming and Interrupt Contract
 
 - Streaming (`/v1/message:stream`) emits incremental
   `TaskArtifactUpdateEvent` and then `TaskStatusUpdateEvent(final=true)`.
+- If task persistence fails while processing a request, the service maps that
+  failure to a stable failed task or failed final status instead of leaking raw
+  task-store exceptions.
+- Those task-store failure surfaces use `metadata.codex.error` with
+  `type=TASK_STORE_UNAVAILABLE` and an `operation` field such as `get` or
+  `save`.
 - Stream artifacts carry `artifact.metadata.shared.stream.block_type` with
   values `text`, `reasoning`, and `tool_call`.
 - The published `urn:a2a:stream-hints/v1` contract also declares the emitted
@@ -610,6 +619,8 @@ Terminal-task note:
 - That replay-once terminal behavior is a service-level contract for this
   deployment. It is published through the compatibility profile and wire
   contract so clients do not mistake it for a generic A2A baseline rule.
+- If the task store is unavailable while loading subscribe state, the service
+  returns a controlled failure instead of exposing backend exception details.
 
 ## Development Setup
 

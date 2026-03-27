@@ -19,6 +19,7 @@ from codex_a2a.logging_context import (
     resolve_correlation_id,
     set_correlation_id,
 )
+from codex_a2a.server.task_store import TaskStoreOperationError, task_store_failure_message
 
 logger = logging.getLogger(__name__)
 
@@ -150,7 +151,17 @@ def install_http_middlewares(
         if not task_id:
             return JSONResponse({"error": "Task not found"}, status_code=404)
 
-        task = await task_store.get(task_id)
+        try:
+            task = await task_store.get(task_id)
+        except TaskStoreOperationError as exc:
+            logger.exception(
+                "Task store operation failed while guarding subscribe path task_id=%s operation=%s",
+                task_id,
+                exc.operation,
+            )
+            return JSONResponse(
+                {"error": task_store_failure_message(exc.operation)}, status_code=503
+            )
         if task is None:
             return JSONResponse({"error": "Task not found", "task_id": task_id}, status_code=404)
         return await call_next(request)

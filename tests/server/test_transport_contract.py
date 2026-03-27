@@ -8,12 +8,14 @@ from unittest.mock import AsyncMock, MagicMock
 import httpx
 import pytest
 from a2a.server.apps.rest.rest_adapter import RESTAdapter
+from a2a.server.tasks.task_store import TaskStore
 from a2a.types import TransportProtocol
 from sse_starlette.sse import EventSourceResponse
 from starlette.requests import Request
 
 from codex_a2a.server.agent_card import build_agent_card
 from codex_a2a.server.application import create_app
+from codex_a2a.server.task_store import TaskStoreOperationError, TaskStoreRuntime
 from tests.support.dummy_clients import DummyChatCodexClient
 from tests.support.settings import make_settings
 
@@ -527,6 +529,42 @@ async def test_subscribe_missing_task_returns_controlled_404(monkeypatch) -> Non
 
     assert response.status_code == 404
     assert response.json() == {"error": "Task not found", "task_id": "task-missing"}
+
+
+@pytest.mark.asyncio
+async def test_subscribe_task_store_failure_returns_controlled_503(monkeypatch) -> None:
+    import codex_a2a.server.application as app_module
+
+    class _FailingTaskStore(TaskStore):
+        async def save(self, task, context=None) -> None:  # noqa: ANN001
+            del task, context
+
+        async def get(self, task_id: str, context=None):  # noqa: ANN001
+            del context
+            raise TaskStoreOperationError("get", task_id)
+
+        async def delete(self, task_id: str, context=None) -> None:  # noqa: ANN001
+            del task_id, context
+
+    monkeypatch.setattr(app_module, "CodexClient", DummyChatCodexClient)
+    monkeypatch.setattr(
+        app_module,
+        "build_task_store_runtime",
+        lambda settings, engine=None: TaskStoreRuntime(  # noqa: ARG005
+            task_store=_FailingTaskStore(),
+            startup=AsyncMock(),
+            shutdown=AsyncMock(),
+        ),
+    )
+    app = app_module.create_app(make_settings(a2a_bearer_token="test-token"))
+    transport = httpx.ASGITransport(app=app)
+    headers = {"Authorization": "Bearer test-token"}
+
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get("/v1/tasks/task-broken:subscribe", headers=headers)
+
+    assert response.status_code == 503
+    assert response.json() == {"error": "Task store unavailable while loading task state."}
 
 
 def _rest_message_payload() -> dict:
