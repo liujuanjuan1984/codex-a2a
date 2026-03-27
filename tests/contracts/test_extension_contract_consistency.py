@@ -5,6 +5,7 @@ import pytest
 
 from codex_a2a.contracts.extensions import (
     COMPATIBILITY_PROFILE_EXTENSION_URI,
+    EXEC_CONTROL_EXTENSION_URI,
     INTERRUPT_CALLBACK_EXTENSION_URI,
     SESSION_BINDING_EXTENSION_URI,
     SESSION_QUERY_DEFAULT_LIMIT,
@@ -14,6 +15,7 @@ from codex_a2a.contracts.extensions import (
     WIRE_CONTRACT_EXTENSION_URI,
     build_capability_snapshot,
     build_compatibility_profile_params,
+    build_exec_control_extension_params,
     build_interrupt_callback_extension_params,
     build_session_binding_extension_params,
     build_session_query_extension_params,
@@ -203,6 +205,7 @@ def test_openapi_jsonrpc_contract_extension_matches_ssot() -> None:
     streaming = contract["streaming"]
     session_query = contract["session_query"]
     interrupt_callback = contract["interrupt_callback"]
+    exec_control = contract["exec_control"]
     wire_contract = contract["wire_contract"]
     compatibility_profile = contract["compatibility_profile"]
     expected_session_binding = build_session_binding_extension_params(
@@ -213,6 +216,9 @@ def test_openapi_jsonrpc_contract_extension_matches_ssot() -> None:
         runtime_profile=runtime_profile,
     )
     expected_interrupt_callback = build_interrupt_callback_extension_params(
+        runtime_profile=runtime_profile,
+    )
+    expected_exec_control = build_exec_control_extension_params(
         runtime_profile=runtime_profile,
     )
     expected_wire_contract = build_wire_contract_extension_params(
@@ -236,6 +242,9 @@ def test_openapi_jsonrpc_contract_extension_matches_ssot() -> None:
     assert interrupt_callback == expected_interrupt_callback, (
         "OpenAPI interrupt callback contract drifted from extension_contracts SSOT."
     )
+    assert exec_control == expected_exec_control, (
+        "OpenAPI exec control contract drifted from extension_contracts SSOT."
+    )
     assert wire_contract == expected_wire_contract, (
         "OpenAPI wire contract drifted from extension_contracts SSOT."
     )
@@ -254,6 +263,7 @@ def test_openapi_and_agent_card_extension_contracts_match() -> None:
     assert post_contract["session_binding"] == ext_by_uri[SESSION_BINDING_EXTENSION_URI].params
     assert post_contract["streaming"] == ext_by_uri[STREAMING_EXTENSION_URI].params
     assert post_contract["session_query"] == ext_by_uri[SESSION_QUERY_EXTENSION_URI].params
+    assert post_contract["exec_control"] == ext_by_uri[EXEC_CONTROL_EXTENSION_URI].params
     assert (
         post_contract["interrupt_callback"] == ext_by_uri[INTERRUPT_CALLBACK_EXTENSION_URI].params
     )
@@ -327,8 +337,11 @@ def test_openapi_jsonrpc_examples_match_declared_extension_contracts() -> None:
     post = openapi["paths"]["/"]["post"]
     extension_contracts = post["x-a2a-extension-contracts"]
     session_method_contracts = extension_contracts["session_query"]["method_contracts"]
+    exec_method_contracts = extension_contracts["exec_control"]["method_contracts"]
     interrupt_method_contracts = extension_contracts["interrupt_callback"]["method_contracts"]
-    declared_extension_methods = set(session_method_contracts) | set(interrupt_method_contracts)
+    declared_extension_methods = (
+        set(session_method_contracts) | set(exec_method_contracts) | set(interrupt_method_contracts)
+    )
     examples = post["requestBody"]["content"]["application/json"]["examples"]
 
     for example in examples.values():
@@ -342,7 +355,11 @@ def test_openapi_jsonrpc_examples_match_declared_extension_contracts() -> None:
         )
 
         params = payload.get("params", {})
-        method_contract = session_method_contracts.get(method) or interrupt_method_contracts[method]
+        method_contract = (
+            session_method_contracts.get(method)
+            or exec_method_contracts.get(method)
+            or interrupt_method_contracts[method]
+        )
         required_fields = method_contract["params"].get("required", [])
         for field in required_fields:
             assert _example_params_include_field(params, field), (
@@ -363,6 +380,42 @@ def test_openapi_jsonrpc_examples_hide_shell_when_shell_disabled() -> None:
 
     assert "codex.sessions.shell" not in methods
     assert "codex.sessions.shell" not in session_contracts
+
+
+def test_openapi_shell_example_declares_one_shot_contract() -> None:
+    settings = make_settings(a2a_bearer_token="test-token")
+    openapi = create_app(settings).openapi()
+    post = openapi["paths"]["/"]["post"]
+    examples = post["requestBody"]["content"]["application/json"]["examples"]
+    session_contracts = post["x-a2a-extension-contracts"]["session_query"]["method_contracts"]
+
+    assert examples["session_shell"]["summary"] == (
+        "Run a one-shot shell command attributed to an existing session"
+    )
+    shell_contract = session_contracts["codex.sessions.shell"]
+    assert shell_contract["execution_binding"] == "standalone_command_exec"
+    assert shell_contract["session_binding"] == "ownership_attribution_only"
+    assert shell_contract["uses_upstream_session_context"] is False
+    assert any("one-shot shell snapshot" in note for note in shell_contract["notes"])
+
+
+def test_openapi_exec_examples_declare_task_streaming_contract() -> None:
+    settings = make_settings(a2a_bearer_token="test-token")
+    openapi = create_app(settings).openapi()
+    post = openapi["paths"]["/"]["post"]
+    examples = post["requestBody"]["content"]["application/json"]["examples"]
+    exec_contracts = post["x-a2a-extension-contracts"]["exec_control"]["method_contracts"]
+    streaming_contract = post["x-a2a-extension-contracts"]["exec_control"]["task_streaming"]
+
+    assert examples["exec_start"]["value"]["method"] == "codex.exec.start"
+    assert examples["exec_write"]["value"]["method"] == "codex.exec.write"
+    assert examples["exec_resize"]["value"]["method"] == "codex.exec.resize"
+    assert examples["exec_terminate"]["value"]["method"] == "codex.exec.terminate"
+    assert exec_contracts["codex.exec.start"]["execution_binding"] == (
+        "standalone_interactive_command_exec"
+    )
+    assert streaming_contract["task_stream_method"] == "tasks/resubscribe"
+    assert "process_id" in exec_contracts["codex.exec.start"]["result"]["fields"]
 
 
 def test_openapi_jsonrpc_examples_use_declared_default_session_limit() -> None:

@@ -76,6 +76,10 @@ class DummySessionQueryCodexClient:
         self.last_prompt_async: dict[str, Any] | None = None
         self.last_command: dict[str, Any] | None = None
         self.last_shell: dict[str, Any] | None = None
+        self.last_exec_start: dict[str, Any] | None = None
+        self.exec_write_calls: list[dict[str, Any]] = []
+        self.exec_resize_calls: list[dict[str, Any]] = []
+        self.exec_terminate_calls: list[dict[str, Any]] = []
         self.permission_reply_calls: list[dict[str, Any]] = []
         self.question_reply_calls: list[dict[str, Any]] = []
         self.question_reject_calls: list[dict[str, Any]] = []
@@ -128,6 +132,48 @@ class DummySessionQueryCodexClient:
             "parts": [{"type": "text", "text": f"stdout\n$ {request['command']}"}],
             "raw": {"request": request},
         }
+
+    async def exec_start(
+        self,
+        request: dict[str, Any],
+        *,
+        directory: str | None = None,
+        timeout_override=None,  # noqa: ANN001
+    ) -> dict[str, Any]:
+        del timeout_override
+        self.last_exec_start = {
+            "request": request,
+            "directory": directory,
+        }
+        process_id = str(request.get("processId") or "exec-1")
+        return {"stdout": "hello\n", "stderr": "", "exitCode": 0, "processId": process_id}
+
+    async def exec_write(
+        self,
+        *,
+        process_id: str,
+        delta_base64: str | None = None,
+        close_stdin: bool | None = None,
+    ) -> None:
+        self.exec_write_calls.append(
+            {
+                "process_id": process_id,
+                "delta_base64": delta_base64,
+                "close_stdin": close_stdin,
+            }
+        )
+
+    async def exec_resize(self, *, process_id: str, rows: int, cols: int) -> None:
+        self.exec_resize_calls.append(
+            {
+                "process_id": process_id,
+                "rows": rows,
+                "cols": cols,
+            }
+        )
+
+    async def exec_terminate(self, *, process_id: str) -> None:
+        self.exec_terminate_calls.append({"process_id": process_id})
 
     async def permission_reply(
         self,

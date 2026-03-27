@@ -14,12 +14,14 @@ from a2a.types import (
 from codex_a2a.config import Settings
 from codex_a2a.contracts.extensions import (
     COMPATIBILITY_PROFILE_EXTENSION_URI,
+    EXEC_CONTROL_EXTENSION_URI,
     INTERRUPT_CALLBACK_EXTENSION_URI,
     SESSION_BINDING_EXTENSION_URI,
     SESSION_QUERY_EXTENSION_URI,
     STREAMING_EXTENSION_URI,
     WIRE_CONTRACT_EXTENSION_URI,
     build_compatibility_profile_params,
+    build_exec_control_extension_params,
     build_interrupt_callback_extension_params,
     build_session_binding_extension_params,
     build_session_query_extension_params,
@@ -36,7 +38,8 @@ def _build_agent_card_description(settings: Settings, runtime_profile: RuntimePr
         "(message/send, message/stream), task APIs (tasks/get, tasks/cancel, "
         "tasks/resubscribe; REST mapping: GET /v1/tasks/{id}:subscribe), "
         "shared session-binding and streaming contracts, Codex session-query "
-        "extensions, shared interrupt callback extensions, a machine-readable "
+        "and interactive exec extensions, shared interrupt callback extensions, "
+        "a machine-readable "
         "compatibility profile, and a machine-readable wire contract."
     )
     parts: list[str] = [base, summary]
@@ -84,6 +87,9 @@ def build_agent_card(
     )
     streaming_extension_params = build_streaming_extension_params()
     session_query_extension_params = build_session_query_extension_params(
+        runtime_profile=runtime_profile,
+    )
+    exec_control_extension_params = build_exec_control_extension_params(
         runtime_profile=runtime_profile,
     )
     interrupt_callback_extension_params = build_interrupt_callback_extension_params(
@@ -152,6 +158,16 @@ def build_agent_card(
                     params=session_query_extension_params,
                 ),
                 AgentExtension(
+                    uri=EXEC_CONTROL_EXTENSION_URI,
+                    required=False,
+                    description=(
+                        "Expose standalone interactive command execution via custom JSON-RPC "
+                        "methods codex.exec.start, codex.exec.write, codex.exec.resize, and "
+                        "codex.exec.terminate."
+                    ),
+                    params=exec_control_extension_params,
+                ),
+                AgentExtension(
                     uri=INTERRUPT_CALLBACK_EXTENSION_URI,
                     required=False,
                     description=(
@@ -216,6 +232,20 @@ def build_agent_card(
                 examples=[
                     "Reply once/always/reject to a permission request by request_id.",
                     "Submit answers for a question request by request_id.",
+                ],
+            ),
+            AgentSkill(
+                id="codex.exec.interactive",
+                name="Codex Interactive Exec",
+                description=(
+                    "Start and control standalone interactive command execution via "
+                    "codex.exec.start/write/resize/terminate and consume output through "
+                    "A2A task streams."
+                ),
+                tags=["codex", "exec", "terminal", "interactive"],
+                examples=[
+                    "Start an interactive exec session (method codex.exec.start).",
+                    "Write stdin bytes or resize the exec PTY by process_id.",
                 ],
             ),
         ],

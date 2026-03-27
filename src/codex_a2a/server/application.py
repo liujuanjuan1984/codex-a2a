@@ -12,12 +12,14 @@ from fastapi import FastAPI
 from codex_a2a.client import A2AClientManager
 from codex_a2a.config import Settings
 from codex_a2a.contracts.extensions import (
+    EXEC_CONTROL_METHODS,
     INTERRUPT_CALLBACK_METHODS,
     SESSION_CONTROL_METHODS,
     SESSION_QUERY_METHODS,
     build_capability_snapshot,
 )
 from codex_a2a.execution.directory_policy import resolve_and_validate_directory
+from codex_a2a.execution.exec_runtime import CodexExecRuntime
 from codex_a2a.execution.executor import CodexAgentExecutor
 from codex_a2a.jsonrpc.application import CodexSessionQueryJSONRPCApplication
 from codex_a2a.jsonrpc.hooks import SessionGuardHooks
@@ -68,6 +70,10 @@ def create_app(settings: Settings) -> FastAPI:
         agent_executor=executor,
         task_store=task_store,
     )
+    exec_runtime = CodexExecRuntime(
+        client=client,
+        request_handler=handler,
+    )
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
@@ -96,6 +102,7 @@ def create_app(settings: Settings) -> FastAPI:
     jsonrpc_methods = {
         **SESSION_QUERY_METHODS,
         **SESSION_CONTROL_METHODS,
+        **EXEC_CONTROL_METHODS,
         **INTERRUPT_CALLBACK_METHODS,
     }
     if "shell" not in capability_snapshot.session_query_method_keys:
@@ -107,6 +114,7 @@ def create_app(settings: Settings) -> FastAPI:
         http_handler=handler,
         context_builder=context_builder,
         codex_client=client,
+        exec_runtime=exec_runtime,
         methods=jsonrpc_methods,
         protocol_version=settings.a2a_protocol_version,
         supported_methods=list(capability_snapshot.supported_jsonrpc_methods),
@@ -126,6 +134,7 @@ def create_app(settings: Settings) -> FastAPI:
     jsonrpc_app.add_routes_to_app(app)
     app.state.codex_client = client
     app.state.codex_executor = executor
+    app.state.codex_exec_runtime = exec_runtime
     app.state.a2a_client_manager = a2a_client_manager
     app.state.task_store = task_store
 

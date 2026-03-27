@@ -18,6 +18,7 @@ WIRE_CONTRACT_EXTENSION_URI = "urn:codex-a2a:wire-contract/v1"
 SESSION_BINDING_EXTENSION_URI = "urn:a2a:session-binding/v1"
 STREAMING_EXTENSION_URI = "urn:a2a:stream-hints/v1"
 SESSION_QUERY_EXTENSION_URI = "urn:codex-a2a:codex-session-query/v1"
+EXEC_CONTROL_EXTENSION_URI = "urn:codex-a2a:codex-exec/v1"
 INTERRUPT_CALLBACK_EXTENSION_URI = "urn:a2a:interactive-interrupt/v1"
 
 TASKS_RESUBSCRIBE_METHOD = "tasks/resubscribe"
@@ -54,6 +55,17 @@ class InterruptMethodContract:
     required_params: tuple[str, ...] = ()
     optional_params: tuple[str, ...] = ()
     notification_response_status: int | None = None
+
+
+@dataclass(frozen=True)
+class ExecMethodContract:
+    method: str
+    required_params: tuple[str, ...] = ()
+    optional_params: tuple[str, ...] = ()
+    result_fields: tuple[str, ...] = ()
+    notification_response_status: int | None = None
+    execution_binding: str | None = None
+    notes: tuple[str, ...] = ()
 
 
 SESSION_QUERY_PAGINATION_MODE = "limit"
@@ -127,6 +139,11 @@ SESSION_QUERY_METHOD_CONTRACTS: dict[str, SessionQueryMethodContract] = {
                 "session_id is used for ownership checks and A2A result attribution; "
                 "it does not provide an upstream session-bound shell context."
             ),
+            (
+                "This method returns a one-shot shell snapshot and does not expose "
+                "interactive PTY lifecycle operations such as write, resize, or "
+                "terminate."
+            ),
         ),
     ),
 }
@@ -186,6 +203,84 @@ INTERRUPT_CALLBACK_METHODS: dict[str, str] = {
     key: contract.method for key, contract in INTERRUPT_CALLBACK_METHOD_CONTRACTS.items()
 }
 
+EXEC_CONTROL_METHOD_CONTRACTS: dict[str, ExecMethodContract] = {
+    "exec_start": ExecMethodContract(
+        method="codex.exec.start",
+        required_params=("request.command",),
+        optional_params=(
+            "request.arguments",
+            "request.process_id",
+            "request.tty",
+            "request.rows",
+            "request.cols",
+            "request.output_bytes_cap",
+            "request.disable_output_cap",
+            "request.timeout_ms",
+            "request.disable_timeout",
+            CODEX_DIRECTORY_METADATA_FIELD,
+        ),
+        result_fields=("ok", "task_id", "context_id", "process_id"),
+        notification_response_status=204,
+        execution_binding="standalone_interactive_command_exec",
+        notes=(
+            (
+                "codex.exec.start begins a standalone interactive command/exec session and "
+                "returns immediately with process/task handles."
+            ),
+            (
+                "Output is delivered through the normal A2A task stream and "
+                "tasks/resubscribe surfaces rather than the JSON-RPC response body."
+            ),
+            (
+                "This surface is intentionally separate from codex.sessions.shell, which "
+                "remains a one-shot shell snapshot contract."
+            ),
+        ),
+    ),
+    "exec_write": ExecMethodContract(
+        method="codex.exec.write",
+        required_params=("request.process_id",),
+        optional_params=("request.delta_base64", "request.close_stdin"),
+        result_fields=("ok", "process_id"),
+        notification_response_status=204,
+        execution_binding="standalone_interactive_command_exec",
+    ),
+    "exec_resize": ExecMethodContract(
+        method="codex.exec.resize",
+        required_params=("request.process_id", "request.rows", "request.cols"),
+        result_fields=("ok", "process_id"),
+        notification_response_status=204,
+        execution_binding="standalone_interactive_command_exec",
+    ),
+    "exec_terminate": ExecMethodContract(
+        method="codex.exec.terminate",
+        required_params=("request.process_id",),
+        result_fields=("ok", "process_id"),
+        notification_response_status=204,
+        execution_binding="standalone_interactive_command_exec",
+    ),
+}
+
+EXEC_CONTROL_METHODS: dict[str, str] = {
+    key: contract.method for key, contract in EXEC_CONTROL_METHOD_CONTRACTS.items()
+}
+
+EXEC_CONTROL_ERROR_BUSINESS_CODES: dict[str, int] = {
+    "EXEC_SESSION_NOT_FOUND": -32009,
+    "UPSTREAM_UNREACHABLE": -32002,
+    "UPSTREAM_HTTP_ERROR": -32003,
+}
+EXEC_CONTROL_ERROR_DATA_FIELDS: tuple[str, ...] = (
+    "type",
+    "process_id",
+    "upstream_status",
+    "detail",
+)
+EXEC_CONTROL_INVALID_PARAMS_DATA_FIELDS: tuple[str, ...] = (
+    "type",
+    "field",
+)
+
 INTERRUPT_SUCCESS_RESULT_FIELDS: tuple[str, ...] = ("ok", "request_id")
 INTERRUPT_ERROR_BUSINESS_CODES: dict[str, int] = {
     "INTERRUPT_REQUEST_NOT_FOUND": -32004,
@@ -241,6 +336,7 @@ class CapabilitySnapshot:
     extension_jsonrpc_methods: tuple[str, ...]
     session_query_method_keys: tuple[str, ...]
     session_query_methods: tuple[str, ...]
+    exec_control_methods: tuple[str, ...]
     conditional_methods: dict[str, dict[str, str]]
 
 
@@ -260,8 +356,10 @@ def build_capability_snapshot(*, runtime_profile: RuntimeProfile) -> CapabilityS
             "toggle": "A2A_ENABLE_SESSION_SHELL",
         }
     session_query_methods = tuple(SESSION_QUERY_METHODS[key] for key in session_query_method_keys)
+    exec_control_methods = tuple(EXEC_CONTROL_METHODS.values())
     extension_jsonrpc_methods = (
         *session_query_methods,
+        *exec_control_methods,
         *INTERRUPT_CALLBACK_METHODS.values(),
     )
     return CapabilitySnapshot(
@@ -272,6 +370,7 @@ def build_capability_snapshot(*, runtime_profile: RuntimeProfile) -> CapabilityS
         extension_jsonrpc_methods=extension_jsonrpc_methods,
         session_query_method_keys=tuple(session_query_method_keys),
         session_query_methods=session_query_methods,
+        exec_control_methods=exec_control_methods,
         conditional_methods=conditional_methods,
     )
 
@@ -319,6 +418,7 @@ def build_wire_contract_extension_params(
                 SESSION_BINDING_EXTENSION_URI,
                 STREAMING_EXTENSION_URI,
                 SESSION_QUERY_EXTENSION_URI,
+                EXEC_CONTROL_EXTENSION_URI,
                 INTERRUPT_CALLBACK_EXTENSION_URI,
             ],
         },
@@ -390,6 +490,17 @@ def build_compatibility_profile_params(
                 "surface": "extension",
                 "availability": "always",
                 "retention": "stable",
+                "extension_uri": EXEC_CONTROL_EXTENSION_URI,
+            }
+            for method in snapshot.exec_control_methods
+        }
+    )
+    method_retention.update(
+        {
+            method: {
+                "surface": "extension",
+                "availability": "always",
+                "retention": "stable",
                 "extension_uri": INTERRUPT_CALLBACK_EXTENSION_URI,
             }
             for method in INTERRUPT_CALLBACK_METHODS.values()
@@ -408,6 +519,11 @@ def build_compatibility_profile_params(
             "retention": "required",
         },
         SESSION_QUERY_EXTENSION_URI: {
+            "surface": "jsonrpc-extension",
+            "availability": "always",
+            "retention": "stable",
+        },
+        EXEC_CONTROL_EXTENSION_URI: {
             "surface": "jsonrpc-extension",
             "availability": "always",
             "retention": "stable",
@@ -439,6 +555,7 @@ def build_compatibility_profile_params(
             ],
             "codex_extensions": [
                 SESSION_QUERY_EXTENSION_URI,
+                EXEC_CONTROL_EXTENSION_URI,
                 COMPATIBILITY_PROFILE_EXTENSION_URI,
                 WIRE_CONTRACT_EXTENSION_URI,
             ],
@@ -469,6 +586,11 @@ def build_compatibility_profile_params(
             (
                 "codex.sessions.shell is deployment-conditional: discover it from the "
                 "declared profile and current extension contracts before calling it."
+            ),
+            (
+                "Treat codex.exec.* as the interactive standalone command runtime. Use "
+                "it for write/resize/terminate flows instead of inferring those semantics "
+                "from codex.sessions.shell."
             ),
             (
                 "Treat execution_environment fields as deployment-configured discovery "
@@ -673,6 +795,60 @@ def build_session_query_extension_params(
                 ),
                 "metadata.shared.session.id carries the same upstream session identity explicitly",
             ],
+        },
+    }
+
+
+def build_exec_control_extension_params(
+    *,
+    runtime_profile: RuntimeProfile,
+) -> dict[str, Any]:
+    method_contracts: dict[str, Any] = {}
+    for contract in EXEC_CONTROL_METHOD_CONTRACTS.values():
+        method_contract_doc: dict[str, Any] = {
+            "params": _build_method_contract_params(
+                required=contract.required_params,
+                optional=contract.optional_params,
+                unsupported=(),
+            ),
+            "result": {"fields": list(contract.result_fields)},
+        }
+        if contract.notification_response_status is not None:
+            method_contract_doc["notification_response_status"] = (
+                contract.notification_response_status
+            )
+        if contract.execution_binding is not None:
+            method_contract_doc["execution_binding"] = contract.execution_binding
+        if contract.notes:
+            method_contract_doc["notes"] = list(contract.notes)
+        method_contracts[contract.method] = method_contract_doc
+
+    return {
+        "methods": dict(EXEC_CONTROL_METHODS),
+        "method_contracts": method_contracts,
+        "profile": runtime_profile.summary_dict(),
+        "supported_metadata": ["codex.directory"],
+        "provider_private_metadata": ["codex.directory"],
+        "task_streaming": {
+            "start_result_fields": ["ok", "task_id", "context_id", "process_id"],
+            "task_status_source": "tasks/get",
+            "task_stream_method": TASKS_RESUBSCRIBE_METHOD,
+            "terminal_delivery": "result_artifact_plus_terminal_status",
+            "notes": [
+                (
+                    "codex.exec.start returns an immediate handle while stdout/stderr deltas "
+                    "flow through the standard A2A task stream."
+                ),
+                (
+                    "Interactive exec sessions are standalone runtimes keyed by process_id; "
+                    "they are not upstream thread-bound shells."
+                ),
+            ],
+        },
+        "errors": {
+            "business_codes": dict(EXEC_CONTROL_ERROR_BUSINESS_CODES),
+            "error_data_fields": list(EXEC_CONTROL_ERROR_DATA_FIELDS),
+            "invalid_params_data_fields": list(EXEC_CONTROL_INVALID_PARAMS_DATA_FIELDS),
         },
     }
 

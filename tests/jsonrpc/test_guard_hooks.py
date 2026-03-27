@@ -3,6 +3,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from codex_a2a.contracts.extensions import (
+    EXEC_CONTROL_METHODS,
     INTERRUPT_CALLBACK_METHODS,
     SESSION_CONTROL_METHODS,
     SESSION_QUERY_METHODS,
@@ -24,12 +25,14 @@ def _build_extension_app(
     methods = {
         **SESSION_QUERY_METHODS,
         **SESSION_CONTROL_METHODS,
+        **EXEC_CONTROL_METHODS,
         **INTERRUPT_CALLBACK_METHODS,
     }
     return CodexSessionQueryJSONRPCApplication(
         agent_card=build_agent_card(settings),
         http_handler=MagicMock(),
         codex_client=DummyCodexClient(settings),
+        exec_runtime=MagicMock(),
         methods=methods,
         protocol_version=settings.a2a_protocol_version,
         supported_methods=build_supported_jsonrpc_methods(

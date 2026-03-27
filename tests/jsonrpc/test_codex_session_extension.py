@@ -6,6 +6,7 @@ import pytest
 
 from codex_a2a.config import Settings
 from codex_a2a.contracts.extensions import (
+    EXEC_CONTROL_METHODS,
     INTERRUPT_CALLBACK_METHODS,
     SESSION_CONTROL_METHODS,
     SESSION_QUERY_DEFAULT_LIMIT,
@@ -37,6 +38,7 @@ def _build_extension_app(
     methods = {
         **SESSION_QUERY_METHODS,
         **SESSION_CONTROL_METHODS,
+        **EXEC_CONTROL_METHODS,
         **INTERRUPT_CALLBACK_METHODS,
     }
     guard_hooks = SessionGuardHooks(
@@ -49,6 +51,7 @@ def _build_extension_app(
         agent_card=build_agent_card(settings),
         http_handler=MagicMock(),
         codex_client=DummyCodexClient(settings),
+        exec_runtime=MagicMock(),
         methods=methods,
         protocol_version=settings.a2a_protocol_version,
         supported_methods=build_supported_jsonrpc_methods(

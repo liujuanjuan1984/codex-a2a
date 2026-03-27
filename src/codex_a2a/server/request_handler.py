@@ -9,6 +9,7 @@ from a2a.server.request_handlers.default_request_handler import (
     TERMINAL_TASK_STATES,
     DefaultRequestHandler,
 )
+from a2a.server.tasks import ResultAggregator, TaskManager
 from a2a.types import (
     Artifact,
     InternalError,
@@ -55,6 +56,44 @@ class CodexRequestHandler(DefaultRequestHandler):
             return await super().on_get_task(params, context)
         except TaskStoreOperationError as exc:
             raise self._task_store_server_error(exc) from exc
+
+    async def start_background_task_stream(
+        self,
+        *,
+        task: Task,
+        context=None,
+        producer,
+    ) -> asyncio.Task:
+        await self.task_store.save(task, context)
+        queue = await self._queue_manager.create_or_tap(task.id)
+        task_manager = TaskManager(
+            task_id=task.id,
+            context_id=task.context_id,
+            task_store=self.task_store,
+            initial_message=None,
+            context=context,
+        )
+        result_aggregator = ResultAggregator(task_manager)
+        consumer = EventConsumer(queue)
+
+        async def _run_and_close() -> None:
+            try:
+                await producer(queue)
+            finally:
+                await queue.close()
+
+        producer_task = asyncio.create_task(_run_and_close())
+        producer_task.set_name(f"background_stream:{task.id}")
+        await self._register_producer(task.id, producer_task)
+
+        consumer_task = asyncio.create_task(result_aggregator.consume_all(consumer))
+        consumer_task.set_name(f"background_aggregate:{task.id}")
+        self._track_background_task(consumer_task)
+
+        cleanup_task = asyncio.create_task(self._cleanup_producer(producer_task, task.id))
+        cleanup_task.set_name(f"cleanup_producer:{task.id}")
+        self._track_background_task(cleanup_task)
+        return producer_task
 
     @classmethod
     def _task_store_server_error(cls, exc: TaskStoreOperationError) -> ServerError:

@@ -5,11 +5,13 @@ from typing import Any, cast
 from fastapi import FastAPI
 
 from codex_a2a.contracts.extensions import (
+    EXEC_CONTROL_METHODS,
     INTERRUPT_CALLBACK_METHODS,
     SESSION_CONTROL_METHODS,
     SESSION_QUERY_DEFAULT_LIMIT,
     SESSION_QUERY_METHODS,
     build_compatibility_profile_params,
+    build_exec_control_extension_params,
     build_interrupt_callback_extension_params,
     build_session_binding_extension_params,
     build_session_query_extension_params,
@@ -28,12 +30,15 @@ def _build_jsonrpc_extension_openapi_description(*, session_shell_enabled: bool)
     ]
     if session_shell_enabled:
         session_methods.append(SESSION_CONTROL_METHODS["shell"])
+    exec_methods = ", ".join(EXEC_CONTROL_METHODS.values())
     interrupt_methods = ", ".join(sorted(INTERRUPT_CALLBACK_METHODS.values()))
     return (
         "A2A JSON-RPC entrypoint. Supports core A2A methods "
         "(message/send, message/stream, tasks/get, tasks/cancel, tasks/resubscribe) "
-        "plus Codex session extensions and shared interrupt callback methods.\n\n"
+        "plus Codex session extensions, interactive exec extensions, and shared "
+        "interrupt callback methods.\n\n"
         f"Codex session query/control methods: {', '.join(session_methods)}.\n"
+        f"Codex interactive exec methods: {exec_methods}.\n"
         f"Shared interrupt callback methods: {interrupt_methods}.\n\n"
         "Notification semantics: extension requests without JSON-RPC id return HTTP 204. "
         "Unsupported methods return JSON-RPC -32601 with supported_methods and "
@@ -120,6 +125,62 @@ def _build_jsonrpc_extension_openapi_examples(*, session_shell_enabled: bool) ->
                 },
             },
         },
+        "exec_start": {
+            "summary": "Start standalone interactive command execution",
+            "value": {
+                "jsonrpc": "2.0",
+                "id": 24,
+                "method": EXEC_CONTROL_METHODS["exec_start"],
+                "params": {
+                    "request": {
+                        "command": "bash",
+                        "arguments": "-lc 'printf hello && sleep 1'",
+                        "process_id": "exec-1",
+                        "tty": True,
+                        "rows": 24,
+                        "cols": 80,
+                    }
+                },
+            },
+        },
+        "exec_write": {
+            "summary": "Write stdin bytes to an interactive exec session",
+            "value": {
+                "jsonrpc": "2.0",
+                "id": 25,
+                "method": EXEC_CONTROL_METHODS["exec_write"],
+                "params": {
+                    "request": {
+                        "process_id": "exec-1",
+                        "delta_base64": "cHdkCg==",
+                    }
+                },
+            },
+        },
+        "exec_resize": {
+            "summary": "Resize the interactive exec PTY",
+            "value": {
+                "jsonrpc": "2.0",
+                "id": 26,
+                "method": EXEC_CONTROL_METHODS["exec_resize"],
+                "params": {
+                    "request": {
+                        "process_id": "exec-1",
+                        "rows": 40,
+                        "cols": 120,
+                    }
+                },
+            },
+        },
+        "exec_terminate": {
+            "summary": "Terminate an interactive exec session",
+            "value": {
+                "jsonrpc": "2.0",
+                "id": 27,
+                "method": EXEC_CONTROL_METHODS["exec_terminate"],
+                "params": {"request": {"process_id": "exec-1"}},
+            },
+        },
         "permission_reply": {
             "summary": "Reply to permission interrupt request",
             "value": {
@@ -150,7 +211,7 @@ def _build_jsonrpc_extension_openapi_examples(*, session_shell_enabled: bool) ->
     }
     if session_shell_enabled:
         examples["session_shell"] = {
-            "summary": "Run shell command attributed to an existing session",
+            "summary": "Run a one-shot shell command attributed to an existing session",
             "value": {
                 "jsonrpc": "2.0",
                 "id": 23,
@@ -207,6 +268,9 @@ def patch_openapi_contract(
     session_query = build_session_query_extension_params(
         runtime_profile=runtime_profile,
     )
+    exec_control = build_exec_control_extension_params(
+        runtime_profile=runtime_profile,
+    )
     interrupt_callback = build_interrupt_callback_extension_params(
         runtime_profile=runtime_profile,
     )
@@ -239,6 +303,7 @@ def patch_openapi_contract(
                         "session_binding": session_binding,
                         "streaming": streaming,
                         "session_query": session_query,
+                        "exec_control": exec_control,
                         "interrupt_callback": interrupt_callback,
                         "wire_contract": wire_contract,
                         "compatibility_profile": compatibility_profile,
