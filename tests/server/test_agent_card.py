@@ -169,6 +169,25 @@ def test_agent_card_injects_profile_into_extensions() -> None:
         "codex.sessions.list": "upstream_passthrough",
         "codex.sessions.messages.list": "local_tail_slice",
     }
+    assert session_query.params["rich_input"]["prompt_async_part_types"] == [
+        "text",
+        "image",
+        "mention",
+        "skill",
+    ]
+    assert session_query.params["rich_input"]["core_message_part_mapping"] == {
+        "TextPart": "text",
+        "FilePart(image only)": "input_image",
+        "DataPart(type=mention|skill)": "mention|skill",
+    }
+    assert (
+        session_query.params["rich_input"]["prompt_async_part_contracts"]["image"]["maps_to"]
+        == "turn/start.input[].type=input_image"
+    )
+    assert any(
+        "mention.path values are forwarded verbatim" in note
+        for note in session_query.params["rich_input"]["notes"]
+    )
     assert session_query.params["result_envelope"] == {}
     assert any(
         "forwards limit upstream" in note for note in session_query.params["pagination"]["notes"]
@@ -190,6 +209,9 @@ def test_agent_card_injects_profile_into_extensions() -> None:
     assert shell_contract["uses_upstream_session_context"] is False
     assert any("command/exec" in note for note in shell_contract["notes"])
     assert any("one-shot shell snapshot" in note for note in shell_contract["notes"])
+    prompt_contract = session_query.params["method_contracts"]["codex.sessions.prompt_async"]
+    assert any("type=text, image, mention, and skill" in note for note in prompt_contract["notes"])
+    assert any("local_image" in note for note in prompt_contract["notes"])
 
     interrupt = ext_by_uri[INTERRUPT_CALLBACK_EXTENSION_URI]
     assert interrupt.params["profile"] == profile

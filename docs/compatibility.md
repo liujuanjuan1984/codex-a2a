@@ -115,6 +115,10 @@ will be reflected live per request.
 - `codex.sessions.shell` is compatibility-sensitive as a one-shot shell
   snapshot contract. Future interactive exec support must use a separate
   extension family rather than silently widening this method's behavior.
+- Rich input mapping is compatibility-sensitive across both `codex.sessions.prompt_async`
+  and the core A2A message surface. Changes to supported part types, FilePart
+  image handling, or DataPart mention/skill mapping should be treated as
+  wire-level behavior changes.
 - `codex.exec.*` is compatibility-sensitive as the standalone interactive exec
   contract. Changes to handle shapes, task-stream delivery, or lifecycle method
   names should be treated as wire-level changes.

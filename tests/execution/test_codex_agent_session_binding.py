@@ -4,6 +4,9 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from a2a.types import (
     Artifact,
+    DataPart,
+    FilePart,
+    FileWithUri,
     Part,
     Task,
     TaskArtifactUpdateEvent,
@@ -35,6 +38,92 @@ async def test_agent_prefers_metadata_shared_session_id() -> None:
 
     assert client.created_sessions == 0
     assert client.sent_session_ids == ["ses-bound"]
+
+
+@pytest.mark.asyncio
+async def test_agent_maps_rich_input_parts_to_structured_codex_input() -> None:
+    class RichInputClient(DummyChatCodexClient):
+        async def create_session(
+            self,
+            title: str | None = None,
+            *,
+            directory: str | None = None,
+        ) -> str:
+            self.created_sessions += 1
+            self.sent_inputs.append({"created_session_title": title, "directory": directory})
+            return f"ses-created-{self.created_sessions}"
+
+    client = RichInputClient()
+    executor = CodexAgentExecutor(client, streaming_enabled=False)
+    q = DummyEventQueue()
+
+    ctx = make_request_context(
+        task_id="t-rich",
+        context_id="c-rich",
+        text="",
+        parts=[
+            Part(
+                root=FilePart(
+                    file=FileWithUri(
+                        uri="https://example.com/screenshot.png",
+                        mimeType="image/png",
+                        name="screenshot.png",
+                    )
+                )
+            ),
+            Part(
+                root=DataPart(
+                    data={
+                        "type": "mention",
+                        "name": "Demo App",
+                        "path": "app://demo-app",
+                    }
+                )
+            ),
+        ],
+    )
+    await executor.execute(ctx, q)
+
+    assert client.created_sessions == 1
+    assert client.sent_session_ids == ["ses-created-1"]
+    assert client.sent_inputs[0]["created_session_title"] == "Demo App"
+    assert client.sent_inputs[1]["input_items"] == [
+        {"type": "image", "url": "https://example.com/screenshot.png"},
+        {"type": "mention", "name": "Demo App", "path": "app://demo-app"},
+    ]
+
+
+@pytest.mark.asyncio
+async def test_agent_rejects_non_image_file_parts() -> None:
+    client = DummyChatCodexClient()
+    executor = CodexAgentExecutor(client, streaming_enabled=False)
+    q = DummyEventQueue()
+
+    ctx = make_request_context(
+        task_id="t-bad-file",
+        context_id="c-bad-file",
+        text="",
+        parts=[
+            Part(
+                root=FilePart(
+                    file=FileWithUri(
+                        uri="https://example.com/report.pdf",
+                        mimeType="application/pdf",
+                        name="report.pdf",
+                    )
+                )
+            )
+        ],
+    )
+    await executor.execute(ctx, q)
+
+    task = next(event for event in q.events if isinstance(event, Task))
+    assert task.status.state == TaskState.failed
+    assert task.status.message is not None
+    assert (
+        task.status.message.parts[0].root.text
+        == "Only text, image file, and codex rich input data parts are supported."
+    )
 
 
 @pytest.mark.asyncio

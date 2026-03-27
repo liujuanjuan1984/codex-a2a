@@ -105,7 +105,18 @@ def _build_jsonrpc_extension_openapi_examples(*, session_shell_enabled: bool) ->
                 "params": {
                     "session_id": "s-1",
                     "request": {
-                        "parts": [{"type": "text", "text": "Continue and summarize next steps."}]
+                        "parts": [
+                            {"type": "text", "text": "Use the app to summarize next steps."},
+                            {
+                                "type": "image",
+                                "url": "https://example.com/screenshot.png",
+                            },
+                            {
+                                "type": "mention",
+                                "name": "Demo App",
+                                "path": "app://demo-app",
+                            },
+                        ]
                     },
                 },
             },

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import AliasChoices, Field, ValidationError, field_validator, model_validator
 
@@ -20,13 +20,6 @@ class PromptTextPart(_PermissiveModel):
     type: Literal["text"]
     text: str
 
-    @field_validator("type", mode="before")
-    @classmethod
-    def _validate_type(cls, value: Any) -> str:
-        if value != "text":
-            raise ValueError("Only text request parts are currently supported")
-        return "text"
-
     @field_validator("text", mode="before")
     @classmethod
     def _validate_text(cls, value: Any) -> str:
@@ -35,8 +28,64 @@ class PromptTextPart(_PermissiveModel):
         return value
 
 
+class PromptImagePart(_PermissiveModel):
+    type: Literal["image"]
+    url: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("url", "image_url", "imageUrl"),
+    )
+    bytes: str | None = None
+    mime_type: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("mime_type", "mimeType"),
+        serialization_alias="mimeType",
+    )
+    name: str | None = None
+
+    @field_validator("url", "bytes", "mime_type", "name", mode="before")
+    @classmethod
+    def _validate_optional_strings(cls, value: Any) -> str | None:
+        return strip_optional_string(value)
+
+    @model_validator(mode="after")
+    def _require_url_or_bytes(self) -> PromptImagePart:
+        if self.url is None and self.bytes is None:
+            raise ValueError("request.parts[].url or request.parts[].bytes is required")
+        if self.bytes is not None and self.mime_type is None and self.url is None:
+            raise ValueError("request.parts[].mimeType is required when bytes is provided")
+        return self
+
+
+class PromptMentionPart(_PermissiveModel):
+    type: Literal["mention"]
+    name: str
+    path: str
+
+    @field_validator("name", "path", mode="before")
+    @classmethod
+    def _validate_strings(cls, value: Any) -> str:
+        return normalize_non_empty_string(value, message="must be a non-empty string")
+
+
+class PromptSkillPart(_PermissiveModel):
+    type: Literal["skill"]
+    name: str
+    path: str
+
+    @field_validator("name", "path", mode="before")
+    @classmethod
+    def _validate_strings(cls, value: Any) -> str:
+        return normalize_non_empty_string(value, message="must be a non-empty string")
+
+
+PromptAsyncPart = Annotated[
+    PromptTextPart | PromptImagePart | PromptMentionPart | PromptSkillPart,
+    Field(discriminator="type"),
+]
+
+
 class PromptAsyncRequestParams(_StrictModel):
-    parts: list[PromptTextPart]
+    parts: list[PromptAsyncPart]
     message_id: str | None = Field(
         default=None,
         validation_alias="messageID",
@@ -308,6 +357,16 @@ def _raise_control_validation_error(exc: ValidationError) -> None:
             message=message_text,
             data={"type": "INVALID_FIELD", "field": "request.cols"},
         )
+    if message_text == "request.parts[].url or request.parts[].bytes is required":
+        raise JsonRpcParamsValidationError(
+            message=message_text,
+            data={"type": "INVALID_FIELD", "field": "request.parts"},
+        )
+    if message_text == "request.parts[].mimeType is required when bytes is provided":
+        raise JsonRpcParamsValidationError(
+            message=message_text,
+            data={"type": "INVALID_FIELD", "field": "request.parts"},
+        )
     if message_text == "request.delta_base64 or request.close_stdin=true is required":
         raise JsonRpcParamsValidationError(
             message=message_text,
@@ -369,6 +428,24 @@ def _raise_control_validation_error(exc: ValidationError) -> None:
             message=f"{field} must be a string",
             data={"type": "INVALID_FIELD", "field": field},
         )
+    if (
+        len(loc) >= 3
+        and loc[:2] == ("request", "parts")
+        and loc[-1]
+        in {
+            "url",
+            "bytes",
+            "mimeType",
+            "mime_type",
+            "name",
+            "path",
+        }
+    ):
+        field = format_loc(loc)
+        raise JsonRpcParamsValidationError(
+            message=f"{field} must be a string",
+            data={"type": "INVALID_FIELD", "field": field},
+        )
     if loc in {
         ("request", "rows"),
         ("request", "cols"),
@@ -398,8 +475,26 @@ def _raise_control_validation_error(exc: ValidationError) -> None:
         )
     if len(loc) >= 3 and loc[:2] == ("request", "parts") and loc[-1] == "text":
         field = format_loc(loc)
+        if field.endswith(".text.text"):
+            field = field.removesuffix(".text")
         raise JsonRpcParamsValidationError(
             message=f"{field} must be a string",
+            data={"type": "INVALID_FIELD", "field": field},
+        )
+    if (
+        first.get("type") == "union_tag_invalid"
+        and len(loc) >= 3
+        and loc[:2] == ("request", "parts")
+    ):
+        field = f"{format_loc(loc)}.type"
+        raise JsonRpcParamsValidationError(
+            message="request.parts[].type must be one of: text, image, mention, skill",
+            data={"type": "INVALID_FIELD", "field": field},
+        )
+    if len(loc) >= 3 and loc[:2] == ("request", "parts") and loc[-1] == "type":
+        field = format_loc(loc)
+        raise JsonRpcParamsValidationError(
+            message=("request.parts[].type must be one of: text, image, mention, skill"),
             data={"type": "INVALID_FIELD", "field": field},
         )
     if len(loc) >= 2 and loc[:2] == ("request", "parts") and loc[-1] != "type":

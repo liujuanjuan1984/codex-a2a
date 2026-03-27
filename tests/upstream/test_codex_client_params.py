@@ -122,6 +122,65 @@ async def test_session_shell_uses_command_exec_without_thread_context() -> None:
 
 
 @pytest.mark.asyncio
+async def test_session_prompt_async_maps_rich_input_parts_to_turn_start() -> None:
+    client = CodexClient(
+        make_settings(
+            a2a_bearer_token="t-1",
+            codex_workspace_root="/safe",
+            codex_timeout=1.0,
+        )
+    )
+
+    seen: list[tuple[str, dict | None]] = []
+
+    async def fake_rpc_request(method: str, params: dict | None = None):
+        seen.append((method, params))
+        return {"turn": {"id": "turn-42"}}
+
+    client._rpc_request = fake_rpc_request
+
+    result = await client.session_prompt_async(
+        "thr-1",
+        {
+            "parts": [
+                {"type": "text", "text": "Use the app."},
+                {"type": "image", "url": "https://example.com/image.png"},
+                {"type": "mention", "name": "Demo App", "path": "app://demo-app"},
+                {
+                    "type": "skill",
+                    "name": "skill-creator",
+                    "path": "/tmp/skill-creator/SKILL.md",
+                },
+            ]
+        },
+    )
+
+    assert result == {"ok": True, "session_id": "thr-1", "turn_id": "turn-42"}
+    assert seen == [
+        (
+            "turn/start",
+            {
+                "threadId": "thr-1",
+                "input": [
+                    {"type": "text", "text": "Use the app.", "text_elements": []},
+                    {
+                        "type": "input_image",
+                        "image_url": "https://example.com/image.png",
+                    },
+                    {"type": "mention", "name": "Demo App", "path": "app://demo-app"},
+                    {
+                        "type": "skill",
+                        "name": "skill-creator",
+                        "path": "/tmp/skill-creator/SKILL.md",
+                    },
+                ],
+                "cwd": "/safe",
+            },
+        )
+    ]
+
+
+@pytest.mark.asyncio
 async def test_exec_start_uses_interactive_command_exec_params() -> None:
     client = CodexClient(
         make_settings(
@@ -891,6 +950,57 @@ async def test_send_message_timeout_override_none_disables_wait_timeout() -> Non
 
     assert message.text == "done"
     assert ("thr-1", "turn-1") not in client._turn_trackers
+
+
+@pytest.mark.asyncio
+async def test_send_message_uses_structured_input_items_when_provided() -> None:
+    client = CodexClient(
+        make_settings(a2a_bearer_token="t-1", codex_workspace_root="/safe", codex_timeout=1.0)
+    )
+
+    seen: list[tuple[str, dict | None]] = []
+
+    async def fake_rpc_request(method: str, params: dict | None = None):
+        seen.append((method, params))
+        return {"turn": {"id": "turn-1"}}
+
+    client._rpc_request = fake_rpc_request
+    tracker = client._get_or_create_tracker("thr-1", "turn-1")
+    tracker.text_chunks.append("done")
+    tracker.completed.set()
+
+    message = await client.send_message(
+        "thr-1",
+        "",
+        input_items=[
+            {"type": "text", "text": "Look at the screenshot."},
+            {"type": "image", "url": "https://example.com/screenshot.png"},
+            {"type": "mention", "name": "Demo App", "path": "app://demo-app"},
+        ],
+    )
+
+    assert message.text == "done"
+    assert seen == [
+        (
+            "turn/start",
+            {
+                "threadId": "thr-1",
+                "input": [
+                    {
+                        "type": "text",
+                        "text": "Look at the screenshot.",
+                        "text_elements": [],
+                    },
+                    {
+                        "type": "input_image",
+                        "image_url": "https://example.com/screenshot.png",
+                    },
+                    {"type": "mention", "name": "Demo App", "path": "app://demo-app"},
+                ],
+                "cwd": "/safe",
+            },
+        )
+    ]
 
 
 @pytest.mark.asyncio

@@ -38,6 +38,13 @@ from codex_a2a.execution.response_emitter import (
 from codex_a2a.execution.session_runtime import SessionRuntime
 from codex_a2a.execution.stream_state import StreamOutputState
 from codex_a2a.execution.streaming import consume_codex_stream
+from codex_a2a.input_mapping import (
+    UnsupportedInputError,
+    extract_text_from_normalized_items,
+    is_text_only_normalized_input,
+    map_a2a_message_parts_to_normalized_items,
+    summarize_normalized_items,
+)
 from codex_a2a.upstream.client import CodexClient
 
 from .output_mapping import enqueue_artifact_update, extract_token_usage, merge_token_usage
@@ -92,7 +99,24 @@ class CodexAgentExecutor(AgentExecutor):
         identity = (call_context.state.get("identity") if call_context else None) or "anonymous"
 
         streaming_request = self._should_stream(context)
-        user_text = context.get_user_input().strip()
+        message_parts = getattr(context.message, "parts", None) if context.message else None
+        try:
+            request_input_items = map_a2a_message_parts_to_normalized_items(message_parts)
+        except UnsupportedInputError as exc:
+            await self._emit_error(
+                event_queue,
+                task_id=task_id,
+                context_id=context_id,
+                message=str(exc),
+                streaming_request=streaming_request,
+            )
+            return
+
+        user_text = extract_text_from_normalized_items(request_input_items)
+        if not user_text:
+            user_text = context.get_user_input().strip()
+        session_title = user_text or summarize_normalized_items(request_input_items)
+        text_only_request = is_text_only_normalized_input(request_input_items, user_text=user_text)
         bound_session_id = extract_shared_session_id(context)
 
         # Directory validation
@@ -121,23 +145,27 @@ class CodexAgentExecutor(AgentExecutor):
             )
             return
 
-        if not user_text:
+        if not user_text and not request_input_items:
             await self._emit_error(
                 event_queue,
                 task_id=task_id,
                 context_id=context_id,
-                message="Only text input is supported.",
+                message="Only text, image file, and codex rich input data parts are supported.",
                 streaming_request=streaming_request,
             )
             return
 
         logger.debug(
-            "Received message identity=%s task_id=%s context_id=%s streaming=%s text=%s",
+            (
+                "Received message identity=%s task_id=%s context_id=%s "
+                "streaming=%s text=%s part_count=%s"
+            ),
             identity,
             task_id,
             context_id,
             streaming_request,
             user_text,
+            len(request_input_items),
         )
 
         stream_artifact_id = f"{task_id}:stream"
@@ -166,10 +194,10 @@ class CodexAgentExecutor(AgentExecutor):
             session_id, pending_preferred_claim = await self._session_runtime.get_or_create_session(
                 identity=identity,
                 context_id=context_id,
-                title=user_text,
+                title=session_title,
                 preferred_session_id=bound_session_id,
                 create_session=lambda: self._client.create_session(
-                    title=user_text,
+                    title=session_title,
                     directory=directory,
                 ),
             )
@@ -193,8 +221,13 @@ class CodexAgentExecutor(AgentExecutor):
             )
 
             next_turn_text = user_text
+            next_turn_input_items = (
+                None if text_only_request or not request_input_items else list(request_input_items)
+            )
             while True:
                 send_kwargs: dict[str, Any] = {"directory": directory}
+                if next_turn_input_items is not None:
+                    send_kwargs["input_items"] = next_turn_input_items
                 if streaming_request:
                     stream_completion_event = asyncio.Event()
                     stream_task = asyncio.create_task(
@@ -218,6 +251,7 @@ class CodexAgentExecutor(AgentExecutor):
                     next_turn_text,
                     **send_kwargs,
                 )
+                next_turn_input_items = None
                 if pending_preferred_claim:
                     await self._session_runtime.finalize_preferred_session_binding(
                         identity=identity,
