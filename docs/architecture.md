@@ -44,15 +44,13 @@ implementation-oriented logical component view for first-time readers.
 2. FastAPI validates transport shape and auth.
 3. The adapter translates A2A message/task semantics into Codex runtime calls.
 4. Codex runtime emits session events, stream chunks, and interrupt requests.
-5. The service maps those into shared A2A-facing contracts before returning
-   them to the client.
+5. The service maps those into shared A2A-facing contracts before returning them to the client.
 
 ### Streaming flow
 
 For streaming requests, the service does more than simple passthrough:
 
-- classifies stream blocks into shared types such as `text`, `reasoning`, and
-  `tool_call`
+- classifies stream blocks into shared types such as `text`, `reasoning`, and `tool_call`
 - preserves ordering and identity metadata
 - emits interrupt lifecycle status updates
 - publishes normalized usage data in final metadata when available
@@ -97,12 +95,9 @@ stronger isolation is added.
 
 Use the docs by responsibility:
 
-- [README](../README.md): project overview, quick-start path, and entry
-  navigation
-- [Usage Guide](guide.md): configuration, protocol behavior, and runtime
-  examples
-- [Compatibility Guide](compatibility.md): current compatibility promises and
-  stability expectations
+- [README](../README.md): project overview, quick-start path, and entry navigation
+- [Usage Guide](guide.md): configuration, protocol behavior, and runtime examples
+- [Compatibility Guide](compatibility.md): current compatibility promises and stability expectations
 - [Contributing Guide](../CONTRIBUTING.md): contributor workflow and validation
 - [Security Policy](../SECURITY.md): threat model and disclosure guidance
 
