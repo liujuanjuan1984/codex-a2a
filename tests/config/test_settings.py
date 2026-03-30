@@ -23,6 +23,17 @@ def test_settings_valid():
         "A2A_BEARER_TOKEN": "test-token",
         "CODEX_TIMEOUT": "300",
         "CODEX_MODEL_REASONING_EFFORT": "high",
+        "CODEX_MODEL_REASONING_SUMMARY": "concise",
+        "CODEX_MODEL_VERBOSITY": "medium",
+        "CODEX_PROFILE": "coding",
+        "CODEX_APPROVAL_POLICY": "on-request",
+        "CODEX_SANDBOX_MODE": "workspace-write",
+        "CODEX_SANDBOX_WORKSPACE_WRITE_WRITABLE_ROOTS": "/tmp/workspace,/tmp/cache",
+        "CODEX_SANDBOX_WORKSPACE_WRITE_NETWORK_ACCESS": "true",
+        "CODEX_SANDBOX_WORKSPACE_WRITE_EXCLUDE_SLASH_TMP": "true",
+        "CODEX_SANDBOX_WORKSPACE_WRITE_EXCLUDE_TMPDIR_ENV_VAR": "false",
+        "CODEX_WEB_SEARCH": "live",
+        "CODEX_REVIEW_MODEL": "gpt-5.1",
         "CODEX_WORKSPACE_ROOT": "/tmp/workspace",
     }
     with mock.patch.dict(os.environ, env, clear=True):
@@ -30,6 +41,20 @@ def test_settings_valid():
         assert settings.a2a_bearer_token == "test-token"
         assert settings.codex_timeout == 300.0
         assert settings.codex_model_reasoning_effort == "high"
+        assert settings.codex_model_reasoning_summary == "concise"
+        assert settings.codex_model_verbosity == "medium"
+        assert settings.codex_profile == "coding"
+        assert settings.codex_approval_policy == "on-request"
+        assert settings.codex_sandbox_mode == "workspace-write"
+        assert settings.codex_sandbox_workspace_write_writable_roots == [
+            "/tmp/workspace",
+            "/tmp/cache",
+        ]
+        assert settings.codex_sandbox_workspace_write_network_access is True
+        assert settings.codex_sandbox_workspace_write_exclude_slash_tmp is True
+        assert settings.codex_sandbox_workspace_write_exclude_tmpdir_env_var is False
+        assert settings.codex_web_search == "live"
+        assert settings.codex_review_model == "gpt-5.1"
         assert settings.codex_workspace_root == "/tmp/workspace"
         assert settings.a2a_database_url == "sqlite+aiosqlite:///./codex-a2a.db"
         assert settings.a2a_version == __version__
@@ -133,6 +158,28 @@ def test_settings_reject_invalid_execution_sandbox_mode() -> None:
         with pytest.raises(ValidationError) as excinfo:
             Settings.from_env()
     assert "A2A_EXECUTION_SANDBOX_MODE" in str(excinfo.value)
+
+
+@pytest.mark.parametrize(
+    ("env_name", "env_value"),
+    [
+        ("CODEX_MODEL_REASONING_EFFORT", "ultra"),
+        ("CODEX_MODEL_REASONING_SUMMARY", "verbose"),
+        ("CODEX_MODEL_VERBOSITY", "max"),
+        ("CODEX_APPROVAL_POLICY", "unlessTrusted"),
+        ("CODEX_SANDBOX_MODE", "external-sandbox"),
+        ("CODEX_WEB_SEARCH", "on"),
+    ],
+)
+def test_settings_reject_invalid_codex_runtime_overrides(env_name: str, env_value: str) -> None:
+    env = {
+        "A2A_BEARER_TOKEN": "test",
+        env_name: env_value,
+    }
+    with mock.patch.dict(os.environ, env, clear=True):
+        with pytest.raises(ValidationError) as excinfo:
+            Settings.from_env()
+    assert env_name in str(excinfo.value)
 
 
 def test_settings_parse_a2a_client_transport_and_timeouts() -> None:
