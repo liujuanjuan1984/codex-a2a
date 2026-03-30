@@ -34,12 +34,48 @@ _APPROVAL_POLICIES = {
     "on-failure",
     "untrusted-only",
 }
+_CODEX_APPROVAL_POLICIES = {
+    "never",
+    "on-request",
+    "on-failure",
+    "untrusted",
+    "unlessTrusted",
+}
 _APPROVAL_ESCALATION_BEHAVIORS = {
     "unknown",
     "unavailable",
     "per_request",
     "fallback_only",
     "restricted",
+}
+_CODEX_REASONING_EFFORTS = {
+    "none",
+    "minimal",
+    "low",
+    "medium",
+    "high",
+    "xhigh",
+}
+_CODEX_REASONING_SUMMARIES = {
+    "auto",
+    "concise",
+    "detailed",
+    "none",
+}
+_CODEX_VERBOSITIES = {
+    "low",
+    "medium",
+    "high",
+}
+_CODEX_SANDBOX_MODES = {
+    "read-only",
+    "workspace-write",
+    "danger-full-access",
+}
+_CODEX_WEB_SEARCH_MODES = {
+    "disabled",
+    "cached",
+    "live",
 }
 
 
@@ -145,6 +181,50 @@ class Settings(BaseSettings):
     codex_model_reasoning_effort: str | None = Field(
         default=None,
         alias="CODEX_MODEL_REASONING_EFFORT",
+    )
+    codex_profile: str | None = Field(
+        default=None,
+        alias="CODEX_PROFILE",
+    )
+    codex_model_reasoning_summary: str | None = Field(
+        default=None,
+        alias="CODEX_MODEL_REASONING_SUMMARY",
+    )
+    codex_model_verbosity: str | None = Field(
+        default=None,
+        alias="CODEX_MODEL_VERBOSITY",
+    )
+    codex_approval_policy: str | None = Field(
+        default=None,
+        alias="CODEX_APPROVAL_POLICY",
+    )
+    codex_sandbox_mode: str | None = Field(
+        default=None,
+        alias="CODEX_SANDBOX_MODE",
+    )
+    codex_sandbox_workspace_write_writable_roots: Annotated[list[str], NoDecode] = Field(
+        default_factory=list,
+        alias="CODEX_SANDBOX_WORKSPACE_WRITE_WRITABLE_ROOTS",
+    )
+    codex_sandbox_workspace_write_network_access: bool | None = Field(
+        default=None,
+        alias="CODEX_SANDBOX_WORKSPACE_WRITE_NETWORK_ACCESS",
+    )
+    codex_sandbox_workspace_write_exclude_slash_tmp: bool | None = Field(
+        default=None,
+        alias="CODEX_SANDBOX_WORKSPACE_WRITE_EXCLUDE_SLASH_TMP",
+    )
+    codex_sandbox_workspace_write_exclude_tmpdir_env_var: bool | None = Field(
+        default=None,
+        alias="CODEX_SANDBOX_WORKSPACE_WRITE_EXCLUDE_TMPDIR_ENV_VAR",
+    )
+    codex_web_search: str | None = Field(
+        default=None,
+        alias="CODEX_WEB_SEARCH",
+    )
+    codex_review_model: str | None = Field(
+        default=None,
+        alias="CODEX_REVIEW_MODEL",
     )
 
     # A2A settings
@@ -264,6 +344,7 @@ class Settings(BaseSettings):
         return value
 
     @field_validator(
+        "codex_sandbox_workspace_write_writable_roots",
         "a2a_execution_sandbox_writable_roots",
         "a2a_execution_network_allowed_domains",
         mode="before",
@@ -279,6 +360,72 @@ class Settings(BaseSettings):
             value,
             allowed=_SANDBOX_MODES,
             env_name="A2A_EXECUTION_SANDBOX_MODE",
+        )
+
+    @field_validator("codex_model_reasoning_effort")
+    @classmethod
+    def validate_codex_model_reasoning_effort(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
+        return _validate_choice(
+            value,
+            allowed=_CODEX_REASONING_EFFORTS,
+            env_name="CODEX_MODEL_REASONING_EFFORT",
+        )
+
+    @field_validator("codex_model_reasoning_summary")
+    @classmethod
+    def validate_codex_model_reasoning_summary(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
+        return _validate_choice(
+            value,
+            allowed=_CODEX_REASONING_SUMMARIES,
+            env_name="CODEX_MODEL_REASONING_SUMMARY",
+        )
+
+    @field_validator("codex_model_verbosity")
+    @classmethod
+    def validate_codex_model_verbosity(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
+        return _validate_choice(
+            value,
+            allowed=_CODEX_VERBOSITIES,
+            env_name="CODEX_MODEL_VERBOSITY",
+        )
+
+    @field_validator("codex_approval_policy")
+    @classmethod
+    def validate_codex_approval_policy(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
+        return _validate_choice(
+            value,
+            allowed=_CODEX_APPROVAL_POLICIES,
+            env_name="CODEX_APPROVAL_POLICY",
+        )
+
+    @field_validator("codex_sandbox_mode")
+    @classmethod
+    def validate_codex_sandbox_mode(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
+        return _validate_choice(
+            value,
+            allowed=_CODEX_SANDBOX_MODES,
+            env_name="CODEX_SANDBOX_MODE",
+        )
+
+    @field_validator("codex_web_search")
+    @classmethod
+    def validate_codex_web_search(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
+        return _validate_choice(
+            value,
+            allowed=_CODEX_WEB_SEARCH_MODES,
+            env_name="CODEX_WEB_SEARCH",
         )
 
     @field_validator("a2a_execution_sandbox_filesystem_scope")

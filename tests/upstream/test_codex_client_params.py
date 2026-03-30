@@ -1472,13 +1472,25 @@ async def test_question_request_promotes_nested_context_details() -> None:
 
 
 @pytest.mark.asyncio
-async def test_ensure_started_passes_reasoning_effort_override_to_codex_cli() -> None:
+async def test_ensure_started_passes_runtime_overrides_to_codex_cli() -> None:
     client = CodexClient(
         make_settings(
             a2a_bearer_token="t-1",
             codex_timeout=1.0,
             codex_cli_bin="codex-custom",
+            codex_model="gpt-5.1-codex",
+            codex_profile="coding",
             codex_model_reasoning_effort="high",
+            codex_model_reasoning_summary="concise",
+            codex_model_verbosity="medium",
+            codex_approval_policy="on-request",
+            codex_sandbox_mode="workspace-write",
+            codex_sandbox_workspace_write_writable_roots=["/safe", "/tmp/cache"],
+            codex_sandbox_workspace_write_network_access=True,
+            codex_sandbox_workspace_write_exclude_slash_tmp=True,
+            codex_sandbox_workspace_write_exclude_tmpdir_env_var=False,
+            codex_web_search="live",
+            codex_review_model="gpt-5.1",
         )
     )
 
@@ -1543,7 +1555,38 @@ async def test_ensure_started_passes_reasoning_effort_override_to_codex_cli() ->
 
     assert captured
     args, _kwargs = captured[0]
-    assert args[:4] == ("codex-custom", "-c", 'model_reasoning_effort="high"', "app-server")
+    assert args[:21] == (
+        "codex-custom",
+        "-c",
+        'model="gpt-5.1-codex"',
+        "-c",
+        'profile="coding"',
+        "-c",
+        'model_reasoning_effort="high"',
+        "-c",
+        'model_reasoning_summary="concise"',
+        "-c",
+        'model_verbosity="medium"',
+        "-c",
+        'approval_policy="on-request"',
+        "-c",
+        'sandbox_mode="workspace-write"',
+        "-c",
+        'web_search="live"',
+        "-c",
+        'review_model="gpt-5.1"',
+        "-c",
+        'sandbox_workspace_write={"writable_roots": ["/safe", "/tmp/cache"], '
+        '"network_access": true, "exclude_slash_tmp": true, '
+        '"exclude_tmpdir_env_var": false}',
+    )
+    assert args[21:] == ("app-server", "--listen", "stdio://")
+
+
+def test_build_startup_config_overrides_omits_empty_workspace_write_config() -> None:
+    client = CodexClient(make_settings(a2a_bearer_token="t-1", codex_timeout=1.0))
+
+    assert client._startup_config_overrides == {"model": "gpt-5.1-codex"}
 
 
 @pytest.mark.asyncio

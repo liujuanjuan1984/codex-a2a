@@ -91,7 +91,7 @@ class CodexClient:
         self._cli_bin = settings.codex_cli_bin
         self._listen = settings.codex_app_server_listen
         self._default_model = settings.codex_model
-        self._model_reasoning_effort = settings.codex_model_reasoning_effort
+        self._startup_config_overrides = self._build_startup_config_overrides(settings)
         self._interrupt_request_ttl_seconds = settings.a2a_interrupt_request_ttl_seconds
         self._interrupt_request_tombstone_ttl_seconds = INTERRUPT_REQUEST_TOMBSTONE_TTL_SECONDS
         self._log_payloads = settings.a2a_log_payloads
@@ -132,6 +132,57 @@ class CodexClient:
             return None
         normalized = value.strip()
         return normalized or None
+
+    @classmethod
+    def _build_startup_config_overrides(cls, settings: Settings) -> dict[str, Any]:
+        overrides: dict[str, Any] = {}
+        for key, value in (
+            ("model", cls._optional_string(settings.codex_model)),
+            ("profile", cls._optional_string(settings.codex_profile)),
+            (
+                "model_reasoning_effort",
+                cls._optional_string(settings.codex_model_reasoning_effort),
+            ),
+            (
+                "model_reasoning_summary",
+                cls._optional_string(settings.codex_model_reasoning_summary),
+            ),
+            ("model_verbosity", cls._optional_string(settings.codex_model_verbosity)),
+            ("approval_policy", cls._optional_string(settings.codex_approval_policy)),
+            ("sandbox_mode", cls._optional_string(settings.codex_sandbox_mode)),
+            ("web_search", cls._optional_string(settings.codex_web_search)),
+            ("review_model", cls._optional_string(settings.codex_review_model)),
+        ):
+            if value is not None:
+                overrides[key] = value
+
+        workspace_write: dict[str, Any] = {}
+        if settings.codex_sandbox_workspace_write_writable_roots:
+            workspace_write["writable_roots"] = list(
+                settings.codex_sandbox_workspace_write_writable_roots
+            )
+        if settings.codex_sandbox_workspace_write_network_access is not None:
+            workspace_write["network_access"] = (
+                settings.codex_sandbox_workspace_write_network_access
+            )
+        if settings.codex_sandbox_workspace_write_exclude_slash_tmp is not None:
+            workspace_write["exclude_slash_tmp"] = (
+                settings.codex_sandbox_workspace_write_exclude_slash_tmp
+            )
+        if settings.codex_sandbox_workspace_write_exclude_tmpdir_env_var is not None:
+            workspace_write["exclude_tmpdir_env_var"] = (
+                settings.codex_sandbox_workspace_write_exclude_tmpdir_env_var
+            )
+        if workspace_write:
+            overrides["sandbox_workspace_write"] = workspace_write
+        return overrides
+
+    @staticmethod
+    def _build_cli_config_args(overrides: Mapping[str, Any]) -> list[str]:
+        cli_args: list[str] = []
+        for key, value in overrides.items():
+            cli_args.extend(["-c", f"{key}={json.dumps(value)}"])
+        return cli_args
 
     def bind_interrupt_context(
         self,
@@ -337,13 +388,7 @@ class CodexClient:
                 raise RuntimeError("codex client already closed")
 
             cli_args: list[str] = [self._resolve_cli_bin()]
-            if self._model_reasoning_effort:
-                cli_args.extend(
-                    [
-                        "-c",
-                        f"model_reasoning_effort={json.dumps(self._model_reasoning_effort)}",
-                    ]
-                )
+            cli_args.extend(self._build_cli_config_args(self._startup_config_overrides))
             cli_args.extend(
                 [
                     "app-server",
