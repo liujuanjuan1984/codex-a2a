@@ -84,7 +84,7 @@ Authenticated extended card:
 - JSON-RPC: `agent/getAuthenticatedExtendedCard`
 - HTTP: `GET /v1/card`
 
-## Capabilities
+## Highlights
 
 - A2A HTTP+JSON endpoints such as `/v1/message:send` and
   `/v1/message:stream`
@@ -96,63 +96,20 @@ Authenticated extended card:
 - Interrupt lifecycle mapping and callback validation
 - Transport selection, Agent Card discovery, timeout control, and bearer/basic
   auth for outbound A2A calls
-- Payload logging controls, secret-handling guardrails, and released-CLI
-  startup / source-based runtime paths
+- Payload logging controls, secret-handling guardrails, and released-CLI startup
+  / source-based runtime paths
 
-Detailed usage, protocol behavior, and extension references live in:
-- [Usage Guide](docs/guide.md)
-- [Extension Specifications](docs/extension-specifications.md)
-- [Compatibility Guide](docs/compatibility.md)
+## Boundaries
 
-## Portable vs Private Surface
+- Treat the core A2A send / stream / task methods plus Agent Card discovery as
+  the portable baseline.
+- Treat `codex.*` methods and `metadata.codex.directory` as the Codex-specific
+  control plane for Codex-aware clients.
+- Treat one deployed instance as a single-tenant trust boundary, not a hardened
+  multi-tenant runtime.
 
-For open-source consumers, treat this repository as two layers:
-
-- Portable A2A surface:
-  core A2A send/stream/task methods, Agent Card discovery, and the shared
-  `urn:a2a:*` metadata conventions documented in this repository.
-- Codex-specific control plane:
-  `codex.sessions.*`, `codex.discovery.*`, `codex.exec.*`, and
-  `metadata.codex.directory`.
-
-Generic A2A clients should start from the portable core surface. The Codex-
-specific control plane is useful for Codex-aware clients and coding-agent
-workflows, but it is not advertised as a portable cross-agent baseline. For the
-normative compatibility split, read [Compatibility Guide](docs/compatibility.md).
-
-## Peering Node / Outbound Access
-
-`codex-a2a` supports a "Peering Node" architecture where one process can both
-expose an inbound A2A surface and call peer A2A services outbound.
-
-### CLI Client
-
-Call another A2A agent directly from the command line:
-
-```bash
-A2A_CLIENT_BEARER_TOKEN=your-outbound-token \
-codex-a2a call http://other-agent:8000 "How are you?"
-
-A2A_CLIENT_BASIC_AUTH="user:pass" \
-codex-a2a call http://other-agent:8000 "How are you?"
-```
-
-### Outbound Agent Calls
-
-The server can autonomously execute `a2a_call(url, message)` tool calls emitted
-by the Codex runtime. Results are fetched through A2A and returned back into
-the local execution flow as tool results.
-
-For authenticated peers, configure `A2A_CLIENT_BEARER_TOKEN` for server-side
-outbound calls, or `A2A_CLIENT_BASIC_AUTH` for peer services protected by
-HTTP Basic auth. These outbound credentials apply to the peer specified by
-`codex-a2a call` or `a2a_call(url, message)`, not to this service's inbound
-`A2A_BEARER_TOKEN`. The CLI intentionally reads outbound credentials from
-environment variables so secrets do not land in shell history or process
-arguments.
-
-Detailed outbound client settings and protocol examples live in the
-[Usage Guide](docs/guide.md).
+The normative compatibility split and deployment model live in
+[Compatibility Guide](docs/compatibility.md) and [Security Policy](SECURITY.md).
 
 ## When To Use It
 
@@ -179,38 +136,10 @@ upstream adapter normalization, and application-facing integration, while
 `codex-a2a` stays focused on the runtime boundary around Codex plus embedded
 peer calling.
 
-## Deployment Boundary
-
-This repository improves the service boundary around Codex, but it does not
-turn Codex into a hardened multi-tenant platform.
-
-- `A2A_BEARER_TOKEN` protects the inbound A2A surface.
-- One deployed instance should be treated as a single-tenant trust boundary.
-- For mutually untrusted tenants, run separate instances with isolated users,
-  workspaces, credentials, and ports.
-
-Read before deployment:
-
-- [SECURITY.md](SECURITY.md)
-- [Usage Guide](docs/guide.md)
-- [Compatibility Guide](docs/compatibility.md)
-
-## Release Model
-
-Released versions are published to PyPI and mapped to Git tags / GitHub
-Releases.
-
-- create a PR from the working branch
-- merge into `main` after human review
-- create a `v*` tag only from a commit already contained in `main`
-- let the tag trigger PyPI and GitHub Release publication
-
-This repository does not publish directly from an unmerged feature branch.
-
 ## Further Reading
 
 - [Usage Guide](docs/guide.md)
-  Configuration, transport usage, and runtime examples.
+  Runtime configuration, outbound access, transport usage, and client examples.
 - [Extension Specifications](docs/extension-specifications.md)
   Stable extension URI/spec index plus public-vs-extended card disclosure rules.
 - [Architecture Guide](docs/architecture.md)
@@ -223,9 +152,8 @@ This repository does not publish directly from an unmerged feature branch.
 
 ## Development
 
-For contributor workflow and helper scripts, see [Contributing Guide](CONTRIBUTING.md)
-and [Scripts Reference](scripts/README.md). Maintainers can regenerate optional
-upstream Codex reference snapshots locally with `scripts/sync_codex_docs.sh`.
+For contributor workflow, validation, release handling, and helper scripts, see
+[Contributing Guide](CONTRIBUTING.md) and [Scripts Reference](scripts/README.md).
 
 ## License
 
