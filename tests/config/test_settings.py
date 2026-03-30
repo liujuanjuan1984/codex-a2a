@@ -166,7 +166,7 @@ def test_settings_reject_invalid_execution_sandbox_mode() -> None:
         ("CODEX_MODEL_REASONING_EFFORT", "ultra"),
         ("CODEX_MODEL_REASONING_SUMMARY", "verbose"),
         ("CODEX_MODEL_VERBOSITY", "max"),
-        ("CODEX_APPROVAL_POLICY", "always"),
+        ("CODEX_APPROVAL_POLICY", "unlessTrusted"),
         ("CODEX_SANDBOX_MODE", "external-sandbox"),
         ("CODEX_WEB_SEARCH", "on"),
     ],

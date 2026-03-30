@@ -58,6 +58,65 @@ async def test_list_calls_use_expected_rpc_params() -> None:
 
 
 @pytest.mark.asyncio
+async def test_create_session_uses_model_id_override_not_startup_default() -> None:
+    client = CodexClient(
+        make_settings(
+            a2a_bearer_token="t-1",
+            codex_workspace_root="/safe",
+            codex_timeout=1.0,
+            codex_model="gpt-5.1-codex",
+            codex_model_id="gpt-5.2-codex",
+        )
+    )
+
+    seen: list[tuple[str, dict | None]] = []
+
+    async def fake_rpc_request(method: str, params: dict | None = None):
+        seen.append((method, params))
+        return {"thread": {"id": "thr-1"}}
+
+    client._rpc_request = fake_rpc_request
+
+    session_id = await client.create_session(directory="/safe/project")
+
+    assert session_id == "thr-1"
+    assert seen == [
+        (
+            "thread/start",
+            {
+                "model": "gpt-5.2-codex",
+                "cwd": "/safe/project",
+            },
+        )
+    ]
+
+
+@pytest.mark.asyncio
+async def test_create_session_relies_on_startup_default_model_when_model_id_unset() -> None:
+    client = CodexClient(
+        make_settings(
+            a2a_bearer_token="t-1",
+            codex_workspace_root="/safe",
+            codex_timeout=1.0,
+            codex_model="gpt-5.1-codex",
+        )
+    )
+
+    seen: list[tuple[str, dict | None]] = []
+
+    async def fake_rpc_request(method: str, params: dict | None = None):
+        seen.append((method, params))
+        return {"thread": {"id": "thr-2"}}
+
+    client._rpc_request = fake_rpc_request
+
+    session_id = await client.create_session()
+
+    assert session_id == "thr-2"
+    assert seen == [("thread/start", {"cwd": "/safe"})]
+
+
+@pytest.mark.asyncio
 async def test_list_messages_applies_limit_locally_after_mapping() -> None:
     client = CodexClient(
         make_settings(
@@ -1587,6 +1646,18 @@ def test_build_startup_config_overrides_omits_empty_workspace_write_config() -> 
     client = CodexClient(make_settings(a2a_bearer_token="t-1", codex_timeout=1.0))
 
     assert client._startup_config_overrides == {"model": "gpt-5.1-codex"}
+
+
+def test_build_startup_config_overrides_prefers_profile_when_model_not_explicit() -> None:
+    client = CodexClient(
+        make_settings(
+            a2a_bearer_token="t-1",
+            codex_timeout=1.0,
+            codex_profile="coding",
+        )
+    )
+
+    assert client._startup_config_overrides == {"profile": "coding"}
 
 
 @pytest.mark.asyncio

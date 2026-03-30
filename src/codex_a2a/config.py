@@ -39,7 +39,6 @@ _CODEX_APPROVAL_POLICIES = {
     "on-request",
     "on-failure",
     "untrusted",
-    "unlessTrusted",
 }
 _APPROVAL_ESCALATION_BEHAVIORS = {
     "unknown",

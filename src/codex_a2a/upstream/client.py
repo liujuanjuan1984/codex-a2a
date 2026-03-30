@@ -90,7 +90,6 @@ class CodexClient:
         self._request_timeout = settings.codex_timeout
         self._cli_bin = settings.codex_cli_bin
         self._listen = settings.codex_app_server_listen
-        self._default_model = settings.codex_model
         self._startup_config_overrides = self._build_startup_config_overrides(settings)
         self._interrupt_request_ttl_seconds = settings.a2a_interrupt_request_ttl_seconds
         self._interrupt_request_tombstone_ttl_seconds = INTERRUPT_REQUEST_TOMBSTONE_TTL_SECONDS
@@ -136,9 +135,15 @@ class CodexClient:
     @classmethod
     def _build_startup_config_overrides(cls, settings: Settings) -> dict[str, Any]:
         overrides: dict[str, Any] = {}
+        profile = cls._optional_string(settings.codex_profile)
+        model = cls._optional_string(settings.codex_model)
+        model_explicit = "codex_model" in settings.model_fields_set
+
+        if model is not None and (model_explicit or profile is None):
+            overrides["model"] = model
+
         for key, value in (
-            ("model", cls._optional_string(settings.codex_model)),
-            ("profile", cls._optional_string(settings.codex_profile)),
+            ("profile", profile),
             (
                 "model_reasoning_effort",
                 cls._optional_string(settings.codex_model_reasoning_effort),
@@ -966,9 +971,8 @@ class CodexClient:
     ) -> str:
         del title
         params: dict[str, Any] = {}
-        model = self._model_id or self._default_model
-        if model:
-            params["model"] = model
+        if self._model_id:
+            params["model"] = self._model_id
         if directory:
             params["cwd"] = directory
         elif self._workspace_root:
