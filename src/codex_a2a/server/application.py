@@ -8,7 +8,6 @@ import uvicorn
 from a2a.server.apps.jsonrpc.fastapi_app import A2AFastAPI
 from a2a.server.apps.rest.rest_adapter import RESTAdapter
 from fastapi import FastAPI
-from starlette.middleware.gzip import GZipMiddleware
 
 from codex_a2a.client import A2AClientManager
 from codex_a2a.config import Settings
@@ -186,8 +185,6 @@ def create_app(settings: Settings) -> FastAPI:
                 service="codex-a2a",
                 version=settings.a2a_version,
             )
-
-    app.add_middleware(GZipMiddleware, minimum_size=1024)
 
     install_http_middlewares(
         app,

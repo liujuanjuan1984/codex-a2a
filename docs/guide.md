@@ -18,7 +18,6 @@ compatibility promises live in [compatibility.md](./compatibility.md).
   - HTTP core route: `GET /v1/card`
   - compatibility route: `GET /agent/authenticatedExtendedCard`
 - Agent Card responses publish `ETag` and `Cache-Control`; clients should revalidate instead of repeatedly fetching full payloads.
-- Larger authenticated extended card responses support gzip compression.
 - Payload schema is transport-specific and should not be mixed:
   - REST send payload usually uses `message.content` and role values like `ROLE_USER`
   - JSON-RPC `message/send` payload uses `params.message.parts` and role values `user` / `agent`

@@ -191,7 +191,6 @@ def install_http_middlewares(
                 headers={
                     "ETag": public_card_etag,
                     "Cache-Control": PUBLIC_AGENT_CARD_CACHE_CONTROL,
-                    "Vary": "Accept-Encoding",
                 },
             )
 
@@ -202,10 +201,6 @@ def install_http_middlewares(
         if is_public_card:
             response.headers["ETag"] = public_card_etag
             response.headers["Cache-Control"] = PUBLIC_AGENT_CARD_CACHE_CONTROL
-            response.headers["Vary"] = _merge_vary(
-                response.headers.get("Vary", ""),
-                "Accept-Encoding",
-            )
             return response
 
         response.headers["ETag"] = extended_card_etag
@@ -213,7 +208,6 @@ def install_http_middlewares(
         response.headers["Vary"] = _merge_vary(
             response.headers.get("Vary", ""),
             "Authorization",
-            "Accept-Encoding",
         )
         if _etag_matches(request.headers.get("if-none-match"), extended_card_etag):
             return Response(status_code=304, headers=dict(response.headers))
