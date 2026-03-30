@@ -84,6 +84,10 @@ Authenticated extended card:
 - JSON-RPC: `agent/getAuthenticatedExtendedCard`
 - HTTP: `GET /v1/card`
 
+Outbound peer auth is configured with `A2A_CLIENT_BEARER_TOKEN` or
+`A2A_CLIENT_BASIC_AUTH`; see the Usage Guide for the complete client-side
+matrix.
+
 ## Highlights
 
 - A2A HTTP+JSON endpoints such as `/v1/message:send` and
@@ -101,10 +105,12 @@ Authenticated extended card:
 
 ## Boundaries
 
+Portable vs Private Surface:
+
 - Treat the core A2A send / stream / task methods plus Agent Card discovery as
   the portable baseline.
-- Treat `codex.*` methods and `metadata.codex.directory` as the Codex-specific
-  control plane for Codex-aware clients.
+- Treat `codex.*` methods and `metadata.codex.directory` as the
+  Codex-specific control plane for Codex-aware clients.
 - Treat one deployed instance as a single-tenant trust boundary, not a hardened
   multi-tenant runtime.
 
@@ -154,6 +160,7 @@ peer calling.
 
 For contributor workflow, validation, release handling, and helper scripts, see
 [Contributing Guide](CONTRIBUTING.md) and [Scripts Reference](scripts/README.md).
+Use that workflow to create a PR from the working branch and merge into `main` after human review.
 
 ## License
 
