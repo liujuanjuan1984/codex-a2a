@@ -41,7 +41,11 @@ from codex_a2a.server.runtime_state import build_runtime_state_runtime
 from codex_a2a.server.task_store import build_task_store_runtime
 from codex_a2a.upstream.client import CodexClient
 
-from .http_middlewares import install_http_middlewares
+from .http_middlewares import (
+    GZIP_COMPRESSIBLE_PATHS,
+    PathScopedGZipMiddleware,
+    install_http_middlewares,
+)
 
 
 def create_app(settings: Settings) -> FastAPI:
@@ -158,6 +162,10 @@ def create_app(settings: Settings) -> FastAPI:
         title=settings.a2a_title,
         version=settings.a2a_version,
         lifespan=lifespan,
+    )
+    app.add_middleware(
+        PathScopedGZipMiddleware,
+        paths=GZIP_COMPRESSIBLE_PATHS,
     )
     jsonrpc_app.add_routes_to_app(app)
     app.state.codex_client = client

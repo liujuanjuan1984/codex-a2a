@@ -10,7 +10,10 @@ from urllib.parse import unquote
 from a2a.server.tasks.task_store import TaskStore
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
+from starlette.datastructures import Headers
+from starlette.middleware.gzip import GZipResponder
 from starlette.responses import Response, StreamingResponse
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 from codex_a2a.config import Settings
 from codex_a2a.logging_context import (
@@ -31,12 +34,19 @@ _AUTHENTICATED_EXTENDED_CARD_PATHS = {
     "/agent/authenticatedExtendedCard",
     "/v1/card",
 }
+_OPENAPI_PATHS = {
+    "/openapi.json",
+}
 _REST_MESSAGE_PATHS = {
     "/v1/message:send",
     "/v1/message:stream",
 }
+GZIP_COMPRESSIBLE_PATHS = (
+    _PUBLIC_AGENT_CARD_PATHS | _AUTHENTICATED_EXTENDED_CARD_PATHS | _OPENAPI_PATHS
+)
 PUBLIC_AGENT_CARD_CACHE_CONTROL = "public, max-age=300"
 AUTHENTICATED_EXTENDED_CARD_CACHE_CONTROL = "private, max-age=300"
+GZIP_MINIMUM_SIZE_BYTES = 1024
 
 
 def _parse_json_body(body_bytes: bytes) -> dict | None:
@@ -130,6 +140,44 @@ def _merge_vary(*values: str) -> str:
     return ", ".join(ordered)
 
 
+class PathScopedGZipMiddleware:
+    """Apply gzip only to selected large text endpoints."""
+
+    def __init__(
+        self,
+        app: ASGIApp,
+        *,
+        paths: set[str],
+        minimum_size: int = GZIP_MINIMUM_SIZE_BYTES,
+        compresslevel: int = 9,
+    ) -> None:
+        self.app = app
+        self.paths = frozenset(paths)
+        self.minimum_size = minimum_size
+        self.compresslevel = compresslevel
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        if scope.get("path") not in self.paths:
+            await self.app(scope, receive, send)
+            return
+
+        headers = Headers(scope=scope)
+        if "gzip" not in headers.get("Accept-Encoding", ""):
+            await self.app(scope, receive, send)
+            return
+
+        responder = GZipResponder(
+            self.app,
+            self.minimum_size,
+            compresslevel=self.compresslevel,
+        )
+        await responder(scope, receive, send)
+
+
 async def _get_request_body(request: Request) -> bytes:
     body = await request.body()
     request._body = body  # allow downstream to read again
@@ -191,6 +239,7 @@ def install_http_middlewares(
                 headers={
                     "ETag": public_card_etag,
                     "Cache-Control": PUBLIC_AGENT_CARD_CACHE_CONTROL,
+                    "Vary": "Accept-Encoding",
                 },
             )
 
@@ -201,6 +250,10 @@ def install_http_middlewares(
         if is_public_card:
             response.headers["ETag"] = public_card_etag
             response.headers["Cache-Control"] = PUBLIC_AGENT_CARD_CACHE_CONTROL
+            response.headers["Vary"] = _merge_vary(
+                response.headers.get("Vary", ""),
+                "Accept-Encoding",
+            )
             return response
 
         response.headers["ETag"] = extended_card_etag
@@ -208,6 +261,7 @@ def install_http_middlewares(
         response.headers["Vary"] = _merge_vary(
             response.headers.get("Vary", ""),
             "Authorization",
+            "Accept-Encoding",
         )
         if _etag_matches(request.headers.get("if-none-match"), extended_card_etag):
             return Response(status_code=304, headers=dict(response.headers))
