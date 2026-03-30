@@ -693,6 +693,59 @@ class CodexClient:
             )
             return
 
+        if method == "thread/started":
+            thread = self._normalize_thread_summary(params.get("thread"))
+            if thread is None:
+                return
+            await self._enqueue_stream_event(
+                {
+                    "type": "thread.lifecycle.started",
+                    "properties": {
+                        "thread_id": thread["id"],
+                        "thread": thread,
+                        "status": thread.get("status"),
+                        "source": "thread/started",
+                        "codex": {"raw": params},
+                    },
+                }
+            )
+            return
+
+        if method == "thread/status/changed":
+            thread_id = str(params.get("threadId", "")).strip()
+            status = self._normalize_thread_status(params.get("status"))
+            if not thread_id or status is None:
+                return
+            await self._enqueue_stream_event(
+                {
+                    "type": "thread.lifecycle.status_changed",
+                    "properties": {
+                        "thread_id": thread_id,
+                        "status": status,
+                        "source": "thread/status/changed",
+                        "codex": {"raw": params},
+                    },
+                }
+            )
+            return
+
+        if method in {"thread/archived", "thread/unarchived", "thread/closed"}:
+            thread_id = str(params.get("threadId", "")).strip()
+            if not thread_id:
+                return
+            normalized_type = method.removeprefix("thread/").replace("/", "_")
+            await self._enqueue_stream_event(
+                {
+                    "type": f"thread.lifecycle.{normalized_type}",
+                    "properties": {
+                        "thread_id": thread_id,
+                        "source": method,
+                        "codex": {"raw": params},
+                    },
+                }
+            )
+            return
+
         if method == "thread/tokenUsage/updated":
             thread_id = str(params.get("threadId", "")).strip()
             token_usage = params.get("tokenUsage")
@@ -736,17 +789,17 @@ class CodexClient:
                 if turn_id:
                     tracker = self._get_or_create_tracker(thread_id, turn_id)
                     tracker.raw_turn = turn
-                    status = str(turn.get("status", "")).strip()
-                    if status.lower() in {"failed", "interrupted", "cancelled", "canceled"}:
+                    turn_status = str(turn.get("status", "")).strip()
+                    if turn_status.lower() in {"failed", "interrupted", "cancelled", "canceled"}:
                         error = turn.get("error")
                         if isinstance(error, dict):
                             error_message = error.get("message")
                             if isinstance(error_message, str) and error_message.strip():
                                 tracker.error = error_message.strip()
                             else:
-                                tracker.error = status or "turn failed"
+                                tracker.error = turn_status or "turn failed"
                         else:
-                            tracker.error = status or "turn failed"
+                            tracker.error = turn_status or "turn failed"
                     tracker.completed.set()
             return
 
@@ -886,6 +939,45 @@ class CodexClient:
             raise RuntimeError("codex thread/start response missing thread id")
         return session_id.strip()
 
+    @staticmethod
+    def _normalize_thread_status(value: Any) -> dict[str, Any] | None:
+        if isinstance(value, dict):
+            status_type = value.get("type")
+            if isinstance(status_type, str) and status_type.strip():
+                return dict(value)
+            return None
+        if isinstance(value, str) and value.strip():
+            return {"type": value.strip()}
+        return None
+
+    def _normalize_thread_summary(self, value: Any) -> dict[str, Any] | None:
+        if not isinstance(value, dict):
+            return None
+        raw_id = value.get("id")
+        if not isinstance(raw_id, str) or not raw_id.strip():
+            return None
+        thread_id = raw_id.strip()
+        title_candidates = (
+            value.get("name"),
+            value.get("title"),
+            value.get("preview"),
+            thread_id,
+        )
+        title = thread_id
+        for candidate in title_candidates:
+            if isinstance(candidate, str) and candidate.strip():
+                title = candidate.strip()
+                break
+        normalized = {
+            "id": thread_id,
+            "title": title,
+            "raw": value,
+        }
+        status = self._normalize_thread_status(value.get("status"))
+        if status is not None:
+            normalized["status"] = status
+        return normalized
+
     async def list_skills(self, *, params: dict[str, Any] | None = None) -> Any:
         return await self._rpc_request("skills/list", self._merge_params(params))
 
@@ -913,19 +1005,70 @@ class CodexClient:
         # Normalize to the shape expected by the JSON-RPC session query mapping.
         sessions: list[dict[str, Any]] = []
         for item in data:
-            if not isinstance(item, dict):
+            session = self._normalize_thread_summary(item)
+            if session is None:
                 continue
-            thread_id = item.get("id")
-            if not isinstance(thread_id, str) or not thread_id.strip():
-                continue
-            sessions.append(
+            sessions.append(session)
+        return sessions
+
+    async def thread_fork(self, thread_id: str, *, params: dict[str, Any] | None = None) -> Any:
+        rpc_params: dict[str, Any] = {"threadId": thread_id}
+        if isinstance(params, dict):
+            rpc_params.update(
                 {
-                    "id": thread_id,
-                    "title": item.get("preview") or thread_id,
-                    "raw": item,
+                    key: value
+                    for key, value in params.items()
+                    if key != "directory" and value is not None
                 }
             )
-        return sessions
+        result = await self._rpc_request(
+            "thread/fork",
+            rpc_params,
+        )
+        if not isinstance(result, dict):
+            raise RuntimeError("codex thread/fork response missing result object")
+        thread = self._normalize_thread_summary(result.get("thread"))
+        if thread is None:
+            raise RuntimeError("codex thread/fork response missing thread")
+        return thread
+
+    async def thread_archive(self, thread_id: str) -> None:
+        await self._rpc_request("thread/archive", {"threadId": thread_id})
+
+    async def thread_unarchive(self, thread_id: str) -> Any:
+        result = await self._rpc_request("thread/unarchive", {"threadId": thread_id})
+        if not isinstance(result, dict):
+            raise RuntimeError("codex thread/unarchive response missing result object")
+        thread = self._normalize_thread_summary(result.get("thread"))
+        if thread is None:
+            raise RuntimeError("codex thread/unarchive response missing thread")
+        return thread
+
+    async def thread_metadata_update(
+        self,
+        thread_id: str,
+        *,
+        params: dict[str, Any] | None = None,
+    ) -> Any:
+        rpc_params: dict[str, Any] = {"threadId": thread_id}
+        if isinstance(params, dict):
+            rpc_params.update(
+                {
+                    key: value
+                    for key, value in params.items()
+                    if key != "directory" and value is not None
+                }
+            )
+        result = await self._rpc_request(
+            "thread/metadata/update",
+            rpc_params,
+        )
+        if not isinstance(result, dict):
+            raise RuntimeError("codex thread/metadata/update response missing result object")
+        thread = self._normalize_thread_summary(result.get("thread"))
+        if thread is None:
+            raise RuntimeError("codex thread/metadata/update response missing thread")
+        return thread
 
     async def list_messages(self, session_id: str, *, params: dict[str, Any] | None = None) -> Any:
         query = self._merge_params(params)

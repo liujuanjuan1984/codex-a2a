@@ -44,6 +44,18 @@ from codex_a2a.jsonrpc.query_params import (
     parse_get_session_messages_params,
     parse_list_sessions_params,
 )
+from codex_a2a.jsonrpc.thread_lifecycle_params import (
+    ThreadArchiveControlParams,
+    ThreadForkControlParams,
+    ThreadMetadataUpdateControlParams,
+    ThreadUnarchiveControlParams,
+    ThreadWatchControlParams,
+    parse_thread_archive_params,
+    parse_thread_fork_params,
+    parse_thread_metadata_update_params,
+    parse_thread_unarchive_params,
+    parse_thread_watch_params,
+)
 
 __all__ = [
     "CommandControlParams",
@@ -65,6 +77,11 @@ __all__ = [
     "QuestionRejectParams",
     "QuestionReplyParams",
     "ShellControlParams",
+    "ThreadArchiveControlParams",
+    "ThreadForkControlParams",
+    "ThreadMetadataUpdateControlParams",
+    "ThreadUnarchiveControlParams",
+    "ThreadWatchControlParams",
     "parse_command_params",
     "parse_discovery_apps_list_params",
     "parse_discovery_plugin_read_params",
@@ -84,4 +101,9 @@ __all__ = [
     "parse_question_reject_params",
     "parse_question_reply_params",
     "parse_shell_params",
+    "parse_thread_archive_params",
+    "parse_thread_fork_params",
+    "parse_thread_metadata_update_params",
+    "parse_thread_unarchive_params",
+    "parse_thread_watch_params",
 ]

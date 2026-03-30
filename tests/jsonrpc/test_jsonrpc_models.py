@@ -17,6 +17,10 @@ from codex_a2a.jsonrpc.params import (
     parse_permission_reply_params,
     parse_permissions_reply_params,
     parse_prompt_async_params,
+    parse_thread_archive_params,
+    parse_thread_fork_params,
+    parse_thread_metadata_update_params,
+    parse_thread_watch_params,
 )
 
 
@@ -252,6 +256,100 @@ def test_parse_prompt_async_params_rejects_unknown_part_type() -> None:
         "type": "INVALID_FIELD",
         "field": "request.parts[0].type",
     }
+
+
+def test_parse_thread_lifecycle_params_preserve_aliases() -> None:
+    fork = parse_thread_fork_params(
+        {
+            "threadId": "thr-1",
+            "request": {"ephemeral": True},
+            "metadata": {"codex": {"directory": "/workspace"}},
+        }
+    )
+    metadata_update = parse_thread_metadata_update_params(
+        {
+            "thread_id": "thr-1",
+            "request": {"gitInfo": {"branch": "feat/thread-lifecycle", "originUrl": "https://x"}},
+        }
+    )
+    watch = parse_thread_watch_params(
+        {
+            "request": {
+                "events": ["thread.started", "thread.status.changed", "thread.started"],
+                "threadIds": ["thr-1", "thr-2", "thr-1"],
+            }
+        }
+    )
+
+    assert fork.thread_id == "thr-1"
+    assert fork.request is not None
+    assert fork.request.model_dump(by_alias=True, exclude_none=True) == {"ephemeral": True}
+    assert fork.metadata is not None
+    assert fork.metadata.codex is not None
+    assert fork.metadata.codex.directory == "/workspace"
+    assert metadata_update.request.model_dump(by_alias=True, exclude_none=True) == {
+        "gitInfo": {
+            "branch": "feat/thread-lifecycle",
+            "originUrl": "https://x",
+        }
+    }
+    assert watch.request is not None
+    assert watch.request.model_dump(by_alias=True, exclude_none=True) == {
+        "events": ["thread.started", "thread.status.changed"],
+        "threadIds": ["thr-1", "thr-2"],
+    }
+
+
+@pytest.mark.parametrize(
+    ("parser", "payload", "message", "field"),
+    [
+        (
+            parse_thread_archive_params,
+            {"thread_id": "   "},
+            "Missing required params.thread_id",
+            "thread_id",
+        ),
+        (
+            parse_thread_fork_params,
+            {"thread_id": "thr-1", "request": {"ephemeral": "yes"}},
+            "request.ephemeral must be a boolean",
+            "request.ephemeral",
+        ),
+        (
+            parse_thread_metadata_update_params,
+            {"thread_id": "thr-1", "request": {"gitInfo": {}}},
+            "request.git_info must include at least one field",
+            "request.git_info",
+        ),
+        (
+            parse_thread_watch_params,
+            {"request": {"events": ["thread.deleted"]}},
+            (
+                "request.events entries must be one of: thread.started, "
+                "thread.status.changed, thread.archived, thread.unarchived, thread.closed"
+            ),
+            "request.events",
+        ),
+        (
+            parse_thread_watch_params,
+            {"request": {"threadIds": ["thr-1", "  "]}},
+            "request.thread_ids[] must be a non-empty string",
+            "request.thread_ids",
+        ),
+    ],
+)
+def test_parse_thread_lifecycle_params_reject_invalid_fields(
+    parser,
+    payload: dict,
+    message: str,
+    field: str,
+) -> None:
+    with pytest.raises(JsonRpcParamsValidationError) as exc_info:
+        parser(payload)
+
+    assert str(exc_info.value) == message
+    assert exc_info.value.data["type"] in {"MISSING_FIELD", "INVALID_FIELD"}
+    assert exc_info.value.data["field"] == field
 
 
 def test_parse_discovery_param_aliases_preserve_upstream_shapes() -> None:

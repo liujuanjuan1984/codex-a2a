@@ -17,12 +17,14 @@ from codex_a2a.contracts.extensions import (
     INTERRUPT_CALLBACK_METHODS,
     SESSION_CONTROL_METHODS,
     SESSION_QUERY_METHODS,
+    THREAD_LIFECYCLE_METHODS,
     build_capability_snapshot,
 )
 from codex_a2a.execution.directory_policy import resolve_and_validate_directory
 from codex_a2a.execution.discovery_runtime import CodexDiscoveryRuntime
 from codex_a2a.execution.exec_runtime import CodexExecRuntime
 from codex_a2a.execution.executor import CodexAgentExecutor
+from codex_a2a.execution.thread_lifecycle_runtime import CodexThreadLifecycleRuntime
 from codex_a2a.jsonrpc.application import CodexSessionQueryJSONRPCApplication
 from codex_a2a.jsonrpc.hooks import SessionGuardHooks
 from codex_a2a.logging_context import install_log_record_factory
@@ -80,6 +82,10 @@ def create_app(settings: Settings) -> FastAPI:
         client=client,
         request_handler=handler,
     )
+    thread_lifecycle_runtime = CodexThreadLifecycleRuntime(
+        client=client,
+        request_handler=handler,
+    )
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
@@ -109,6 +115,11 @@ def create_app(settings: Settings) -> FastAPI:
         **SESSION_QUERY_METHODS,
         **SESSION_CONTROL_METHODS,
         **DISCOVERY_METHODS,
+        "thread_fork": THREAD_LIFECYCLE_METHODS["fork"],
+        "thread_archive": THREAD_LIFECYCLE_METHODS["archive"],
+        "thread_unarchive": THREAD_LIFECYCLE_METHODS["unarchive"],
+        "thread_metadata_update": THREAD_LIFECYCLE_METHODS["metadata_update"],
+        "thread_watch": THREAD_LIFECYCLE_METHODS["watch"],
         **EXEC_CONTROL_METHODS,
         **INTERRUPT_CALLBACK_METHODS,
     }
@@ -123,6 +134,7 @@ def create_app(settings: Settings) -> FastAPI:
         codex_client=client,
         exec_runtime=exec_runtime,
         discovery_runtime=discovery_runtime,
+        thread_lifecycle_runtime=thread_lifecycle_runtime,
         methods=jsonrpc_methods,
         protocol_version=settings.a2a_protocol_version,
         supported_methods=list(capability_snapshot.supported_jsonrpc_methods),
@@ -144,6 +156,7 @@ def create_app(settings: Settings) -> FastAPI:
     app.state.codex_executor = executor
     app.state.codex_exec_runtime = exec_runtime
     app.state.codex_discovery_runtime = discovery_runtime
+    app.state.codex_thread_lifecycle_runtime = thread_lifecycle_runtime
     app.state.a2a_client_manager = a2a_client_manager
     app.state.task_store = task_store
 

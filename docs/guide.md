@@ -702,6 +702,143 @@ curl -sS http://127.0.0.1:8000/v1/tasks/<task_id>:subscribe \
   -H "Authorization: Bearer ${A2A_BEARER_TOKEN}"
 ```
 
+## Codex Thread Lifecycle (A2A Extension)
+
+This service exposes provider-private thread lifecycle methods through JSON-RPC:
+
+- `codex.threads.fork`
+- `codex.threads.archive`
+- `codex.threads.unarchive`
+- `codex.threads.metadata.update`
+- `codex.threads.watch`
+
+Lifecycle control guidance:
+
+- treat `codex.threads.*` as a lifecycle management surface separate from
+  `codex.sessions.*` query/control methods
+- control methods return a stable minimum thread summary: `id`, `title`,
+  optional `status`, and `codex.raw`
+- `thread/unsubscribe` is intentionally not part of this first-stage stable
+  contract because upstream unsubscribe is connection-scoped
+
+### Thread Fork (`codex.threads.fork`)
+
+```bash
+curl -sS http://127.0.0.1:8000/ \
+  -H 'content-type: application/json' \
+  -H "Authorization: Bearer ${A2A_BEARER_TOKEN}" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 16,
+    "method": "codex.threads.fork",
+    "params": {
+      "thread_id": "thr-1",
+      "request": {
+        "ephemeral": true
+      }
+    }
+  }'
+```
+
+### Thread Archive (`codex.threads.archive`)
+
+```bash
+curl -sS http://127.0.0.1:8000/ \
+  -H 'content-type: application/json' \
+  -H "Authorization: Bearer ${A2A_BEARER_TOKEN}" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 17,
+    "method": "codex.threads.archive",
+    "params": {
+      "thread_id": "thr-1"
+    }
+  }'
+```
+
+### Thread Unarchive (`codex.threads.unarchive`)
+
+```bash
+curl -sS http://127.0.0.1:8000/ \
+  -H 'content-type: application/json' \
+  -H "Authorization: Bearer ${A2A_BEARER_TOKEN}" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 18,
+    "method": "codex.threads.unarchive",
+    "params": {
+      "thread_id": "thr-1"
+    }
+  }'
+```
+
+### Thread Metadata Update (`codex.threads.metadata.update`)
+
+```bash
+curl -sS http://127.0.0.1:8000/ \
+  -H 'content-type: application/json' \
+  -H "Authorization: Bearer ${A2A_BEARER_TOKEN}" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 19,
+    "method": "codex.threads.metadata.update",
+    "params": {
+      "thread_id": "thr-1",
+      "request": {
+        "gitInfo": {
+          "branch": "feature/thread-lifecycle",
+          "originUrl": "https://github.com/example/repo.git"
+        }
+      }
+    }
+  }'
+```
+
+### Thread Watch (`codex.threads.watch`)
+
+Upstream Codex emits `thread/started`, `thread/status/changed`,
+`thread/archived`, `thread/unarchived`, and `thread/closed` as server-side
+notifications. This service bridges those signals through a background A2A task
+stream rather than exposing standalone server-push JSON-RPC notifications.
+
+- start a watch with `codex.threads.watch`
+- subscribe or re-subscribe through `tasks/resubscribe`
+- supported watch event filters are `thread.started`, `thread.status.changed`,
+  `thread.archived`, `thread.unarchived`, and `thread.closed`
+- consume `DataPart` payloads with:
+  - `kind=thread_started`
+  - `kind=thread_status_changed`
+  - `kind=thread_archived`
+  - `kind=thread_unarchived`
+  - `kind=thread_closed`
+
+Watch start example:
+
+```bash
+curl -sS http://127.0.0.1:8000/ \
+  -H 'content-type: application/json' \
+  -H "Authorization: Bearer ${A2A_BEARER_TOKEN}" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 20,
+    "method": "codex.threads.watch",
+    "params": {
+      "request": {
+        "events": ["thread.started", "thread.status.changed", "thread.archived"],
+        "threadIds": ["thr-1"]
+      }
+    }
+  }'
+```
+
+The JSON-RPC result returns `task_id` and `context_id`. Then use the standard
+task stream:
+
+```bash
+curl -sS http://127.0.0.1:8000/v1/tasks/<task_id>:subscribe \
+  -H "Authorization: Bearer ${A2A_BEARER_TOKEN}"
+```
+
 ## Codex Interrupt Callback (A2A Extension)
 
 When stream metadata reports an interrupt request at `metadata.shared.interrupt`,
