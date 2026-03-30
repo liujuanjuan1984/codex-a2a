@@ -10,7 +10,7 @@ from urllib.parse import unquote
 from a2a.server.tasks.task_store import TaskStore
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
-from starlette.responses import StreamingResponse
+from starlette.responses import Response, StreamingResponse
 
 from codex_a2a.config import Settings
 from codex_a2a.logging_context import (
@@ -27,10 +27,16 @@ _PUBLIC_AGENT_CARD_PATHS = {
     "/.well-known/agent-card.json",
     "/.well-known/agent.json",
 }
+_AUTHENTICATED_EXTENDED_CARD_PATHS = {
+    "/agent/authenticatedExtendedCard",
+    "/v1/card",
+}
 _REST_MESSAGE_PATHS = {
     "/v1/message:send",
     "/v1/message:stream",
 }
+PUBLIC_AGENT_CARD_CACHE_CONTROL = "public, max-age=300"
+AUTHENTICATED_EXTENDED_CARD_CACHE_CONTROL = "private, max-age=300"
 
 
 def _parse_json_body(body_bytes: bytes) -> dict | None:
@@ -81,6 +87,49 @@ def _decode_payload_preview(body: bytes, *, limit: int) -> str:
     return text
 
 
+def _agent_card_response_bytes(card: object) -> bytes:
+    model_dump = getattr(card, "model_dump", None)
+    if not callable(model_dump):  # pragma: no cover - defensive
+        raise TypeError("card must provide model_dump()")
+    return json.dumps(
+        model_dump(
+            mode="json",
+            exclude_none=True,
+            by_alias=True,
+        ),
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+
+
+def _build_agent_card_etag(card: object) -> str:
+    return f'W/"{hashlib.sha256(_agent_card_response_bytes(card)).hexdigest()}"'
+
+
+def _etag_matches(if_none_match: str | None, etag: str) -> bool:
+    if not if_none_match:
+        return False
+    candidates = {item.strip() for item in if_none_match.split(",") if item.strip()}
+    return "*" in candidates or etag in candidates
+
+
+def _merge_vary(*values: str) -> str:
+    ordered: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        for item in value.split(","):
+            normalized = item.strip()
+            if not normalized:
+                continue
+            key = normalized.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            ordered.append(normalized)
+    return ", ".join(ordered)
+
+
 async def _get_request_body(request: Request) -> bytes:
     body = await request.body()
     request._body = body  # allow downstream to read again
@@ -112,13 +161,63 @@ def install_http_middlewares(
     *,
     settings: Settings,
     task_store: TaskStore,
+    agent_card: object,
+    extended_agent_card: object,
 ) -> None:
+    public_card_etag = _build_agent_card_etag(agent_card)
+    extended_card_etag = _build_agent_card_etag(extended_agent_card)
+
     def _unauthorized_response() -> JSONResponse:
         return JSONResponse(
             {"error": "Unauthorized"},
             status_code=401,
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+    @app.middleware("http")
+    async def cache_agent_card_responses(request: Request, call_next):
+        if request.method != "GET":
+            return await call_next(request)
+
+        path = request.url.path
+        is_public_card = path in _PUBLIC_AGENT_CARD_PATHS
+        is_extended_card = path in _AUTHENTICATED_EXTENDED_CARD_PATHS
+        if not is_public_card and not is_extended_card:
+            return await call_next(request)
+
+        if is_public_card and _etag_matches(request.headers.get("if-none-match"), public_card_etag):
+            return Response(
+                status_code=304,
+                headers={
+                    "ETag": public_card_etag,
+                    "Cache-Control": PUBLIC_AGENT_CARD_CACHE_CONTROL,
+                    "Vary": "Accept-Encoding",
+                },
+            )
+
+        response = await call_next(request)
+        if response.status_code != 200:
+            return response
+
+        if is_public_card:
+            response.headers["ETag"] = public_card_etag
+            response.headers["Cache-Control"] = PUBLIC_AGENT_CARD_CACHE_CONTROL
+            response.headers["Vary"] = _merge_vary(
+                response.headers.get("Vary", ""),
+                "Accept-Encoding",
+            )
+            return response
+
+        response.headers["ETag"] = extended_card_etag
+        response.headers["Cache-Control"] = AUTHENTICATED_EXTENDED_CARD_CACHE_CONTROL
+        response.headers["Vary"] = _merge_vary(
+            response.headers.get("Vary", ""),
+            "Authorization",
+            "Accept-Encoding",
+        )
+        if _etag_matches(request.headers.get("if-none-match"), extended_card_etag):
+            return Response(status_code=304, headers=dict(response.headers))
+        return response
 
     @app.middleware("http")
     async def guard_rest_payload_shape(request: Request, call_next):

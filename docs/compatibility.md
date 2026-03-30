@@ -18,7 +18,8 @@ floating dependency resolution.
 
 Machine-readable discovery surfaces must reflect actual runtime behavior:
 
-- Agent Card
+- public Agent Card
+- authenticated extended card
 - OpenAPI metadata
 - JSON-RPC wire contract
 - compatibility profile
@@ -31,6 +32,7 @@ Open-source consumption guidance:
 - Treat the core A2A send / stream / task methods as the portable baseline.
 - Treat `urn:a2a:*` entries in this repository as shared repo-family conventions, not as claims that they are part of the A2A core baseline.
 - Treat `codex.*` methods and `metadata.codex.directory` as a Codex-specific control plane layered on top of the portable A2A surface.
+- Treat [extension-specifications.md](./extension-specifications.md) as the stable URI/spec index, not as the main usage guide.
 
 ## Normative Sources
 
@@ -38,7 +40,7 @@ When documentation or reference material disagrees, treat these as normative in
 this order:
 
 - runtime behavior validated by tests
-- machine-readable discovery output such as Agent Card and OpenAPI metadata
+- machine-readable discovery output such as Agent Card, authenticated extended card, and OpenAPI metadata
 - repository-owned docs in `README.md`, `docs/`, and `CONTRIBUTING.md`
 
 Maintainer-local upstream Codex snapshots generated via
@@ -102,6 +104,7 @@ will be reflected live per request.
 ## Extension Stability
 
 - Shared metadata and extension contracts should stay synchronized across Agent Card, OpenAPI, and runtime behavior.
+- Public Agent Card should stay intentionally minimal. Detailed extension params belong in the authenticated extended card and OpenAPI, not back in the anonymous discovery surface.
 - Product-specific extensions should remain stable within the current major line unless explicitly documented otherwise.
 - Deployment-conditional methods must be declared as conditional rather than silently disappearing.
 - `codex.sessions.shell` is compatibility-sensitive as a one-shot shell snapshot contract. Future interactive exec support must use a separate extension family rather than silently widening this method's behavior.
@@ -142,6 +145,7 @@ Important note:
 - `urn:a2a:*` extension URIs used here should be read as shared conventions in this repository family.
 - They are not a claim that those extensions are part of the A2A core baseline.
 - `codex.*` methods are intentionally product-specific. They improve Codex-aware workflows but should not be assumed to transfer unchanged to unrelated A2A agents.
+- The public Agent Card is intentionally smaller than the authenticated extended card; that size difference is part of the current discovery contract rather than a documentation accident.
 
 ## Non-Goals
 

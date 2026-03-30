@@ -80,6 +80,10 @@ codex-a2a
 
 Agent Card: `http://127.0.0.1:8000/.well-known/agent-card.json`
 
+Authenticated extended card:
+- JSON-RPC: `agent/getAuthenticatedExtendedCard`
+- HTTP: `GET /v1/card`
+
 ## Capabilities
 
 - A2A HTTP+JSON endpoints such as `/v1/message:send` and
@@ -95,8 +99,10 @@ Agent Card: `http://127.0.0.1:8000/.well-known/agent-card.json`
 - Payload logging controls, secret-handling guardrails, and released-CLI
   startup / source-based runtime paths
 
-Detailed protocol contracts, examples, and extension docs live in
-[Usage Guide](docs/guide.md).
+Detailed usage, protocol behavior, and extension references live in:
+- [Usage Guide](docs/guide.md)
+- [Extension Specifications](docs/extension-specifications.md)
+- [Compatibility Guide](docs/compatibility.md)
 
 ## Portable vs Private Surface
 
@@ -111,7 +117,8 @@ For open-source consumers, treat this repository as two layers:
 
 Generic A2A clients should start from the portable core surface. The Codex-
 specific control plane is useful for Codex-aware clients and coding-agent
-workflows, but it is not advertised as a portable cross-agent baseline.
+workflows, but it is not advertised as a portable cross-agent baseline. For the
+normative compatibility split, read [Compatibility Guide](docs/compatibility.md).
 
 ## Peering Node / Outbound Access
 
@@ -203,8 +210,9 @@ This repository does not publish directly from an unmerged feature branch.
 ## Further Reading
 
 - [Usage Guide](docs/guide.md)
-  Configuration, API contracts, client examples, streaming/session/interrupt
-  details.
+  Configuration, transport usage, and runtime examples.
+- [Extension Specifications](docs/extension-specifications.md)
+  Stable extension URI/spec index plus public-vs-extended card disclosure rules.
 - [Architecture Guide](docs/architecture.md)
   System structure, boundaries, and request flow.
 - [Compatibility Guide](docs/compatibility.md)

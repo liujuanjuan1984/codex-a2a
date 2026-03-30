@@ -2,8 +2,9 @@
 
 This guide covers runtime configuration, transport contracts,
 streaming/session/interrupt behavior, and client examples.
-It is the canonical document for implementation-level protocol contracts;
-[README.md](../README.md) stays at overview level.
+[README.md](../README.md) stays at overview level, the stable extension URI/spec
+index lives in [extension-specifications.md](./extension-specifications.md), and
+compatibility promises live in [compatibility.md](./compatibility.md).
 
 ## Transport Contracts
 
@@ -11,16 +12,24 @@ It is the canonical document for implementation-level protocol contracts;
   - HTTP+JSON (REST endpoints such as `/v1/message:send`)
   - JSON-RPC (`POST /`)
 - Agent Card keeps `preferredTransport=HTTP+JSON` and also exposes JSON-RPC in `additional_interfaces`.
+- The public Agent Card at `/.well-known/agent-card.json` is intentionally slimmed to the minimum discovery surface.
+- Detailed provider-private contracts are available through the authenticated extended card:
+  - preferred: JSON-RPC `agent/getAuthenticatedExtendedCard`
+  - HTTP core route: `GET /v1/card`
+  - compatibility route: `GET /agent/authenticatedExtendedCard`
+- Agent Card responses publish `ETag` and `Cache-Control`; clients should revalidate instead of repeatedly fetching full payloads.
+- Larger authenticated extended card responses support gzip compression.
 - Payload schema is transport-specific and should not be mixed:
   - REST send payload usually uses `message.content` and role values like `ROLE_USER`
   - JSON-RPC `message/send` payload uses `params.message.parts` and role values `user` / `agent`
-- The JSON-RPC entrypoint now publishes an explicit wire contract for the
-  supported method set and unsupported-method error shape.
+- The JSON-RPC entrypoint and authenticated extended card publish the explicit
+  wire contract for the supported method set and unsupported-method error shape.
 
 ## Wire Contract
 
-The service publishes a machine-readable wire contract through Agent Card and
-OpenAPI metadata.
+The full machine-readable wire contract is published through the authenticated
+extended card and OpenAPI metadata. The public Agent Card keeps only the minimum
+capability declarations needed for discovery.
 
 Use it to answer:
 
@@ -59,6 +68,8 @@ Consumer guidance:
 
 - Discover the current method set from Agent Card / OpenAPI before calling
   custom JSON-RPC methods.
+- Fetch the authenticated extended card when you need the detailed method matrix,
+  provider-private notes, or full extension params.
 - Treat `supported_methods` in `error.data` as the runtime truth for the
   current deployment, especially when a deployment-conditional method is
   disabled.
@@ -66,11 +77,14 @@ Consumer guidance:
 - Treat `codex.*` methods and `metadata.codex.directory` as a Codex-specific
   control plane for Codex-aware clients rather than generic A2A portability
   claims.
+- See [extension-specifications.md](./extension-specifications.md) for the
+  stable URI/spec index, and [compatibility.md](./compatibility.md) for
+  compatibility promises.
 
 ## Compatibility Profile
 
-The service publishes a machine-readable compatibility profile through Agent
-Card and OpenAPI metadata. Its purpose is to declare:
+The full machine-readable compatibility profile is published through the
+authenticated extended card and OpenAPI metadata. Its purpose is to declare:
 
 - the stable A2A core interoperability baseline
 - which shared extensions are intended to be reused across this repo family
@@ -152,6 +166,9 @@ Current implementation note:
 - This is intentional: current shared session/stream/interrupt behavior is part
   of the deployed interoperability contract, so a blanket runtime profile split
   would be misleading without broader wire-level changes.
+- For compatibility policy and stability expectations, use
+  [compatibility.md](./compatibility.md) as the normative repo document rather
+  than this usage guide.
 
 ## Environment Variables
 
@@ -325,7 +342,8 @@ described first in [README.md](../README.md) and above in this guide.
   returns service status plus a structured `profile` summary; it does not call
   upstream Codex.
 - Requests require `Authorization: Bearer <token>`; otherwise `401` is
-  returned. Agent Card endpoints are public.
+  returned. The public Agent Card endpoints are public; authenticated extended
+  card routes still require bearer auth.
 - Within one `codex-a2a` instance, all consumers share the same
   underlying Codex workspace/environment. This deployment model is not
   tenant-isolated by default.

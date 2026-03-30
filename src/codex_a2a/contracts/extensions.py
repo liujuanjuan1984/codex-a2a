@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from a2a.server.apps.jsonrpc.jsonrpc_app import JSONRPCApplication
+
 from codex_a2a.contracts.runtime_output import (
     build_artifact_stream_contract_params,
     build_interrupt_contract_params,
@@ -569,17 +571,18 @@ INTERRUPT_INVALID_PARAMS_DATA_FIELDS: tuple[str, ...] = (
     "request_id",
 )
 
-CORE_JSONRPC_METHODS: tuple[str, ...] = (
-    "message/send",
-    "message/stream",
-    "tasks/get",
-    "tasks/cancel",
-    TASKS_RESUBSCRIBE_METHOD,
-)
+CORE_JSONRPC_METHODS: tuple[str, ...] = tuple(JSONRPCApplication.METHOD_TO_MODEL)
 CORE_HTTP_ENDPOINTS: tuple[str, ...] = (
-    "/v1/message:send",
-    "/v1/message:stream",
-    TASKS_SUBSCRIBE_HTTP_ENDPOINT,
+    "POST /v1/message:send",
+    "POST /v1/message:stream",
+    "GET /v1/tasks",
+    "GET /v1/tasks/{id}",
+    "POST /v1/tasks/{id}:cancel",
+    "GET /v1/tasks/{id}:subscribe",
+    "GET /v1/tasks/{id}/pushNotificationConfigs",
+    "POST /v1/tasks/{id}/pushNotificationConfigs",
+    "GET /v1/tasks/{id}/pushNotificationConfigs/{push_id}",
+    "GET /v1/card",
 )
 WIRE_CONTRACT_UNSUPPORTED_METHOD_DATA_FIELDS: tuple[str, ...] = (
     "type",

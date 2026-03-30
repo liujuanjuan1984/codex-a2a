@@ -96,7 +96,8 @@ stronger isolation is added.
 Use the docs by responsibility:
 
 - [README](../README.md): project overview, quick-start path, and entry navigation
-- [Usage Guide](guide.md): configuration, protocol behavior, and runtime examples
+- [Usage Guide](guide.md): configuration, transport usage, and runtime examples
+- [Extension Specifications](extension-specifications.md): stable extension URI/spec index and public-vs-extended disclosure rules
 - [Compatibility Guide](compatibility.md): current compatibility promises and stability expectations
 - [Contributing Guide](../CONTRIBUTING.md): contributor workflow and validation
 - [Security Policy](../SECURITY.md): threat model and disclosure guidance

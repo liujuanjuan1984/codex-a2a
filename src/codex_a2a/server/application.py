@@ -8,6 +8,7 @@ import uvicorn
 from a2a.server.apps.jsonrpc.fastapi_app import A2AFastAPI
 from a2a.server.apps.rest.rest_adapter import RESTAdapter
 from fastapi import FastAPI
+from starlette.middleware.gzip import GZipMiddleware
 
 from codex_a2a.client import A2AClientManager
 from codex_a2a.config import Settings
@@ -29,7 +30,10 @@ from codex_a2a.jsonrpc.application import CodexSessionQueryJSONRPCApplication
 from codex_a2a.jsonrpc.hooks import SessionGuardHooks
 from codex_a2a.logging_context import install_log_record_factory
 from codex_a2a.profile.runtime import build_runtime_profile
-from codex_a2a.server.agent_card import build_agent_card
+from codex_a2a.server.agent_card import (
+    build_agent_card,
+    build_authenticated_extended_agent_card,
+)
 from codex_a2a.server.call_context import IdentityAwareCallContextBuilder
 from codex_a2a.server.database import build_database_engine
 from codex_a2a.server.openapi import patch_openapi_contract
@@ -110,6 +114,10 @@ def create_app(settings: Settings) -> FastAPI:
     runtime_profile = build_runtime_profile(settings)
     capability_snapshot = build_capability_snapshot(runtime_profile=runtime_profile)
     agent_card = build_agent_card(settings, runtime_profile=runtime_profile)
+    extended_agent_card = build_authenticated_extended_agent_card(
+        settings,
+        runtime_profile=runtime_profile,
+    )
     context_builder = IdentityAwareCallContextBuilder()
     jsonrpc_methods = {
         **SESSION_QUERY_METHODS,
@@ -130,6 +138,7 @@ def create_app(settings: Settings) -> FastAPI:
     jsonrpc_app = CodexSessionQueryJSONRPCApplication(
         agent_card=agent_card,
         http_handler=handler,
+        extended_agent_card=extended_agent_card,
         context_builder=context_builder,
         codex_client=client,
         exec_runtime=exec_runtime,
@@ -163,6 +172,7 @@ def create_app(settings: Settings) -> FastAPI:
     rest_adapter = RESTAdapter(
         agent_card=agent_card,
         http_handler=handler,
+        extended_agent_card=extended_agent_card,
         context_builder=context_builder,
     )
     for route, callback in rest_adapter.routes().items():
@@ -177,10 +187,14 @@ def create_app(settings: Settings) -> FastAPI:
                 version=settings.a2a_version,
             )
 
+    app.add_middleware(GZipMiddleware, minimum_size=1024)
+
     install_http_middlewares(
         app,
         settings=settings,
         task_store=task_store,
+        agent_card=agent_card,
+        extended_agent_card=extended_agent_card,
     )
 
     patch_openapi_contract(

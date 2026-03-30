@@ -40,10 +40,11 @@ def _build_jsonrpc_extension_openapi_description(*, session_shell_enabled: bool)
     interrupt_methods = ", ".join(sorted(INTERRUPT_CALLBACK_METHODS.values()))
     return (
         "A2A JSON-RPC entrypoint. Supports core A2A methods "
-        "(message/send, message/stream, tasks/get, tasks/cancel, tasks/resubscribe) "
-        "plus Codex session extensions, Codex thread lifecycle extensions, "
-        "Codex discovery extensions, interactive exec extensions, and shared "
-        "interrupt callback methods.\n\n"
+        "(message/send, message/stream, tasks/get, tasks/cancel, "
+        "tasks/pushNotificationConfig/*, tasks/resubscribe, "
+        "agent/getAuthenticatedExtendedCard) plus Codex session extensions, "
+        "Codex thread lifecycle extensions, Codex discovery extensions, "
+        "interactive exec extensions, and shared interrupt callback methods.\n\n"
         f"Codex session query/control methods: {', '.join(session_methods)}.\n"
         f"Codex thread lifecycle methods: {thread_lifecycle_methods}.\n"
         f"Codex discovery methods: {discovery_methods}.\n"
@@ -85,6 +86,15 @@ def _build_jsonrpc_extension_openapi_examples(*, session_shell_enabled: bool) ->
                         "parts": [{"kind": "text", "text": "Stream the answer and summarize."}],
                     }
                 },
+            },
+        },
+        "authenticated_extended_card": {
+            "summary": "Fetch the authenticated extended Agent Card",
+            "value": {
+                "jsonrpc": "2.0",
+                "id": 103,
+                "method": "agent/getAuthenticatedExtendedCard",
+                "params": {},
             },
         },
         "session_list": {

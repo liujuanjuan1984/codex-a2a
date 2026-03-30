@@ -27,7 +27,7 @@ from codex_a2a.contracts.extensions import (
     build_wire_contract_extension_params,
 )
 from codex_a2a.profile.runtime import build_runtime_profile
-from codex_a2a.server.agent_card import build_agent_card
+from codex_a2a.server.agent_card import build_authenticated_extended_agent_card
 from codex_a2a.server.application import create_app
 from tests.support.dummy_clients import DummySessionQueryCodexClient as DummyCodexClient
 from tests.support.settings import make_settings
@@ -83,7 +83,7 @@ def test_capability_snapshot_tracks_conditional_shell_surface() -> None:
 def test_session_query_extension_ssot_matches_agent_card_contract() -> None:
     settings = make_settings(a2a_bearer_token="test-token")
     runtime_profile = build_runtime_profile(settings)
-    card = build_agent_card(settings)
+    card = build_authenticated_extended_agent_card(settings)
     ext_by_uri = {ext.uri: ext for ext in card.capabilities.extensions or []}
 
     session_query = ext_by_uri[SESSION_QUERY_EXTENSION_URI]
@@ -105,7 +105,7 @@ def test_session_query_extension_ssot_matches_agent_card_contract_when_shell_dis
         a2a_enable_session_shell=False,
     )
     runtime_profile = build_runtime_profile(settings)
-    card = build_agent_card(settings)
+    card = build_authenticated_extended_agent_card(settings)
     ext_by_uri = {ext.uri: ext for ext in card.capabilities.extensions or []}
 
     session_query = ext_by_uri[SESSION_QUERY_EXTENSION_URI]
@@ -124,7 +124,7 @@ def test_session_query_extension_ssot_matches_agent_card_contract_when_shell_dis
 def test_discovery_extension_ssot_matches_agent_card_contract() -> None:
     settings = make_settings(a2a_bearer_token="test-token")
     runtime_profile = build_runtime_profile(settings)
-    card = build_agent_card(settings)
+    card = build_authenticated_extended_agent_card(settings)
     ext_by_uri = {ext.uri: ext for ext in card.capabilities.extensions or []}
 
     discovery = ext_by_uri[DISCOVERY_EXTENSION_URI]
@@ -138,7 +138,7 @@ def test_discovery_extension_ssot_matches_agent_card_contract() -> None:
 def test_thread_lifecycle_extension_ssot_matches_agent_card_contract() -> None:
     settings = make_settings(a2a_bearer_token="test-token")
     runtime_profile = build_runtime_profile(settings)
-    card = build_agent_card(settings)
+    card = build_authenticated_extended_agent_card(settings)
     ext_by_uri = {ext.uri: ext for ext in card.capabilities.extensions or []}
 
     thread_lifecycle = ext_by_uri[THREAD_LIFECYCLE_EXTENSION_URI]
@@ -186,7 +186,7 @@ async def test_session_query_runtime_result_envelope_matches_declared_contract(
     import codex_a2a.server.application as app_module
 
     settings = make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, codex_timeout=1.0)
-    card = build_agent_card(settings)
+    card = build_authenticated_extended_agent_card(settings)
     ext_by_uri = {ext.uri: ext for ext in card.capabilities.extensions or []}
     method_contracts = ext_by_uri[SESSION_QUERY_EXTENSION_URI].params["method_contracts"]
     expected_result = method_contracts[method]["result"]
@@ -214,7 +214,7 @@ async def test_session_query_runtime_result_envelope_matches_declared_contract(
 
 def test_session_query_result_envelope_omits_method_level_contracts() -> None:
     settings = make_settings(a2a_bearer_token="test-token")
-    card = build_agent_card(settings)
+    card = build_authenticated_extended_agent_card(settings)
     ext_by_uri = {ext.uri: ext for ext in card.capabilities.extensions or []}
     session_query = ext_by_uri[SESSION_QUERY_EXTENSION_URI]
 
@@ -301,7 +301,7 @@ def test_openapi_jsonrpc_contract_extension_matches_ssot() -> None:
 
 def test_openapi_and_agent_card_extension_contracts_match() -> None:
     settings = make_settings(a2a_bearer_token="test-token")
-    card = build_agent_card(settings)
+    card = build_authenticated_extended_agent_card(settings)
     ext_by_uri = {ext.uri: ext for ext in card.capabilities.extensions or []}
     openapi = create_app(settings).openapi()
     post_contract = openapi["paths"]["/"]["post"]["x-a2a-extension-contracts"]
@@ -462,7 +462,11 @@ def test_openapi_jsonrpc_examples_match_declared_extension_contracts() -> None:
     for example in examples.values():
         payload = example["value"]
         method = payload["method"]
-        if method in {"message/send", "message/stream"}:
+        if method in {
+            "message/send",
+            "message/stream",
+            "agent/getAuthenticatedExtendedCard",
+        }:
             continue
 
         assert method in declared_extension_methods, (

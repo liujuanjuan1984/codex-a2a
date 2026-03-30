@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 from a2a.types import (
     AgentCapabilities,
     AgentCard,
@@ -35,15 +37,79 @@ from codex_a2a.contracts.extensions import (
 from codex_a2a.profile.runtime import RuntimeProfile, build_runtime_profile
 
 
-def _build_agent_card_description(settings: Settings, runtime_profile: RuntimeProfile) -> str:
+def _select_public_extension_params(
+    params: dict[str, Any],
+    *,
+    keys: tuple[str, ...],
+) -> dict[str, Any]:
+    return {key: params[key] for key in keys if key in params}
+
+
+def _build_public_streaming_extension_params(
+    params: dict[str, Any],
+) -> dict[str, Any]:
+    return {
+        "artifact_metadata_field": params["artifact_metadata_field"],
+        "status_metadata_field": params["status_metadata_field"],
+        "interrupt_metadata_field": params["interrupt_metadata_field"],
+        "session_metadata_field": params["session_metadata_field"],
+        "usage_metadata_field": params["usage_metadata_field"],
+        "block_types": params["block_types"],
+        "block_part_types": params["block_part_types"],
+        "stream_fields": _select_public_extension_params(
+            params["stream_fields"],
+            keys=("block_type", "message_id", "sequence", "source"),
+        ),
+        "status_stream_fields": _select_public_extension_params(
+            params["status_stream_fields"],
+            keys=("type", "status", "source", "event_id"),
+        ),
+        "session_fields": _select_public_extension_params(
+            params["session_fields"],
+            keys=("id", "title"),
+        ),
+        "interrupt_fields": _select_public_extension_params(
+            params["interrupt_fields"],
+            keys=("request_id", "type", "phase", "resolution"),
+        ),
+        "usage_fields": _select_public_extension_params(
+            params["usage_fields"],
+            keys=("input_tokens", "output_tokens", "total_tokens", "reasoning_tokens"),
+        ),
+    }
+
+
+def _build_agent_card_description(
+    settings: Settings,
+    runtime_profile: RuntimeProfile,
+    *,
+    include_detailed_contracts: bool,
+) -> str:
     base = (settings.a2a_description or "").strip() or "Codex A2A runtime adapter."
+    if not include_detailed_contracts:
+        public_parts: list[str] = [
+            base,
+            (
+                "Supports HTTP+JSON and JSON-RPC transports, standard A2A messaging, "
+                "and authenticated extended Agent Card discovery."
+            ),
+            (
+                "Single-tenant deployment; all consumers share the same underlying Codex "
+                "workspace/environment."
+            ),
+        ]
+        project = runtime_profile.runtime_context.project
+        if isinstance(project, str) and project.strip():
+            public_parts.append(f"Deployment project: {project}.")
+        return " ".join(public_parts)
+
     summary = (
         "Supports HTTP+JSON and JSON-RPC transports, standard A2A messaging "
-        "(message/send, message/stream), task APIs (tasks/get, tasks/cancel, "
-        "tasks/resubscribe; REST mapping: GET /v1/tasks/{id}:subscribe), "
-        "shared session-binding and streaming contracts, Codex session-query, "
-        "thread lifecycle, discovery, and interactive exec extensions, shared "
-        "interrupt callback extensions, a machine-readable "
+        "(message/send, message/stream), authenticated extended Agent Card "
+        "(agent/getAuthenticatedExtendedCard), task APIs (tasks/get, tasks/cancel, "
+        "tasks/resubscribe), shared session-binding and streaming contracts, "
+        "Codex session-query, thread lifecycle, discovery, and interactive exec "
+        "extensions, shared interrupt callback extensions, a machine-readable "
         "compatibility profile, and a machine-readable wire contract."
     )
     parts: list[str] = [base, summary]
@@ -80,20 +146,17 @@ def _build_chat_examples(project: str | None) -> list[str]:
     return examples
 
 
-def build_agent_card(
-    settings: Settings, *, runtime_profile: RuntimeProfile | None = None
-) -> AgentCard:
-    public_url = settings.a2a_public_url.rstrip("/")
-    base_url = public_url
-    runtime_profile = runtime_profile or build_runtime_profile(settings)
+def _build_agent_extensions(
+    *,
+    settings: Settings,
+    runtime_profile: RuntimeProfile,
+    include_detailed_contracts: bool,
+) -> list[AgentExtension]:
     session_binding_extension_params = build_session_binding_extension_params(
         runtime_profile=runtime_profile,
     )
     streaming_extension_params = build_streaming_extension_params()
     session_query_extension_params = build_session_query_extension_params(
-        runtime_profile=runtime_profile,
-    )
-    exec_control_extension_params = build_exec_control_extension_params(
         runtime_profile=runtime_profile,
     )
     discovery_extension_params = build_discovery_extension_params(
@@ -102,8 +165,11 @@ def build_agent_card(
     thread_lifecycle_extension_params = build_thread_lifecycle_extension_params(
         runtime_profile=runtime_profile,
     )
+    exec_control_extension_params = build_exec_control_extension_params(
+        runtime_profile=runtime_profile,
+    )
     interrupt_callback_extension_params = build_interrupt_callback_extension_params(
-        runtime_profile=runtime_profile
+        runtime_profile=runtime_profile,
     )
     wire_contract_extension_params = build_wire_contract_extension_params(
         protocol_version=settings.a2a_protocol_version,
@@ -113,6 +179,281 @@ def build_agent_card(
         protocol_version=settings.a2a_protocol_version,
         runtime_profile=runtime_profile,
     )
+
+    return [
+        AgentExtension(
+            uri=SESSION_BINDING_EXTENSION_URI,
+            required=False,
+            description=(
+                "Shared contract to bind A2A messages to an existing Codex session "
+                "when continuing a previous chat. Clients should pass "
+                "metadata.shared.session.id. The metadata.codex.directory field "
+                "remains available as a Codex-private override under "
+                "server-side directory boundary validation."
+            ),
+            params=(
+                session_binding_extension_params
+                if include_detailed_contracts
+                else _select_public_extension_params(
+                    session_binding_extension_params,
+                    keys=(
+                        "metadata_field",
+                        "behavior",
+                        "supported_metadata",
+                        "provider_private_metadata",
+                    ),
+                )
+            ),
+        ),
+        AgentExtension(
+            uri=STREAMING_EXTENSION_URI,
+            required=False,
+            description=(
+                "Shared streaming metadata contract for canonical block hints, "
+                "timeline identity, usage, and interactive interrupt metadata."
+            ),
+            params=(
+                streaming_extension_params
+                if include_detailed_contracts
+                else _build_public_streaming_extension_params(streaming_extension_params)
+            ),
+        ),
+        AgentExtension(
+            uri=SESSION_QUERY_EXTENSION_URI,
+            required=False,
+            description=(
+                "Support Codex session list/history queries via custom JSON-RPC methods "
+                "on the agent's A2A JSON-RPC interface, including structured rich "
+                "input for codex.sessions.prompt_async."
+            ),
+            params=session_query_extension_params if include_detailed_contracts else None,
+        ),
+        AgentExtension(
+            uri=DISCOVERY_EXTENSION_URI,
+            required=False,
+            description=(
+                "Expose read-only skills/apps/plugins discovery plus a task-stream "
+                "notification bridge for invalidation and refresh signals."
+            ),
+            params=discovery_extension_params if include_detailed_contracts else None,
+        ),
+        AgentExtension(
+            uri=THREAD_LIFECYCLE_EXTENSION_URI,
+            required=False,
+            description=(
+                "Expose provider-private thread lifecycle control plus a task-stream "
+                "notification bridge for lifecycle status, archive, and restore "
+                "signals."
+            ),
+            params=thread_lifecycle_extension_params if include_detailed_contracts else None,
+        ),
+        AgentExtension(
+            uri=EXEC_CONTROL_EXTENSION_URI,
+            required=False,
+            description=(
+                "Expose standalone interactive command execution via custom JSON-RPC "
+                "methods codex.exec.start, codex.exec.write, codex.exec.resize, and "
+                "codex.exec.terminate."
+            ),
+            params=exec_control_extension_params if include_detailed_contracts else None,
+        ),
+        AgentExtension(
+            uri=INTERRUPT_CALLBACK_EXTENSION_URI,
+            required=False,
+            description=(
+                "Handle interactive interrupt callbacks generated during "
+                "streaming through shared JSON-RPC methods."
+            ),
+            params=(
+                interrupt_callback_extension_params
+                if include_detailed_contracts
+                else _select_public_extension_params(
+                    interrupt_callback_extension_params,
+                    keys=("methods", "supported_interrupt_events", "request_id_field"),
+                )
+            ),
+        ),
+        AgentExtension(
+            uri=COMPATIBILITY_PROFILE_EXTENSION_URI,
+            required=False,
+            description=(
+                "Machine-readable compatibility profile for the current A2A core "
+                "baseline, declared custom extensions, and retention policy."
+            ),
+            params=compatibility_profile_params if include_detailed_contracts else None,
+        ),
+        AgentExtension(
+            uri=WIRE_CONTRACT_EXTENSION_URI,
+            required=False,
+            description=(
+                "Declare the current JSON-RPC/HTTP method boundary and the "
+                "unsupported method error contract for generic A2A clients."
+            ),
+            params=wire_contract_extension_params if include_detailed_contracts else None,
+        ),
+    ]
+
+
+def _build_agent_skills(
+    *,
+    settings: Settings,
+    include_detailed_contracts: bool,
+) -> list[AgentSkill]:
+    if not include_detailed_contracts:
+        return [
+            AgentSkill(
+                id="codex.chat",
+                name="Codex Chat",
+                description=(
+                    "Handle core A2A chat turns with shared session binding and "
+                    "Codex-backed streaming."
+                ),
+                tags=["assistant", "coding", "codex", "core-a2a"],
+            ),
+            AgentSkill(
+                id="codex.sessions.query",
+                name="Codex Sessions Query",
+                description=(
+                    "Inspect Codex sessions and history through provider-private "
+                    "JSON-RPC extensions."
+                ),
+                tags=["codex", "sessions", "history", "provider-private"],
+            ),
+            AgentSkill(
+                id="codex.discovery.query",
+                name="Codex Discovery Query",
+                description=(
+                    "Discover skills, apps, and plugins through provider-private "
+                    "JSON-RPC extensions."
+                ),
+                tags=["codex", "discovery", "provider-private"],
+            ),
+            AgentSkill(
+                id="codex.threads.lifecycle",
+                name="Codex Thread Lifecycle",
+                description=(
+                    "Manage provider-private thread lifecycle actions and watch "
+                    "status/archive signals through JSON-RPC extensions."
+                ),
+                tags=["codex", "threads", "lifecycle", "provider-private"],
+            ),
+            AgentSkill(
+                id="codex.interrupt.callback",
+                name="Codex Interrupt Callback",
+                description=("Reply to shared interrupt callbacks emitted during streaming."),
+                tags=["interrupt", "shared"],
+            ),
+            AgentSkill(
+                id="codex.exec.interactive",
+                name="Codex Interactive Exec",
+                description=(
+                    "Start and control standalone interactive command execution "
+                    "through provider-private JSON-RPC extensions."
+                ),
+                tags=["codex", "exec", "interactive", "provider-private"],
+            ),
+        ]
+
+    skills = [
+        AgentSkill(
+            id="codex.chat",
+            name="Codex Chat",
+            description=(
+                "Handle message/send and message/stream requests by routing user text, "
+                "image FilePart inputs, and codex rich-input DataPart payloads to "
+                "Codex sessions."
+            ),
+            tags=["assistant", "coding", "codex"],
+            examples=_build_chat_examples(settings.a2a_project),
+        ),
+        AgentSkill(
+            id="codex.sessions.query",
+            name="Codex Sessions Query",
+            description=(
+                "Query Codex sessions and message histories via JSON-RPC extension "
+                "methods codex.sessions.list and codex.sessions.messages.list."
+            ),
+            tags=["codex", "sessions", "history"],
+            examples=[
+                "List Codex sessions (method codex.sessions.list).",
+                "List messages for a session (method codex.sessions.messages.list).",
+            ],
+        ),
+        AgentSkill(
+            id="codex.discovery.query",
+            name="Codex Discovery Query",
+            description=(
+                "Discover skills, apps, and plugins plus stable path identifiers via "
+                "codex.discovery.* JSON-RPC extension methods."
+            ),
+            tags=["codex", "discovery", "skills", "apps", "plugins"],
+            examples=[
+                "List available Codex skills (method codex.discovery.skills.list).",
+                "List available apps or plugins before constructing mention.path values.",
+                "Start a discovery watch stream (method codex.discovery.watch).",
+            ],
+        ),
+        AgentSkill(
+            id="codex.threads.lifecycle",
+            name="Codex Thread Lifecycle",
+            description=(
+                "Manage thread fork/archive/unarchive/metadata-update flows and watch "
+                "thread lifecycle signals via codex.threads.* JSON-RPC extension methods."
+            ),
+            tags=["codex", "threads", "lifecycle"],
+            examples=[
+                "Fork a Codex thread (method codex.threads.fork).",
+                "Start a lifecycle watch stream (method codex.threads.watch).",
+            ],
+        ),
+        AgentSkill(
+            id="codex.interrupt.callback",
+            name="Codex Interrupt Callback",
+            description=(
+                "Reply permission/question/permissions/elicitation interrupts emitted "
+                "during streaming via shared JSON-RPC interrupt callback methods."
+            ),
+            tags=[
+                "codex",
+                "interrupt",
+                "permission",
+                "question",
+                "permissions",
+                "elicitation",
+                "shared",
+            ],
+            examples=[
+                "Reply once/always/reject to a permission request by request_id.",
+                "Submit answers for a question request by request_id.",
+                "Grant a permissions subset or answer an elicitation request by request_id.",
+            ],
+        ),
+        AgentSkill(
+            id="codex.exec.interactive",
+            name="Codex Interactive Exec",
+            description=(
+                "Start and control standalone interactive command execution via "
+                "codex.exec.start/write/resize/terminate and consume output through "
+                "A2A task streams."
+            ),
+            tags=["codex", "exec", "terminal", "interactive"],
+            examples=[
+                "Start an interactive exec session (method codex.exec.start).",
+                "Write stdin bytes or resize the exec PTY by process_id.",
+            ],
+        ),
+    ]
+    return skills
+
+
+def _build_agent_card(
+    settings: Settings,
+    *,
+    runtime_profile: RuntimeProfile | None,
+    include_detailed_contracts: bool,
+) -> AgentCard:
+    public_url = settings.a2a_public_url.rstrip("/")
+    runtime_profile = runtime_profile or build_runtime_profile(settings)
     security_schemes: dict[str, SecurityScheme] = {
         "bearerAuth": SecurityScheme(
             root=HTTPAuthSecurityScheme(
@@ -126,8 +467,12 @@ def build_agent_card(
 
     return AgentCard(
         name=settings.a2a_title,
-        description=_build_agent_card_description(settings, runtime_profile),
-        url=base_url,
+        description=_build_agent_card_description(
+            settings,
+            runtime_profile,
+            include_detailed_contracts=include_detailed_contracts,
+        ),
+        url=public_url,
         documentation_url=settings.a2a_documentation_url,
         version=settings.a2a_version,
         protocol_version=settings.a2a_protocol_version,
@@ -136,189 +481,45 @@ def build_agent_card(
         default_output_modes=["text/plain"],
         capabilities=AgentCapabilities(
             streaming=True,
-            extensions=[
-                AgentExtension(
-                    uri=SESSION_BINDING_EXTENSION_URI,
-                    required=False,
-                    description=(
-                        "Shared contract to bind A2A messages to an existing Codex session "
-                        "when continuing a previous chat. Clients should pass "
-                        "metadata.shared.session.id. The metadata.codex.directory field "
-                        "remains available as a Codex-private override under "
-                        "server-side directory boundary validation."
-                    ),
-                    params=session_binding_extension_params,
-                ),
-                AgentExtension(
-                    uri=STREAMING_EXTENSION_URI,
-                    required=False,
-                    description=(
-                        "Shared streaming metadata contract for canonical block hints, "
-                        "timeline identity, usage, and interactive interrupt metadata."
-                    ),
-                    params=streaming_extension_params,
-                ),
-                AgentExtension(
-                    uri=SESSION_QUERY_EXTENSION_URI,
-                    required=False,
-                    description=(
-                        "Support Codex session list/history queries via custom JSON-RPC methods "
-                        "on the agent's A2A JSON-RPC interface, including structured rich "
-                        "input for codex.sessions.prompt_async."
-                    ),
-                    params=session_query_extension_params,
-                ),
-                AgentExtension(
-                    uri=DISCOVERY_EXTENSION_URI,
-                    required=False,
-                    description=(
-                        "Expose read-only skills/apps/plugins discovery plus a task-stream "
-                        "notification bridge for invalidation and refresh signals."
-                    ),
-                    params=discovery_extension_params,
-                ),
-                AgentExtension(
-                    uri=THREAD_LIFECYCLE_EXTENSION_URI,
-                    required=False,
-                    description=(
-                        "Expose provider-private thread lifecycle control plus a task-stream "
-                        "notification bridge for lifecycle status, archive, and restore "
-                        "signals."
-                    ),
-                    params=thread_lifecycle_extension_params,
-                ),
-                AgentExtension(
-                    uri=EXEC_CONTROL_EXTENSION_URI,
-                    required=False,
-                    description=(
-                        "Expose standalone interactive command execution via custom JSON-RPC "
-                        "methods codex.exec.start, codex.exec.write, codex.exec.resize, and "
-                        "codex.exec.terminate."
-                    ),
-                    params=exec_control_extension_params,
-                ),
-                AgentExtension(
-                    uri=INTERRUPT_CALLBACK_EXTENSION_URI,
-                    required=False,
-                    description=(
-                        "Handle interactive interrupt callbacks generated during "
-                        "streaming through shared JSON-RPC methods."
-                    ),
-                    params=interrupt_callback_extension_params,
-                ),
-                AgentExtension(
-                    uri=COMPATIBILITY_PROFILE_EXTENSION_URI,
-                    required=False,
-                    description=(
-                        "Machine-readable compatibility profile for the current A2A core "
-                        "baseline, declared custom extensions, and retention policy."
-                    ),
-                    params=compatibility_profile_params,
-                ),
-                AgentExtension(
-                    uri=WIRE_CONTRACT_EXTENSION_URI,
-                    required=False,
-                    description=(
-                        "Declare the current JSON-RPC/HTTP method boundary and the "
-                        "unsupported method error contract for generic A2A clients."
-                    ),
-                    params=wire_contract_extension_params,
-                ),
-            ],
+            extensions=_build_agent_extensions(
+                settings=settings,
+                runtime_profile=runtime_profile,
+                include_detailed_contracts=include_detailed_contracts,
+            ),
         ),
-        skills=[
-            AgentSkill(
-                id="codex.chat",
-                name="Codex Chat",
-                description=(
-                    "Handle message/send and message/stream requests by routing user text, "
-                    "image FilePart inputs, and codex rich-input DataPart payloads to "
-                    "Codex sessions."
-                ),
-                tags=["assistant", "coding", "codex"],
-                examples=_build_chat_examples(settings.a2a_project),
-            ),
-            AgentSkill(
-                id="codex.sessions.query",
-                name="Codex Sessions Query",
-                description=(
-                    "Query Codex sessions and message histories via JSON-RPC extension "
-                    "methods codex.sessions.list and codex.sessions.messages.list."
-                ),
-                tags=["codex", "sessions", "history"],
-                examples=[
-                    "List Codex sessions (method codex.sessions.list).",
-                    "List messages for a session (method codex.sessions.messages.list).",
-                ],
-            ),
-            AgentSkill(
-                id="codex.discovery.query",
-                name="Codex Discovery Query",
-                description=(
-                    "Discover skills, apps, and plugins plus stable path identifiers via "
-                    "codex.discovery.* JSON-RPC extension methods."
-                ),
-                tags=["codex", "discovery", "skills", "apps", "plugins"],
-                examples=[
-                    "List available Codex skills (method codex.discovery.skills.list).",
-                    "List available apps or plugins before constructing mention.path values.",
-                    "Start a discovery watch stream (method codex.discovery.watch).",
-                ],
-            ),
-            AgentSkill(
-                id="codex.threads.lifecycle",
-                name="Codex Thread Lifecycle",
-                description=(
-                    "Manage thread fork/archive/unarchive/metadata-update flows and watch "
-                    "thread lifecycle signals via codex.threads.* JSON-RPC extension methods."
-                ),
-                tags=["codex", "threads", "lifecycle"],
-                examples=[
-                    "Fork a Codex thread (method codex.threads.fork).",
-                    "Start a lifecycle watch stream (method codex.threads.watch).",
-                ],
-            ),
-            AgentSkill(
-                id="codex.interrupt.callback",
-                name="Codex Interrupt Callback",
-                description=(
-                    "Reply permission/question/permissions/elicitation interrupts emitted "
-                    "during streaming via shared JSON-RPC interrupt callback methods."
-                ),
-                tags=[
-                    "codex",
-                    "interrupt",
-                    "permission",
-                    "question",
-                    "permissions",
-                    "elicitation",
-                    "shared",
-                ],
-                examples=[
-                    "Reply once/always/reject to a permission request by request_id.",
-                    "Submit answers for a question request by request_id.",
-                    "Grant a permissions subset or answer an elicitation request by request_id.",
-                ],
-            ),
-            AgentSkill(
-                id="codex.exec.interactive",
-                name="Codex Interactive Exec",
-                description=(
-                    "Start and control standalone interactive command execution via "
-                    "codex.exec.start/write/resize/terminate and consume output through "
-                    "A2A task streams."
-                ),
-                tags=["codex", "exec", "terminal", "interactive"],
-                examples=[
-                    "Start an interactive exec session (method codex.exec.start).",
-                    "Write stdin bytes or resize the exec PTY by process_id.",
-                ],
-            ),
-        ],
+        skills=_build_agent_skills(
+            settings=settings,
+            include_detailed_contracts=include_detailed_contracts,
+        ),
+        supports_authenticated_extended_card=True,
         additional_interfaces=[
-            AgentInterface(transport=TransportProtocol.http_json, url=base_url),
-            AgentInterface(transport=TransportProtocol.jsonrpc, url=base_url),
+            AgentInterface(transport=TransportProtocol.http_json, url=public_url),
+            AgentInterface(transport=TransportProtocol.jsonrpc, url=public_url),
         ],
         security_schemes=security_schemes,
         security=security,
+    )
+
+
+def build_agent_card(
+    settings: Settings,
+    *,
+    runtime_profile: RuntimeProfile | None = None,
+) -> AgentCard:
+    return _build_agent_card(
+        settings,
+        runtime_profile=runtime_profile,
+        include_detailed_contracts=False,
+    )
+
+
+def build_authenticated_extended_agent_card(
+    settings: Settings,
+    *,
+    runtime_profile: RuntimeProfile | None = None,
+) -> AgentCard:
+    return _build_agent_card(
+        settings,
+        runtime_profile=runtime_profile,
+        include_detailed_contracts=True,
     )

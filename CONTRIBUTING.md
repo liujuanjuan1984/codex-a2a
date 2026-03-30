@@ -51,9 +51,10 @@ export A2A_BEARER_TOKEN="$(python -c 'import secrets; print(secrets.token_hex(24
 CODEX_WORKSPACE_ROOT=/abs/path/to/workspace uv run codex-a2a
 ```
 
-5. Open the Agent Card:
+5. Inspect the discovery surfaces:
 
 - `http://127.0.0.1:8000/.well-known/agent-card.json`
+- `curl -H "Authorization: Bearer ${A2A_BEARER_TOKEN}" http://127.0.0.1:8000/v1/card`
 
 ## Validation Baseline
 
