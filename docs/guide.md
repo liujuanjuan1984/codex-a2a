@@ -157,45 +157,28 @@ Current implementation note:
 
 - `CODEX_CLI_BIN`: Codex CLI binary path, default `codex`
 - `CODEX_APP_SERVER_LISTEN`: Codex app-server listen target, default `stdio://`
-- `CODEX_MODEL`: default Codex model, passed to `codex app-server` via
-  `-c model=...`, default `gpt-5.1-codex`
+- `CODEX_MODEL`: default Codex model, passed to `codex app-server` via `-c model=...`, default `gpt-5.1-codex`
 - `CODEX_MODEL_ID`: per-turn model override passed to `turn/start` (optional)
-- `CODEX_MODEL_REASONING_EFFORT`: explicit reasoning effort override passed to
-  Codex CLI app-server via `-c model_reasoning_effort=...` (optional)
-- `CODEX_PROFILE`: Codex profile name passed to `codex app-server` via
-  `-c profile=...` (optional)
-- `CODEX_MODEL_REASONING_SUMMARY`: default reasoning summary mode passed to
-  `codex app-server` via `-c model_reasoning_summary=...` (optional)
-- `CODEX_MODEL_VERBOSITY`: default model verbosity passed to
-  `codex app-server` via `-c model_verbosity=...` (optional)
-- `CODEX_APPROVAL_POLICY`: default approval policy passed to
-  `codex app-server` via `-c approval_policy=...` (optional)
-- `CODEX_SANDBOX_MODE`: default sandbox mode passed to
-  `codex app-server` via `-c sandbox_mode=...` (optional)
-- `CODEX_SANDBOX_WORKSPACE_WRITE_WRITABLE_ROOTS`: comma-separated writable
-  roots for `sandbox_workspace_write` passed to `codex app-server` via
-  `-c sandbox_workspace_write=...` (optional)
-- `CODEX_SANDBOX_WORKSPACE_WRITE_NETWORK_ACCESS`: default workspace-write
-  network access flag passed through `sandbox_workspace_write` (optional)
-- `CODEX_SANDBOX_WORKSPACE_WRITE_EXCLUDE_SLASH_TMP`: default workspace-write
-  `/tmp` exclusion flag passed through `sandbox_workspace_write` (optional)
-- `CODEX_SANDBOX_WORKSPACE_WRITE_EXCLUDE_TMPDIR_ENV_VAR`: default
-  workspace-write `$TMPDIR` exclusion flag passed through
-  `sandbox_workspace_write` (optional)
-- `CODEX_WEB_SEARCH`: default Codex web search mode passed to
-  `codex app-server` via `-c web_search=...` (optional)
-- `CODEX_REVIEW_MODEL`: default review model passed to
-  `codex app-server` via `-c review_model=...` (optional)
+- `CODEX_MODEL_REASONING_EFFORT`: explicit reasoning effort override passed to Codex CLI app-server via `-c model_reasoning_effort=...` (optional)
+- `CODEX_PROFILE`: Codex profile name passed to `codex app-server` via `-c profile=...` (optional)
+- `CODEX_MODEL_REASONING_SUMMARY`: default reasoning summary mode passed to `codex app-server` via `-c model_reasoning_summary=...` (optional)
+- `CODEX_MODEL_VERBOSITY`: default model verbosity passed to `codex app-server` via `-c model_verbosity=...` (optional)
+- `CODEX_APPROVAL_POLICY`: default approval policy passed to `codex app-server` via `-c approval_policy=...` (optional)
+- `CODEX_SANDBOX_MODE`: default sandbox mode passed to `codex app-server` via `-c sandbox_mode=...` (optional)
+- `CODEX_SANDBOX_WORKSPACE_WRITE_WRITABLE_ROOTS`: comma-separated writable roots for `sandbox_workspace_write` passed to `codex app-server` via `-c sandbox_workspace_write=...` (optional)
+- `CODEX_SANDBOX_WORKSPACE_WRITE_NETWORK_ACCESS`: default workspace-write network access flag passed through `sandbox_workspace_write` (optional)
+- `CODEX_SANDBOX_WORKSPACE_WRITE_EXCLUDE_SLASH_TMP`: default workspace-write `/tmp` exclusion flag passed through `sandbox_workspace_write` (optional)
+- `CODEX_SANDBOX_WORKSPACE_WRITE_EXCLUDE_TMPDIR_ENV_VAR`: default workspace-write `$TMPDIR` exclusion flag passed through `sandbox_workspace_write` (optional)
+- `CODEX_WEB_SEARCH`: default Codex web search mode passed to `codex app-server` via `-c web_search=...` (optional)
+- `CODEX_REVIEW_MODEL`: default review model passed to `codex app-server` via `-c review_model=...` (optional)
 - `CODEX_WORKSPACE_ROOT`: default Codex workspace root (optional)
 - `CODEX_PROVIDER_ID`: deployment metadata only (optional)
 - `CODEX_AGENT`: deployment metadata only (optional)
 - `CODEX_VARIANT`: deployment metadata only (optional)
 - `CODEX_TIMEOUT`: request timeout in seconds, default `120`
-- `CODEX_TIMEOUT_STREAM`: streaming turn timeout in seconds (optional);
-  unset means no explicit stream timeout for the streaming send path
+- `CODEX_TIMEOUT_STREAM`: streaming turn timeout in seconds (optional); unset means no explicit stream timeout for the streaming send path
 
-- `A2A_PUBLIC_URL`: externally reachable A2A URL prefix,
-  default `http://127.0.0.1:8000`
+- `A2A_PUBLIC_URL`: externally reachable A2A URL prefix, default `http://127.0.0.1:8000`
 - `A2A_PROJECT`: optional project label injected into Agent Card extensions and examples
 - `A2A_TITLE`: agent name, default `Codex A2A`
 - `A2A_DESCRIPTION`: agent description
