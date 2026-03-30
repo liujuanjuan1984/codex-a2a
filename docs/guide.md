@@ -157,9 +157,14 @@ Current implementation note:
 
 - `CODEX_CLI_BIN`: Codex CLI binary path, default `codex`
 - `CODEX_APP_SERVER_LISTEN`: Codex app-server listen target, default `stdio://`
-- `CODEX_MODEL`: default model passed to `thread/start`, default `gpt-5.1-codex`
+- `CODEX_UPSTREAM_TRANSPORT`: upstream connection mode, default `embedded-stdio`;
+  supported values are `embedded-stdio` and `external-websocket`
+- `CODEX_UPSTREAM_URL`: external Codex app-server websocket URL, required when
+  `CODEX_UPSTREAM_TRANSPORT=external-websocket`
+- `CODEX_MODEL`: embedded-mode compatibility default passed to `thread/start`,
+  default `gpt-5.1-codex`
 - `CODEX_MODEL_ID`: per-turn model override passed to `turn/start` (optional)
-- `CODEX_MODEL_REASONING_EFFORT`: explicit reasoning effort override passed to
+- `CODEX_MODEL_REASONING_EFFORT`: embedded-mode compatibility override passed to
   Codex CLI app-server via `-c model_reasoning_effort=...` (optional)
 - `CODEX_WORKSPACE_ROOT`: default Codex workspace root (optional)
 - `CODEX_PROVIDER_ID`: deployment metadata only (optional)
@@ -245,6 +250,11 @@ Current implementation note:
 
 Configuration note:
 - The service configuration layer only accepts `CODEX_*` names for Codex-facing settings.
+- `CODEX_UPSTREAM_TRANSPORT=external-websocket` is the recommended deployment
+  path. In that mode, `CODEX_UPSTREAM_URL` tells `codex-a2a` how to connect,
+  while model/search/yolo/provider defaults remain Codex-side concerns.
+- `CODEX_CLI_BIN`, `CODEX_APP_SERVER_LISTEN`, `CODEX_MODEL`, and
+  `CODEX_MODEL_REASONING_EFFORT` are embedded-mode compatibility knobs.
 - Outbound auth prefers `A2A_CLIENT_BEARER_TOKEN` when both bearer and basic
   credentials are configured; otherwise it uses `A2A_CLIENT_BASIC_AUTH`.
 
@@ -252,14 +262,14 @@ Codex prerequisite note:
 - `codex-a2a` assumes the local `codex` runtime is already usable.
 - Install and verify the `codex` CLI itself before starting this server.
 - Provider selection, login state, and upstream API keys remain Codex-side prerequisites.
-- Service startup fails fast when the local `codex` runtime is missing or cannot initialize.
+- Service startup fails fast when the configured Codex upstream cannot initialize.
 
-## Released CLI Self-Start
+## Recommended Two-Process Start
 
 For a single user or an existing workspace root, prefer the published CLI
 instead of repository scripts. The abbreviated quick-start stays in
 [README.md](../README.md); this section keeps the fuller runtime example and
-operational notes.
+operational notes for the recommended external-upstream deployment model.
 
 Install once:
 
@@ -268,10 +278,17 @@ uv tool install codex-a2a
 ```
 
 Apply the same Codex prerequisites from [README.md](../README.md) before
-starting the runtime. This guide keeps the fuller example with explicit model
-and timeout overrides.
+starting the runtime.
 
-Run against a workspace root:
+Start Codex first using its own CLI/config surface. Keep model defaults,
+reasoning effort, search, yolo, provider auth, and other Codex-native runtime
+choices on the Codex side:
+
+```bash
+codex app-server --listen ws://127.0.0.1:4222
+```
+
+Then run `codex-a2a` against that upstream:
 
 ```bash
 A2A_BEARER_TOKEN="$(python -c 'import secrets; print(secrets.token_hex(24))')" \
@@ -279,8 +296,9 @@ A2A_HOST=127.0.0.1 \
 A2A_PORT=8000 \
 A2A_PUBLIC_URL=http://127.0.0.1:8000 \
 A2A_DATABASE_URL=sqlite+aiosqlite:///./codex-a2a.db \
+CODEX_UPSTREAM_TRANSPORT=external-websocket \
+CODEX_UPSTREAM_URL=ws://127.0.0.1:4222 \
 CODEX_WORKSPACE_ROOT=/abs/path/to/workspace \
-CODEX_MODEL_ID=gpt-5.1-codex \
 CODEX_TIMEOUT=300 \
 codex-a2a
 ```
@@ -288,9 +306,24 @@ codex-a2a
 Notes:
 
 - `CODEX_WORKSPACE_ROOT` should point at the workspace root you want Codex to operate in.
-- `codex-a2a` launches the Codex app-server subprocess itself; no
-  separate `codex serve` step is required.
+- `codex-a2a` only connects to the configured websocket upstream in this mode;
+  it does not decide Codex-native flags such as model defaults, search, or yolo.
 - Upgrade the installed CLI with `uv tool upgrade codex-a2a`.
+
+## Embedded Compatibility Path
+
+For local debugging or backwards compatibility, `codex-a2a` can still launch
+an embedded stdio `codex app-server` subprocess:
+
+```bash
+A2A_BEARER_TOKEN="$(python -c 'import secrets; print(secrets.token_hex(24))')" \
+CODEX_WORKSPACE_ROOT=/abs/path/to/workspace \
+codex-a2a
+```
+
+This path keeps `CODEX_CLI_BIN`, `CODEX_APP_SERVER_LISTEN`, `CODEX_MODEL`, and
+`CODEX_MODEL_REASONING_EFFORT` as compatibility controls, but it is no longer
+the preferred deployment model.
 
 ## Source-Based Development Start
 
@@ -300,6 +333,8 @@ unreleased changes:
 ```bash
 uv sync --all-extras
 export A2A_BEARER_TOKEN="$(python -c 'import secrets; print(secrets.token_hex(24))')"
+export CODEX_UPSTREAM_TRANSPORT=external-websocket
+export CODEX_UPSTREAM_URL=ws://127.0.0.1:4222
 CODEX_WORKSPACE_ROOT=/abs/path/to/workspace uv run codex-a2a
 ```
 

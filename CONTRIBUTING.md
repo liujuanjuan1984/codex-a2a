@@ -39,19 +39,28 @@ uv sync --all-extras
 - verify `codex` is installed and available on `PATH` (or set `CODEX_CLI_BIN`)
 - verify Codex provider/auth configuration already works outside this repository
 
-3. Generate a local bearer token:
+3. Start Codex first:
+
+```bash
+codex app-server --listen ws://127.0.0.1:4222
+```
+
+4. Generate a local bearer token:
 
 ```bash
 export A2A_BEARER_TOKEN="$(python -c 'import secrets; print(secrets.token_hex(24))')"
 ```
 
-4. Start this service from the source tree:
+5. Start this service from the source tree:
 
 ```bash
-CODEX_WORKSPACE_ROOT=/abs/path/to/workspace uv run codex-a2a
+CODEX_UPSTREAM_TRANSPORT=external-websocket \
+CODEX_UPSTREAM_URL=ws://127.0.0.1:4222 \
+CODEX_WORKSPACE_ROOT=/abs/path/to/workspace \
+uv run codex-a2a
 ```
 
-5. Open the Agent Card:
+6. Open the Agent Card:
 
 - `http://127.0.0.1:8000/.well-known/agent-card.json`
 

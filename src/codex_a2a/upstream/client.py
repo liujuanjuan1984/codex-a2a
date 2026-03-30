@@ -11,6 +11,8 @@ from collections.abc import AsyncIterator, Callable, Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+from websockets.asyncio.client import connect as websocket_connect
+
 from codex_a2a import __version__
 from codex_a2a.config import Settings
 from codex_a2a.input_mapping import build_turn_input_from_normalized_items
@@ -74,7 +76,7 @@ class _InterruptExecutionContext:
 
 
 class CodexClient:
-    """Codex app-server client adapter (stdio JSON-RPC)."""
+    """Codex app-server client adapter (embedded stdio or external websocket)."""
 
     def __init__(
         self,
@@ -90,6 +92,8 @@ class CodexClient:
         self._request_timeout = settings.codex_timeout
         self._cli_bin = settings.codex_cli_bin
         self._listen = settings.codex_app_server_listen
+        self._upstream_transport = settings.codex_upstream_transport
+        self._upstream_url = settings.codex_upstream_url
         self._default_model = settings.codex_model
         self._model_reasoning_effort = settings.codex_model_reasoning_effort
         self._interrupt_request_ttl_seconds = settings.a2a_interrupt_request_ttl_seconds
@@ -100,6 +104,8 @@ class CodexClient:
         self._process: asyncio.subprocess.Process | None = None
         self._stdout_task: asyncio.Task[None] | None = None
         self._stderr_task: asyncio.Task[None] | None = None
+        self._websocket: Any | None = None
+        self._websocket_task: asyncio.Task[None] | None = None
         self._closed = False
 
         self._init_lock = asyncio.Lock()
@@ -207,17 +213,24 @@ class CodexClient:
         async with self._state_lock:
             process = self._process
             self._process = None
+            websocket = self._websocket
+            self._websocket = None
 
-        for task in (self._stdout_task, self._stderr_task):
+        for task in (self._stdout_task, self._stderr_task, self._websocket_task):
             if task:
                 task.cancel()
         self._stdout_task = None
         self._stderr_task = None
+        self._websocket_task = None
 
         for pending in self._pending_requests.values():
             if not pending.future.done():
                 pending.future.set_exception(RuntimeError("codex app-server closed"))
         self._pending_requests.clear()
+
+        if websocket is not None:
+            with contextlib.suppress(Exception):
+                await websocket.close()
 
         if process:
             if process.returncode is None:
@@ -239,6 +252,18 @@ class CodexClient:
     @property
     def settings(self) -> Settings:
         return self._settings
+
+    def _uses_embedded_stdio(self) -> bool:
+        return self._upstream_transport == "embedded-stdio"
+
+    def _is_running(self) -> bool:
+        if self._uses_embedded_stdio():
+            return self._process is not None and self._process.returncode is None
+        return (
+            self._websocket is not None
+            and self._websocket_task is not None
+            and not self._websocket_task.done()
+        )
 
     def _resolve_timeout_seconds(
         self,
@@ -310,6 +335,12 @@ class CodexClient:
             await self._ensure_started()
         except CodexStartupPrerequisiteError:
             raise
+        except ImportError as exc:
+            raise CodexStartupPrerequisiteError(
+                "Codex prerequisite not satisfied: websocket transport support is "
+                "not installed. Reinstall codex-a2a with the released dependencies "
+                "before using external websocket upstream mode."
+            ) from exc
         except FileNotFoundError as exc:
             raise CodexStartupPrerequisiteError(
                 "Codex prerequisite not satisfied: failed to execute the "
@@ -317,6 +348,14 @@ class CodexClient:
                 "CODEX_CLI_BIN points to a valid executable."
             ) from exc
         except Exception as exc:
+            if not self._uses_embedded_stdio():
+                raise CodexStartupPrerequisiteError(
+                    "Codex prerequisite not satisfied: failed to connect or "
+                    "initialize the external Codex app-server. Verify that "
+                    "CODEX_UPSTREAM_URL points to a running "
+                    "`codex app-server --listen ws://...` endpoint and that "
+                    "the upstream Codex runtime is already configured."
+                ) from exc
             raise CodexStartupPrerequisiteError(
                 "Codex prerequisite not satisfied: failed to start or initialize "
                 "`codex app-server`. Verify that Codex itself is usable and "
@@ -327,41 +366,47 @@ class CodexClient:
     async def _ensure_started(self) -> None:
         if self._closed:
             raise RuntimeError("codex client already closed")
-        if self._initialized and self._process and self._process.returncode is None:
+        if self._initialized and self._is_running():
             return
 
         async with self._init_lock:
-            if self._initialized and self._process and self._process.returncode is None:
+            if self._initialized and self._is_running():
                 return
             if self._closed:
                 raise RuntimeError("codex client already closed")
 
-            cli_args: list[str] = [self._resolve_cli_bin()]
-            if self._model_reasoning_effort:
+            if self._uses_embedded_stdio():
+                cli_args: list[str] = [self._resolve_cli_bin()]
+                if self._model_reasoning_effort:
+                    cli_args.extend(
+                        [
+                            "-c",
+                            f"model_reasoning_effort={json.dumps(self._model_reasoning_effort)}",
+                        ]
+                    )
                 cli_args.extend(
                     [
-                        "-c",
-                        f"model_reasoning_effort={json.dumps(self._model_reasoning_effort)}",
+                        "app-server",
+                        "--listen",
+                        self._listen,
                     ]
                 )
-            cli_args.extend(
-                [
-                    "app-server",
-                    "--listen",
-                    self._listen,
-                ]
-            )
 
-            process = await asyncio.create_subprocess_exec(
-                *cli_args,
-                stdin=asyncio.subprocess.PIPE,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
+                process = await asyncio.create_subprocess_exec(
+                    *cli_args,
+                    stdin=asyncio.subprocess.PIPE,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                )
 
-            self._process = process
-            self._stdout_task = asyncio.create_task(self._read_stdout_loop())
-            self._stderr_task = asyncio.create_task(self._read_stderr_loop())
+                self._process = process
+                self._stdout_task = asyncio.create_task(self._read_stdout_loop())
+                self._stderr_task = asyncio.create_task(self._read_stderr_loop())
+            else:
+                assert self._upstream_url is not None
+                websocket = await websocket_connect(self._upstream_url)
+                self._websocket = websocket
+                self._websocket_task = asyncio.create_task(self._read_websocket_loop())
 
             init_result = await self._rpc_request(
                 "initialize",
@@ -381,6 +426,45 @@ class CodexClient:
                 logger.debug("codex initialize result=%s", init_result)
             await self._send_json_message({"method": "initialized", "params": {}})
             self._initialized = True
+
+    async def _read_websocket_loop(self) -> None:
+        websocket = self._websocket
+        if websocket is None:
+            return
+        try:
+            async for frame in websocket:
+                raw = (
+                    frame.decode("utf-8", errors="replace")
+                    if isinstance(frame, bytes)
+                    else str(frame)
+                )
+                raw = raw.strip()
+                if not raw:
+                    continue
+                try:
+                    message = json.loads(raw)
+                except json.JSONDecodeError:
+                    logger.debug("drop non-json websocket frame from codex app-server: %s", raw)
+                    continue
+                if not isinstance(message, dict):
+                    logger.debug(
+                        "drop non-object jsonrpc websocket payload from codex app-server: %s",
+                        type(message).__name__,
+                    )
+                    continue
+                await self._dispatch_message(message)
+        except asyncio.CancelledError:
+            raise
+        except Exception:  # pragma: no cover - defensive
+            logger.exception("codex app-server websocket loop failed")
+        finally:
+            async with self._state_lock:
+                if self._websocket is websocket:
+                    self._websocket = None
+            for pending in self._pending_requests.values():
+                if not pending.future.done():
+                    pending.future.set_exception(RuntimeError("codex app-server websocket closed"))
+            self._pending_requests.clear()
 
     async def _read_stdout_loop(self) -> None:
         process = self._process
@@ -490,15 +574,22 @@ class CodexClient:
             await self._handle_notification(message)
 
     async def _send_json_message(self, payload: dict[str, Any]) -> None:
-        process = self._process
-        if process is None or process.stdin is None:
-            raise RuntimeError("codex app-server is not running")
         line = json.dumps(payload, ensure_ascii=False)
         if self._log_payloads:
             logger.debug("codex app-server -> %s", line)
         async with self._write_lock:
-            process.stdin.write((line + "\n").encode("utf-8"))
-            await process.stdin.drain()
+            if self._uses_embedded_stdio():
+                process = self._process
+                if process is None or process.stdin is None:
+                    raise RuntimeError("codex app-server is not running")
+                process.stdin.write((line + "\n").encode("utf-8"))
+                await process.stdin.drain()
+                return
+
+            websocket = self._websocket
+            if websocket is None:
+                raise RuntimeError("codex app-server websocket is not running")
+            await websocket.send(line)
 
     async def _rpc_request(
         self,
@@ -921,7 +1012,7 @@ class CodexClient:
     ) -> str:
         del title
         params: dict[str, Any] = {}
-        model = self._model_id or self._default_model
+        model = self._default_model if self._uses_embedded_stdio() else None
         if model:
             params["model"] = model
         if directory:

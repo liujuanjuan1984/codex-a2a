@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from typing import Annotated, Any, cast
+from urllib.parse import urlparse
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 from codex_a2a import __version__
@@ -40,6 +41,10 @@ _APPROVAL_ESCALATION_BEHAVIORS = {
     "per_request",
     "fallback_only",
     "restricted",
+}
+_CODEX_UPSTREAM_TRANSPORTS = {
+    "embedded-stdio",
+    "external-websocket",
 }
 
 
@@ -92,6 +97,19 @@ def _validate_choice(value: str, *, allowed: set[str], env_name: str) -> str:
     return value
 
 
+def _normalize_codex_upstream_transport(value: Any) -> Any:
+    if value is None:
+        return "embedded-stdio"
+    if not isinstance(value, str):
+        return value
+    normalized = value.strip().lower().replace("_", "-")
+    if normalized in {"embedded", "embedded-stdio", "stdio", "subprocess"}:
+        return "embedded-stdio"
+    if normalized in {"external", "external-websocket", "websocket", "ws"}:
+        return "external-websocket"
+    return normalized
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_prefix="",
@@ -137,6 +155,14 @@ class Settings(BaseSettings):
     codex_app_server_listen: str = Field(
         default="stdio://",
         alias="CODEX_APP_SERVER_LISTEN",
+    )
+    codex_upstream_transport: str = Field(
+        default="embedded-stdio",
+        alias="CODEX_UPSTREAM_TRANSPORT",
+    )
+    codex_upstream_url: str | None = Field(
+        default=None,
+        alias="CODEX_UPSTREAM_URL",
     )
     codex_model: str = Field(
         default="gpt-5.1-codex",
@@ -263,6 +289,35 @@ class Settings(BaseSettings):
             raise ValueError("A2A_INTERRUPT_REQUEST_TTL_SECONDS must be >= 1")
         return value
 
+    @field_validator("codex_upstream_transport", mode="before")
+    @classmethod
+    def normalize_codex_upstream_transport(cls, value: Any) -> Any:
+        return _normalize_codex_upstream_transport(value)
+
+    @field_validator("codex_upstream_transport")
+    @classmethod
+    def validate_codex_upstream_transport(cls, value: str) -> str:
+        return _validate_choice(
+            value,
+            allowed=_CODEX_UPSTREAM_TRANSPORTS,
+            env_name="CODEX_UPSTREAM_TRANSPORT",
+        )
+
+    @field_validator("codex_upstream_url")
+    @classmethod
+    def validate_codex_upstream_url(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
+        normalized = value.strip()
+        if not normalized:
+            return None
+        parsed = urlparse(normalized)
+        if parsed.scheme not in {"ws", "wss"}:
+            raise ValueError("CODEX_UPSTREAM_URL must use ws:// or wss://")
+        if not parsed.netloc:
+            raise ValueError("CODEX_UPSTREAM_URL must include a host")
+        return normalized
+
     @field_validator(
         "a2a_execution_sandbox_writable_roots",
         "a2a_execution_network_allowed_domains",
@@ -353,6 +408,26 @@ class Settings(BaseSettings):
 
         validate_basic_auth(value)
         return value
+
+    @model_validator(mode="after")
+    def validate_codex_upstream_settings(self) -> Settings:
+        if self.codex_upstream_transport == "external-websocket":
+            if self.codex_upstream_url is None:
+                raise ValueError(
+                    "CODEX_UPSTREAM_URL is required when "
+                    "CODEX_UPSTREAM_TRANSPORT=external-websocket"  # pragma: allowlist secret
+                )
+            if self.codex_model_reasoning_effort is not None:
+                raise ValueError(
+                    "CODEX_MODEL_REASONING_EFFORT is only supported when "
+                    "CODEX_UPSTREAM_TRANSPORT=embedded-stdio"  # pragma: allowlist secret
+                )
+        elif self.codex_upstream_url is not None:
+            raise ValueError(
+                "CODEX_UPSTREAM_URL is only supported when "
+                "CODEX_UPSTREAM_TRANSPORT=external-websocket"  # pragma: allowlist secret
+            )
+        return self
 
     @classmethod
     def from_env(cls) -> Settings:

@@ -31,8 +31,22 @@ def test_settings_valid():
         assert settings.codex_timeout == 300.0
         assert settings.codex_model_reasoning_effort == "high"
         assert settings.codex_workspace_root == "/tmp/workspace"
+        assert settings.codex_upstream_transport == "embedded-stdio"
         assert settings.a2a_database_url == "sqlite+aiosqlite:///./codex-a2a.db"
         assert settings.a2a_version == __version__
+
+
+def test_settings_parse_external_websocket_upstream() -> None:
+    env = {
+        "A2A_BEARER_TOKEN": "test-token",
+        "CODEX_UPSTREAM_TRANSPORT": "external",
+        "CODEX_UPSTREAM_URL": "ws://127.0.0.1:4222",
+    }
+    with mock.patch.dict(os.environ, env, clear=True):
+        settings = Settings.from_env()
+
+    assert settings.codex_upstream_transport == "external-websocket"
+    assert settings.codex_upstream_url == "ws://127.0.0.1:4222"
 
 
 def test_settings_parse_ops_flags_and_timeouts():
@@ -133,6 +147,30 @@ def test_settings_reject_invalid_execution_sandbox_mode() -> None:
         with pytest.raises(ValidationError) as excinfo:
             Settings.from_env()
     assert "A2A_EXECUTION_SANDBOX_MODE" in str(excinfo.value)
+
+
+def test_settings_reject_external_upstream_without_url() -> None:
+    env = {
+        "A2A_BEARER_TOKEN": "test",
+        "CODEX_UPSTREAM_TRANSPORT": "external-websocket",
+    }
+    with mock.patch.dict(os.environ, env, clear=True):
+        with pytest.raises(ValidationError) as excinfo:
+            Settings.from_env()
+    assert "CODEX_UPSTREAM_URL" in str(excinfo.value)
+
+
+def test_settings_reject_reasoning_effort_for_external_upstream() -> None:
+    env = {
+        "A2A_BEARER_TOKEN": "test",
+        "CODEX_UPSTREAM_TRANSPORT": "external-websocket",
+        "CODEX_UPSTREAM_URL": "ws://127.0.0.1:4222",
+        "CODEX_MODEL_REASONING_EFFORT": "high",
+    }
+    with mock.patch.dict(os.environ, env, clear=True):
+        with pytest.raises(ValidationError) as excinfo:
+            Settings.from_env()
+    assert "CODEX_MODEL_REASONING_EFFORT" in str(excinfo.value)
 
 
 def test_settings_parse_a2a_client_transport_and_timeouts() -> None:

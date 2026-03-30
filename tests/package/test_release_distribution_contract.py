@@ -18,21 +18,24 @@ def test_readme_documents_released_cli_installation_via_uv_tool() -> None:
     assert "uv tool install codex-a2a" in README_TEXT
     assert "uv tool upgrade codex-a2a" in README_TEXT
     assert 'uv tool install "codex-a2a==<version>"' in README_TEXT
-    assert "Self-start the released CLI against a workspace root:" in README_TEXT
+    assert "Recommended two-process startup:" in README_TEXT
     assert "## Development From Source" not in README_TEXT
     assert "## Development From Source" in CONTRIBUTING_TEXT
-    assert "CODEX_WORKSPACE_ROOT=/abs/path/to/workspace uv run codex-a2a" in CONTRIBUTING_TEXT
+    assert "CODEX_UPSTREAM_TRANSPORT=external-websocket \\" in CONTRIBUTING_TEXT
+    assert "CODEX_UPSTREAM_URL=ws://127.0.0.1:4222 \\" in CONTRIBUTING_TEXT
     assert "http://127.0.0.1:8000/.well-known/agent-card.json" in CONTRIBUTING_TEXT
     assert "Install and verify the local `codex` CLI itself." in README_TEXT
     assert "does not provision Codex providers, login state, or API keys for you" in README_TEXT
-    assert "Startup fails fast if the local `codex` runtime is missing" in README_TEXT
+    assert "Startup fails fast if the configured Codex upstream cannot initialize." in README_TEXT
     assert "CODEX_WORKSPACE_ROOT=/abs/path/to/workspace" in README_TEXT  # pragma: allowlist secret
     assert "A2A_DATABASE_URL=sqlite+aiosqlite:///./codex-a2a.db" in README_TEXT
     assert (
         "A2A_BEARER_TOKEN=\"$(python -c 'import secrets; print(secrets.token_hex(24))')\" \\"
         in README_TEXT
     )
-    assert "CODEX_WORKSPACE_ROOT=/abs/path/to/workspace \\\ncodex-a2a" in README_TEXT
+    assert "codex app-server --listen ws://127.0.0.1:4222" in README_TEXT
+    assert "CODEX_UPSTREAM_TRANSPORT=external-websocket \\" in README_TEXT
+    assert "CODEX_UPSTREAM_URL=ws://127.0.0.1:4222 \\" in README_TEXT
     assert "export A2A_HOST=127.0.0.1" not in README_TEXT
     assert "A2A_CLIENT_BASIC_AUTH" in README_TEXT
     assert "--token your-outbound-token" not in README_TEXT

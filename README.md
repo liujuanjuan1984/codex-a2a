@@ -2,13 +2,13 @@
 
 > Expose Codex through A2A.
 
-`codex-a2a` adds an A2A runtime layer to the local Codex runtime, with
+`codex-a2a` adds an A2A runtime layer to a Codex app-server runtime, with
 auth, streaming, session continuity, interrupt handling, a built-in
 outbound A2A client, and a clear deployment boundary.
 
 ## What This Is
 
-- An A2A adapter service for the local Codex runtime, with inbound runtime
+- An A2A adapter service for a Codex app-server runtime, with inbound runtime
   exposure plus outbound peer calling.
 - It supports both roles in one process: serving as an A2A Server and hosting
   an embedded A2A Client for `a2a_call` and CLI-driven peer calls.
@@ -63,22 +63,33 @@ Before starting the runtime:
 
 - Install and verify the local `codex` CLI itself.
 - Configure Codex with a working provider/model setup and any required credentials.
+- Prefer running Codex as a separate upstream process and keep Codex-native
+  flags or config such as model defaults, reasoning effort, search, and yolo
+  on the Codex side.
 - `codex-a2a` does not provision Codex providers, login state, or API keys for you.
-- Startup fails fast if the local `codex` runtime is missing or cannot initialize.
+- Startup fails fast if the configured Codex upstream cannot initialize.
 
-Self-start the released CLI against a workspace root:
+Recommended two-process startup:
 
 ```bash
+# Start Codex first using its own CLI/config surface.
+codex app-server --listen ws://127.0.0.1:4222
+
 A2A_BEARER_TOKEN="$(python -c 'import secrets; print(secrets.token_hex(24))')" \
 A2A_HOST=127.0.0.1 \
 A2A_PORT=8000 \
 A2A_PUBLIC_URL=http://127.0.0.1:8000 \
 A2A_DATABASE_URL=sqlite+aiosqlite:///./codex-a2a.db \
+CODEX_UPSTREAM_TRANSPORT=external-websocket \
+CODEX_UPSTREAM_URL=ws://127.0.0.1:4222 \
 CODEX_WORKSPACE_ROOT=/abs/path/to/workspace \
 codex-a2a
 ```
 
 Agent Card: `http://127.0.0.1:8000/.well-known/agent-card.json`
+
+Embedded stdio startup remains available as a compatibility path for local
+debugging, but it is no longer the recommended deployment model.
 
 ## Capabilities
 

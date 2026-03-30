@@ -8,6 +8,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+import codex_a2a.upstream.client as upstream_client_module
 from codex_a2a.logging_context import bind_correlation_id
 from codex_a2a.upstream.client import (
     CodexClient,
@@ -1471,6 +1472,25 @@ async def test_question_request_promotes_nested_context_details() -> None:
     )
 
 
+class _DummyWebSocket:
+    def __init__(self) -> None:
+        self.sent: list[str] = []
+        self._closed = asyncio.Event()
+
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self) -> str:
+        await self._closed.wait()
+        raise StopAsyncIteration
+
+    async def send(self, payload: str) -> None:
+        self.sent.append(payload)
+
+    async def close(self) -> None:
+        self._closed.set()
+
+
 @pytest.mark.asyncio
 async def test_ensure_started_passes_reasoning_effort_override_to_codex_cli() -> None:
     client = CodexClient(
@@ -1544,6 +1564,111 @@ async def test_ensure_started_passes_reasoning_effort_override_to_codex_cli() ->
     assert captured
     args, _kwargs = captured[0]
     assert args[:4] == ("codex-custom", "-c", 'model_reasoning_effort="high"', "app-server")
+
+
+@pytest.mark.asyncio
+async def test_ensure_started_connects_to_external_websocket_upstream() -> None:
+    client = CodexClient(
+        make_settings(
+            a2a_bearer_token="t-1",
+            codex_timeout=1.0,
+            codex_upstream_transport="external-websocket",
+            codex_upstream_url="ws://127.0.0.1:4222",
+        )
+    )
+
+    captured: list[str] = []
+    dummy_websocket = _DummyWebSocket()
+
+    async def fake_connect(url: str):
+        captured.append(url)
+        return dummy_websocket
+
+    async def fake_rpc_request(
+        method: str, params: dict | None = None, *, _skip_ensure: bool = False
+    ):
+        assert method == "initialize"
+        assert _skip_ensure is True
+        assert params == {
+            "clientInfo": {
+                "name": "codex_a2a",
+                "title": "Codex A2A",
+                "version": client.settings.a2a_version,
+            },
+            "capabilities": {
+                "experimentalApi": True,
+            },
+        }
+        return {}
+
+    async def fake_send_json(payload: dict) -> None:
+        assert payload == {"method": "initialized", "params": {}}
+
+    client._rpc_request = fake_rpc_request
+    client._send_json_message = fake_send_json
+
+    original_connect = upstream_client_module.websocket_connect
+    upstream_client_module.websocket_connect = fake_connect
+    try:
+        await client._ensure_started()
+    finally:
+        upstream_client_module.websocket_connect = original_connect
+        await client.close()
+
+    assert captured == ["ws://127.0.0.1:4222"]
+
+
+@pytest.mark.asyncio
+async def test_create_session_omits_embedded_default_model_for_external_upstream() -> None:
+    client = CodexClient(
+        make_settings(
+            a2a_bearer_token="t-1",
+            codex_timeout=1.0,
+            codex_upstream_transport="external-websocket",
+            codex_upstream_url="ws://127.0.0.1:4222",
+            codex_model="gpt-5.1-codex",
+            codex_workspace_root="/safe",
+        )
+    )
+
+    seen: list[tuple[str, dict | None]] = []
+
+    async def fake_rpc_request(method: str, params: dict | None = None):
+        seen.append((method, params))
+        return {"thread": {"id": "thr-1"}}
+
+    client._rpc_request = fake_rpc_request
+
+    session_id = await client.create_session()
+
+    assert session_id == "thr-1"
+    assert seen == [("thread/start", {"cwd": "/safe"})]
+
+
+@pytest.mark.asyncio
+async def test_startup_preflight_external_websocket_failure_has_clear_message() -> None:
+    client = CodexClient(
+        make_settings(
+            a2a_bearer_token="t-1",
+            codex_timeout=1.0,
+            codex_upstream_transport="external-websocket",
+            codex_upstream_url="ws://127.0.0.1:4222",
+        )
+    )
+
+    async def fake_connect(_url: str):
+        raise OSError("connection refused")
+
+    original_connect = upstream_client_module.websocket_connect
+    upstream_client_module.websocket_connect = fake_connect
+    try:
+        with pytest.raises(CodexStartupPrerequisiteError) as excinfo:
+            await client.startup_preflight()
+    finally:
+        upstream_client_module.websocket_connect = original_connect
+        await client.close()
+
+    assert "CODEX_UPSTREAM_URL" in str(excinfo.value)
 
 
 @pytest.mark.asyncio
