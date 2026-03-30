@@ -11,6 +11,7 @@ from codex_a2a.contracts.extensions import (
     SESSION_CONTROL_METHODS,
     SESSION_QUERY_DEFAULT_LIMIT,
     SESSION_QUERY_METHODS,
+    THREAD_LIFECYCLE_METHODS,
     build_compatibility_profile_params,
     build_discovery_extension_params,
     build_exec_control_extension_params,
@@ -18,6 +19,7 @@ from codex_a2a.contracts.extensions import (
     build_session_binding_extension_params,
     build_session_query_extension_params,
     build_streaming_extension_params,
+    build_thread_lifecycle_extension_params,
     build_wire_contract_extension_params,
 )
 from codex_a2a.profile.runtime import RuntimeProfile
@@ -33,14 +35,17 @@ def _build_jsonrpc_extension_openapi_description(*, session_shell_enabled: bool)
     if session_shell_enabled:
         session_methods.append(SESSION_CONTROL_METHODS["shell"])
     discovery_methods = ", ".join(DISCOVERY_METHODS.values())
+    thread_lifecycle_methods = ", ".join(THREAD_LIFECYCLE_METHODS.values())
     exec_methods = ", ".join(EXEC_CONTROL_METHODS.values())
     interrupt_methods = ", ".join(sorted(INTERRUPT_CALLBACK_METHODS.values()))
     return (
         "A2A JSON-RPC entrypoint. Supports core A2A methods "
         "(message/send, message/stream, tasks/get, tasks/cancel, tasks/resubscribe) "
-        "plus Codex session extensions, Codex discovery extensions, interactive "
-        "exec extensions, and shared interrupt callback methods.\n\n"
+        "plus Codex session extensions, Codex thread lifecycle extensions, "
+        "Codex discovery extensions, interactive exec extensions, and shared "
+        "interrupt callback methods.\n\n"
         f"Codex session query/control methods: {', '.join(session_methods)}.\n"
+        f"Codex thread lifecycle methods: {thread_lifecycle_methods}.\n"
         f"Codex discovery methods: {discovery_methods}.\n"
         f"Codex interactive exec methods: {exec_methods}.\n"
         f"Shared interrupt callback methods: {interrupt_methods}.\n\n"
@@ -186,6 +191,59 @@ def _build_jsonrpc_extension_openapi_examples(*, session_shell_enabled: bool) ->
                 "id": 27,
                 "method": DISCOVERY_METHODS["watch"],
                 "params": {"request": {"events": ["skills.changed", "apps.updated"]}},
+            },
+        },
+        "thread_fork": {
+            "summary": "Fork a Codex thread",
+            "value": {
+                "jsonrpc": "2.0",
+                "id": 271,
+                "method": THREAD_LIFECYCLE_METHODS["fork"],
+                "params": {"thread_id": "thr-1", "request": {"ephemeral": True}},
+            },
+        },
+        "thread_archive": {
+            "summary": "Archive a Codex thread",
+            "value": {
+                "jsonrpc": "2.0",
+                "id": 272,
+                "method": THREAD_LIFECYCLE_METHODS["archive"],
+                "params": {"thread_id": "thr-1"},
+            },
+        },
+        "thread_unarchive": {
+            "summary": "Restore an archived Codex thread",
+            "value": {
+                "jsonrpc": "2.0",
+                "id": 273,
+                "method": THREAD_LIFECYCLE_METHODS["unarchive"],
+                "params": {"thread_id": "thr-1"},
+            },
+        },
+        "thread_metadata_update": {
+            "summary": "Patch persisted Codex thread git metadata",
+            "value": {
+                "jsonrpc": "2.0",
+                "id": 274,
+                "method": THREAD_LIFECYCLE_METHODS["metadata_update"],
+                "params": {
+                    "thread_id": "thr-1",
+                    "request": {"git_info": {"branch": "feature/thread-lifecycle"}},
+                },
+            },
+        },
+        "thread_watch": {
+            "summary": "Watch thread lifecycle signals through a task stream",
+            "value": {
+                "jsonrpc": "2.0",
+                "id": 275,
+                "method": THREAD_LIFECYCLE_METHODS["watch"],
+                "params": {
+                    "request": {
+                        "events": ["thread.started", "thread.status.changed"],
+                        "thread_ids": ["thr-1"],
+                    }
+                },
             },
         },
         "exec_start": {
@@ -362,6 +420,9 @@ def patch_openapi_contract(
     discovery = build_discovery_extension_params(
         runtime_profile=runtime_profile,
     )
+    thread_lifecycle = build_thread_lifecycle_extension_params(
+        runtime_profile=runtime_profile,
+    )
     exec_control = build_exec_control_extension_params(
         runtime_profile=runtime_profile,
     )
@@ -398,6 +459,7 @@ def patch_openapi_contract(
                         "streaming": streaming,
                         "session_query": session_query,
                         "discovery": discovery,
+                        "thread_lifecycle": thread_lifecycle,
                         "exec_control": exec_control,
                         "interrupt_callback": interrupt_callback,
                         "wire_contract": wire_contract,

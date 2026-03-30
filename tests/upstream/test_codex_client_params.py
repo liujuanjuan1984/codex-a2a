@@ -274,6 +274,64 @@ async def test_exec_control_methods_forward_expected_rpc_calls() -> None:
 
 
 @pytest.mark.asyncio
+async def test_thread_lifecycle_methods_forward_expected_rpc_calls() -> None:
+    client = CodexClient(make_settings(a2a_bearer_token="t-1", codex_timeout=1.0))
+
+    seen: list[tuple[str, dict | None]] = []
+
+    async def fake_rpc_request(
+        method: str,
+        params: dict | None = None,
+        *,
+        timeout_override=None,  # noqa: ANN001
+        _skip_ensure: bool = False,
+    ):
+        del timeout_override, _skip_ensure
+        seen.append((method, params))
+        if method == "thread/fork":
+            return {"thread": {"id": "thr-1-fork", "preview": "Forked thread"}}
+        if method == "thread/unarchive":
+            return {"thread": {"id": "thr-1", "preview": "Restored thread"}}
+        if method == "thread/metadata/update":
+            return {"thread": {"id": "thr-1", "preview": "Thread 1"}}
+        return {}
+
+    client._rpc_request = fake_rpc_request
+
+    fork = await client.thread_fork("thr-1", params={"ephemeral": True})
+    await client.thread_archive("thr-1")
+    unarchive = await client.thread_unarchive("thr-1")
+    metadata = await client.thread_metadata_update(
+        "thr-1", params={"gitInfo": {"branch": "feat/thread-lifecycle"}}
+    )
+
+    assert fork == {
+        "id": "thr-1-fork",
+        "title": "Forked thread",
+        "raw": {"id": "thr-1-fork", "preview": "Forked thread"},
+    }
+    assert unarchive == {
+        "id": "thr-1",
+        "title": "Restored thread",
+        "raw": {"id": "thr-1", "preview": "Restored thread"},
+    }
+    assert metadata == {
+        "id": "thr-1",
+        "title": "Thread 1",
+        "raw": {"id": "thr-1", "preview": "Thread 1"},
+    }
+    assert seen == [
+        ("thread/fork", {"threadId": "thr-1", "ephemeral": True}),
+        ("thread/archive", {"threadId": "thr-1"}),
+        ("thread/unarchive", {"threadId": "thr-1"}),
+        (
+            "thread/metadata/update",
+            {"threadId": "thr-1", "gitInfo": {"branch": "feat/thread-lifecycle"}},
+        ),
+    ]
+
+
+@pytest.mark.asyncio
 async def test_command_exec_output_delta_notification_maps_to_exec_stream_event() -> None:
     client = CodexClient(make_settings(a2a_bearer_token="t-1", codex_timeout=1.0))
     events: list[dict] = []
@@ -368,6 +426,89 @@ async def test_discovery_notifications_map_to_stream_events() -> None:
                         },
                     }
                 ]
+            },
+        },
+    ]
+
+
+@pytest.mark.asyncio
+async def test_thread_lifecycle_notifications_map_to_stream_events() -> None:
+    client = CodexClient(make_settings(a2a_bearer_token="t-1", codex_timeout=1.0))
+    events: list[dict] = []
+
+    async def fake_enqueue(event: dict) -> None:
+        events.append(event)
+
+    client._enqueue_stream_event = fake_enqueue
+
+    await client._handle_notification(
+        {
+            "method": "thread/started",
+            "params": {
+                "thread": {
+                    "id": "thr-1",
+                    "preview": "Thread 1",
+                    "status": {"type": "idle"},
+                }
+            },
+        }
+    )
+    await client._handle_notification(
+        {
+            "method": "thread/status/changed",
+            "params": {"threadId": "thr-1", "status": "running"},
+        }
+    )
+    await client._handle_notification(
+        {
+            "method": "thread/archived",
+            "params": {"threadId": "thr-1"},
+        }
+    )
+
+    assert events == [
+        {
+            "type": "thread.lifecycle.started",
+            "properties": {
+                "thread_id": "thr-1",
+                "thread": {
+                    "id": "thr-1",
+                    "title": "Thread 1",
+                    "status": {"type": "idle"},
+                    "raw": {
+                        "id": "thr-1",
+                        "preview": "Thread 1",
+                        "status": {"type": "idle"},
+                    },
+                },
+                "status": {"type": "idle"},
+                "source": "thread/started",
+                "codex": {
+                    "raw": {
+                        "thread": {
+                            "id": "thr-1",
+                            "preview": "Thread 1",
+                            "status": {"type": "idle"},
+                        }
+                    }
+                },
+            },
+        },
+        {
+            "type": "thread.lifecycle.status_changed",
+            "properties": {
+                "thread_id": "thr-1",
+                "status": {"type": "running"},
+                "source": "thread/status/changed",
+                "codex": {"raw": {"threadId": "thr-1", "status": "running"}},
+            },
+        },
+        {
+            "type": "thread.lifecycle.archived",
+            "properties": {
+                "thread_id": "thr-1",
+                "source": "thread/archived",
+                "codex": {"raw": {"threadId": "thr-1"}},
             },
         },
     ]

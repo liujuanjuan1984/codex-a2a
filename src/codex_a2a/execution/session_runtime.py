@@ -99,7 +99,6 @@ class SessionRuntime:
         pending_session_claim_ttl_seconds: int = 30,
         state_store: SessionStateRepository | None = None,
     ) -> None:
-        self._session_cache_ttl_seconds = int(session_cache_ttl_seconds)
         self._pending_session_claim_ttl_seconds = int(pending_session_claim_ttl_seconds)
         self._sessions = TTLCache(
             ttl_seconds=session_cache_ttl_seconds,

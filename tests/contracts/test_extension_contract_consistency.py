@@ -13,6 +13,7 @@ from codex_a2a.contracts.extensions import (
     SESSION_QUERY_EXTENSION_URI,
     SESSION_QUERY_MAX_LIMIT,
     STREAMING_EXTENSION_URI,
+    THREAD_LIFECYCLE_EXTENSION_URI,
     WIRE_CONTRACT_EXTENSION_URI,
     build_capability_snapshot,
     build_compatibility_profile_params,
@@ -22,6 +23,7 @@ from codex_a2a.contracts.extensions import (
     build_session_binding_extension_params,
     build_session_query_extension_params,
     build_streaming_extension_params,
+    build_thread_lifecycle_extension_params,
     build_wire_contract_extension_params,
 )
 from codex_a2a.profile.runtime import build_runtime_profile
@@ -133,6 +135,20 @@ def test_discovery_extension_ssot_matches_agent_card_contract() -> None:
     )
 
 
+def test_thread_lifecycle_extension_ssot_matches_agent_card_contract() -> None:
+    settings = make_settings(a2a_bearer_token="test-token")
+    runtime_profile = build_runtime_profile(settings)
+    card = build_agent_card(settings)
+    ext_by_uri = {ext.uri: ext for ext in card.capabilities.extensions or []}
+
+    thread_lifecycle = ext_by_uri[THREAD_LIFECYCLE_EXTENSION_URI]
+    expected = build_thread_lifecycle_extension_params(runtime_profile=runtime_profile)
+
+    assert thread_lifecycle.params == expected, (
+        "Thread lifecycle extension drifted from extension_contracts SSOT."
+    )
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("method", "params"),
@@ -223,6 +239,7 @@ def test_openapi_jsonrpc_contract_extension_matches_ssot() -> None:
     discovery = contract["discovery"]
     interrupt_callback = contract["interrupt_callback"]
     exec_control = contract["exec_control"]
+    thread_lifecycle = contract["thread_lifecycle"]
     wire_contract = contract["wire_contract"]
     compatibility_profile = contract["compatibility_profile"]
     expected_session_binding = build_session_binding_extension_params(
@@ -239,6 +256,9 @@ def test_openapi_jsonrpc_contract_extension_matches_ssot() -> None:
         runtime_profile=runtime_profile,
     )
     expected_exec_control = build_exec_control_extension_params(
+        runtime_profile=runtime_profile,
+    )
+    expected_thread_lifecycle = build_thread_lifecycle_extension_params(
         runtime_profile=runtime_profile,
     )
     expected_wire_contract = build_wire_contract_extension_params(
@@ -268,6 +288,9 @@ def test_openapi_jsonrpc_contract_extension_matches_ssot() -> None:
     assert exec_control == expected_exec_control, (
         "OpenAPI exec control contract drifted from extension_contracts SSOT."
     )
+    assert thread_lifecycle == expected_thread_lifecycle, (
+        "OpenAPI thread lifecycle contract drifted from extension_contracts SSOT."
+    )
     assert wire_contract == expected_wire_contract, (
         "OpenAPI wire contract drifted from extension_contracts SSOT."
     )
@@ -287,6 +310,7 @@ def test_openapi_and_agent_card_extension_contracts_match() -> None:
     assert post_contract["streaming"] == ext_by_uri[STREAMING_EXTENSION_URI].params
     assert post_contract["session_query"] == ext_by_uri[SESSION_QUERY_EXTENSION_URI].params
     assert post_contract["discovery"] == ext_by_uri[DISCOVERY_EXTENSION_URI].params
+    assert post_contract["thread_lifecycle"] == ext_by_uri[THREAD_LIFECYCLE_EXTENSION_URI].params
     assert post_contract["exec_control"] == ext_by_uri[EXEC_CONTROL_EXTENSION_URI].params
     assert (
         post_contract["interrupt_callback"] == ext_by_uri[INTERRUPT_CALLBACK_EXTENSION_URI].params
@@ -373,6 +397,29 @@ def test_guide_mentions_declared_discovery_contract() -> None:
         assert fragment in guide_text
 
 
+def test_guide_mentions_declared_thread_lifecycle_contract() -> None:
+    guide_text = Path("docs/guide.md").read_text()
+    compatibility_text = Path("docs/compatibility.md").read_text()
+    lifecycle_contract = build_thread_lifecycle_extension_params(
+        runtime_profile=build_runtime_profile(make_settings(a2a_bearer_token="test-token")),
+    )
+
+    assert "codex.threads.fork" in guide_text
+    assert "codex.threads.archive" in guide_text
+    assert "codex.threads.unarchive" in guide_text
+    assert "codex.threads.metadata.update" in guide_text
+    assert "codex.threads.watch" in guide_text
+    assert "thread_started" in guide_text
+    assert "thread_status_changed" in guide_text
+    assert "thread_archived" in guide_text
+    assert "thread_unarchived" in guide_text
+    assert "thread_closed" in guide_text
+    assert "thread lifecycle watch-task bridge" in compatibility_text
+
+    for fragment in lifecycle_contract["task_streaming"]["supported_events"]:
+        assert fragment in guide_text
+
+
 def test_guide_environment_variables_match_settings_aliases() -> None:
     import re
 
@@ -401,10 +448,12 @@ def test_openapi_jsonrpc_examples_match_declared_extension_contracts() -> None:
     session_method_contracts = extension_contracts["session_query"]["method_contracts"]
     discovery_method_contracts = extension_contracts["discovery"]["method_contracts"]
     exec_method_contracts = extension_contracts["exec_control"]["method_contracts"]
+    thread_lifecycle_method_contracts = extension_contracts["thread_lifecycle"]["method_contracts"]
     interrupt_method_contracts = extension_contracts["interrupt_callback"]["method_contracts"]
     declared_extension_methods = (
         set(session_method_contracts)
         | set(discovery_method_contracts)
+        | set(thread_lifecycle_method_contracts)
         | set(exec_method_contracts)
         | set(interrupt_method_contracts)
     )
@@ -424,6 +473,7 @@ def test_openapi_jsonrpc_examples_match_declared_extension_contracts() -> None:
         method_contract = (
             session_method_contracts.get(method)
             or discovery_method_contracts.get(method)
+            or thread_lifecycle_method_contracts.get(method)
             or exec_method_contracts.get(method)
             or interrupt_method_contracts[method]
         )

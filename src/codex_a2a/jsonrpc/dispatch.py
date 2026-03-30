@@ -9,6 +9,7 @@ class ExtensionMethodRegistry:
     session_control_methods: frozenset[str]
     discovery_query_methods: frozenset[str]
     discovery_control_methods: frozenset[str]
+    thread_lifecycle_control_methods: frozenset[str]
     exec_control_methods: frozenset[str]
     interrupt_callback_methods: frozenset[str]
     extension_methods: frozenset[str]
@@ -38,6 +39,15 @@ class ExtensionMethodRegistry:
             }
         )
         discovery_control_methods = frozenset({methods["watch"]})
+        thread_lifecycle_control_methods = frozenset(
+            {
+                methods["thread_fork"],
+                methods["thread_archive"],
+                methods["thread_unarchive"],
+                methods["thread_metadata_update"],
+                methods["thread_watch"],
+            }
+        )
         exec_control_methods = frozenset(
             {
                 methods["exec_start"],
@@ -60,6 +70,7 @@ class ExtensionMethodRegistry:
             | session_control_methods
             | discovery_query_methods
             | discovery_control_methods
+            | thread_lifecycle_control_methods
             | exec_control_methods
             | interrupt_callback_methods
         )
@@ -68,6 +79,7 @@ class ExtensionMethodRegistry:
             session_control_methods=session_control_methods,
             discovery_query_methods=discovery_query_methods,
             discovery_control_methods=discovery_control_methods,
+            thread_lifecycle_control_methods=thread_lifecycle_control_methods,
             exec_control_methods=exec_control_methods,
             interrupt_callback_methods=interrupt_callback_methods,
             extension_methods=extension_methods,

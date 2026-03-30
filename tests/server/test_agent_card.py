@@ -8,6 +8,7 @@ from codex_a2a.contracts.extensions import (
     SESSION_QUERY_EXTENSION_URI,
     SESSION_QUERY_MAX_LIMIT,
     STREAMING_EXTENSION_URI,
+    THREAD_LIFECYCLE_EXTENSION_URI,
     WIRE_CONTRACT_EXTENSION_URI,
 )
 from codex_a2a.server.agent_card import build_agent_card
@@ -228,6 +229,29 @@ def test_agent_card_injects_profile_into_extensions() -> None:
     assert apps_contract["result"]["fields"] == ["items", "next_cursor"]
     assert any("mention_path" in note for note in apps_contract["notes"])
 
+    thread_lifecycle = ext_by_uri[THREAD_LIFECYCLE_EXTENSION_URI]
+    assert thread_lifecycle.params["profile"] == profile
+    assert thread_lifecycle.params["methods"]["fork"] == "codex.threads.fork"
+    assert thread_lifecycle.params["methods"]["archive"] == "codex.threads.archive"
+    assert thread_lifecycle.params["methods"]["unarchive"] == "codex.threads.unarchive"
+    assert thread_lifecycle.params["methods"]["metadata_update"] == "codex.threads.metadata.update"
+    assert thread_lifecycle.params["methods"]["watch"] == "codex.threads.watch"
+    assert thread_lifecycle.params["notification_bridge"]["current_delivery"] == (
+        "codex.threads.watch task stream"
+    )
+    assert thread_lifecycle.params["task_streaming"]["task_stream_method"] == "tasks/resubscribe"
+    assert thread_lifecycle.params["stable_thread_fields"] == ["id", "title", "status", "codex.raw"]
+    assert any(
+        "thread/unsubscribe is intentionally excluded" in note
+        for note in thread_lifecycle.params["notification_bridge"]["notes"]
+    )
+    assert (
+        thread_lifecycle.params["method_contracts"]["codex.threads.watch"][
+            "notification_response_status"
+        ]
+        == 204
+    )
+
     interrupt = ext_by_uri[INTERRUPT_CALLBACK_EXTENSION_URI]
     assert interrupt.params["profile"] == profile
     assert interrupt.params["request_id_field"] == "metadata.shared.interrupt.request_id"
@@ -303,6 +327,7 @@ def test_agent_card_injects_profile_into_extensions() -> None:
     assert compatibility.params["extension_taxonomy"]["codex_extensions"] == [
         "urn:codex-a2a:codex-session-query/v1",
         "urn:codex-a2a:codex-discovery/v1",
+        "urn:codex-a2a:codex-thread-lifecycle/v1",
         "urn:codex-a2a:codex-exec/v1",
         "urn:codex-a2a:compatibility-profile/v1",
         "urn:codex-a2a:wire-contract/v1",
@@ -354,6 +379,7 @@ def test_agent_card_injects_profile_into_extensions() -> None:
         "terminal tasks/resubscribe replay-once behavior" in note
         for note in compatibility.params["consumer_guidance"]
     )
+    assert any("codex.threads.*" in note for note in compatibility.params["consumer_guidance"])
     assert any("codex.exec.*" in note for note in compatibility.params["consumer_guidance"])
     shell_policy = compatibility.params["method_retention"]["codex.sessions.shell"]
     assert shell_policy["availability"] == "enabled"
@@ -363,12 +389,26 @@ def test_agent_card_injects_profile_into_extensions() -> None:
     assert exec_policy["availability"] == "always"
     assert exec_policy["retention"] == "stable"
     assert exec_policy["extension_uri"] == "urn:codex-a2a:codex-exec/v1"
+    thread_policy = compatibility.params["method_retention"]["codex.threads.watch"]
+    assert thread_policy["availability"] == "always"
+    assert thread_policy["retention"] == "stable"
+    assert thread_policy["extension_uri"] == "urn:codex-a2a:codex-thread-lifecycle/v1"
 
 
 def test_agent_card_chat_examples_include_project_hint_when_configured() -> None:
     card = build_agent_card(make_settings(a2a_bearer_token="test-token", a2a_project="alpha"))
     chat_skill = next(skill for skill in card.skills if skill.id == "codex.chat")
     assert any("project alpha" in example for example in chat_skill.examples)
+
+
+def test_agent_card_declares_thread_lifecycle_skill() -> None:
+    card = build_agent_card(make_settings(a2a_bearer_token="test-token"))
+    skill = next(skill for skill in card.skills if skill.id == "codex.threads.lifecycle")
+
+    assert skill.name == "Codex Thread Lifecycle"
+    assert "codex.threads.*" in skill.description
+    assert any("codex.threads.fork" in example for example in skill.examples)
+    assert any("codex.threads.watch" in example for example in skill.examples)
 
 
 def test_agent_card_omits_shell_method_when_disabled() -> None:

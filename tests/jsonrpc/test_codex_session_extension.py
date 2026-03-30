@@ -13,6 +13,7 @@ from codex_a2a.contracts.extensions import (
     SESSION_QUERY_DEFAULT_LIMIT,
     SESSION_QUERY_MAX_LIMIT,
     SESSION_QUERY_METHODS,
+    THREAD_LIFECYCLE_METHODS,
     build_capability_snapshot,
 )
 from codex_a2a.jsonrpc.application import CodexSessionQueryJSONRPCApplication
@@ -40,6 +41,11 @@ def _build_extension_app(
         **SESSION_QUERY_METHODS,
         **SESSION_CONTROL_METHODS,
         **DISCOVERY_METHODS,
+        "thread_fork": THREAD_LIFECYCLE_METHODS["fork"],
+        "thread_archive": THREAD_LIFECYCLE_METHODS["archive"],
+        "thread_unarchive": THREAD_LIFECYCLE_METHODS["unarchive"],
+        "thread_metadata_update": THREAD_LIFECYCLE_METHODS["metadata_update"],
+        "thread_watch": THREAD_LIFECYCLE_METHODS["watch"],
         **EXEC_CONTROL_METHODS,
         **INTERRUPT_CALLBACK_METHODS,
     }
@@ -55,6 +61,7 @@ def _build_extension_app(
         codex_client=DummyCodexClient(settings),
         exec_runtime=MagicMock(),
         discovery_runtime=MagicMock(),
+        thread_lifecycle_runtime=MagicMock(),
         methods=methods,
         protocol_version=settings.a2a_protocol_version,
         supported_methods=list(

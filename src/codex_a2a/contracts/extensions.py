@@ -19,6 +19,7 @@ SESSION_BINDING_EXTENSION_URI = "urn:a2a:session-binding/v1"
 STREAMING_EXTENSION_URI = "urn:a2a:stream-hints/v1"
 SESSION_QUERY_EXTENSION_URI = "urn:codex-a2a:codex-session-query/v1"
 DISCOVERY_EXTENSION_URI = "urn:codex-a2a:codex-discovery/v1"
+THREAD_LIFECYCLE_EXTENSION_URI = "urn:codex-a2a:codex-thread-lifecycle/v1"
 EXEC_CONTROL_EXTENSION_URI = "urn:codex-a2a:codex-exec/v1"
 INTERRUPT_CALLBACK_EXTENSION_URI = "urn:a2a:interactive-interrupt/v1"
 
@@ -77,6 +78,16 @@ class DiscoveryMethodContract:
     result_fields: tuple[str, ...] = ()
     items_type: str | None = None
     items_field: str | None = None
+    notification_response_status: int | None = None
+    notes: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class ThreadLifecycleMethodContract:
+    method: str
+    required_params: tuple[str, ...] = ()
+    optional_params: tuple[str, ...] = ()
+    result_fields: tuple[str, ...] = ()
     notification_response_status: int | None = None
     notes: tuple[str, ...] = ()
 
@@ -312,6 +323,108 @@ DISCOVERY_INVALID_PARAMS_DATA_FIELDS: tuple[str, ...] = (
     "fields",
 )
 
+THREAD_LIFECYCLE_SUPPORTED_EVENTS: tuple[str, ...] = (
+    "thread.started",
+    "thread.status.changed",
+    "thread.archived",
+    "thread.unarchived",
+    "thread.closed",
+)
+THREAD_LIFECYCLE_METHOD_CONTRACTS: dict[str, ThreadLifecycleMethodContract] = {
+    "fork": ThreadLifecycleMethodContract(
+        method="codex.threads.fork",
+        required_params=("thread_id",),
+        optional_params=("request.ephemeral", CODEX_DIRECTORY_METADATA_FIELD),
+        result_fields=("ok", "thread", "thread_id"),
+        notification_response_status=204,
+        notes=(
+            (
+                "Fork creates a new upstream thread id and returns a normalized minimal "
+                "thread projection plus codex.raw passthrough data."
+            ),
+            ("request.ephemeral forwards to upstream thread/fork ephemeral mode when true."),
+        ),
+    ),
+    "archive": ThreadLifecycleMethodContract(
+        method="codex.threads.archive",
+        required_params=("thread_id",),
+        optional_params=(CODEX_DIRECTORY_METADATA_FIELD,),
+        result_fields=("ok", "thread_id"),
+        notification_response_status=204,
+        notes=(
+            (
+                "Archive returns only a minimal stable success envelope; clients should use "
+                "codex.threads.watch for lifecycle notifications."
+            ),
+        ),
+    ),
+    "unarchive": ThreadLifecycleMethodContract(
+        method="codex.threads.unarchive",
+        required_params=("thread_id",),
+        optional_params=(CODEX_DIRECTORY_METADATA_FIELD,),
+        result_fields=("ok", "thread", "thread_id"),
+        notification_response_status=204,
+        notes=(
+            (
+                "Unarchive restores a persisted rollout and returns a normalized minimal "
+                "thread projection plus codex.raw passthrough data."
+            ),
+        ),
+    ),
+    "metadata_update": ThreadLifecycleMethodContract(
+        method="codex.threads.metadata.update",
+        required_params=("thread_id", "request.git_info"),
+        optional_params=(
+            "request.git_info.sha",
+            "request.git_info.branch",
+            "request.git_info.origin_url",
+            CODEX_DIRECTORY_METADATA_FIELD,
+        ),
+        result_fields=("ok", "thread", "thread_id"),
+        notification_response_status=204,
+        notes=(
+            (
+                "This surface currently stabilizes only persisted git_info updates. "
+                "Explicit null clears a stored field; omitted fields are left unchanged."
+            ),
+        ),
+    ),
+    "watch": ThreadLifecycleMethodContract(
+        method="codex.threads.watch",
+        optional_params=("request.events", "request.thread_ids", CODEX_DIRECTORY_METADATA_FIELD),
+        result_fields=("ok", "task_id", "context_id"),
+        notification_response_status=204,
+        notes=(
+            (
+                "Use tasks/resubscribe to consume lifecycle events emitted through the watch "
+                "task stream."
+            ),
+            ("request.thread_ids narrows the watch to specific upstream thread ids when provided."),
+        ),
+    ),
+}
+THREAD_LIFECYCLE_METHODS: dict[str, str] = {
+    key: contract.method for key, contract in THREAD_LIFECYCLE_METHOD_CONTRACTS.items()
+}
+THREAD_LIFECYCLE_ERROR_BUSINESS_CODES: dict[str, int] = {
+    "THREAD_NOT_FOUND": -32010,
+    "THREAD_FORBIDDEN": -32011,
+    "UPSTREAM_UNREACHABLE": -32002,
+    "UPSTREAM_HTTP_ERROR": -32003,
+}
+THREAD_LIFECYCLE_ERROR_DATA_FIELDS: tuple[str, ...] = (
+    "type",
+    "method",
+    "thread_id",
+    "upstream_status",
+    "detail",
+)
+THREAD_LIFECYCLE_INVALID_PARAMS_DATA_FIELDS: tuple[str, ...] = (
+    "type",
+    "field",
+    "fields",
+)
+
 INTERRUPT_CALLBACK_METHOD_CONTRACTS: dict[str, InterruptMethodContract] = {
     "reply_permission": InterruptMethodContract(
         method="a2a.interrupt.permission.reply",
@@ -483,6 +596,7 @@ class CapabilitySnapshot:
     session_query_method_keys: tuple[str, ...]
     session_query_methods: tuple[str, ...]
     discovery_methods: tuple[str, ...]
+    thread_lifecycle_methods: tuple[str, ...]
     exec_control_methods: tuple[str, ...]
     conditional_methods: dict[str, dict[str, str]]
 
@@ -504,10 +618,12 @@ def build_capability_snapshot(*, runtime_profile: RuntimeProfile) -> CapabilityS
         }
     session_query_methods = tuple(SESSION_QUERY_METHODS[key] for key in session_query_method_keys)
     discovery_methods = tuple(DISCOVERY_METHODS.values())
+    thread_lifecycle_methods = tuple(THREAD_LIFECYCLE_METHODS.values())
     exec_control_methods = tuple(EXEC_CONTROL_METHODS.values())
     extension_jsonrpc_methods = (
         *session_query_methods,
         *discovery_methods,
+        *thread_lifecycle_methods,
         *exec_control_methods,
         *INTERRUPT_CALLBACK_METHODS.values(),
     )
@@ -520,6 +636,7 @@ def build_capability_snapshot(*, runtime_profile: RuntimeProfile) -> CapabilityS
         session_query_method_keys=tuple(session_query_method_keys),
         session_query_methods=session_query_methods,
         discovery_methods=discovery_methods,
+        thread_lifecycle_methods=thread_lifecycle_methods,
         exec_control_methods=exec_control_methods,
         conditional_methods=conditional_methods,
     )
@@ -564,6 +681,7 @@ def build_wire_contract_extension_params(
                 STREAMING_EXTENSION_URI,
                 SESSION_QUERY_EXTENSION_URI,
                 DISCOVERY_EXTENSION_URI,
+                THREAD_LIFECYCLE_EXTENSION_URI,
                 EXEC_CONTROL_EXTENSION_URI,
                 INTERRUPT_CALLBACK_EXTENSION_URI,
             ],
@@ -629,6 +747,17 @@ def build_compatibility_profile_params(
                 "surface": "extension",
                 "availability": "always",
                 "retention": "stable",
+                "extension_uri": THREAD_LIFECYCLE_EXTENSION_URI,
+            }
+            for method in snapshot.thread_lifecycle_methods
+        }
+    )
+    method_retention.update(
+        {
+            method: {
+                "surface": "extension",
+                "availability": "always",
+                "retention": "stable",
                 "extension_uri": SESSION_QUERY_EXTENSION_URI,
             }
             for method in snapshot.session_query_methods
@@ -685,6 +814,11 @@ def build_compatibility_profile_params(
             "availability": "always",
             "retention": "stable",
         },
+        THREAD_LIFECYCLE_EXTENSION_URI: {
+            "surface": "jsonrpc-extension",
+            "availability": "always",
+            "retention": "stable",
+        },
         EXEC_CONTROL_EXTENSION_URI: {
             "surface": "jsonrpc-extension",
             "availability": "always",
@@ -718,6 +852,7 @@ def build_compatibility_profile_params(
             "codex_extensions": [
                 SESSION_QUERY_EXTENSION_URI,
                 DISCOVERY_EXTENSION_URI,
+                THREAD_LIFECYCLE_EXTENSION_URI,
                 EXEC_CONTROL_EXTENSION_URI,
                 COMPATIBILITY_PROFILE_EXTENSION_URI,
                 WIRE_CONTRACT_EXTENSION_URI,
@@ -749,6 +884,10 @@ def build_compatibility_profile_params(
             (
                 "Use codex.discovery.* methods to discover stable skill.path and "
                 "mention.path identifiers before constructing rich input items."
+            ),
+            (
+                "Treat codex.threads.* as provider-private lifecycle management surfaces "
+                "separate from codex.sessions.* query/control methods."
             ),
             (
                 "codex.sessions.shell is deployment-conditional: discover it from the "
@@ -1130,6 +1269,113 @@ def build_discovery_extension_params(
             "business_codes": dict(DISCOVERY_ERROR_BUSINESS_CODES),
             "error_data_fields": list(DISCOVERY_ERROR_DATA_FIELDS),
             "invalid_params_data_fields": list(DISCOVERY_INVALID_PARAMS_DATA_FIELDS),
+        },
+    }
+
+
+def build_thread_lifecycle_extension_params(
+    *,
+    runtime_profile: RuntimeProfile,
+) -> dict[str, Any]:
+    snapshot = build_capability_snapshot(runtime_profile=runtime_profile)
+    active_method_contracts = {
+        key: contract
+        for key, contract in THREAD_LIFECYCLE_METHOD_CONTRACTS.items()
+        if contract.method in snapshot.thread_lifecycle_methods
+    }
+    method_contracts: dict[str, Any] = {}
+
+    for contract in active_method_contracts.values():
+        method_contract_doc: dict[str, Any] = {
+            "params": _build_method_contract_params(
+                required=contract.required_params,
+                optional=contract.optional_params,
+                unsupported=(),
+            ),
+            "result": {"fields": list(contract.result_fields)},
+        }
+        if contract.notification_response_status is not None:
+            method_contract_doc["notification_response_status"] = (
+                contract.notification_response_status
+            )
+        if contract.notes:
+            method_contract_doc["notes"] = list(contract.notes)
+        method_contracts[contract.method] = method_contract_doc
+
+    return {
+        "methods": dict(THREAD_LIFECYCLE_METHODS),
+        "method_contracts": method_contracts,
+        "profile": runtime_profile.summary_dict(),
+        "supported_metadata": ["codex.directory"],
+        "provider_private_metadata": ["codex.directory"],
+        "stable_thread_fields": ["id", "title", "status", "codex.raw"],
+        "notification_bridge": {
+            "upstream_notifications": [
+                "thread/started",
+                "thread/status/changed",
+                "thread/archived",
+                "thread/unarchived",
+                "thread/closed",
+            ],
+            "current_delivery": "codex.threads.watch task stream",
+            "notes": [
+                (
+                    "This service does not expose standalone server-push JSON-RPC "
+                    "notifications. Use codex.threads.watch plus tasks/resubscribe to "
+                    "consume lifecycle events."
+                ),
+                (
+                    "thread/unsubscribe is intentionally excluded from this first-stage "
+                    "stable surface because upstream unsubscribe is connection-scoped while "
+                    "this service currently shares one underlying Codex client connection."
+                ),
+            ],
+        },
+        "task_streaming": {
+            "task_stream_method": TASKS_RESUBSCRIBE_METHOD,
+            "http_subscribe_endpoint": TASKS_SUBSCRIBE_HTTP_ENDPOINT,
+            "watch_method": THREAD_LIFECYCLE_METHODS["watch"],
+            "supported_events": list(THREAD_LIFECYCLE_SUPPORTED_EVENTS),
+            "data_part_payloads": {
+                "thread.started": {
+                    "kind": "thread_started",
+                    "source": "thread/started",
+                    "thread_field": "thread",
+                },
+                "thread.status.changed": {
+                    "kind": "thread_status_changed",
+                    "source": "thread/status/changed",
+                    "status_field": "status",
+                },
+                "thread.archived": {
+                    "kind": "thread_archived",
+                    "source": "thread/archived",
+                },
+                "thread.unarchived": {
+                    "kind": "thread_unarchived",
+                    "source": "thread/unarchived",
+                    "thread_field": "thread",
+                },
+                "thread.closed": {
+                    "kind": "thread_closed",
+                    "source": "thread/closed",
+                },
+            },
+        },
+        "consumer_guidance": [
+            (
+                "Treat codex.threads.* as provider-private lifecycle management methods "
+                "separate from codex.sessions.* query/control surfaces."
+            ),
+            (
+                "Prefer codex.threads.watch when clients need status transitions or archive/"
+                "restore invalidation signals."
+            ),
+        ],
+        "errors": {
+            "business_codes": dict(THREAD_LIFECYCLE_ERROR_BUSINESS_CODES),
+            "error_data_fields": list(THREAD_LIFECYCLE_ERROR_DATA_FIELDS),
+            "invalid_params_data_fields": list(THREAD_LIFECYCLE_INVALID_PARAMS_DATA_FIELDS),
         },
     }
 

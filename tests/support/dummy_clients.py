@@ -147,10 +147,13 @@ class DummySessionQueryCodexClient:
         self.last_apps_params = None
         self.last_plugins_params = None
         self.last_plugin_read_params = None
+        self.last_thread_fork: dict[str, Any] | None = None
+        self.last_thread_archive: dict[str, Any] | None = None
+        self.last_thread_unarchive: dict[str, Any] | None = None
+        self.last_thread_metadata_update: dict[str, Any] | None = None
         self.last_prompt_async: dict[str, Any] | None = None
         self.last_command: dict[str, Any] | None = None
         self.last_shell: dict[str, Any] | None = None
-        self.last_exec_start: dict[str, Any] | None = None
         self.exec_write_calls: list[dict[str, Any]] = []
         self.exec_resize_calls: list[dict[str, Any]] = []
         self.exec_terminate_calls: list[dict[str, Any]] = []
@@ -189,6 +192,54 @@ class DummySessionQueryCodexClient:
     async def read_plugin(self, *, params=None):
         self.last_plugin_read_params = params
         return self._plugin_read_payload
+
+    async def thread_fork(self, thread_id: str, *, params=None):
+        self.last_thread_fork = {"thread_id": thread_id, "params": params}
+        return {
+            "id": f"{thread_id}-fork",
+            "title": f"Fork of {thread_id}",
+            "status": {"type": "idle"},
+            "raw": {
+                "id": f"{thread_id}-fork",
+                "preview": f"Fork of {thread_id}",
+                "status": {"type": "idle"},
+            },
+        }
+
+    async def thread_archive(self, thread_id: str) -> None:
+        self.last_thread_archive = {"thread_id": thread_id}
+
+    async def thread_unarchive(self, thread_id: str):
+        self.last_thread_unarchive = {"thread_id": thread_id}
+        return {
+            "id": thread_id,
+            "title": f"Restored {thread_id}",
+            "status": {"type": "notLoaded"},
+            "raw": {
+                "id": thread_id,
+                "preview": f"Restored {thread_id}",
+                "status": {"type": "notLoaded"},
+            },
+        }
+
+    async def thread_metadata_update(self, thread_id: str, *, params=None):
+        self.last_thread_metadata_update = {"thread_id": thread_id, "params": params}
+        branch = None
+        if isinstance(params, dict):
+            git_info = params.get("gitInfo")
+            if isinstance(git_info, dict):
+                branch = git_info.get("branch")
+        return {
+            "id": thread_id,
+            "title": f"Thread {thread_id}",
+            "status": {"type": "notLoaded"},
+            "raw": {
+                "id": thread_id,
+                "preview": f"Thread {thread_id}",
+                "status": {"type": "notLoaded"},
+                "gitInfo": {"branch": branch},
+            },
+        }
 
     async def session_prompt_async(self, session_id: str, *, request=None, directory=None):
         self.last_prompt_async = {
@@ -233,10 +284,7 @@ class DummySessionQueryCodexClient:
         timeout_override=None,  # noqa: ANN001
     ) -> dict[str, Any]:
         del timeout_override
-        self.last_exec_start = {
-            "request": request,
-            "directory": directory,
-        }
+        del directory
         process_id = str(request.get("processId") or "exec-1")
         return {"stdout": "hello\n", "stderr": "", "exitCode": 0, "processId": process_id}
 

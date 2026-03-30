@@ -134,6 +134,9 @@ will be reflected live per request.
   contract for `skill.path` and `mention_path` identifiers. Changes to
   normalized item fields, plugin marketplace mapping, or discovery watch task
   payload kinds should be treated as wire-level changes.
+- `codex.threads.*` is compatibility-sensitive as the provider-private thread
+  lifecycle contract. Changes to lifecycle method names, watch payload kinds,
+  or watch-task bridge event names should be treated as wire-level changes.
 
 ## Extension Taxonomy
 
@@ -151,6 +154,7 @@ This repository distinguishes between three layers:
     - session query/control
     - discovery/query surfaces
     - discovery watch task bridge
+    - thread lifecycle watch-task bridge
     - standalone interactive exec
 
 Discovery note:
@@ -160,6 +164,11 @@ Discovery note:
   declared read-only discovery methods.
 - `codex.discovery.watch` is the declared bridge for upstream
   `skills/changed` and `app/list/updated` notifications.
+- `codex.threads.watch` is the declared thread lifecycle watch-task bridge for
+  upstream `thread/started`, `thread/status/changed`, `thread/archived`,
+  `thread/unarchived`, and `thread/closed` notifications.
+- `thread/unsubscribe` is intentionally excluded from the stable public
+  contract until this service exposes connection-safe subscription ownership.
 - This repository does not claim a generic standalone server-push JSON-RPC
   transport for those notifications; the compatibility contract is the
   watch-task bridge published through Agent Card and OpenAPI.

@@ -20,6 +20,7 @@ from codex_a2a.contracts.extensions import (
     SESSION_BINDING_EXTENSION_URI,
     SESSION_QUERY_EXTENSION_URI,
     STREAMING_EXTENSION_URI,
+    THREAD_LIFECYCLE_EXTENSION_URI,
     WIRE_CONTRACT_EXTENSION_URI,
     build_compatibility_profile_params,
     build_discovery_extension_params,
@@ -28,6 +29,7 @@ from codex_a2a.contracts.extensions import (
     build_session_binding_extension_params,
     build_session_query_extension_params,
     build_streaming_extension_params,
+    build_thread_lifecycle_extension_params,
     build_wire_contract_extension_params,
 )
 from codex_a2a.profile.runtime import RuntimeProfile, build_runtime_profile
@@ -40,8 +42,8 @@ def _build_agent_card_description(settings: Settings, runtime_profile: RuntimePr
         "(message/send, message/stream), task APIs (tasks/get, tasks/cancel, "
         "tasks/resubscribe; REST mapping: GET /v1/tasks/{id}:subscribe), "
         "shared session-binding and streaming contracts, Codex session-query, "
-        "discovery, and interactive exec extensions, shared interrupt callback "
-        "extensions, a machine-readable "
+        "thread lifecycle, discovery, and interactive exec extensions, shared "
+        "interrupt callback extensions, a machine-readable "
         "compatibility profile, and a machine-readable wire contract."
     )
     parts: list[str] = [base, summary]
@@ -95,6 +97,9 @@ def build_agent_card(
         runtime_profile=runtime_profile,
     )
     discovery_extension_params = build_discovery_extension_params(
+        runtime_profile=runtime_profile,
+    )
+    thread_lifecycle_extension_params = build_thread_lifecycle_extension_params(
         runtime_profile=runtime_profile,
     )
     interrupt_callback_extension_params = build_interrupt_callback_extension_params(
@@ -173,6 +178,16 @@ def build_agent_card(
                     params=discovery_extension_params,
                 ),
                 AgentExtension(
+                    uri=THREAD_LIFECYCLE_EXTENSION_URI,
+                    required=False,
+                    description=(
+                        "Expose provider-private thread lifecycle control plus a task-stream "
+                        "notification bridge for lifecycle status, archive, and restore "
+                        "signals."
+                    ),
+                    params=thread_lifecycle_extension_params,
+                ),
+                AgentExtension(
                     uri=EXEC_CONTROL_EXTENSION_URI,
                     required=False,
                     description=(
@@ -248,6 +263,19 @@ def build_agent_card(
                     "List available Codex skills (method codex.discovery.skills.list).",
                     "List available apps or plugins before constructing mention.path values.",
                     "Start a discovery watch stream (method codex.discovery.watch).",
+                ],
+            ),
+            AgentSkill(
+                id="codex.threads.lifecycle",
+                name="Codex Thread Lifecycle",
+                description=(
+                    "Manage thread fork/archive/unarchive/metadata-update flows and watch "
+                    "thread lifecycle signals via codex.threads.* JSON-RPC extension methods."
+                ),
+                tags=["codex", "threads", "lifecycle"],
+                examples=[
+                    "Fork a Codex thread (method codex.threads.fork).",
+                    "Start a lifecycle watch stream (method codex.threads.watch).",
                 ],
             ),
             AgentSkill(
