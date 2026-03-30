@@ -11,21 +11,33 @@ from codex_a2a.contracts.extensions import (
     THREAD_LIFECYCLE_EXTENSION_URI,
     WIRE_CONTRACT_EXTENSION_URI,
 )
-from codex_a2a.server.agent_card import build_agent_card
+from codex_a2a.server.agent_card import (
+    build_agent_card,
+    build_authenticated_extended_agent_card,
+)
 from tests.support.settings import make_settings
 
 
-def test_agent_card_description_reflects_actual_transport_capabilities() -> None:
+def test_public_agent_card_description_reflects_discovery_surface() -> None:
     card = build_agent_card(make_settings(a2a_bearer_token="test-token"))
 
     assert "HTTP+JSON and JSON-RPC transports" in card.description
+    assert "authenticated extended Agent Card discovery" in card.description
+    assert "single-tenant deployment" in card.description.lower()
+    assert "machine-readable wire contract" not in card.description
+    assert card.supports_authenticated_extended_card is True
+
+
+def test_authenticated_extended_agent_card_description_reflects_detailed_contracts() -> None:
+    card = build_authenticated_extended_agent_card(make_settings(a2a_bearer_token="test-token"))
+
     assert "message/send, message/stream" in card.description
-    assert "tasks/get, tasks/cancel" in card.description
+    assert "tasks/get, tasks/cancel, tasks/resubscribe" in card.description
+    assert "agent/getAuthenticatedExtendedCard" in card.description
     assert "interactive exec extensions" in card.description
     assert "machine-readable wire contract" in card.description
     assert "machine-readable compatibility profile" in card.description
     assert "all consumers share the same underlying Codex workspace/environment" in card.description
-    assert "single-tenant, self-hosted coding workflows" in card.description
 
 
 def test_agent_card_declares_bearer_only_security() -> None:
@@ -35,8 +47,57 @@ def test_agent_card_declares_bearer_only_security() -> None:
     assert card.security == [{"bearerAuth": []}]
 
 
-def test_agent_card_injects_profile_into_extensions() -> None:
-    card = build_agent_card(
+def test_public_agent_card_minimizes_provider_private_contracts() -> None:
+    card = build_agent_card(make_settings(a2a_bearer_token="test-token"))
+    ext_by_uri = {ext.uri: ext for ext in card.capabilities.extensions or []}
+
+    session_binding = ext_by_uri[SESSION_BINDING_EXTENSION_URI]
+    assert session_binding.params == {
+        "metadata_field": "metadata.shared.session.id",
+        "behavior": "prefer_metadata_binding_else_create_session",
+        "supported_metadata": ["shared.session.id", "codex.directory"],
+        "provider_private_metadata": ["codex.directory"],
+    }
+
+    streaming = ext_by_uri[STREAMING_EXTENSION_URI]
+    assert streaming.params["artifact_metadata_field"] == "metadata.shared.stream"
+    assert streaming.params["status_metadata_field"] == "metadata.shared.stream"
+    assert streaming.params["interrupt_metadata_field"] == "metadata.shared.interrupt"
+    assert streaming.params["session_fields"] == {
+        "id": "metadata.shared.session.id",
+        "title": "metadata.shared.session.title",
+    }
+    assert streaming.params["usage_fields"]["total_tokens"] == "metadata.shared.usage.total_tokens"
+    assert "tool_call_payload_contract" not in streaming.params
+
+    assert ext_by_uri[SESSION_QUERY_EXTENSION_URI].params is None
+    assert ext_by_uri[DISCOVERY_EXTENSION_URI].params is None
+    assert ext_by_uri[THREAD_LIFECYCLE_EXTENSION_URI].params is None
+    assert ext_by_uri[EXEC_CONTROL_EXTENSION_URI].params is None
+    assert ext_by_uri[COMPATIBILITY_PROFILE_EXTENSION_URI].params is None
+    assert ext_by_uri[WIRE_CONTRACT_EXTENSION_URI].params is None
+
+    interrupt = ext_by_uri[INTERRUPT_CALLBACK_EXTENSION_URI]
+    assert interrupt.params == {
+        "methods": {
+            "reply_permission": "a2a.interrupt.permission.reply",
+            "reply_question": "a2a.interrupt.question.reply",
+            "reject_question": "a2a.interrupt.question.reject",
+            "reply_permissions": "a2a.interrupt.permissions.reply",
+            "reply_elicitation": "a2a.interrupt.elicitation.reply",
+        },
+        "supported_interrupt_events": [
+            "permission.asked",
+            "question.asked",
+            "permissions.asked",
+            "elicitation.asked",
+        ],
+        "request_id_field": "metadata.shared.interrupt.request_id",
+    }
+
+
+def test_authenticated_extended_agent_card_injects_profile_into_extensions() -> None:
+    card = build_authenticated_extended_agent_card(
         make_settings(
             a2a_bearer_token="test-token",
             a2a_project="alpha",
@@ -284,89 +345,30 @@ def test_agent_card_injects_profile_into_extensions() -> None:
 
     wire_contract = ext_by_uri[WIRE_CONTRACT_EXTENSION_URI]
     assert wire_contract.params["protocol_version"] == "0.3.0"
+    assert "agent/getAuthenticatedExtendedCard" in wire_contract.params["all_jsonrpc_methods"]
+    assert "tasks/pushNotificationConfig/set" in wire_contract.params["all_jsonrpc_methods"]
+    assert "POST /v1/message:send" in wire_contract.params["core"]["http_endpoints"]
+    assert "GET /v1/card" in wire_contract.params["core"]["http_endpoints"]
+
     compatibility = ext_by_uri[COMPATIBILITY_PROFILE_EXTENSION_URI]
     assert compatibility.params["profile_id"] == "codex-a2a-single-tenant-coding-v1"
     assert compatibility.params["protocol_version"] == "0.3.0"
-    assert compatibility.params["deployment"] == {
-        "id": "single_tenant_shared_workspace",
-        "single_tenant": True,
-        "shared_workspace_across_consumers": True,
-        "tenant_isolation": "none",
-    }
     assert compatibility.params["deployment"] == profile["deployment"]
     assert compatibility.params["runtime_features"] == profile["runtime_features"]
-    assert compatibility.params["core"]["jsonrpc_methods"] == [
-        "message/send",
-        "message/stream",
-        "tasks/get",
-        "tasks/cancel",
-        "tasks/resubscribe",
-    ]
-    assert compatibility.params["service_behaviors"]["tasks/resubscribe"] == {
-        "scope": "service-level",
-        "jsonrpc_method": "tasks/resubscribe",
-        "http_endpoint": "/v1/tasks/{id}:subscribe",
-        "non_terminal_behavior": "stream_live_updates",
-        "terminal_behavior": "replay_once_then_close",
-        "notes": [
-            (
-                "tasks/resubscribe itself is part of the core interoperability baseline, but "
-                "the terminal replay-once policy is deployment-specific service behavior."
-            ),
-            (
-                "Consumers should not assume replay-once terminal delivery is guaranteed by "
-                "generic A2A runtimes unless it is declared explicitly."
-            ),
-        ],
-    }
-    assert compatibility.params["extension_taxonomy"]["shared_extensions"] == [
-        "urn:a2a:session-binding/v1",
-        "urn:a2a:stream-hints/v1",
-        "urn:a2a:interactive-interrupt/v1",
-    ]
-    assert compatibility.params["extension_taxonomy"]["codex_extensions"] == [
-        "urn:codex-a2a:codex-session-query/v1",
-        "urn:codex-a2a:codex-discovery/v1",
-        "urn:codex-a2a:codex-thread-lifecycle/v1",
-        "urn:codex-a2a:codex-exec/v1",
-        "urn:codex-a2a:compatibility-profile/v1",
-        "urn:codex-a2a:wire-contract/v1",
-    ]
+    assert "agent/getAuthenticatedExtendedCard" in compatibility.params["core"]["jsonrpc_methods"]
     assert compatibility.params["extension_taxonomy"]["provider_private_metadata"] == [
         "codex.directory"
     ]
-    assert wire_contract.params["core"]["jsonrpc_methods"] == [
-        "message/send",
-        "message/stream",
-        "tasks/get",
-        "tasks/cancel",
-        "tasks/resubscribe",
-    ]
-    assert wire_contract.params["service_behaviors"]["tasks/resubscribe"] == {
-        "scope": "service-level",
-        "jsonrpc_method": "tasks/resubscribe",
-        "http_endpoint": "/v1/tasks/{id}:subscribe",
-        "non_terminal_behavior": "stream_live_updates",
-        "terminal_behavior": "replay_once_then_close",
-        "notes": [
-            (
-                "tasks/resubscribe remains part of the core A2A method baseline, but this "
-                "deployment's terminal-task replay behavior is a service-level contract."
-            ),
-            (
-                "When the task is already terminal, this service replays one final task "
-                "snapshot and then closes the stream."
-            ),
-        ],
+    assert compatibility.params["method_retention"]["agent/getAuthenticatedExtendedCard"] == {
+        "surface": "core",
+        "availability": "always",
+        "retention": "required",
     }
-    assert "codex.sessions.shell" in wire_contract.params["all_jsonrpc_methods"]
-    assert wire_contract.params["unsupported_method_error"]["code"] == -32601
-    assert wire_contract.params["unsupported_method_error"]["data_fields"] == [
-        "type",
-        "method",
-        "supported_methods",
-        "protocol_version",
-    ]
+    assert compatibility.params["method_retention"]["tasks/pushNotificationConfig/set"] == {
+        "surface": "core",
+        "availability": "always",
+        "retention": "required",
+    }
     assert any(
         "single-tenant, shared-workspace coding profile" in note
         for note in compatibility.params["consumer_guidance"]
@@ -395,24 +397,29 @@ def test_agent_card_injects_profile_into_extensions() -> None:
     assert thread_policy["extension_uri"] == "urn:codex-a2a:codex-thread-lifecycle/v1"
 
 
-def test_agent_card_chat_examples_include_project_hint_when_configured() -> None:
-    card = build_agent_card(make_settings(a2a_bearer_token="test-token", a2a_project="alpha"))
+def test_authenticated_extended_agent_card_chat_examples_include_project_hint_when_configured() -> (
+    None
+):
+    card = build_authenticated_extended_agent_card(
+        make_settings(a2a_bearer_token="test-token", a2a_project="alpha")
+    )
     chat_skill = next(skill for skill in card.skills if skill.id == "codex.chat")
     assert any("project alpha" in example for example in chat_skill.examples)
 
 
-def test_agent_card_declares_thread_lifecycle_skill() -> None:
+def test_public_agent_card_skills_are_minimal() -> None:
     card = build_agent_card(make_settings(a2a_bearer_token="test-token"))
-    skill = next(skill for skill in card.skills if skill.id == "codex.threads.lifecycle")
+    session_skill = next(skill for skill in card.skills if skill.id == "codex.sessions.query")
+    thread_skill = next(skill for skill in card.skills if skill.id == "codex.threads.lifecycle")
 
-    assert skill.name == "Codex Thread Lifecycle"
-    assert "codex.threads.*" in skill.description
-    assert any("codex.threads.fork" in example for example in skill.examples)
-    assert any("codex.threads.watch" in example for example in skill.examples)
+    assert session_skill.examples is None
+    assert "provider-private" in session_skill.tags
+    assert thread_skill.examples is None
+    assert "provider-private" in thread_skill.tags
 
 
-def test_agent_card_omits_shell_method_when_disabled() -> None:
-    card = build_agent_card(
+def test_authenticated_extended_agent_card_omits_shell_method_when_disabled() -> None:
+    card = build_authenticated_extended_agent_card(
         make_settings(
             a2a_bearer_token="test-token",
             a2a_enable_session_shell=False,

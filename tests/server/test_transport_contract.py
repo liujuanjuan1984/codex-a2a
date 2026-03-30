@@ -15,6 +15,10 @@ from starlette.requests import Request
 
 from codex_a2a.server.agent_card import build_agent_card
 from codex_a2a.server.application import create_app
+from codex_a2a.server.http_middlewares import (
+    AUTHENTICATED_EXTENDED_CARD_CACHE_CONTROL,
+    PUBLIC_AGENT_CARD_CACHE_CONTROL,
+)
 from codex_a2a.server.task_store import TaskStoreOperationError, TaskStoreRuntime
 from tests.support.dummy_clients import DummyChatCodexClient
 from tests.support.settings import make_settings
@@ -41,6 +45,8 @@ def test_rest_subscription_route_matches_current_sdk_contract() -> None:
     assert "/health" in route_paths
     assert "/v1/tasks/{id}:subscribe" in route_paths
     assert "/v1/tasks/{id}:resubscribe" not in route_paths
+    assert "/agent/authenticatedExtendedCard" in route_paths
+    assert "/v1/card" in route_paths
 
 
 def test_health_route_can_be_disabled() -> None:
@@ -235,6 +241,7 @@ def test_openapi_jsonrpc_examples_include_core_and_extension_methods() -> None:
     methods = {value.get("value", {}).get("method") for value in example_values}
     assert "message/send" in methods
     assert "message/stream" in methods
+    assert "agent/getAuthenticatedExtendedCard" in methods
     assert "codex.sessions.list" in methods
     assert "codex.sessions.messages.list" in methods
     assert "codex.sessions.prompt_async" in methods
@@ -250,6 +257,123 @@ def test_openapi_jsonrpc_examples_include_core_and_extension_methods() -> None:
     assert "codex.threads.metadata.update" in methods
     assert "codex.threads.watch" in methods
     assert "a2a.interrupt.permission.reply" in methods
+
+
+@pytest.mark.asyncio
+async def test_agent_card_routes_split_public_and_authenticated_extended_contracts(
+    monkeypatch,
+) -> None:
+    import codex_a2a.server.application as app_module
+
+    monkeypatch.setattr(app_module, "CodexClient", DummyChatCodexClient)
+    app = app_module.create_app(make_settings(a2a_bearer_token="test-token"))
+    transport = httpx.ASGITransport(app=app)
+    headers = {"Authorization": "Bearer test-token"}
+
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        public_card = await client.get("/.well-known/agent-card.json")
+        assert public_card.status_code == 200
+        assert public_card.headers["cache-control"] == PUBLIC_AGENT_CARD_CACHE_CONTROL
+        assert public_card.headers["etag"]
+        assert public_card.headers["vary"] == "Accept-Encoding"
+        assert public_card.json()["supportsAuthenticatedExtendedCard"] is True
+
+        public_cached = await client.get(
+            "/.well-known/agent-card.json",
+            headers={"If-None-Match": public_card.headers["etag"]},
+        )
+        assert public_cached.status_code == 304
+        assert public_cached.headers["vary"] == "Accept-Encoding"
+
+        unauthorized_extended = await client.get("/agent/authenticatedExtendedCard")
+        assert unauthorized_extended.status_code == 401
+
+        extended_card = await client.get("/agent/authenticatedExtendedCard", headers=headers)
+        assert extended_card.status_code == 200
+        assert extended_card.headers["cache-control"] == AUTHENTICATED_EXTENDED_CARD_CACHE_CONTROL
+        assert {
+            value.strip() for value in extended_card.headers["vary"].split(",") if value.strip()
+        } == {"Authorization", "Accept-Encoding"}
+        assert extended_card.headers["etag"]
+
+        extended_cached = await client.get(
+            "/agent/authenticatedExtendedCard",
+            headers={
+                **headers,
+                "If-None-Match": extended_card.headers["etag"],
+            },
+        )
+        assert extended_cached.status_code == 304
+
+        v1_card = await client.get("/v1/card", headers=headers)
+        assert v1_card.status_code == 200
+        assert v1_card.headers["cache-control"] == AUTHENTICATED_EXTENDED_CARD_CACHE_CONTROL
+
+        public_extensions = {
+            item["uri"]: item for item in public_card.json()["capabilities"]["extensions"]
+        }
+        extended_extensions = {
+            item["uri"]: item for item in extended_card.json()["capabilities"]["extensions"]
+        }
+        assert public_extensions["urn:codex-a2a:codex-session-query/v1"].get("params") is None
+        assert (
+            extended_extensions["urn:codex-a2a:codex-session-query/v1"]["params"]["methods"][
+                "list_sessions"
+            ]
+            == "codex.sessions.list"
+        )
+        assert len(public_card.content) < len(extended_card.content)
+
+        rpc_card = await client.post(
+            "/",
+            headers=headers,
+            json={
+                "jsonrpc": "2.0",
+                "id": "card-1",
+                "method": "agent/getAuthenticatedExtendedCard",
+                "params": {},
+            },
+        )
+        assert rpc_card.status_code == 200
+        rpc_extensions = {
+            item["uri"]: item for item in rpc_card.json()["result"]["capabilities"]["extensions"]
+        }
+        assert (
+            rpc_extensions["urn:codex-a2a:codex-session-query/v1"]["params"]["methods"][
+                "list_sessions"
+            ]
+            == "codex.sessions.list"
+        )
+
+
+@pytest.mark.asyncio
+async def test_targeted_gzip_applies_to_card_and_openapi_routes(monkeypatch) -> None:
+    import codex_a2a.server.application as app_module
+
+    monkeypatch.setattr(app_module, "CodexClient", DummyChatCodexClient)
+    app = app_module.create_app(make_settings(a2a_bearer_token="test-token"))
+    transport = httpx.ASGITransport(app=app)
+
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        public_card = await client.get(
+            "/.well-known/agent-card.json",
+            headers={"Accept-Encoding": "gzip"},
+        )
+        extended_card = await client.get(
+            "/agent/authenticatedExtendedCard",
+            headers={
+                "Authorization": "Bearer test-token",
+                "Accept-Encoding": "gzip",
+            },
+        )
+        openapi = await client.get(
+            "/openapi.json",
+            headers={"Authorization": "Bearer test-token", "Accept-Encoding": "gzip"},
+        )
+
+    assert public_card.headers.get("content-encoding") == "gzip"
+    assert extended_card.headers.get("content-encoding") == "gzip"
+    assert openapi.headers.get("content-encoding") == "gzip"
 
 
 @pytest.mark.asyncio

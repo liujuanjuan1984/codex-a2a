@@ -29,7 +29,10 @@ from codex_a2a.jsonrpc.application import CodexSessionQueryJSONRPCApplication
 from codex_a2a.jsonrpc.hooks import SessionGuardHooks
 from codex_a2a.logging_context import install_log_record_factory
 from codex_a2a.profile.runtime import build_runtime_profile
-from codex_a2a.server.agent_card import build_agent_card
+from codex_a2a.server.agent_card import (
+    build_agent_card,
+    build_authenticated_extended_agent_card,
+)
 from codex_a2a.server.call_context import IdentityAwareCallContextBuilder
 from codex_a2a.server.database import build_database_engine
 from codex_a2a.server.openapi import patch_openapi_contract
@@ -38,7 +41,11 @@ from codex_a2a.server.runtime_state import build_runtime_state_runtime
 from codex_a2a.server.task_store import build_task_store_runtime
 from codex_a2a.upstream.client import CodexClient
 
-from .http_middlewares import install_http_middlewares
+from .http_middlewares import (
+    GZIP_COMPRESSIBLE_PATHS,
+    PathScopedGZipMiddleware,
+    install_http_middlewares,
+)
 
 
 def create_app(settings: Settings) -> FastAPI:
@@ -110,6 +117,10 @@ def create_app(settings: Settings) -> FastAPI:
     runtime_profile = build_runtime_profile(settings)
     capability_snapshot = build_capability_snapshot(runtime_profile=runtime_profile)
     agent_card = build_agent_card(settings, runtime_profile=runtime_profile)
+    extended_agent_card = build_authenticated_extended_agent_card(
+        settings,
+        runtime_profile=runtime_profile,
+    )
     context_builder = IdentityAwareCallContextBuilder()
     jsonrpc_methods = {
         **SESSION_QUERY_METHODS,
@@ -130,6 +141,7 @@ def create_app(settings: Settings) -> FastAPI:
     jsonrpc_app = CodexSessionQueryJSONRPCApplication(
         agent_card=agent_card,
         http_handler=handler,
+        extended_agent_card=extended_agent_card,
         context_builder=context_builder,
         codex_client=client,
         exec_runtime=exec_runtime,
@@ -151,6 +163,10 @@ def create_app(settings: Settings) -> FastAPI:
         version=settings.a2a_version,
         lifespan=lifespan,
     )
+    app.add_middleware(
+        PathScopedGZipMiddleware,
+        paths=GZIP_COMPRESSIBLE_PATHS,
+    )
     jsonrpc_app.add_routes_to_app(app)
     app.state.codex_client = client
     app.state.codex_executor = executor
@@ -163,6 +179,7 @@ def create_app(settings: Settings) -> FastAPI:
     rest_adapter = RESTAdapter(
         agent_card=agent_card,
         http_handler=handler,
+        extended_agent_card=extended_agent_card,
         context_builder=context_builder,
     )
     for route, callback in rest_adapter.routes().items():
@@ -181,6 +198,8 @@ def create_app(settings: Settings) -> FastAPI:
         app,
         settings=settings,
         task_store=task_store,
+        agent_card=agent_card,
+        extended_agent_card=extended_agent_card,
     )
 
     patch_openapi_contract(

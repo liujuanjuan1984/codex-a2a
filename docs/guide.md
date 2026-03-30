@@ -2,8 +2,9 @@
 
 This guide covers runtime configuration, transport contracts,
 streaming/session/interrupt behavior, and client examples.
-It is the canonical document for implementation-level protocol contracts;
-[README.md](../README.md) stays at overview level.
+[README.md](../README.md) stays at overview level, the stable extension URI/spec
+index lives in [extension-specifications.md](./extension-specifications.md), and
+compatibility promises live in [compatibility.md](./compatibility.md).
 
 ## Transport Contracts
 
@@ -11,16 +12,30 @@ It is the canonical document for implementation-level protocol contracts;
   - HTTP+JSON (REST endpoints such as `/v1/message:send`)
   - JSON-RPC (`POST /`)
 - Agent Card keeps `preferredTransport=HTTP+JSON` and also exposes JSON-RPC in `additional_interfaces`.
+- The public Agent Card at `/.well-known/agent-card.json` is intentionally slimmed to the minimum discovery surface.
+- Detailed provider-private contracts are available through the authenticated extended card:
+  - preferred: JSON-RPC `agent/getAuthenticatedExtendedCard`
+  - HTTP core route: `GET /v1/card`
+  - compatibility route: `GET /agent/authenticatedExtendedCard`
+- Agent Card responses publish `ETag` and `Cache-Control`; clients should revalidate instead of repeatedly fetching full payloads.
+- Larger discovery documents support gzip compression on these HTTP GET routes:
+  - `/.well-known/agent-card.json`
+  - `/.well-known/agent.json`
+  - `GET /v1/card`
+  - `GET /agent/authenticatedExtendedCard`
+  - `GET /openapi.json`
+- Streaming and task routes do not rely on this gzip behavior.
 - Payload schema is transport-specific and should not be mixed:
   - REST send payload usually uses `message.content` and role values like `ROLE_USER`
   - JSON-RPC `message/send` payload uses `params.message.parts` and role values `user` / `agent`
-- The JSON-RPC entrypoint now publishes an explicit wire contract for the
-  supported method set and unsupported-method error shape.
+- The JSON-RPC entrypoint and authenticated extended card publish the explicit
+  wire contract for the supported method set and unsupported-method error shape.
 
 ## Wire Contract
 
-The service publishes a machine-readable wire contract through Agent Card and
-OpenAPI metadata.
+The full machine-readable wire contract is published through the authenticated
+extended card and OpenAPI metadata. The public Agent Card keeps only the minimum
+capability declarations needed for discovery.
 
 Use it to answer:
 
@@ -59,6 +74,8 @@ Consumer guidance:
 
 - Discover the current method set from Agent Card / OpenAPI before calling
   custom JSON-RPC methods.
+- Fetch the authenticated extended card when you need the detailed method matrix,
+  provider-private notes, or full extension params.
 - Treat `supported_methods` in `error.data` as the runtime truth for the
   current deployment, especially when a deployment-conditional method is
   disabled.
@@ -66,11 +83,14 @@ Consumer guidance:
 - Treat `codex.*` methods and `metadata.codex.directory` as a Codex-specific
   control plane for Codex-aware clients rather than generic A2A portability
   claims.
+- See [extension-specifications.md](./extension-specifications.md) for the
+  stable URI/spec index, and [compatibility.md](./compatibility.md) for
+  compatibility promises.
 
 ## Compatibility Profile
 
-The service publishes a machine-readable compatibility profile through Agent
-Card and OpenAPI metadata. Its purpose is to declare:
+The full machine-readable compatibility profile is published through the
+authenticated extended card and OpenAPI metadata. Its purpose is to declare:
 
 - the stable A2A core interoperability baseline
 - which shared extensions are intended to be reused across this repo family
@@ -152,25 +172,36 @@ Current implementation note:
 - This is intentional: current shared session/stream/interrupt behavior is part
   of the deployed interoperability contract, so a blanket runtime profile split
   would be misleading without broader wire-level changes.
+- For compatibility policy and stability expectations, use
+  [compatibility.md](./compatibility.md) as the normative repo document rather
+  than this usage guide.
 
 ## Environment Variables
 
 - `CODEX_CLI_BIN`: Codex CLI binary path, default `codex`
 - `CODEX_APP_SERVER_LISTEN`: Codex app-server listen target, default `stdio://`
-- `CODEX_MODEL`: default model passed to `thread/start`, default `gpt-5.1-codex`
+- `CODEX_MODEL`: default Codex model, passed to `codex app-server` via `-c model=...`, default `gpt-5.1-codex`
 - `CODEX_MODEL_ID`: per-turn model override passed to `turn/start` (optional)
-- `CODEX_MODEL_REASONING_EFFORT`: explicit reasoning effort override passed to
-  Codex CLI app-server via `-c model_reasoning_effort=...` (optional)
+- `CODEX_MODEL_REASONING_EFFORT`: explicit reasoning effort override passed to Codex CLI app-server via `-c model_reasoning_effort=...` (optional)
+- `CODEX_PROFILE`: Codex profile name passed to `codex app-server` via `-c profile=...` (optional)
+- `CODEX_MODEL_REASONING_SUMMARY`: default reasoning summary mode passed to `codex app-server` via `-c model_reasoning_summary=...` (optional)
+- `CODEX_MODEL_VERBOSITY`: default model verbosity passed to `codex app-server` via `-c model_verbosity=...` (optional)
+- `CODEX_APPROVAL_POLICY`: default approval policy passed to `codex app-server` via `-c approval_policy=...` (optional)
+- `CODEX_SANDBOX_MODE`: default sandbox mode passed to `codex app-server` via `-c sandbox_mode=...` (optional)
+- `CODEX_SANDBOX_WORKSPACE_WRITE_WRITABLE_ROOTS`: comma-separated writable roots for `sandbox_workspace_write` passed to `codex app-server` via `-c sandbox_workspace_write=...` (optional)
+- `CODEX_SANDBOX_WORKSPACE_WRITE_NETWORK_ACCESS`: default workspace-write network access flag passed through `sandbox_workspace_write` (optional)
+- `CODEX_SANDBOX_WORKSPACE_WRITE_EXCLUDE_SLASH_TMP`: default workspace-write `/tmp` exclusion flag passed through `sandbox_workspace_write` (optional)
+- `CODEX_SANDBOX_WORKSPACE_WRITE_EXCLUDE_TMPDIR_ENV_VAR`: default workspace-write `$TMPDIR` exclusion flag passed through `sandbox_workspace_write` (optional)
+- `CODEX_WEB_SEARCH`: default Codex web search mode passed to `codex app-server` via `-c web_search=...` (optional)
+- `CODEX_REVIEW_MODEL`: default review model passed to `codex app-server` via `-c review_model=...` (optional)
 - `CODEX_WORKSPACE_ROOT`: default Codex workspace root (optional)
 - `CODEX_PROVIDER_ID`: deployment metadata only (optional)
 - `CODEX_AGENT`: deployment metadata only (optional)
 - `CODEX_VARIANT`: deployment metadata only (optional)
 - `CODEX_TIMEOUT`: request timeout in seconds, default `120`
-- `CODEX_TIMEOUT_STREAM`: streaming turn timeout in seconds (optional);
-  unset means no explicit stream timeout for the streaming send path
+- `CODEX_TIMEOUT_STREAM`: streaming turn timeout in seconds (optional); unset means no explicit stream timeout for the streaming send path
 
-- `A2A_PUBLIC_URL`: externally reachable A2A URL prefix,
-  default `http://127.0.0.1:8000`
+- `A2A_PUBLIC_URL`: externally reachable A2A URL prefix, default `http://127.0.0.1:8000`
 - `A2A_PROJECT`: optional project label injected into Agent Card extensions and examples
 - `A2A_TITLE`: agent name, default `Codex A2A`
 - `A2A_DESCRIPTION`: agent description
@@ -280,7 +311,9 @@ A2A_PORT=8000 \
 A2A_PUBLIC_URL=http://127.0.0.1:8000 \
 A2A_DATABASE_URL=sqlite+aiosqlite:///./codex-a2a.db \
 CODEX_WORKSPACE_ROOT=/abs/path/to/workspace \
-CODEX_MODEL_ID=gpt-5.1-codex \
+CODEX_MODEL=gpt-5.1-codex \
+CODEX_MODEL_REASONING_EFFORT=high \
+CODEX_WEB_SEARCH=live \
 CODEX_TIMEOUT=300 \
 codex-a2a
 ```
@@ -315,7 +348,8 @@ described first in [README.md](../README.md) and above in this guide.
   returns service status plus a structured `profile` summary; it does not call
   upstream Codex.
 - Requests require `Authorization: Bearer <token>`; otherwise `401` is
-  returned. Agent Card endpoints are public.
+  returned. The public Agent Card endpoints are public; authenticated extended
+  card routes still require bearer auth.
 - Within one `codex-a2a` instance, all consumers share the same
   underlying Codex workspace/environment. This deployment model is not
   tenant-isolated by default.

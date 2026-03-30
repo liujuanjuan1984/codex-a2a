@@ -18,7 +18,8 @@ floating dependency resolution.
 
 Machine-readable discovery surfaces must reflect actual runtime behavior:
 
-- Agent Card
+- public Agent Card
+- authenticated extended card
 - OpenAPI metadata
 - JSON-RPC wire contract
 - compatibility profile
@@ -29,10 +30,9 @@ readable capability.
 Open-source consumption guidance:
 
 - Treat the core A2A send / stream / task methods as the portable baseline.
-- Treat `urn:a2a:*` entries in this repository as shared repo-family
-  conventions, not as claims that they are part of the A2A core baseline.
-- Treat `codex.*` methods and `metadata.codex.directory` as a Codex-specific
-  control plane layered on top of the portable A2A surface.
+- Treat `urn:a2a:*` entries in this repository as shared repo-family conventions, not as claims that they are part of the A2A core baseline.
+- Treat `codex.*` methods and `metadata.codex.directory` as a Codex-specific control plane layered on top of the portable A2A surface.
+- Treat [extension-specifications.md](./extension-specifications.md) as the stable URI/spec index, not as the main usage guide.
 
 ## Normative Sources
 
@@ -40,7 +40,7 @@ When documentation or reference material disagrees, treat these as normative in
 this order:
 
 - runtime behavior validated by tests
-- machine-readable discovery output such as Agent Card and OpenAPI metadata
+- machine-readable discovery output such as Agent Card, authenticated extended card, and OpenAPI metadata
 - repository-owned docs in `README.md`, `docs/`, and `CONTRIBUTING.md`
 
 Maintainer-local upstream Codex snapshots generated via
@@ -70,25 +70,15 @@ semantics.
 
 Task-store resilience is also service-level behavior in this deployment:
 
-- Once a task reaches a terminal state, later conflicting persistence writes are
-  dropped on a first-terminal-state-wins basis.
-- In the default SQLite-backed deployment, terminal-task persistence is guarded
-  with an atomic database upsert instead of a process-local read-before-write
-  check.
-- Task-store I/O failures are surfaced as stable service errors instead of
-  leaking backend-specific exceptions through request handlers.
+- Once a task reaches a terminal state, later conflicting persistence writes are dropped on a first-terminal-state-wins basis.
+- In the default SQLite-backed deployment, terminal-task persistence is guarded with an atomic database upsert instead of a process-local read-before-write check.
+- Task-store I/O failures are surfaced as stable service errors instead of leaking backend-specific exceptions through request handlers.
 
 Task durability is deployment-dependent:
 
-- `A2A_DATABASE_URL=<sqlalchemy-async-url>` preserves task
-  lookup/cancel/resubscribe state across process restarts.
-- `A2A_DATABASE_URL` now defaults to
-  `sqlite+aiosqlite:///./codex-a2a.db`, so persistence is the default runtime
-  behavior.
-- The same database-backed mode also preserves session-binding ownership state
-  and pending interrupt callback requests that still fall within their TTL.
-  Session-binding and ownership persistence are independent from the in-memory
-  session cache TTL.
+- `A2A_DATABASE_URL=<sqlalchemy-async-url>` preserves task lookup/cancel/resubscribe state across process restarts.
+- `A2A_DATABASE_URL` now defaults to `sqlite+aiosqlite:///./codex-a2a.db`, so persistence is the default runtime behavior.
+- The same database-backed mode also preserves session-binding ownership state and pending interrupt callback requests that still fall within their TTL. Session-binding and ownership persistence are independent from the in-memory session cache TTL.
 
 ## Deployment Profile
 
@@ -104,8 +94,7 @@ as a secure multi-tenant runtime boundary.
 The compatibility surface distinguishes between:
 
 - a stable deployment profile
-- runtime features such as directory binding policy, session shell availability,
-  interrupt TTL, and health endpoint exposure
+- runtime features such as directory binding policy, session shell availability, interrupt TTL, and health endpoint exposure
 
 Execution-environment boundary fields are also published through the runtime
 profile when configured. Those fields are declarative deployment metadata, not
@@ -114,29 +103,15 @@ will be reflected live per request.
 
 ## Extension Stability
 
-- Shared metadata and extension contracts should stay synchronized across Agent
-  Card, OpenAPI, and runtime behavior.
-- Product-specific extensions should remain stable within the current major
-  line unless explicitly documented otherwise.
-- Deployment-conditional methods must be declared as conditional rather than
-  silently disappearing.
-- `codex.sessions.shell` is compatibility-sensitive as a one-shot shell
-  snapshot contract. Future interactive exec support must use a separate
-  extension family rather than silently widening this method's behavior.
-- Rich input mapping is compatibility-sensitive across both `codex.sessions.prompt_async`
-  and the core A2A message surface. Changes to supported part types, FilePart
-  image handling, or DataPart mention/skill mapping should be treated as
-  wire-level behavior changes.
-- `codex.exec.*` is compatibility-sensitive as the standalone interactive exec
-  contract. Changes to handle shapes, task-stream delivery, or lifecycle method
-  names should be treated as wire-level changes.
-- `codex.discovery.*` is compatibility-sensitive as the stable discovery
-  contract for `skill.path` and `mention_path` identifiers. Changes to
-  normalized item fields, plugin marketplace mapping, or discovery watch task
-  payload kinds should be treated as wire-level changes.
-- `codex.threads.*` is compatibility-sensitive as the provider-private thread
-  lifecycle contract. Changes to lifecycle method names, watch payload kinds,
-  or watch-task bridge event names should be treated as wire-level changes.
+- Shared metadata and extension contracts should stay synchronized across Agent Card, OpenAPI, and runtime behavior.
+- Public Agent Card should stay intentionally minimal. Detailed extension params belong in the authenticated extended card and OpenAPI, not back in the anonymous discovery surface.
+- Product-specific extensions should remain stable within the current major line unless explicitly documented otherwise.
+- Deployment-conditional methods must be declared as conditional rather than silently disappearing.
+- `codex.sessions.shell` is compatibility-sensitive as a one-shot shell snapshot contract. Future interactive exec support must use a separate extension family rather than silently widening this method's behavior.
+- Rich input mapping is compatibility-sensitive across both `codex.sessions.prompt_async` and the core A2A message surface. Changes to supported part types, FilePart image handling, or DataPart mention/skill mapping should be treated as wire-level behavior changes.
+- `codex.exec.*` is compatibility-sensitive as the standalone interactive exec contract. Changes to handle shapes, task-stream delivery, or lifecycle method names should be treated as wire-level changes.
+- `codex.discovery.*` is compatibility-sensitive as the stable discovery contract for `skill.path` and `mention_path` identifiers. Changes to normalized item fields, plugin marketplace mapping, or discovery watch task payload kinds should be treated as wire-level changes.
+- `codex.threads.*` is compatibility-sensitive as the provider-private thread lifecycle contract. Changes to lifecycle method names, watch payload kinds, or watch-task bridge event names should be treated as wire-level changes.
 
 ## Extension Taxonomy
 
@@ -159,28 +134,18 @@ This repository distinguishes between three layers:
 
 Discovery note:
 
-- `codex.discovery.skills.list`, `codex.discovery.apps.list`,
-  `codex.discovery.plugins.list`, and `codex.discovery.plugins.read` are
-  declared read-only discovery methods.
-- `codex.discovery.watch` is the declared bridge for upstream
-  `skills/changed` and `app/list/updated` notifications.
-- `codex.threads.watch` is the declared thread lifecycle watch-task bridge for
-  upstream `thread/started`, `thread/status/changed`, `thread/archived`,
-  `thread/unarchived`, and `thread/closed` notifications.
-- `thread/unsubscribe` is intentionally excluded from the stable public
-  contract until this service exposes connection-safe subscription ownership.
-- This repository does not claim a generic standalone server-push JSON-RPC
-  transport for those notifications; the compatibility contract is the
-  watch-task bridge published through Agent Card and OpenAPI.
+- `codex.discovery.skills.list`, `codex.discovery.apps.list`, `codex.discovery.plugins.list`, and `codex.discovery.plugins.read` are declared read-only discovery methods.
+- `codex.discovery.watch` is the declared bridge for upstream `skills/changed` and `app/list/updated` notifications.
+- `codex.threads.watch` is the declared thread lifecycle watch-task bridge for upstream `thread/started`, `thread/status/changed`, `thread/archived`, `thread/unarchived`, and `thread/closed` notifications.
+- `thread/unsubscribe` is intentionally excluded from the stable public contract until this service exposes connection-safe subscription ownership.
+- This repository does not claim a generic standalone server-push JSON-RPC transport for those notifications; the compatibility contract is the watch-task bridge published through Agent Card and OpenAPI.
 
 Important note:
 
-- `urn:a2a:*` extension URIs used here should be read as shared conventions in
-  this repository family.
+- `urn:a2a:*` extension URIs used here should be read as shared conventions in this repository family.
 - They are not a claim that those extensions are part of the A2A core baseline.
-- `codex.*` methods are intentionally product-specific. They improve Codex-aware
-  workflows but should not be assumed to transfer unchanged to unrelated A2A
-  agents.
+- `codex.*` methods are intentionally product-specific. They improve Codex-aware workflows but should not be assumed to transfer unchanged to unrelated A2A agents.
+- The public Agent Card is intentionally smaller than the authenticated extended card; that size difference is part of the current discovery contract rather than a documentation accident.
 
 ## Non-Goals
 
