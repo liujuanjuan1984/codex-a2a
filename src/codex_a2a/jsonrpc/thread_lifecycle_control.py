@@ -138,7 +138,9 @@ async def handle_thread_lifecycle_control_request(
                 context=call_context,
             )
         elif base_request.method == app._method_thread_fork:
-            fork_params = parsed_params if isinstance(parsed_params, ThreadForkControlParams) else None
+            fork_params = (
+                parsed_params if isinstance(parsed_params, ThreadForkControlParams) else None
+            )
             assert fork_params is not None
             thread = await app._codex_client.thread_fork(
                 fork_params.thread_id,

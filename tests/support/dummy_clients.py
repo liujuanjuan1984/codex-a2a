@@ -154,7 +154,6 @@ class DummySessionQueryCodexClient:
         self.last_prompt_async: dict[str, Any] | None = None
         self.last_command: dict[str, Any] | None = None
         self.last_shell: dict[str, Any] | None = None
-        self.last_exec_start: dict[str, Any] | None = None
         self.exec_write_calls: list[dict[str, Any]] = []
         self.exec_resize_calls: list[dict[str, Any]] = []
         self.exec_terminate_calls: list[dict[str, Any]] = []
@@ -285,10 +284,7 @@ class DummySessionQueryCodexClient:
         timeout_override=None,  # noqa: ANN001
     ) -> dict[str, Any]:
         del timeout_override
-        self.last_exec_start = {
-            "request": request,
-            "directory": directory,
-        }
+        del directory
         process_id = str(request.get("processId") or "exec-1")
         return {"stdout": "hello\n", "stderr": "", "exitCode": 0, "processId": process_id}
 
