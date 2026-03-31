@@ -50,8 +50,9 @@ retry() {
   while true; do
     if "$@"; then
       return 0
+    else
+      exit_code=$?
     fi
-    exit_code=$?
     if (( attempt >= retry_attempts )); then
       echo "Command failed after ${attempt} attempts: $*" >&2
       return "${exit_code}"
@@ -99,8 +100,9 @@ ensure_release_exists() {
   if release_exists; then
     echo "GitHub Release already exists for ${release_tag}"
     return 0
+  else
+    exists_result=$?
   fi
-  exists_result=$?
   if (( exists_result != 1 )); then
     echo "Unable to determine whether GitHub Release ${release_tag} already exists" >&2
     return "${exists_result}"
@@ -114,12 +116,14 @@ declare -A existing_release_assets=()
 
 ensure_release_exists
 
+release_assets_json="$(retry gh release view "${release_tag}" --json assets)"
+
 while IFS= read -r asset_name; do
   if [[ -n "${asset_name}" ]]; then
     existing_release_assets["${asset_name}"]=1
   fi
 done < <(
-  retry gh release view "${release_tag}" --json assets | "${python_bin}" -c '
+  printf "%s" "${release_assets_json}" | "${python_bin}" -c '
 import json
 import sys
 
