@@ -97,7 +97,9 @@ def _write_release_assets(tmp_path: Path) -> Path:
     return dist_dir
 
 
-def _script_env(fake_gh_dir: Path, state_path: Path, log_path: Path, dist_dir: Path) -> dict[str, str]:
+def _script_env(
+    fake_gh_dir: Path, state_path: Path, log_path: Path, dist_dir: Path
+) -> dict[str, str]:
     env = os.environ.copy()
     env["PATH"] = f"{fake_gh_dir}{os.pathsep}{env['PATH']}"
     env["FAKE_GH_STATE"] = str(state_path)
@@ -133,7 +135,9 @@ def test_publish_release_script_creates_missing_release_before_upload(tmp_path: 
     log_lines = log_path.read_text(encoding="utf-8").splitlines()
     assert "release create v0.5.1 --generate-notes --verify-tag" in log_lines
     assert "release upload v0.5.1 " + str(dist_dir / "codex_a2a-0.5.1.tar.gz") in log_lines
-    assert "release upload v0.5.1 " + str(dist_dir / "codex_a2a-0.5.1-py3-none-any.whl") in log_lines
+    assert (
+        "release upload v0.5.1 " + str(dist_dir / "codex_a2a-0.5.1-py3-none-any.whl") in log_lines
+    )
 
 
 def test_publish_release_script_fails_when_asset_upload_keeps_failing(tmp_path: Path) -> None:
@@ -154,3 +158,26 @@ def test_publish_release_script_fails_when_asset_upload_keeps_failing(tmp_path: 
     assert result.returncode != 0
     assert "synthetic upload failure" in result.stderr
     assert "Command failed after 2 attempts" in result.stderr
+
+
+def test_publish_release_script_fails_when_release_creation_keeps_failing(tmp_path: Path) -> None:
+    fake_gh, state_path, log_path = _write_fake_gh(tmp_path)
+    dist_dir = _write_release_assets(tmp_path)
+    env = _script_env(fake_gh.parent, state_path, log_path, dist_dir)
+    env["FAKE_GH_FAIL_CREATE"] = "1"
+
+    result = subprocess.run(
+        ["bash", str(PUBLISH_RELEASE_SCRIPT)],
+        cwd=REPO_ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode != 0
+    assert "synthetic create failure" in result.stderr
+    assert "Command failed after 2 attempts" in result.stderr
+    log_lines = log_path.read_text(encoding="utf-8").splitlines()
+    assert "release create v0.5.1 --generate-notes --verify-tag" in log_lines
+    assert not any(line.startswith("release upload v0.5.1 ") for line in log_lines)
