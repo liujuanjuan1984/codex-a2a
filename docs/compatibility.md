@@ -1,8 +1,6 @@
 # Compatibility Guide
 
-This document explains the compatibility promises this repository currently
-tries to uphold for open-source users, A2A consumers, and coding-agent
-integrators.
+This document explains the compatibility promises this repository currently tries to uphold for open-source users, A2A consumers, and coding-agent integrators.
 
 ## Runtime Support
 
@@ -10,9 +8,7 @@ integrators.
 - A2A SDK line: `0.3.x`
 - A2A protocol version advertised by default: `0.3.0`
 
-The repository pins the SDK version in `pyproject.toml` and validates the
-published CLI build in CI. Upgrade the SDK deliberately rather than relying on
-floating dependency resolution.
+The repository pins the SDK version in `pyproject.toml` and validates the published CLI build in CI. Upgrade the SDK deliberately rather than relying on floating dependency resolution.
 
 ## Contract Honesty
 
@@ -24,8 +20,7 @@ Machine-readable discovery surfaces must reflect actual runtime behavior:
 - JSON-RPC wire contract
 - compatibility profile
 
-If runtime support is not implemented, do not expose it as a supported machine-
-readable capability.
+If runtime support is not implemented, do not expose it as a supported machine-readable capability.
 
 Open-source consumption guidance:
 
@@ -36,22 +31,17 @@ Open-source consumption guidance:
 
 ## Normative Sources
 
-When documentation or reference material disagrees, treat these as normative in
-this order:
+When documentation or reference material disagrees, treat these as normative in this order:
 
 - runtime behavior validated by tests
 - machine-readable discovery output such as Agent Card, authenticated extended card, and OpenAPI metadata
 - repository-owned docs in `README.md`, `docs/`, and `CONTRIBUTING.md`
 
-Maintainer-local upstream Codex snapshots generated via
-`scripts/sync_codex_docs.sh` are optional reference inputs for comparison and
-protocol context. They do not override this repository's declared service
-contract.
+Maintainer-local upstream Codex snapshots generated via `scripts/sync_codex_docs.sh` are optional reference inputs for comparison and protocol context. They do not override this repository's declared service contract.
 
 ## Compatibility-Sensitive Surface
 
-This repository still ships as an alpha project. Within that alpha line, these
-declared surfaces should not drift silently:
+This repository still ships as an alpha project. Within that alpha line, these declared surfaces should not drift silently:
 
 - core A2A send / stream / task methods
 - shared session-binding metadata
@@ -59,14 +49,9 @@ declared surfaces should not drift silently:
 - declared custom JSON-RPC extension methods
 - unsupported-method error shape
 
-Changes to those surfaces should be treated as compatibility-sensitive and
-should include corresponding test updates.
+Changes to those surfaces should be treated as compatibility-sensitive and should include corresponding test updates.
 
-Service-level behavior layered on top of those core methods should also be
-declared explicitly when this repository depends on it for interoperability.
-Current example: terminal `tasks/resubscribe` replay-once behavior is published
-as a service-level contract, not as a claim about generic A2A runtime
-semantics.
+Service-level behavior layered on top of those core methods should also be declared explicitly when this repository depends on it for interoperability. Current example: terminal `tasks/resubscribe` replay-once behavior is published as a service-level contract, not as a claim about generic A2A runtime semantics.
 
 Task-store resilience is also service-level behavior in this deployment:
 
@@ -88,18 +73,14 @@ The current service profile is intentionally:
 - shared-workspace
 - `tenant_isolation=none`
 
-One deployed instance should be treated as a single-tenant trust boundary, not
-as a secure multi-tenant runtime boundary.
+One deployed instance should be treated as a single-tenant trust boundary, not as a secure multi-tenant runtime boundary.
 
 The compatibility surface distinguishes between:
 
 - a stable deployment profile
 - runtime features such as directory binding policy, session shell availability, interrupt TTL, and health endpoint exposure
 
-Execution-environment boundary fields are also published through the runtime
-profile when configured. Those fields are declarative deployment metadata, not
-promises that every temporary approval, sandbox escalation, or host-side change
-will be reflected live per request.
+Execution-environment boundary fields are also published through the runtime profile when configured. Those fields are declarative deployment metadata, not promises that every temporary approval, sandbox escalation, or host-side change will be reflected live per request.
 
 ## Extension Stability
 
@@ -120,9 +101,7 @@ This repository distinguishes between three layers:
 - core A2A surface
   - standard send / stream / task methods
 - shared extensions
-  - repo-family conventions such as session binding, stream hints, and
-    interrupt callbacks (`permission`, `question`, `permissions`, and
-    `elicitation` reply surfaces)
+  - repo-family conventions such as session binding, stream hints, and interrupt callbacks (`permission`, `question`, `permissions`, and `elicitation` reply surfaces)
 - Codex-specific extensions
   - `codex.*` JSON-RPC methods and `metadata.codex.directory`
   - this now includes:
@@ -155,5 +134,4 @@ This repository does not currently promise:
 - OAuth2 runtime token verification
 - a generic metrics export protocol such as Prometheus or OpenTelemetry
 
-Those areas may evolve later, but they should not be implied by current
-machine-readable discovery output.
+Those areas may evolve later, but they should not be implied by current machine-readable discovery output.

@@ -1,12 +1,10 @@
 # Architecture Guide
 
-This document explains what `codex-a2a` is responsible for, what remains
-inside Codex, and how requests move through the service.
+This document explains what `codex-a2a` is responsible for, what remains inside Codex, and how requests move through the service.
 
 ## System Role
 
-`codex-a2a` is an adapter layer between A2A clients and the Codex
-runtime.
+`codex-a2a` is an adapter layer between A2A clients and the Codex runtime.
 
 It is responsible for:
 
@@ -32,9 +30,7 @@ flowchart LR
     Codex --> Workspace["Shared workspace and provider credentials"]
 ```
 
-This view emphasizes service responsibility boundaries rather than internal
-module structure. The root [README](../README.md) keeps the more
-implementation-oriented logical component view for first-time readers.
+This view emphasizes service responsibility boundaries rather than internal module structure. The root [README](../README.md) keeps the more implementation-oriented logical component view for first-time readers.
 
 ## Request Flow
 
@@ -59,9 +55,7 @@ Detailed streaming contract: [Usage Guide](guide.md)
 
 ### Session flow
 
-The service keeps a shared session continuation contract around
-`metadata.shared.session.id`, so clients can continue an existing Codex
-conversation without binding directly to provider-private request formats.
+The service keeps a shared session continuation contract around `metadata.shared.session.id`, so clients can continue an existing Codex conversation without binding directly to provider-private request formats.
 
 ### Interrupt flow
 
@@ -88,8 +82,7 @@ The service introduces a boundary, but not a full trust boundary.
 - workspace execution side effects
 - model/provider-specific runtime behavior
 
-That is why deployments should still be treated as trusted or controlled unless
-stronger isolation is added.
+That is why deployments should still be treated as trusted or controlled unless stronger isolation is added.
 
 ## Documentation Split
 
@@ -102,5 +95,4 @@ Use the docs by responsibility:
 - [Contributing Guide](../CONTRIBUTING.md): contributor workflow and validation
 - [Security Policy](../SECURITY.md): threat model and disclosure guidance
 
-Maintainers can regenerate optional upstream Codex reference snapshots with
-`scripts/sync_codex_docs.sh` when protocol comparison is needed.
+Maintainers can regenerate optional upstream Codex reference snapshots with `scripts/sync_codex_docs.sh` when protocol comparison is needed.

@@ -4,8 +4,7 @@ Thanks for contributing to `codex-a2a`.
 
 ## Scope
 
-This repository is the server/runtime boundary around Codex for A2A clients.
-Keep contributions aligned with that role:
+This repository is the server/runtime boundary around Codex for A2A clients. Keep contributions aligned with that role:
 
 - transport and contract correctness
 - deployment and operations guardrails
@@ -18,15 +17,12 @@ Client-only concerns should usually stay out of this repository.
 
 1. Start from the latest `main`.
 2. Work in a dedicated branch.
-3. Link the change to an issue whenever the work changes runtime behavior,
-   contracts, deployment, or documentation beyond small editorial cleanup.
-4. Keep PRs focused and describe contract or compatibility implications
-   explicitly.
+3. Link the change to an issue whenever the work changes runtime behavior, contracts, deployment, or documentation beyond small editorial cleanup.
+4. Keep PRs focused and describe contract or compatibility implications explicitly.
 
 ## Development From Source
 
-Use the repository checkout directly only for development, local debugging, or
-validation against unreleased changes on `main`.
+Use the repository checkout directly only for development, local debugging, or validation against unreleased changes on `main`.
 
 1. Install dependencies:
 
@@ -64,8 +60,7 @@ Run the default validation baseline before opening or updating a PR:
 bash ./scripts/validate_baseline.sh
 ```
 
-This script runs `pre-commit`, `mypy`, `pytest` with the repository coverage
-floor, then builds the package and smoke-tests the freshly built wheel.
+This script runs `pre-commit`, `mypy`, `pytest` with the repository coverage floor, then builds the package and smoke-tests the freshly built wheel.
 
 For shell script changes, validate the touched scripts directly, for example:
 
@@ -74,17 +69,14 @@ bash -n scripts/validate_baseline.sh
 bash -n scripts/smoke_test_built_cli.sh
 ```
 
-If `pre-commit` rewrites files, review the rewritten output and re-run the
-checks until the working tree is clean.
+If `pre-commit` rewrites files, review the rewritten output and re-run the checks until the working tree is clean.
 
 ## Compatibility Expectations
 
 - The repository targets Python 3.11, 3.12, and 3.13.
 - Machine-readable declarations should match actual runtime behavior.
-- Custom extensions must remain stable within the current major line unless a
-  change is explicitly documented as breaking.
-- Shared metadata and wire contracts should not drift between Agent Card,
-  OpenAPI, and runtime behavior.
+- Custom extensions must remain stable within the current major line unless a change is explicitly documented as breaking.
+- Shared metadata and wire contracts should not drift between Agent Card, OpenAPI, and runtime behavior.
 
 More detail: [Compatibility Guide](docs/compatibility.md)
 
@@ -92,8 +84,7 @@ More detail: [Compatibility Guide](docs/compatibility.md)
 
 - Never commit bearer tokens, provider keys, or `.env` contents.
 - Do not add logs that expose raw credentials or private payloads.
-- Deployment, authentication, or secret-handling changes must update the
-  relevant documentation.
+- Deployment, authentication, or secret-handling changes must update the relevant documentation.
 
 ## Reviews
 
