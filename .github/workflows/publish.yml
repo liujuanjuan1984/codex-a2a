@@ -10,14 +10,20 @@ on:
         description: "Existing tag to publish"
         required: true
         type: string
-
-permissions:
-  contents: write
-  id-token: write
+      publish_to_pypi:
+        description: "Also publish this tag to PyPI"
+        required: false
+        default: false
+        type: boolean
 
 jobs:
-  publish:
+  build_release_artifacts:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      artifact_name: ${{ steps.artifact_name.outputs.name }}
+      release_tag: ${{ steps.release_tag.outputs.tag }}
 
     steps:
       - name: Checkout
@@ -41,6 +47,12 @@ jobs:
         run: echo "tag=${RELEASE_TAG}" >> "$GITHUB_OUTPUT"
         env:
           RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag_name || github.ref_name }}
+
+      - name: Resolve artifact name
+        id: artifact_name
+        run: echo "name=release-artifacts-${RELEASE_TAG}" >> "$GITHUB_OUTPUT"
+        env:
+          RELEASE_TAG: ${{ steps.release_tag.outputs.tag }}
 
       - name: Build package artifacts
         env:
@@ -83,16 +95,56 @@ jobs:
         env:
           WHEEL_PATH: ${{ steps.wheel.outputs.wheel_path }}
 
+      - name: Upload built artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.artifact_name.outputs.name }}
+          path: dist/
+          if-no-files-found: error
+
+  publish_pypi:
+    runs-on: ubuntu-latest
+    needs: build_release_artifacts
+    if: github.event_name == 'push' || inputs.publish_to_pypi
+    permissions:
+      id-token: write
+
+    steps:
+      - name: Download built artifacts
+        uses: actions/download-artifact@v5
+        with:
+          name: ${{ needs.build_release_artifacts.outputs.artifact_name }}
+          path: dist
+
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
 
-      - name: Create GitHub Release
+  publish_github_release:
+    runs-on: ubuntu-latest
+    needs:
+      - build_release_artifacts
+      - publish_pypi
+    if: >-
+      always() &&
+      needs.build_release_artifacts.result == 'success' &&
+      (needs.publish_pypi.result == 'success' || needs.publish_pypi.result == 'skipped')
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Download built artifacts
+        uses: actions/download-artifact@v5
+        with:
+          name: ${{ needs.build_release_artifacts.outputs.artifact_name }}
+          path: dist
+
+      - name: Sync GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ steps.release_tag.outputs.tag }}
-        run: |
-          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            gh release upload "$RELEASE_TAG" dist/*.tar.gz dist/*.whl --clobber
-          else
-            gh release create "$RELEASE_TAG" dist/*.tar.gz dist/*.whl --generate-notes --verify-tag
-          fi
+          RELEASE_TAG: ${{ needs.build_release_artifacts.outputs.release_tag }}
+        run: bash ./scripts/publish_github_release.sh

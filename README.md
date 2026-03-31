@@ -2,16 +2,12 @@
 
 > Expose Codex through A2A.
 
-`codex-a2a` adds an A2A runtime layer to the local Codex runtime, with
-auth, streaming, session continuity, interrupt handling, a built-in
-outbound A2A client, and a clear deployment boundary.
+`codex-a2a` adds an A2A runtime layer to the local Codex runtime, with auth, streaming, session continuity, interrupt handling, a built-in outbound A2A client, and a clear deployment boundary.
 
 ## What This Is
 
-- An A2A adapter service for the local Codex runtime, with inbound runtime
-  exposure plus outbound peer calling.
-- It supports both roles in one process: serving as an A2A Server and hosting
-  an embedded A2A Client for `a2a_call` and CLI-driven peer calls.
+- An A2A adapter service for the local Codex runtime, with inbound runtime exposure plus outbound peer calling.
+- It supports both roles in one process: serving as an A2A Server and hosting an embedded A2A Client for `a2a_call` and CLI-driven peer calls.
 
 ## Architecture
 
@@ -84,38 +80,29 @@ Authenticated extended card:
 - JSON-RPC: `agent/getAuthenticatedExtendedCard`
 - HTTP: `GET /v1/card`
 
-Outbound peer auth is configured with `A2A_CLIENT_BEARER_TOKEN` or
-`A2A_CLIENT_BASIC_AUTH`; see the Usage Guide for the complete client-side
-matrix.
+Outbound peer auth is configured with `A2A_CLIENT_BEARER_TOKEN` or `A2A_CLIENT_BASIC_AUTH`; see the Usage Guide for the complete client-side matrix.
 
 ## Highlights
 
-- A2A HTTP+JSON endpoints such as `/v1/message:send` and
-  `/v1/message:stream`
+- A2A HTTP+JSON endpoints such as `/v1/message:send` and `/v1/message:stream`
 - A2A JSON-RPC support on `POST /`
 - Embedded client access through `codex-a2a call`
 - Autonomous outbound peer calls through the `a2a_call` tool
 - SSE streaming with normalized `text`, `reasoning`, and `tool_call` blocks
 - Session continuity and session query extensions
 - Interrupt lifecycle mapping and callback validation
-- Transport selection, Agent Card discovery, timeout control, and bearer/basic
-  auth for outbound A2A calls
-- Payload logging controls, secret-handling guardrails, and released-CLI startup
-  / source-based runtime paths
+- Transport selection, Agent Card discovery, timeout control, and bearer/basic auth for outbound A2A calls
+- Payload logging controls, secret-handling guardrails, and released-CLI startup / source-based runtime paths
 
 ## Boundaries
 
 Portable vs Private Surface:
 
-- Treat the core A2A send / stream / task methods plus Agent Card discovery as
-  the portable baseline.
-- Treat `codex.*` methods and `metadata.codex.directory` as the
-  Codex-specific control plane for Codex-aware clients.
-- Treat one deployed instance as a single-tenant trust boundary, not a hardened
-  multi-tenant runtime.
+- Treat the core A2A send / stream / task methods plus Agent Card discovery as the portable baseline.
+- Treat `codex.*` methods and `metadata.codex.directory` as the Codex-specific control plane for Codex-aware clients.
+- Treat one deployed instance as a single-tenant trust boundary, not a hardened multi-tenant runtime.
 
-The normative compatibility split and deployment model live in
-[Compatibility Guide](docs/compatibility.md) and [Security Policy](SECURITY.md).
+The normative compatibility split and deployment model live in [Compatibility Guide](docs/compatibility.md) and [Security Policy](SECURITY.md).
 
 ## When To Use It
 
@@ -134,33 +121,21 @@ Look elsewhere if:
 
 ## Recommended Client Side
 
-If you want a broader application-facing client integration layer, prefer
-[a2a-client-hub](https://github.com/liujuanjuan1984/a2a-client-hub).
+If you want a broader application-facing client integration layer, prefer [a2a-client-hub](https://github.com/liujuanjuan1984/a2a-client-hub).
 
-It is a better place for higher-level client concerns such as A2A consumption,
-upstream adapter normalization, and application-facing integration, while
-`codex-a2a` stays focused on the runtime boundary around Codex plus embedded
-peer calling.
+It is a better place for higher-level client concerns such as A2A consumption, upstream adapter normalization, and application-facing integration, while `codex-a2a` stays focused on the runtime boundary around Codex plus embedded peer calling.
 
 ## Further Reading
 
-- [Usage Guide](docs/guide.md)
-  Runtime configuration, outbound access, transport usage, and client examples.
-- [Extension Specifications](docs/extension-specifications.md)
-  Stable extension URI/spec index plus public-vs-extended card disclosure rules.
-- [Architecture Guide](docs/architecture.md)
-  System structure, boundaries, and request flow.
-- [Compatibility Guide](docs/compatibility.md)
-  Supported Python/runtime surface, extension stability, and ecosystem-facing
-  compatibility expectations.
-- [Security Policy](SECURITY.md)
-  Threat model, deployment caveats, and vulnerability disclosure guidance.
+- [Usage Guide](docs/guide.md) Runtime configuration, outbound access, transport usage, and client examples.
+- [Extension Specifications](docs/extension-specifications.md) Stable extension URI/spec index plus public-vs-extended card disclosure rules.
+- [Architecture Guide](docs/architecture.md) System structure, boundaries, and request flow.
+- [Compatibility Guide](docs/compatibility.md) Supported Python/runtime surface, extension stability, and ecosystem-facing compatibility expectations.
+- [Security Policy](SECURITY.md) Threat model, deployment caveats, and vulnerability disclosure guidance.
 
 ## Development
 
-For contributor workflow, validation, release handling, and helper scripts, see
-[Contributing Guide](CONTRIBUTING.md) and [Scripts Reference](scripts/README.md).
-Use that workflow to create a PR from the working branch and merge into `main` after human review.
+For contributor workflow, validation, release handling, and helper scripts, see [Contributing Guide](CONTRIBUTING.md) and [Scripts Reference](scripts/README.md). Use that workflow to create a PR from the working branch and merge into `main` after human review.
 
 ## License
 

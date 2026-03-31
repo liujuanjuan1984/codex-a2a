@@ -1,10 +1,6 @@
 # Usage Guide
 
-This guide covers runtime configuration, transport contracts,
-streaming/session/interrupt behavior, and client examples.
-[README.md](../README.md) stays at overview level, the stable extension URI/spec
-index lives in [extension-specifications.md](./extension-specifications.md), and
-compatibility promises live in [compatibility.md](./compatibility.md).
+This guide covers runtime configuration, transport contracts, streaming/session/interrupt behavior, and client examples. [README.md](../README.md) stays at overview level, the stable extension URI/spec index lives in [extension-specifications.md](./extension-specifications.md), and compatibility promises live in [compatibility.md](./compatibility.md).
 
 ## Transport Contracts
 
@@ -28,14 +24,11 @@ compatibility promises live in [compatibility.md](./compatibility.md).
 - Payload schema is transport-specific and should not be mixed:
   - REST send payload usually uses `message.content` and role values like `ROLE_USER`
   - JSON-RPC `message/send` payload uses `params.message.parts` and role values `user` / `agent`
-- The JSON-RPC entrypoint and authenticated extended card publish the explicit
-  wire contract for the supported method set and unsupported-method error shape.
+- The JSON-RPC entrypoint and authenticated extended card publish the explicit wire contract for the supported method set and unsupported-method error shape.
 
 ## Wire Contract
 
-The full machine-readable wire contract is published through the authenticated
-extended card and OpenAPI metadata. The public Agent Card keeps only the minimum
-capability declarations needed for discovery.
+The full machine-readable wire contract is published through the authenticated extended card and OpenAPI metadata. The public Agent Card keeps only the minimum capability declarations needed for discovery.
 
 Use it to answer:
 
@@ -57,8 +50,7 @@ Current behavior:
   - `/v1/message:stream`
   - `/v1/tasks/{id}:subscribe`
 - extension JSON-RPC methods are declared separately from the core baseline
-- `codex.sessions.shell` becomes deployment-conditional when
-  `A2A_ENABLE_SESSION_SHELL=false`
+- `codex.sessions.shell` becomes deployment-conditional when `A2A_ENABLE_SESSION_SHELL=false`
 
 Unsupported method contract:
 
@@ -72,25 +64,16 @@ Unsupported method contract:
 
 Consumer guidance:
 
-- Discover the current method set from Agent Card / OpenAPI before calling
-  custom JSON-RPC methods.
-- Fetch the authenticated extended card when you need the detailed method matrix,
-  provider-private notes, or full extension params.
-- Treat `supported_methods` in `error.data` as the runtime truth for the
-  current deployment, especially when a deployment-conditional method is
-  disabled.
+- Discover the current method set from Agent Card / OpenAPI before calling custom JSON-RPC methods.
+- Fetch the authenticated extended card when you need the detailed method matrix, provider-private notes, or full extension params.
+- Treat `supported_methods` in `error.data` as the runtime truth for the current deployment, especially when a deployment-conditional method is disabled.
 - Treat the core A2A methods as the portable interoperability baseline.
-- Treat `codex.*` methods and `metadata.codex.directory` as a Codex-specific
-  control plane for Codex-aware clients rather than generic A2A portability
-  claims.
-- See [extension-specifications.md](./extension-specifications.md) for the
-  stable URI/spec index, and [compatibility.md](./compatibility.md) for
-  compatibility promises.
+- Treat `codex.*` methods and `metadata.codex.directory` as a Codex-specific control plane for Codex-aware clients rather than generic A2A portability claims.
+- See [extension-specifications.md](./extension-specifications.md) for the stable URI/spec index, and [compatibility.md](./compatibility.md) for compatibility promises.
 
 ## Compatibility Profile
 
-The full machine-readable compatibility profile is published through the
-authenticated extended card and OpenAPI metadata. Its purpose is to declare:
+The full machine-readable compatibility profile is published through the authenticated extended card and OpenAPI metadata. Its purpose is to declare:
 
 - the stable A2A core interoperability baseline
 - which shared extensions are intended to be reused across this repo family
@@ -141,40 +124,21 @@ Retention guidance:
 
 - Treat core methods as the generic client interoperability baseline.
 - Treat this deployment as a single-tenant, shared-workspace coding profile.
-- Treat shared session-binding and streaming metadata contracts as required for
-  the current deployment model; they are not optional documentation-only hints.
-- Treat `urn:a2a:*` extension URIs in this repository as shared extension
-  conventions used across this repo family, not as claims that they are part
-  of the A2A core baseline.
+- Treat shared session-binding and streaming metadata contracts as required for the current deployment model; they are not optional documentation-only hints.
+- Treat `urn:a2a:*` extension URIs in this repository as shared extension conventions used across this repo family, not as claims that they are part of the A2A core baseline.
 - Treat `a2a.interrupt.*` methods as shared extensions.
-- Treat `codex.*` methods and `metadata.codex.directory` as Codex-specific
-  extensions or provider-private operational surfaces rather than portable A2A
-  baseline capabilities.
-- Treat `codex.sessions.shell` as deployment-conditional. Discover it from the
-  declared compatibility profile and extension contracts before calling it.
-- Treat `codex.sessions.shell` as a one-shot shell snapshot surface. It is not
-  an interactive shell session and does not imply PTY lifecycle support.
-- Treat `codex.exec.*` as the standalone interactive exec surface. Use it for
-  stdin write, PTY resize, and terminate flows instead of inferring those
-  capabilities from `codex.sessions.shell`.
-- Generic A2A clients should remain usable without the `codex.*` control plane.
-  Opt into those methods only when you are intentionally integrating with
-  Codex-specific workflows such as session continuation, discovery-backed
-  mentions, or interactive exec.
-- Treat `execution_environment.*` as deployment-configured discovery metadata.
-  It does not promise per-request snapshots of temporary approvals, escalations,
-  or host-side runtime mutations.
+- Treat `codex.*` methods and `metadata.codex.directory` as Codex-specific extensions or provider-private operational surfaces rather than portable A2A baseline capabilities.
+- Treat `codex.sessions.shell` as deployment-conditional. Discover it from the declared compatibility profile and extension contracts before calling it.
+- Treat `codex.sessions.shell` as a one-shot shell snapshot surface. It is not an interactive shell session and does not imply PTY lifecycle support.
+- Treat `codex.exec.*` as the standalone interactive exec surface. Use it for stdin write, PTY resize, and terminate flows instead of inferring those capabilities from `codex.sessions.shell`.
+- Generic A2A clients should remain usable without the `codex.*` control plane. Opt into those methods only when you are intentionally integrating with Codex-specific workflows such as session continuation, discovery-backed mentions, or interactive exec.
+- Treat `execution_environment.*` as deployment-configured discovery metadata. It does not promise per-request snapshots of temporary approvals, escalations, or host-side runtime mutations.
 
 Current implementation note:
 
-- The compatibility profile is declarative. It does not introduce a global
-  runtime `core-only` switch.
-- This is intentional: current shared session/stream/interrupt behavior is part
-  of the deployed interoperability contract, so a blanket runtime profile split
-  would be misleading without broader wire-level changes.
-- For compatibility policy and stability expectations, use
-  [compatibility.md](./compatibility.md) as the normative repo document rather
-  than this usage guide.
+- The compatibility profile is declarative. It does not introduce a global runtime `core-only` switch.
+- This is intentional: current shared session/stream/interrupt behavior is part of the deployed interoperability contract, so a blanket runtime profile split would be misleading without broader wire-level changes.
+- For compatibility policy and stability expectations, use [compatibility.md](./compatibility.md) as the normative repo document rather than this usage guide.
 
 ## Environment Variables
 
@@ -210,74 +174,38 @@ Current implementation note:
 - `A2A_HOST`: bind host, default `127.0.0.1`
 - `A2A_PORT`: bind port, default `8000`
 - `A2A_BEARER_TOKEN`: required; service fails fast if unset
-- `A2A_DATABASE_URL`: SQLAlchemy async database URL shared by the database
-  task store and runtime-state persistence, default
-  `sqlite+aiosqlite:///./codex-a2a.db`. This enables database-backed task
-  persistence and also backs session-binding ownership state plus pending
-  interrupt callback requests for cross-restart recovery. Persisted session
-  binding and ownership state are retained independently from the in-memory
-  session cache TTL. In the default SQLite-backed deployment, terminal-task
-  persistence also uses an atomic database upsert so late conflicting writes do
-  not depend on a process-local pre-read.
+- `A2A_DATABASE_URL`: SQLAlchemy async database URL shared by the database task store and runtime-state persistence, default `sqlite+aiosqlite:///./codex-a2a.db`. This enables database-backed task persistence and also backs session-binding ownership state plus pending interrupt callback requests for cross-restart recovery. Persisted session binding and ownership state are retained independently from the in-memory session cache TTL. In the default SQLite-backed deployment, terminal-task persistence also uses an atomic database upsert so late conflicting writes do not depend on a process-local pre-read.
 - `A2A_ENABLE_HEALTH_ENDPOINT`: enable the authenticated lightweight `/health` probe, default `true`
 - `A2A_ENABLE_SESSION_SHELL`: expose `codex.sessions.shell` on JSON-RPC extensions, default `true`
 - `A2A_LOG_LEVEL`: `DEBUG/INFO/WARNING/ERROR`, default `INFO`
 - `A2A_LOG_PAYLOADS`: log A2A/Codex payload bodies, default `false`
 - `A2A_LOG_BODY_LIMIT`: payload log body size limit, default `0` (no truncation)
-- `A2A_DOCUMENTATION_URL`: optional URL exposed via Agent Card
-  `documentationUrl`
-- `A2A_ALLOW_DIRECTORY_OVERRIDE`: allow `metadata.codex.directory` overrides
-  within the configured workspace boundary, default `true`
-- `A2A_SESSION_CACHE_TTL_SECONDS`: in-memory TTL for
-  `(identity, contextId) -> Codex session_id`, default `3600`. When
-  `A2A_DATABASE_URL` is configured, this only controls the local process cache.
+- `A2A_DOCUMENTATION_URL`: optional URL exposed via Agent Card `documentationUrl`
+- `A2A_ALLOW_DIRECTORY_OVERRIDE`: allow `metadata.codex.directory` overrides within the configured workspace boundary, default `true`
+- `A2A_SESSION_CACHE_TTL_SECONDS`: in-memory TTL for `(identity, contextId) -> Codex session_id`, default `3600`. When `A2A_DATABASE_URL` is configured, this only controls the local process cache.
 - `A2A_SESSION_CACHE_MAXSIZE`: max cache entries, default `10000`
-- `A2A_CANCEL_ABORT_TIMEOUT_SECONDS`: how long `tasks/cancel` waits for
-  in-flight execution/session-create cleanup after issuing cancellation,
-  default `1.0`; `0` means best-effort cancel without waiting
-- `A2A_STREAM_IDLE_DIAGNOSTIC_SECONDS`: threshold before the server emits a
-  stream idle diagnostic log, default `60.0`
-- `A2A_CLIENT_TIMEOUT_SECONDS`: default outbound A2A client request timeout in
-  seconds, default `30.0`
-- `A2A_CLIENT_CARD_FETCH_TIMEOUT_SECONDS`: timeout for outbound Agent Card
-  fetches, default `5.0`
-- `A2A_CLIENT_USE_CLIENT_PREFERENCE`: whether outbound transport negotiation
-  should prefer the local client ordering, default `false`
-- `A2A_CLIENT_BEARER_TOKEN`: optional bearer token injected into outbound A2A
-  requests, including Agent Card fetches when configured. This applies to the
-  target peer service used by `codex-a2a call` or `a2a_call(url, message)`,
-  not to this service's inbound `A2A_BEARER_TOKEN`.
-- `A2A_CLIENT_BASIC_AUTH`: optional Basic auth credential injected into
-  outbound A2A requests when bearer auth is not configured. Accepts
-  `username:password` or its base64-encoded form. This also applies to the
-  target peer service, not to inbound auth on this runtime.
-- `A2A_CLIENT_SUPPORTED_TRANSPORTS`: comma-separated outbound transport
-  preference list, default `JSONRPC,HTTP+JSON`
-- `A2A_INTERRUPT_REQUEST_TTL_SECONDS`: TTL for pending interrupt callbacks
-  before they become expired, default `3600`
-- `A2A_EXECUTION_SANDBOX_MODE`: declarative sandbox mode for machine-readable
-  discovery, default `unknown`
-- `A2A_EXECUTION_SANDBOX_FILESYSTEM_SCOPE`: optional filesystem scope override
-  for machine-readable discovery
-- `A2A_EXECUTION_SANDBOX_WRITABLE_ROOTS`: optional comma-separated writable
-  root list for machine-readable discovery
-- `A2A_EXECUTION_NETWORK_ACCESS`: declarative network access policy for
-  machine-readable discovery, default `unknown`
-- `A2A_EXECUTION_NETWORK_ALLOWED_DOMAINS`: optional comma-separated allowlist
-  exposed only when safe to disclose
-- `A2A_EXECUTION_APPROVAL_POLICY`: declarative approval policy for
-  machine-readable discovery, default `unknown`
-- `A2A_EXECUTION_APPROVAL_ESCALATION_BEHAVIOR`: optional declarative approval
-  escalation behavior override
-- `A2A_EXECUTION_WRITE_ACCESS_SCOPE`: optional declarative write-access scope
-  override for machine-readable discovery
-- `A2A_EXECUTION_WRITE_OUTSIDE_WORKSPACE`: optional declarative override for
-  whether write access extends outside the workspace
+- `A2A_CANCEL_ABORT_TIMEOUT_SECONDS`: how long `tasks/cancel` waits for in-flight execution/session-create cleanup after issuing cancellation, default `1.0`; `0` means best-effort cancel without waiting
+- `A2A_STREAM_IDLE_DIAGNOSTIC_SECONDS`: threshold before the server emits a stream idle diagnostic log, default `60.0`
+- `A2A_CLIENT_TIMEOUT_SECONDS`: default outbound A2A client request timeout in seconds, default `30.0`
+- `A2A_CLIENT_CARD_FETCH_TIMEOUT_SECONDS`: timeout for outbound Agent Card fetches, default `5.0`
+- `A2A_CLIENT_USE_CLIENT_PREFERENCE`: whether outbound transport negotiation should prefer the local client ordering, default `false`
+- `A2A_CLIENT_BEARER_TOKEN`: optional bearer token injected into outbound A2A requests, including Agent Card fetches when configured. This applies to the target peer service used by `codex-a2a call` or `a2a_call(url, message)`, not to this service's inbound `A2A_BEARER_TOKEN`.
+- `A2A_CLIENT_BASIC_AUTH`: optional Basic auth credential injected into outbound A2A requests when bearer auth is not configured. Accepts `username:password` or its base64-encoded form. This also applies to the target peer service, not to inbound auth on this runtime.
+- `A2A_CLIENT_SUPPORTED_TRANSPORTS`: comma-separated outbound transport preference list, default `JSONRPC,HTTP+JSON`
+- `A2A_INTERRUPT_REQUEST_TTL_SECONDS`: TTL for pending interrupt callbacks before they become expired, default `3600`
+- `A2A_EXECUTION_SANDBOX_MODE`: declarative sandbox mode for machine-readable discovery, default `unknown`
+- `A2A_EXECUTION_SANDBOX_FILESYSTEM_SCOPE`: optional filesystem scope override for machine-readable discovery
+- `A2A_EXECUTION_SANDBOX_WRITABLE_ROOTS`: optional comma-separated writable root list for machine-readable discovery
+- `A2A_EXECUTION_NETWORK_ACCESS`: declarative network access policy for machine-readable discovery, default `unknown`
+- `A2A_EXECUTION_NETWORK_ALLOWED_DOMAINS`: optional comma-separated allowlist exposed only when safe to disclose
+- `A2A_EXECUTION_APPROVAL_POLICY`: declarative approval policy for machine-readable discovery, default `unknown`
+- `A2A_EXECUTION_APPROVAL_ESCALATION_BEHAVIOR`: optional declarative approval escalation behavior override
+- `A2A_EXECUTION_WRITE_ACCESS_SCOPE`: optional declarative write-access scope override for machine-readable discovery
+- `A2A_EXECUTION_WRITE_OUTSIDE_WORKSPACE`: optional declarative override for whether write access extends outside the workspace
 
 Configuration note:
 - The service configuration layer only accepts `CODEX_*` names for Codex-facing settings.
-- Outbound auth prefers `A2A_CLIENT_BEARER_TOKEN` when both bearer and basic
-  credentials are configured; otherwise it uses `A2A_CLIENT_BASIC_AUTH`.
+- Outbound auth prefers `A2A_CLIENT_BEARER_TOKEN` when both bearer and basic credentials are configured; otherwise it uses `A2A_CLIENT_BASIC_AUTH`.
 
 Codex prerequisite note:
 - `codex-a2a` assumes the local `codex` runtime is already usable.
@@ -287,10 +215,7 @@ Codex prerequisite note:
 
 ## Released CLI Self-Start
 
-For a single user or an existing workspace root, prefer the published CLI
-instead of repository scripts. The abbreviated quick-start stays in
-[README.md](../README.md); this section keeps the fuller runtime example and
-operational notes.
+For a single user or an existing workspace root, prefer the published CLI instead of repository scripts. The abbreviated quick-start stays in [README.md](../README.md); this section keeps the fuller runtime example and operational notes.
 
 Install once:
 
@@ -298,9 +223,7 @@ Install once:
 uv tool install codex-a2a
 ```
 
-Apply the same Codex prerequisites from [README.md](../README.md) before
-starting the runtime. This guide keeps the fuller example with explicit model
-and timeout overrides.
+Apply the same Codex prerequisites from [README.md](../README.md) before starting the runtime. This guide keeps the fuller example with explicit model and timeout overrides.
 
 Run against a workspace root:
 
@@ -321,14 +244,12 @@ codex-a2a
 Notes:
 
 - `CODEX_WORKSPACE_ROOT` should point at the workspace root you want Codex to operate in.
-- `codex-a2a` launches the Codex app-server subprocess itself; no
-  separate `codex serve` step is required.
+- `codex-a2a` launches the Codex app-server subprocess itself; no separate `codex serve` step is required.
 - Upgrade the installed CLI with `uv tool upgrade codex-a2a`.
 
 ## Source-Based Development Start
 
-Use the source tree directly only for development, debugging, or validation of
-unreleased changes:
+Use the source tree directly only for development, debugging, or validation of unreleased changes:
 
 ```bash
 uv sync --all-extras
@@ -336,150 +257,70 @@ export A2A_BEARER_TOKEN="$(python -c 'import secrets; print(secrets.token_hex(24
 CODEX_WORKSPACE_ROOT=/abs/path/to/workspace uv run codex-a2a
 ```
 
-This path is for contributors. End users should prefer the released CLI path
-described first in [README.md](../README.md) and above in this guide.
+This path is for contributors. End users should prefer the released CLI path described first in [README.md](../README.md) and above in this guide.
 
 ## Service Behavior
 
 ### Health, Auth, and Deployment Boundary
 
-- `GET /health` is a lightweight authenticated status probe. It requires the
-  same `Authorization: Bearer <token>` header as other protected endpoints and
-  returns service status plus a structured `profile` summary; it does not call
-  upstream Codex.
-- Requests require `Authorization: Bearer <token>`; otherwise `401` is
-  returned. The public Agent Card endpoints are public; authenticated extended
-  card routes still require bearer auth.
-- Within one `codex-a2a` instance, all consumers share the same
-  underlying Codex workspace/environment. This deployment model is not
-  tenant-isolated by default.
+- `GET /health` is a lightweight authenticated status probe. It requires the same `Authorization: Bearer <token>` header as other protected endpoints and returns service status plus a structured `profile` summary; it does not call upstream Codex.
+- Requests require `Authorization: Bearer <token>`; otherwise `401` is returned. The public Agent Card endpoints are public; authenticated extended card routes still require bearer auth.
+- Within one `codex-a2a` instance, all consumers share the same underlying Codex workspace/environment. This deployment model is not tenant-isolated by default.
 
 ### Session and Task Behavior
 
 - The service forwards A2A `message:send` to Codex session/message calls.
-- Streaming is always enabled for this service surface. `/v1/message:stream`
-  and JSON-RPC `message/stream` are compatibility-sensitive core capabilities
-  rather than deployment-time toggles.
-- `codex.sessions.shell` is a session-scoped shell control method for
-  ownership, attribution, and traceability. It keeps `session_id` in the A2A
-  contract, but the underlying execution still uses Codex `command/exec`
-  rather than resuming or creating an upstream Codex thread.
-- `codex.sessions.shell` returns a one-shot shell snapshot only. It does not
-  expose PTY lifecycle methods such as stdin write, resize, or terminate, and
-  it should not be treated as an interactive shell session.
-- `codex.exec.start`, `codex.exec.write`, `codex.exec.resize`, and
-  `codex.exec.terminate` expose a standalone interactive `command/exec`
-  runtime. `codex.exec.start` returns process/task handles immediately, while
-  stdout/stderr deltas and the final result flow through normal A2A task
-  streaming and `tasks/resubscribe`.
+- Streaming is always enabled for this service surface. `/v1/message:stream` and JSON-RPC `message/stream` are compatibility-sensitive core capabilities rather than deployment-time toggles.
+- `codex.sessions.shell` is a session-scoped shell control method for ownership, attribution, and traceability. It keeps `session_id` in the A2A contract, but the underlying execution still uses Codex `command/exec` rather than resuming or creating an upstream Codex thread.
+- `codex.sessions.shell` returns a one-shot shell snapshot only. It does not expose PTY lifecycle methods such as stdin write, resize, or terminate, and it should not be treated as an interactive shell session.
+- `codex.exec.start`, `codex.exec.write`, `codex.exec.resize`, and `codex.exec.terminate` expose a standalone interactive `command/exec` runtime. `codex.exec.start` returns process/task handles immediately, while stdout/stderr deltas and the final result flow through normal A2A task streaming and `tasks/resubscribe`.
 - Rich input is supported on two surfaces:
-  - `codex.sessions.prompt_async.request.parts[]` accepts `text`, `image`,
-    `mention`, and `skill`
-  - core A2A `message/send` and `message/stream` keep standard A2A parts and
-    map `TextPart`, image `FilePart`, and
-    `DataPart(data={"type":"mention"|"skill", ...})` into Codex turn input
+  - `codex.sessions.prompt_async.request.parts[]` accepts `text`, `image`, `mention`, and `skill`
+  - core A2A `message/send` and `message/stream` keep standard A2A parts and map `TextPart`, image `FilePart`, and `DataPart(data={"type":"mention"|"skill", ...})` into Codex turn input
 - Image input maps to upstream `turn/start.input[].type=input_image`.
-- `mention.path` and `skill.path` are forwarded verbatim. The service does not
-  guess app or plugin identifiers from display names.
-- `local_image` is not part of the current declared stable rich-input
-  contract.
-- Session query projections currently use the upstream Codex `session_id` as
-  the A2A `contextId`. This is intentional for the current deployment model:
-  `contextId` and `metadata.shared.session.id` refer to the same upstream
-  session identity, and the contract declares that equality explicitly.
+- `mention.path` and `skill.path` are forwarded verbatim. The service does not guess app or plugin identifiers from display names.
+- `local_image` is not part of the current declared stable rich-input contract.
+- Session query projections currently use the upstream Codex `session_id` as the A2A `contextId`. This is intentional for the current deployment model: `contextId` and `metadata.shared.session.id` refer to the same upstream session identity, and the contract declares that equality explicitly.
 - Task state defaults to `input-required` to support multi-turn interactions.
 - Non-streaming requests return a `Task` directly.
-- Non-streaming `message:send` responses may include normalized token usage at
-  `Task.metadata.shared.usage` with the same field schema.
-- `tasks/resubscribe` remains part of the core A2A method baseline, but this
-  deployment's terminal-task replay-once policy is a declared service-level
-  behavior rather than a generic A2A guarantee.
-- Task persistence also applies a service-level resilience policy: once a task
-  has been durably stored in a terminal state, later conflicting writes are
-  dropped instead of overwriting that terminal snapshot.
+- Non-streaming `message:send` responses may include normalized token usage at `Task.metadata.shared.usage` with the same field schema.
+- `tasks/resubscribe` remains part of the core A2A method baseline, but this deployment's terminal-task replay-once policy is a declared service-level behavior rather than a generic A2A guarantee.
+- Task persistence also applies a service-level resilience policy: once a task has been durably stored in a terminal state, later conflicting writes are dropped instead of overwriting that terminal snapshot.
 
 ### Streaming and Interrupt Contract
 
-- Streaming (`/v1/message:stream`) emits incremental
-  `TaskArtifactUpdateEvent` and then `TaskStatusUpdateEvent(final=true)`.
-- If task persistence fails while processing a request, the service maps that
-  failure to a stable failed task or failed final status instead of leaking raw
-  task-store exceptions.
-- Those task-store failure surfaces use `metadata.codex.error` with
-  `type=TASK_STORE_UNAVAILABLE` and an `operation` field such as `get` or
-  `save`.
-- Stream artifacts carry `artifact.metadata.shared.stream.block_type` with
-  values `text`, `reasoning`, and `tool_call`.
-- The published `urn:a2a:stream-hints/v1` contract also declares the emitted
-  A2A part type per block: `text` and `reasoning` use `TextPart`, while
-  `tool_call` uses `DataPart`.
-- All chunks share one stream artifact ID and preserve original timeline via
-  `artifact.metadata.shared.stream.sequence`. Timeline identity fields such as
-  `message_id`, `event_id`, and `source` are emitted under
-  `metadata.shared.stream`.
-- Session projections are normalized under `metadata.shared.session`, with
-  `id` as the canonical field and optional `title` when the upstream surface
-  provides one. The corresponding leaf fields are
-  `metadata.shared.session.id` and `metadata.shared.session.title`.
-- A final snapshot is emitted only when stream chunks did not already produce
-  the same final text.
-- Stream routing is schema-first: the service classifies chunks primarily by
-  Codex `part.type` plus `part_id` state rather than inline text markers.
-- `message.part.delta` and `message.part.updated` are merged per `part_id`;
-  out-of-order deltas are buffered and replayed when the corresponding
-  `part.updated` arrives.
-- `text` and `reasoning` chunks are emitted as `TextPart`, while `tool_call`
-  chunks are emitted as `DataPart` with a normalized structured payload.
-- Legacy stringified JSON tool payloads are rejected; the stream contract only
-  accepts structured `DataPart(data={...})` payloads.
-- To avoid character-level event floods, the service performs light server-side
-  aggregation before emitting `text` and `reasoning` updates: `text` flushes at
-  `120 chars or 200ms`, `reasoning` flushes at `240 chars or 350ms`, and both
-  flush immediately on block switches, `tool_call`, and request completion
-  boundaries.
-- Final status event metadata may include normalized token usage at
-  `metadata.shared.usage` with fields like `input_tokens`, `output_tokens`,
-  `total_tokens`, optional `metadata.shared.usage.reasoning_tokens`,
-  `metadata.shared.usage.cache_tokens.read_tokens`,
-  `metadata.shared.usage.cache_tokens.write_tokens`,
-  `metadata.shared.usage.raw`, and optional `cost`.
+- Streaming (`/v1/message:stream`) emits incremental `TaskArtifactUpdateEvent` and then `TaskStatusUpdateEvent(final=true)`.
+- If task persistence fails while processing a request, the service maps that failure to a stable failed task or failed final status instead of leaking raw task-store exceptions.
+- Those task-store failure surfaces use `metadata.codex.error` with `type=TASK_STORE_UNAVAILABLE` and an `operation` field such as `get` or `save`.
+- Stream artifacts carry `artifact.metadata.shared.stream.block_type` with values `text`, `reasoning`, and `tool_call`.
+- The published `urn:a2a:stream-hints/v1` contract also declares the emitted A2A part type per block: `text` and `reasoning` use `TextPart`, while `tool_call` uses `DataPart`.
+- All chunks share one stream artifact ID and preserve original timeline via `artifact.metadata.shared.stream.sequence`. Timeline identity fields such as `message_id`, `event_id`, and `source` are emitted under `metadata.shared.stream`.
+- Session projections are normalized under `metadata.shared.session`, with `id` as the canonical field and optional `title` when the upstream surface provides one. The corresponding leaf fields are `metadata.shared.session.id` and `metadata.shared.session.title`.
+- A final snapshot is emitted only when stream chunks did not already produce the same final text.
+- Stream routing is schema-first: the service classifies chunks primarily by Codex `part.type` plus `part_id` state rather than inline text markers.
+- `message.part.delta` and `message.part.updated` are merged per `part_id`; out-of-order deltas are buffered and replayed when the corresponding `part.updated` arrives.
+- `text` and `reasoning` chunks are emitted as `TextPart`, while `tool_call` chunks are emitted as `DataPart` with a normalized structured payload.
+- Legacy stringified JSON tool payloads are rejected; the stream contract only accepts structured `DataPart(data={...})` payloads.
+- To avoid character-level event floods, the service performs light server-side aggregation before emitting `text` and `reasoning` updates: `text` flushes at `120 chars or 200ms`, `reasoning` flushes at `240 chars or 350ms`, and both flush immediately on block switches, `tool_call`, and request completion boundaries.
+- Final status event metadata may include normalized token usage at `metadata.shared.usage` with fields like `input_tokens`, `output_tokens`, `total_tokens`, optional `metadata.shared.usage.reasoning_tokens`, `metadata.shared.usage.cache_tokens.read_tokens`, `metadata.shared.usage.cache_tokens.write_tokens`, `metadata.shared.usage.raw`, and optional `cost`.
 - Interrupt lifecycle is explicit:
-  - asked events (`permission.asked` / `question.asked` / `permissions.asked` /
-    `elicitation.asked`) are mapped to
-    `TaskStatusUpdateEvent(final=false, state=input-required)` with
-    `metadata.shared.interrupt.phase=asked`
-  - resolved events (`permission.replied` / `question.replied` /
-    `question.rejected` / `permissions.replied` / `elicitation.replied` /
-    `elicitation.rejected`) are mapped to
-    `TaskStatusUpdateEvent(final=false, state=working)` with
-    `metadata.shared.interrupt.phase=resolved` and
-    `metadata.shared.interrupt.resolution=replied|rejected`
+  - asked events (`permission.asked` / `question.asked` / `permissions.asked` / `elicitation.asked`) are mapped to `TaskStatusUpdateEvent(final=false, state=input-required)` with `metadata.shared.interrupt.phase=asked`
+  - resolved events (`permission.replied` / `question.replied` / `question.rejected` / `permissions.replied` / `elicitation.replied` / `elicitation.rejected`) are mapped to `TaskStatusUpdateEvent(final=false, state=working)` with `metadata.shared.interrupt.phase=resolved` and `metadata.shared.interrupt.resolution=replied|rejected`
 - Duplicate or unknown resolved events are suppressed by `request_id`.
-- For Codex app-server approval and `tool/requestUserInput` requests,
-  user-visible approval/question/permissions/elicitation details are normalized into
-  `metadata.shared.interrupt.details`, including readable `display_message`,
-  resolved `patterns`, requested permission subsets, elicitation form/url
-  payloads, and `questions` when available.
-- HTTP streaming responses send transport-level SSE ping comments on a
-  default keepalive interval from the underlying SDK / `sse-starlette`
-  response without adding synthetic A2A business events.
-- Interrupt status events no longer mirror the asked payload under
-  `metadata.codex.interrupt`; downstream consumers should treat
-  `metadata.shared.interrupt` as the single interrupt rendering contract.
+- For Codex app-server approval and `tool/requestUserInput` requests, user-visible approval/question/permissions/elicitation details are normalized into `metadata.shared.interrupt.details`, including readable `display_message`, resolved `patterns`, requested permission subsets, elicitation form/url payloads, and `questions` when available.
+- HTTP streaming responses send transport-level SSE ping comments on a default keepalive interval from the underlying SDK / `sse-starlette` response without adding synthetic A2A business events.
+- Interrupt status events no longer mirror the asked payload under `metadata.codex.interrupt`; downstream consumers should treat `metadata.shared.interrupt` as the single interrupt rendering contract.
 
 ### Tool Call Payload Contract
 
-- The same shape is published in the machine-readable streaming extension
-  contract under `tool_call_payload_contract`.
+- The same shape is published in the machine-readable streaming extension contract under `tool_call_payload_contract`.
 
 | `kind` | Required fields | Optional fields | Notes |
 | --- | --- | --- | --- |
 | `state` | `kind` | `source_method`, `call_id`, `tool`, `status`, `title`, `subtitle`, `input`, `output`, `error` | Used for structured tool state snapshots. A payload that contains only `kind=state` is invalid and is suppressed. |
 | `output_delta` | `kind`, `output_delta` | `source_method`, `call_id`, `tool`, `status` | Used for raw tool output text increments. `output_delta` is preserved verbatim and may contain spaces or trailing newlines. |
 
-`codex app-server` lifecycle events such as `item/started` and
-`item/completed` are normalized into `kind=state`; `item/*/outputDelta`
-notifications are normalized into `kind=output_delta`.
+`codex app-server` lifecycle events such as `item/started` and `item/completed` are normalized into `kind=state`; `item/*/outputDelta` notifications are normalized into `kind=output_delta`.
 
 Examples:
 
@@ -492,20 +333,14 @@ Examples:
 ```
 ### Directory and Error Handling
 
-- For validation failures, missing context (`task_id`/`context_id`), or
-  internal errors, the service attempts to return standard A2A failure events
-  via `event_queue`.
+- For validation failures, missing context (`task_id`/`context_id`), or internal errors, the service attempts to return standard A2A failure events via `event_queue`.
 - Failure events include concrete error details with `failed` state.
-- Clients can pass `metadata.codex.directory`, but it must stay inside
-  `${CODEX_WORKSPACE_ROOT}` (or service runtime root if not configured).
-- All paths are normalized with `realpath` to prevent `..` or symlink boundary
-  bypass.
-- If `A2A_ALLOW_DIRECTORY_OVERRIDE=false`, only the default directory is
-  accepted.
+- Clients can pass `metadata.codex.directory`, but it must stay inside `${CODEX_WORKSPACE_ROOT}` (or service runtime root if not configured).
+- All paths are normalized with `realpath` to prevent `..` or symlink boundary bypass.
+- If `A2A_ALLOW_DIRECTORY_OVERRIDE=false`, only the default directory is accepted.
 ## Authentication Setup For Local Examples
 
-For local development examples, prefer generating a temporary token once and
-reusing the exported environment variable in the following commands:
+For local development examples, prefer generating a temporary token once and reusing the exported environment variable in the following commands:
 
 ```bash
 export A2A_BEARER_TOKEN="$(python -c 'import secrets; print(secrets.token_hex(24))')"
@@ -526,8 +361,7 @@ To continue a historical Codex session, include this metadata key in each invoke
 Server behavior:
 
 - If provided, the request is sent to that exact Codex session.
-- If omitted, a new session is created and cached by
-  `(identity, contextId) -> session_id`.
+- If omitted, a new session is created and cached by `(identity, contextId) -> session_id`.
 
 Minimal example:
 
@@ -557,20 +391,15 @@ This service exposes Codex session list and message-history queries via A2A JSON
 
 - Trigger: call extension methods through A2A JSON-RPC
 - Auth: same `Authorization: Bearer <token>`
-- Privacy guard: when `A2A_LOG_PAYLOADS=true`, request/response bodies are still
-  suppressed for `method=codex.sessions.*`
-- Endpoint discovery: prefer `additional_interfaces[]` with
-  `transport=jsonrpc` from Agent Card
+- Privacy guard: when `A2A_LOG_PAYLOADS=true`, request/response bodies are still suppressed for `method=codex.sessions.*`
+- Endpoint discovery: prefer `additional_interfaces[]` with `transport=jsonrpc` from Agent Card
 - Result format:
   - `result.items` is always an array of A2A standard objects
   - session list => `Task` with `status.state=completed`
   - message history => `Message`
   - limit pagination defaults to `20` items and rejects values above `100`
-  - pagination behavior is mixed: `codex.sessions.list` forwards `limit` upstream,
-    while `codex.sessions.messages.list` applies the limit locally
-  - `codex.sessions.messages.list` enforces `limit` locally after mapping the
-    upstream thread history into A2A messages, keeping the most recent N messages
-    while preserving their original order
+  - pagination behavior is mixed: `codex.sessions.list` forwards `limit` upstream, while `codex.sessions.messages.list` applies the limit locally
+  - `codex.sessions.messages.list` enforces `limit` locally after mapping the upstream thread history into A2A messages, keeping the most recent N messages while preserving their original order
   - canonical session metadata is exposed at `metadata.shared.session`
   - raw upstream payload is preserved at `metadata.codex.raw`
   - session title is available at `metadata.shared.session.title`
@@ -619,16 +448,13 @@ Use these methods before constructing rich input:
 
 - `skills.list` returns stable `skill.path` values
 - `apps.list` returns stable `mention_path=app://<id>` values
-- `plugins.list` and `plugins.read` return stable
-  `mention_path=plugin://<plugin>@<marketplace>` values
+- `plugins.list` and `plugins.read` return stable `mention_path=plugin://<plugin>@<marketplace>` values
 
 Result-shape guidance:
 
 - use the normalized stable fields declared in Agent Card / OpenAPI first
-- inspect `codex.raw` only when you need upstream-specific fields outside the
-  declared minimum contract
-- `plugin/list` and `plugin/read` remain upstream experimental; this service
-  exposes a stable minimum subset plus passthrough raw payloads
+- inspect `codex.raw` only when you need upstream-specific fields outside the declared minimum contract
+- `plugin/list` and `plugin/read` remain upstream experimental; this service exposes a stable minimum subset plus passthrough raw payloads
 
 ### Skills List (`codex.discovery.skills.list`)
 
@@ -700,9 +526,7 @@ curl -sS http://127.0.0.1:8000/ \
 
 ### Discovery Watch (`codex.discovery.watch`)
 
-Upstream Codex emits `skills/changed` and `app/list/updated` as server-side
-notifications. This service does not expose a standalone server-push JSON-RPC
-transport, so it bridges those signals through a background A2A task stream.
+Upstream Codex emits `skills/changed` and `app/list/updated` as server-side notifications. This service does not expose a standalone server-push JSON-RPC transport, so it bridges those signals through a background A2A task stream.
 
 - start a watch with `codex.discovery.watch`
 - subscribe or re-subscribe through `tasks/resubscribe`
@@ -728,8 +552,7 @@ curl -sS http://127.0.0.1:8000/ \
   }'
 ```
 
-The JSON-RPC result returns `task_id` and `context_id`. Then use the standard
-task stream:
+The JSON-RPC result returns `task_id` and `context_id`. Then use the standard task stream:
 
 ```bash
 curl -sS http://127.0.0.1:8000/v1/tasks/<task_id>:subscribe \
@@ -748,12 +571,9 @@ This service exposes provider-private thread lifecycle methods through JSON-RPC:
 
 Lifecycle control guidance:
 
-- treat `codex.threads.*` as a lifecycle management surface separate from
-  `codex.sessions.*` query/control methods
-- control methods return a stable minimum thread summary: `id`, `title`,
-  optional `status`, and `codex.raw`
-- `thread/unsubscribe` is intentionally not part of this first-stage stable
-  contract because upstream unsubscribe is connection-scoped
+- treat `codex.threads.*` as a lifecycle management surface separate from `codex.sessions.*` query/control methods
+- control methods return a stable minimum thread summary: `id`, `title`, optional `status`, and `codex.raw`
+- `thread/unsubscribe` is intentionally not part of this first-stage stable contract because upstream unsubscribe is connection-scoped
 
 ### Thread Fork (`codex.threads.fork`)
 
@@ -830,15 +650,11 @@ curl -sS http://127.0.0.1:8000/ \
 
 ### Thread Watch (`codex.threads.watch`)
 
-Upstream Codex emits `thread/started`, `thread/status/changed`,
-`thread/archived`, `thread/unarchived`, and `thread/closed` as server-side
-notifications. This service bridges those signals through a background A2A task
-stream rather than exposing standalone server-push JSON-RPC notifications.
+Upstream Codex emits `thread/started`, `thread/status/changed`, `thread/archived`, `thread/unarchived`, and `thread/closed` as server-side notifications. This service bridges those signals through a background A2A task stream rather than exposing standalone server-push JSON-RPC notifications.
 
 - start a watch with `codex.threads.watch`
 - subscribe or re-subscribe through `tasks/resubscribe`
-- supported watch event filters are `thread.started`, `thread.status.changed`,
-  `thread.archived`, `thread.unarchived`, and `thread.closed`
+- supported watch event filters are `thread.started`, `thread.status.changed`, `thread.archived`, `thread.unarchived`, and `thread.closed`
 - consume `DataPart` payloads with:
   - `kind=thread_started`
   - `kind=thread_status_changed`
@@ -865,8 +681,7 @@ curl -sS http://127.0.0.1:8000/ \
   }'
 ```
 
-The JSON-RPC result returns `task_id` and `context_id`. Then use the standard
-task stream:
+The JSON-RPC result returns `task_id` and `context_id`. Then use the standard task stream:
 
 ```bash
 curl -sS http://127.0.0.1:8000/v1/tasks/<task_id>:subscribe \
@@ -875,8 +690,7 @@ curl -sS http://127.0.0.1:8000/v1/tasks/<task_id>:subscribe \
 
 ## Codex Interrupt Callback (A2A Extension)
 
-When stream metadata reports an interrupt request at `metadata.shared.interrupt`,
-clients can reply through JSON-RPC extension methods:
+When stream metadata reports an interrupt request at `metadata.shared.interrupt`, clients can reply through JSON-RPC extension methods:
 
 - asked lifecycle events expose `phase=asked`
 - resolved lifecycle events expose `phase=resolved`
@@ -996,22 +810,15 @@ curl -sS http://127.0.0.1:8000/ \
 
 ## Streaming Re-Subscription (`subscribe`)
 
-If an SSE connection drops, use `GET /v1/tasks/{task_id}:subscribe` to
-re-subscribe while the task is still non-terminal.
+If an SSE connection drops, use `GET /v1/tasks/{task_id}:subscribe` to re-subscribe while the task is still non-terminal.
 
 Terminal-task note:
 
 - While a task is non-terminal, the stream continues with live updates.
-- If the task is already terminal, this service replays one final task snapshot
-  and then closes the stream.
-- That replay-once terminal behavior is a service-level contract for this
-  deployment. It is published through the compatibility profile and wire
-  contract so clients do not mistake it for a generic A2A baseline rule.
-- If the task store is unavailable while loading subscribe state, the service
-  returns a controlled failure instead of exposing backend exception details.
-- In the default SQLite-backed deployment, terminal-task persistence is also
-  database-guarded so late conflicting writes are dropped without relying on a
-  process-local stale snapshot check.
+- If the task is already terminal, this service replays one final task snapshot and then closes the stream.
+- That replay-once terminal behavior is a service-level contract for this deployment. It is published through the compatibility profile and wire contract so clients do not mistake it for a generic A2A baseline rule.
+- If the task store is unavailable while loading subscribe state, the service returns a controlled failure instead of exposing backend exception details.
+- In the default SQLite-backed deployment, terminal-task persistence is also database-guarded so late conflicting writes are dropped without relying on a process-local stale snapshot check.
 
 ## Development Setup
 
