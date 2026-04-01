@@ -174,7 +174,7 @@ Current implementation note:
 - `A2A_HOST`: bind host, default `127.0.0.1`
 - `A2A_PORT`: bind port, default `8000`
 - `A2A_BEARER_TOKEN`: required; service fails fast if unset
-- `A2A_DATABASE_URL`: SQLAlchemy async database URL shared by the database task store and runtime-state persistence, default `sqlite+aiosqlite:///./codex-a2a.db`. This enables database-backed task persistence and also backs session-binding ownership state plus pending interrupt callback requests for cross-restart recovery. Persisted session binding and ownership state are retained independently from the in-memory session cache TTL. In the default SQLite-backed deployment, terminal-task persistence also uses an atomic database upsert so late conflicting writes do not depend on a process-local pre-read.
+- `A2A_DATABASE_URL`: SQLAlchemy async database URL shared by the database task store and runtime-state persistence. When unset and `CODEX_WORKSPACE_ROOT` is configured, it defaults to a SQLite database under `${CODEX_WORKSPACE_ROOT}/.codex-a2a/codex-a2a.db`; otherwise it falls back to `sqlite+aiosqlite:///./codex-a2a.db` relative to the service start directory. This enables database-backed task persistence and also backs session-binding ownership state plus pending interrupt callback requests for cross-restart recovery. Persisted session binding and ownership state are retained independently from the in-memory session cache TTL. In the default SQLite-backed deployment, terminal-task persistence also uses an atomic database upsert so late conflicting writes do not depend on a process-local pre-read. SQLite engines started by `codex-a2a` now default to `journal_mode=WAL`, `busy_timeout=30000`, and `synchronous=NORMAL`; for multi-instance deployments, still prefer an explicit per-instance `A2A_DATABASE_URL` instead of sharing a default SQLite file.
 - `A2A_ENABLE_HEALTH_ENDPOINT`: enable the authenticated lightweight `/health` probe, default `true`
 - `A2A_ENABLE_SESSION_SHELL`: expose `codex.sessions.shell` on JSON-RPC extensions, default `true`
 - `A2A_LOG_LEVEL`: `DEBUG/INFO/WARNING/ERROR`, default `INFO`
@@ -207,6 +207,14 @@ Configuration note:
 - The service configuration layer only accepts `CODEX_*` names for Codex-facing settings.
 - Outbound auth prefers `A2A_CLIENT_BEARER_TOKEN` when both bearer and basic credentials are configured; otherwise it uses `A2A_CLIENT_BASIC_AUTH`.
 
+YOLO-equivalent execution note:
+- `codex-a2a` does not expose a separate `--yolo` flag or `YOLO` environment variable.
+- To start the underlying Codex app-server with YOLO-equivalent behavior, configure:
+  - `CODEX_APPROVAL_POLICY=never`
+  - `CODEX_SANDBOX_MODE=danger-full-access`
+- These values are forwarded to `codex app-server` as `-c approval_policy=...` and `-c sandbox_mode=...`.
+- `A2A_EXECUTION_*` variables are declarative discovery metadata and do not control Codex subprocess startup.
+
 Codex prerequisite note:
 - `codex-a2a` assumes the local `codex` runtime is already usable.
 - Install and verify the `codex` CLI itself before starting this server.
@@ -232,9 +240,11 @@ A2A_BEARER_TOKEN="$(python -c 'import secrets; print(secrets.token_hex(24))')" \
 A2A_HOST=127.0.0.1 \
 A2A_PORT=8000 \
 A2A_PUBLIC_URL=http://127.0.0.1:8000 \
-A2A_DATABASE_URL=sqlite+aiosqlite:///./codex-a2a.db \
+A2A_DATABASE_URL=sqlite+aiosqlite:////abs/path/to/workspace/.codex-a2a/codex-a2a.db \
 CODEX_WORKSPACE_ROOT=/abs/path/to/workspace \
 CODEX_MODEL=gpt-5.1-codex \
+CODEX_APPROVAL_POLICY=never \
+CODEX_SANDBOX_MODE=danger-full-access \
 CODEX_MODEL_REASONING_EFFORT=high \
 CODEX_WEB_SEARCH=live \
 CODEX_TIMEOUT=300 \
@@ -244,6 +254,7 @@ codex-a2a
 Notes:
 
 - `CODEX_WORKSPACE_ROOT` should point at the workspace root you want Codex to operate in.
+- If `A2A_DATABASE_URL` is omitted, `codex-a2a` defaults to `${CODEX_WORKSPACE_ROOT}/.codex-a2a/codex-a2a.db` when a workspace root is configured.
 - `codex-a2a` launches the Codex app-server subprocess itself; no separate `codex serve` step is required.
 - Upgrade the installed CLI with `uv tool upgrade codex-a2a`.
 

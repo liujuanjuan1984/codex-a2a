@@ -56,8 +56,33 @@ def test_settings_valid():
         assert settings.codex_web_search == "live"
         assert settings.codex_review_model == "gpt-5.1"
         assert settings.codex_workspace_root == "/tmp/workspace"
-        assert settings.a2a_database_url == "sqlite+aiosqlite:///./codex-a2a.db"
+        assert (
+            settings.a2a_database_url
+            == "sqlite+aiosqlite:////tmp/workspace/.codex-a2a/codex-a2a.db"
+        )
         assert settings.a2a_version == __version__
+
+
+def test_settings_default_database_url_falls_back_without_workspace_root() -> None:
+    env = {
+        "A2A_BEARER_TOKEN": "test-token",
+    }
+    with mock.patch.dict(os.environ, env, clear=True):
+        settings = Settings.from_env()
+
+    assert settings.a2a_database_url == "sqlite+aiosqlite:///./codex-a2a.db"
+
+
+def test_settings_explicit_none_database_url_is_not_replaced_by_dynamic_default() -> None:
+    settings = Settings.model_validate(
+        {
+            "a2a_bearer_token": "test-token",
+            "codex_workspace_root": "/tmp/workspace",
+            "a2a_database_url": None,
+        }
+    )
+
+    assert settings.a2a_database_url is None
 
 
 def test_settings_parse_ops_flags_and_timeouts():

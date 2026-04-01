@@ -27,7 +27,10 @@ def test_readme_documents_released_cli_installation_via_uv_tool() -> None:
     assert "does not provision Codex providers, login state, or API keys for you" in README_TEXT
     assert "Startup fails fast if the local `codex` runtime is missing" in README_TEXT
     assert "CODEX_WORKSPACE_ROOT=/abs/path/to/workspace" in README_TEXT  # pragma: allowlist secret
-    assert "A2A_DATABASE_URL=sqlite+aiosqlite:///./codex-a2a.db" in README_TEXT
+    assert (
+        "A2A_DATABASE_URL=sqlite+aiosqlite:////abs/path/to/workspace/.codex-a2a/codex-a2a.db"
+        in README_TEXT
+    )
     assert (
         "A2A_BEARER_TOKEN=\"$(python -c 'import secrets; print(secrets.token_hex(24))')\" \\"
         in README_TEXT
