@@ -62,7 +62,7 @@ Task-store resilience is also service-level behavior in this deployment:
 Task durability is deployment-dependent:
 
 - `A2A_DATABASE_URL=<sqlalchemy-async-url>` preserves task lookup/cancel/resubscribe state across process restarts.
-- `A2A_DATABASE_URL` now defaults to `sqlite+aiosqlite:///./codex-a2a.db`, so persistence is the default runtime behavior.
+- `A2A_DATABASE_URL` now defaults to a workspace-local SQLite database at `${CODEX_WORKSPACE_ROOT}/.codex-a2a/codex-a2a.db` when `CODEX_WORKSPACE_ROOT` is configured; otherwise it falls back to `sqlite+aiosqlite:///./codex-a2a.db`. Persistence therefore remains the default runtime behavior.
 - The same database-backed mode also preserves session-binding ownership state and pending interrupt callback requests that still fall within their TTL. Session-binding and ownership persistence are independent from the in-memory session cache TTL.
 
 ## Deployment Profile

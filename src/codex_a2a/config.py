@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Annotated, Any, cast
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 from codex_a2a import __version__
@@ -127,6 +128,14 @@ def _validate_choice(value: str, *, allowed: set[str], env_name: str) -> str:
     return value
 
 
+def _default_a2a_database_url(*, workspace_root: str | None) -> str:
+    if isinstance(workspace_root, str) and workspace_root.strip():
+        resolved_workspace_root = Path(workspace_root).expanduser().resolve()
+        database_path = resolved_workspace_root / ".codex-a2a" / "codex-a2a.db"
+        return f"sqlite+aiosqlite:///{database_path.as_posix()}"
+    return "sqlite+aiosqlite:///./codex-a2a.db"
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_prefix="",
@@ -244,7 +253,7 @@ class Settings(BaseSettings):
     a2a_port: int = Field(default=8000, alias="A2A_PORT")
     a2a_bearer_token: str = Field(..., min_length=1, alias="A2A_BEARER_TOKEN")
     a2a_database_url: str | None = Field(
-        default="sqlite+aiosqlite:///./codex-a2a.db",
+        default=None,
         alias="A2A_DATABASE_URL",
     )
 
@@ -499,6 +508,14 @@ class Settings(BaseSettings):
 
         validate_basic_auth(value)
         return value
+
+    @model_validator(mode="after")
+    def apply_dynamic_defaults(self) -> Settings:
+        if "a2a_database_url" not in self.model_fields_set and self.a2a_database_url is None:
+            self.a2a_database_url = _default_a2a_database_url(
+                workspace_root=self.codex_workspace_root
+            )
+        return self
 
     @classmethod
     def from_env(cls) -> Settings:

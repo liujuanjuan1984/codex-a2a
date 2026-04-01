@@ -69,10 +69,20 @@ A2A_BEARER_TOKEN="$(python -c 'import secrets; print(secrets.token_hex(24))')" \
 A2A_HOST=127.0.0.1 \
 A2A_PORT=8000 \
 A2A_PUBLIC_URL=http://127.0.0.1:8000 \
-A2A_DATABASE_URL=sqlite+aiosqlite:///./codex-a2a.db \
+A2A_DATABASE_URL=sqlite+aiosqlite:////abs/path/to/workspace/.codex-a2a/codex-a2a.db \
 CODEX_WORKSPACE_ROOT=/abs/path/to/workspace \
 codex-a2a
 ```
+
+When `A2A_DATABASE_URL` is unset and `CODEX_WORKSPACE_ROOT` is configured, the default SQLite database is created under `${CODEX_WORKSPACE_ROOT}/.codex-a2a/codex-a2a.db`.
+
+YOLO-equivalent startup note:
+
+- `codex-a2a` does not add a separate `--yolo` flag or `YOLO` environment variable.
+- To start the underlying Codex process with YOLO-equivalent behavior, set:
+  - `CODEX_APPROVAL_POLICY=never`
+  - `CODEX_SANDBOX_MODE=danger-full-access`
+- `A2A_EXECUTION_*` settings are discovery metadata only and do not change how the Codex subprocess starts.
 
 Agent Card: `http://127.0.0.1:8000/.well-known/agent-card.json`
 
