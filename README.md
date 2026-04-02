@@ -17,34 +17,6 @@
 - An A2A adapter service for the local Codex runtime, with inbound runtime exposure plus outbound peer calling.
 - It supports both roles in one process: serving as an A2A Server and hosting an embedded A2A Client for `a2a_call` and CLI-driven peer calls.
 
-## Architecture
-
-```mermaid
-flowchart TD
-    External["A2A Clients / a2a-client-hub / Gateways"]
-
-    subgraph Adapter["codex-a2a Runtime"]
-        Ingress["Inbound A2A Surface\nHTTP+JSON + JSON-RPC"]
-        Codex["Codex Runtime / Executor"]
-        Outbound["Embedded A2A Client\nCLI call + a2a_call"]
-    end
-
-    subgraph Peers["Peer A2A Services"]
-        PeerA2A["Peer A2A Agent"]
-        PeerRuntime["Peer Runtime"]
-        PeerA2A --> PeerRuntime
-    end
-
-    External -->|message/send,\nmessage:stream| Ingress
-    Ingress -->|task execution| Codex
-    Codex -->|stream events / tool results| Ingress
-    Codex -->|a2a_call tool| Outbound
-    Outbound -->|message/send,\nmessage:stream| PeerA2A
-    PeerA2A -->|task / stream result| Outbound
-```
-
-For internal module boundaries and maintainer-facing request call chains, see [Maintainer Architecture Guide](docs/maintainer-architecture.md).
-
 ## Quick Start
 
 Install the released CLI with `uv tool`:
@@ -84,6 +56,10 @@ CODEX_WORKSPACE_ROOT=/abs/path/to/workspace \
 codex-a2a
 ```
 
+For the full runtime configuration matrix, outbound client settings, and deployment notes, see [Usage Guide](docs/guide.md).
+
+## Operational Notes
+
 When `A2A_DATABASE_URL` is unset and `CODEX_WORKSPACE_ROOT` is configured, the default SQLite database is created under `${CODEX_WORKSPACE_ROOT}/.codex-a2a/codex-a2a.db`.
 
 YOLO-equivalent startup note:
@@ -102,6 +78,27 @@ Authenticated extended card:
 
 Outbound peer auth is configured with `A2A_CLIENT_BEARER_TOKEN` or `A2A_CLIENT_BASIC_AUTH`; see the Usage Guide for the complete client-side matrix.
 
+## When To Use It
+
+Use this project when:
+
+- you want to keep Codex as the runtime
+- you need A2A transports and Agent Card discovery
+- you want a thin service boundary instead of building your own adapter
+- you want inbound serving and outbound peer access in one deployable unit
+
+Prefer [a2a-client-hub](https://github.com/liujuanjuan1984/a2a-client-hub) when:
+
+- you need a broader application-facing client integration layer
+- you want higher-level A2A consumption and upstream adapter normalization
+- you want client-side integration concerns separated from the Codex runtime boundary
+
+Look elsewhere if:
+
+- you need hard multi-tenant isolation inside one shared runtime
+- you want this project to manage your process supervisor or host bootstrap
+- you want a general runtime-agnostic A2A server rather than a Codex adapter
+
 ## Highlights
 
 - A2A HTTP+JSON endpoints such as `/v1/message:send` and `/v1/message:stream`
@@ -114,6 +111,34 @@ Outbound peer auth is configured with `A2A_CLIENT_BEARER_TOKEN` or `A2A_CLIENT_B
 - Transport selection, Agent Card discovery, timeout control, and bearer/basic auth for outbound A2A calls
 - Payload logging controls, secret-handling guardrails, and released-CLI startup / source-based runtime paths
 
+## Architecture
+
+```mermaid
+flowchart TD
+    External["A2A Clients / a2a-client-hub / Gateways"]
+
+    subgraph Adapter["codex-a2a Runtime"]
+        Ingress["Inbound A2A Surface\nHTTP+JSON + JSON-RPC"]
+        Codex["Codex Runtime / Executor"]
+        Outbound["Embedded A2A Client\nCLI call + a2a_call"]
+    end
+
+    subgraph Peers["Peer A2A Services"]
+        PeerA2A["Peer A2A Agent"]
+        PeerRuntime["Peer Runtime"]
+        PeerA2A --> PeerRuntime
+    end
+
+    External -->|message/send,\nmessage:stream| Ingress
+    Ingress -->|task execution| Codex
+    Codex -->|stream events / tool results| Ingress
+    Codex -->|a2a_call tool| Outbound
+    Outbound -->|message/send,\nmessage:stream| PeerA2A
+    PeerA2A -->|task / stream result| Outbound
+```
+
+For internal module boundaries and maintainer-facing request call chains, see [Maintainer Architecture Guide](docs/maintainer-architecture.md).
+
 ## Boundaries
 
 Portable vs Private Surface:
@@ -123,27 +148,6 @@ Portable vs Private Surface:
 - Treat one deployed instance as a single-tenant trust boundary, not a hardened multi-tenant runtime.
 
 The normative compatibility split and deployment model live in [Compatibility Guide](docs/compatibility.md) and [Security Policy](SECURITY.md).
-
-## When To Use It
-
-Use this project when:
-
-- you want to keep Codex as the runtime
-- you need A2A transports and Agent Card discovery
-- you want a thin service boundary instead of building your own adapter
-- you want inbound serving and outbound peer access in one deployable unit
-
-Look elsewhere if:
-
-- you need hard multi-tenant isolation inside one shared runtime
-- you want this project to manage your process supervisor or host bootstrap
-- you want a general client integration layer rather than a runtime adapter
-
-## Recommended Client Side
-
-If you want a broader application-facing client integration layer, prefer [a2a-client-hub](https://github.com/liujuanjuan1984/a2a-client-hub).
-
-It is a better place for higher-level client concerns such as A2A consumption, upstream adapter normalization, and application-facing integration, while `codex-a2a` stays focused on the runtime boundary around Codex plus embedded peer calling.
 
 ## Further Reading
 
