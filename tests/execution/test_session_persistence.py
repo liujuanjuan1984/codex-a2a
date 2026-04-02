@@ -148,6 +148,78 @@ async def test_new_runtime_state_schema_omits_binding_and_owner_expires_at_colum
 
 
 @pytest.mark.asyncio
+async def test_runtime_state_initialize_upgrades_legacy_interrupt_request_schema(tmp_path) -> None:
+    database_path = (tmp_path / "legacy-runtime.db").resolve()
+    _create_legacy_interrupt_request_table(database_path)
+    settings = make_settings(
+        a2a_bearer_token="test-token",
+        a2a_database_url=f"sqlite+aiosqlite:///{database_path}",
+    )
+
+    runtime_state = build_runtime_state_runtime(settings)
+    await runtime_state.startup()
+    await runtime_state.shutdown()
+
+    interrupt_columns = _sqlite_columns(database_path, "a2a_pending_interrupt_requests")
+
+    assert {
+        "identity",
+        "task_id",
+        "context_id",
+        "expires_at",
+        "tombstone_expires_at",
+    }.issubset(interrupt_columns)
+    assert _sqlite_schema_version(database_path, "runtime_state") == 1
+
+
+@pytest.mark.asyncio
+async def test_runtime_state_initialize_backfills_missing_schema_version_for_current_schema(
+    tmp_path,
+) -> None:
+    database_path = (tmp_path / "current-runtime.db").resolve()
+    _create_current_interrupt_request_table(database_path)
+    settings = make_settings(
+        a2a_bearer_token="test-token",
+        a2a_database_url=f"sqlite+aiosqlite:///{database_path}",
+    )
+
+    runtime_state = build_runtime_state_runtime(settings)
+    await runtime_state.startup()
+    await runtime_state.shutdown()
+
+    interrupt_columns = _sqlite_columns(database_path, "a2a_pending_interrupt_requests")
+
+    assert {
+        "identity",
+        "task_id",
+        "context_id",
+        "expires_at",
+        "tombstone_expires_at",
+    }.issubset(interrupt_columns)
+    assert _sqlite_schema_version(database_path, "runtime_state") == 1
+
+
+@pytest.mark.asyncio
+async def test_runtime_state_schema_version_write_is_idempotent_across_restarts(tmp_path) -> None:
+    database_path = (tmp_path / "restarted-runtime.db").resolve()
+    settings = make_settings(
+        a2a_bearer_token="test-token",
+        a2a_database_url=f"sqlite+aiosqlite:///{database_path}",
+    )
+
+    runtime_state_1 = build_runtime_state_runtime(settings)
+    await runtime_state_1.startup()
+    await runtime_state_1.shutdown()
+
+    runtime_state_2 = build_runtime_state_runtime(settings)
+    await runtime_state_2.startup()
+    await runtime_state_2.shutdown()
+
+    assert _sqlite_schema_version(database_path, "runtime_state") == 1
+    assert _sqlite_schema_version_row_count(database_path, "runtime_state") == 1
+
+
+@pytest.mark.asyncio
 async def test_runtime_state_runtime_does_not_dispose_shared_engine(
     tmp_path,
     monkeypatch: pytest.MonkeyPatch,
@@ -175,5 +247,74 @@ def _sqlite_columns(database_path, table_name: str) -> set[str]:  # noqa: ANN001
     try:
         rows = connection.execute(f"PRAGMA table_info({table_name})").fetchall()
         return {str(row[1]) for row in rows}
+    finally:
+        connection.close()
+
+
+def _sqlite_schema_version(database_path, scope: str) -> int | None:  # noqa: ANN001
+    connection = sqlite3.connect(database_path)
+    try:
+        row = connection.execute(
+            "SELECT version FROM a2a_schema_version WHERE scope = ?",
+            (scope,),
+        ).fetchone()
+        return None if row is None else int(row[0])
+    finally:
+        connection.close()
+
+
+def _sqlite_schema_version_row_count(database_path, scope: str) -> int:  # noqa: ANN001
+    connection = sqlite3.connect(database_path)
+    try:
+        row = connection.execute(
+            "SELECT COUNT(*) FROM a2a_schema_version WHERE scope = ?",
+            (scope,),
+        ).fetchone()
+        return 0 if row is None else int(row[0])
+    finally:
+        connection.close()
+
+
+def _create_legacy_interrupt_request_table(database_path) -> None:  # noqa: ANN001
+    connection = sqlite3.connect(database_path)
+    try:
+        connection.execute(
+            """
+            CREATE TABLE a2a_pending_interrupt_requests (
+                request_id TEXT PRIMARY KEY,
+                interrupt_type TEXT NOT NULL,
+                session_id TEXT NOT NULL,
+                created_at FLOAT NOT NULL,
+                rpc_request_id JSON NOT NULL,
+                params JSON NOT NULL
+            )
+            """
+        )
+        connection.commit()
+    finally:
+        connection.close()
+
+
+def _create_current_interrupt_request_table(database_path) -> None:  # noqa: ANN001
+    connection = sqlite3.connect(database_path)
+    try:
+        connection.execute(
+            """
+            CREATE TABLE a2a_pending_interrupt_requests (
+                request_id TEXT PRIMARY KEY,
+                interrupt_type TEXT NOT NULL,
+                session_id TEXT NOT NULL,
+                identity TEXT,
+                task_id TEXT,
+                context_id TEXT,
+                created_at FLOAT NOT NULL,
+                expires_at FLOAT,
+                tombstone_expires_at FLOAT,
+                rpc_request_id JSON NOT NULL,
+                params JSON NOT NULL
+            )
+            """
+        )
+        connection.commit()
     finally:
         connection.close()

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import sqlite3
 import time
 from pathlib import Path
 
@@ -179,6 +180,7 @@ async def test_database_backend_persists_task_session_and_interrupt_state_across
     request_identity = (
         f"bearer:{hashlib.sha256(settings.a2a_bearer_token.encode()).hexdigest()[:12]}"
     )
+    database_path = (tmp_path / "app-state.db").resolve()
 
     app1 = app_module.create_app(settings)
     async with app1.router.lifespan_context(app1):
@@ -204,6 +206,8 @@ async def test_database_backend_persists_task_session_and_interrupt_state_across
             task_id="task-1",
             context_id="ctx-1",
         )
+
+    assert _sqlite_schema_version(database_path, "runtime_state") == 1
 
     app2 = app_module.create_app(settings)
     async with app2.router.lifespan_context(app2):
@@ -262,3 +266,15 @@ async def test_database_backend_persists_task_session_and_interrupt_state_across
                 "directory": None,
             }
         ]
+
+
+def _sqlite_schema_version(database_path: Path, scope: str) -> int | None:
+    connection = sqlite3.connect(database_path)
+    try:
+        row = connection.execute(
+            "SELECT version FROM a2a_schema_version WHERE scope = ?",
+            (scope,),
+        ).fetchone()
+        return None if row is None else int(row[0])
+    finally:
+        connection.close()
