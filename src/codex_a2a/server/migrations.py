@@ -55,18 +55,14 @@ def write_schema_version(
     existing_version = read_schema_version(sync_conn, version_table=version_table, scope=scope)
     if existing_version is not None:
         sync_conn.execute(
-            update(version_table)
-            .where(version_table.c.scope == scope)
-            .values(version=version)
+            update(version_table).where(version_table.c.scope == scope).values(version=version)
         )
         return
     try:
         sync_conn.execute(insert(version_table).values(scope=scope, version=version))
     except IntegrityError:
         sync_conn.execute(
-            update(version_table)
-            .where(version_table.c.scope == scope)
-            .values(version=version)
+            update(version_table).where(version_table.c.scope == scope).values(version=version)
         )
 
 
