@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 import logging
 from contextlib import asynccontextmanager
 from typing import Any
@@ -23,7 +24,7 @@ from codex_a2a.contracts.extensions import (
 from codex_a2a.execution.directory_policy import resolve_and_validate_directory
 from codex_a2a.execution.discovery_runtime import CodexDiscoveryRuntime
 from codex_a2a.execution.exec_runtime import CodexExecRuntime
-from codex_a2a.execution.executor import CodexAgentExecutor
+from codex_a2a.execution.executor import CodexAgentExecutor, SessionGuardBindings
 from codex_a2a.execution.thread_lifecycle_runtime import CodexThreadLifecycleRuntime
 from codex_a2a.jsonrpc.application import CodexSessionQueryJSONRPCApplication
 from codex_a2a.jsonrpc.hooks import SessionGuardHooks
@@ -48,22 +49,58 @@ from .http_middlewares import (
 )
 
 
+def _factory_accepts_keyword(factory: Any, keyword: str) -> bool:
+    try:
+        signature = inspect.signature(factory)
+    except (TypeError, ValueError):
+        return False
+
+    if keyword in signature.parameters:
+        return True
+
+    return any(
+        parameter.kind is inspect.Parameter.VAR_KEYWORD
+        for parameter in signature.parameters.values()
+    )
+
+
+def _build_codex_client(
+    settings: Settings,
+    *,
+    interrupt_request_store: Any | None,
+) -> CodexClient:
+    client_kwargs: dict[str, Any] = {}
+    if interrupt_request_store is not None and _factory_accepts_keyword(
+        CodexClient, "interrupt_request_store"
+    ):
+        client_kwargs["interrupt_request_store"] = interrupt_request_store
+    return CodexClient(settings, **client_kwargs)
+
+
+def _build_session_guard_hooks(
+    *,
+    client: CodexClient,
+    bindings: SessionGuardBindings,
+) -> SessionGuardHooks:
+    return SessionGuardHooks(
+        directory_resolver=lambda requested: resolve_and_validate_directory(client, requested),
+        session_claim=bindings.session_claim,
+        session_claim_finalize=bindings.session_claim_finalize,
+        session_claim_release=bindings.session_claim_release,
+        session_owner_matcher=bindings.session_owner_matcher,
+    )
+
+
 def create_app(settings: Settings) -> FastAPI:
     install_log_record_factory()
     shared_database_engine = (
         build_database_engine(settings) if settings.a2a_database_url is not None else None
     )
     runtime_state_runtime = build_runtime_state_runtime(settings, engine=shared_database_engine)
-    if runtime_state_runtime.state_store is None:
-        client = CodexClient(settings)
-    else:
-        try:
-            client = CodexClient(
-                settings,
-                interrupt_request_store=runtime_state_runtime.state_store,
-            )
-        except TypeError:
-            client = CodexClient(settings)
+    client = _build_codex_client(
+        settings,
+        interrupt_request_store=runtime_state_runtime.state_store,
+    )
     a2a_client_manager = A2AClientManager(settings)
     executor = CodexAgentExecutor(
         client,
@@ -136,6 +173,10 @@ def create_app(settings: Settings) -> FastAPI:
     }
     if "shell" not in capability_snapshot.session_query_method_keys:
         jsonrpc_methods.pop("shell", None)
+    session_guard_hooks = _build_session_guard_hooks(
+        client=client,
+        bindings=executor.session_guard_bindings,
+    )
 
     # Compose the shared FastAPI app from the SDK JSON-RPC and REST application wrappers.
     jsonrpc_app = CodexSessionQueryJSONRPCApplication(
@@ -150,13 +191,7 @@ def create_app(settings: Settings) -> FastAPI:
         methods=jsonrpc_methods,
         protocol_version=settings.a2a_protocol_version,
         supported_methods=list(capability_snapshot.supported_jsonrpc_methods),
-        guard_hooks=SessionGuardHooks(
-            directory_resolver=lambda requested: resolve_and_validate_directory(client, requested),
-            session_claim=executor._session_runtime.claim_session,
-            session_claim_finalize=executor._session_runtime.finalize_session_claim,
-            session_claim_release=executor._session_runtime.release_session_claim,
-            session_owner_matcher=executor._session_runtime.session_owner_matches,
-        ),
+        guard_hooks=session_guard_hooks,
     )
     app = A2AFastAPI(
         title=settings.a2a_title,
