@@ -15,8 +15,6 @@ from codex_a2a import __version__
 from codex_a2a.config import Settings
 from codex_a2a.input_mapping import build_turn_input_from_normalized_items
 from codex_a2a.logging_context import (
-    bind_correlation_id,
-    get_correlation_id,
     install_log_record_factory,
 )
 from codex_a2a.upstream.interrupts import (
@@ -33,7 +31,6 @@ from codex_a2a.upstream.interrupts import (
 )
 from codex_a2a.upstream.models import (
     CodexMessage,
-    CodexRPCError,
     CodexStartupPrerequisiteError,
     _PendingRpcRequest,
     _TurnTracker,
@@ -49,6 +46,7 @@ from codex_a2a.upstream.request_mapping import (
     format_shell_response,
     uuid_like_suffix,
 )
+from codex_a2a.upstream.transport import CodexStdioJsonRpcTransport
 
 logger = logging.getLogger(__name__)
 
@@ -96,18 +94,11 @@ class CodexClient:
         self._log_payloads = settings.a2a_log_payloads
         self._interrupt_request_store = interrupt_request_store
 
-        self._process: asyncio.subprocess.Process | None = None
-        self._stdout_task: asyncio.Task[None] | None = None
-        self._stderr_task: asyncio.Task[None] | None = None
-        self._closed = False
-
-        self._init_lock = asyncio.Lock()
-        self._state_lock = asyncio.Lock()
-        self._write_lock = asyncio.Lock()
-
-        self._initialized = False
-        self._next_request_id = 1
-        self._pending_requests: dict[str, _PendingRpcRequest] = {}
+        self._transport = CodexStdioJsonRpcTransport(
+            listen=self._listen,
+            startup_cli_args=self._build_cli_config_args(self._startup_config_overrides),
+            log_payloads=self._log_payloads,
+        )
         self._pending_server_requests: dict[str, _PendingInterruptRequest] = {}
         self._expired_server_requests: dict[str, InterruptRequestTombstone] = {}
         self._active_interrupt_contexts: dict[str, _InterruptExecutionContext] = {}
@@ -124,6 +115,22 @@ class CodexClient:
                 rpc_request_id=entry.rpc_request_id,
                 params=entry.params,
             )
+
+    @property
+    def _process(self) -> asyncio.subprocess.Process | None:
+        return self._transport.process
+
+    @_process.setter
+    def _process(self, value: asyncio.subprocess.Process | None) -> None:
+        self._transport.process = value
+
+    @property
+    def _pending_requests(self) -> dict[str, _PendingRpcRequest]:
+        return self._transport.pending_requests
+
+    @_pending_requests.setter
+    def _pending_requests(self, value: dict[str, _PendingRpcRequest]) -> None:
+        self._transport.pending_requests = value
 
     @staticmethod
     def _optional_string(value: Any) -> str | None:
@@ -259,30 +266,7 @@ class CodexClient:
         )
 
     async def close(self) -> None:
-        self._closed = True
-        async with self._state_lock:
-            process = self._process
-            self._process = None
-
-        for task in (self._stdout_task, self._stderr_task):
-            if task:
-                task.cancel()
-        self._stdout_task = None
-        self._stderr_task = None
-
-        for pending in self._pending_requests.values():
-            if not pending.future.done():
-                pending.future.set_exception(RuntimeError("codex app-server closed"))
-        self._pending_requests.clear()
-
-        if process:
-            if process.returncode is None:
-                process.terminate()
-                try:
-                    await asyncio.wait_for(process.wait(), timeout=1.5)
-                except TimeoutError:
-                    process.kill()
-                    await process.wait()
+        await self._transport.close()
 
     @property
     def stream_timeout(self) -> float | None:
@@ -381,38 +365,7 @@ class CodexClient:
             ) from exc
 
     async def _ensure_started(self) -> None:
-        if self._closed:
-            raise RuntimeError("codex client already closed")
-        if self._initialized and self._process and self._process.returncode is None:
-            return
-
-        async with self._init_lock:
-            if self._initialized and self._process and self._process.returncode is None:
-                return
-            if self._closed:
-                raise RuntimeError("codex client already closed")
-
-            cli_args: list[str] = [self._resolve_cli_bin()]
-            cli_args.extend(self._build_cli_config_args(self._startup_config_overrides))
-            cli_args.extend(
-                [
-                    "app-server",
-                    "--listen",
-                    self._listen,
-                ]
-            )
-
-            process = await asyncio.create_subprocess_exec(
-                *cli_args,
-                stdin=asyncio.subprocess.PIPE,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-
-            self._process = process
-            self._stdout_task = asyncio.create_task(self._read_stdout_loop())
-            self._stderr_task = asyncio.create_task(self._read_stderr_loop())
-
+        async def initialize_client() -> None:
             init_result = await self._rpc_request(
                 "initialize",
                 {
@@ -430,104 +383,22 @@ class CodexClient:
             if self._log_payloads:
                 logger.debug("codex initialize result=%s", init_result)
             await self._send_json_message({"method": "initialized", "params": {}})
-            self._initialized = True
+
+        await self._transport.ensure_started(
+            resolve_cli_bin=self._resolve_cli_bin,
+            read_stdout_loop=self._read_stdout_loop,
+            read_stderr_loop=self._read_stderr_loop,
+            initialize_client=initialize_client,
+        )
 
     async def _read_stdout_loop(self) -> None:
-        process = self._process
-        if process is None or process.stdout is None:
-            return
-        try:
-            async for line in self._iter_stream_lines(process.stdout):
-                raw = line.decode("utf-8", errors="replace").strip()
-                if not raw:
-                    continue
-                try:
-                    message = json.loads(raw)
-                except json.JSONDecodeError:
-                    logger.debug("drop non-json line from codex app-server: %s", raw)
-                    continue
-                if not isinstance(message, dict):
-                    logger.debug(
-                        "drop non-object jsonrpc payload from codex app-server: %s",
-                        type(message).__name__,
-                    )
-                    continue
-                await self._dispatch_message(message)
-        except asyncio.CancelledError:
-            raise
-        except Exception:  # pragma: no cover - defensive
-            logger.exception("codex app-server stdout loop failed")
-        finally:
-            # Fail in-flight RPC futures if the process exits unexpectedly.
-            for pending in self._pending_requests.values():
-                if not pending.future.done():
-                    pending.future.set_exception(RuntimeError("codex app-server stdout closed"))
-            self._pending_requests.clear()
+        await self._transport.read_stdout_loop(dispatch_message=self._dispatch_message)
 
     async def _read_stderr_loop(self) -> None:
-        process = self._process
-        if process is None or process.stderr is None:
-            return
-        try:
-            async for line in self._iter_stream_lines(process.stderr):
-                raw = line.decode("utf-8", errors="replace").rstrip()
-                if raw:
-                    logger.debug("codex app-server stderr: %s", raw)
-        except asyncio.CancelledError:
-            raise
-        except Exception:  # pragma: no cover - defensive
-            logger.exception("codex app-server stderr loop failed")
-
-    async def _iter_stream_lines(
-        self,
-        stream: Any,
-        *,
-        chunk_size: int = 64 * 1024,
-    ) -> AsyncIterator[bytes]:
-        buffer = bytearray()
-        while True:
-            chunk = await stream.read(chunk_size)
-            if not chunk:
-                break
-            buffer.extend(chunk)
-            while True:
-                newline_index = buffer.find(b"\n")
-                if newline_index < 0:
-                    break
-                line = bytes(buffer[:newline_index])
-                del buffer[: newline_index + 1]
-                yield line
-        if buffer:
-            yield bytes(buffer)
+        await self._transport.read_stderr_loop()
 
     async def _dispatch_message(self, message: dict[str, Any]) -> None:
-        # 1) Server response to a client request.
-        if "id" in message and ("result" in message or "error" in message):
-            key = str(message["id"])
-            pending = self._pending_requests.pop(key, None)
-            if not pending:
-                return
-            with bind_correlation_id(pending.correlation_id):
-                if "error" in message:
-                    err = message["error"] if isinstance(message["error"], dict) else {}
-                    code = int(err.get("code", -32000))
-                    text = str(err.get("message", "unknown codex rpc error"))
-                    logger.warning(
-                        "codex rpc error method=%s request_id=%s code=%s",
-                        pending.method,
-                        pending.request_id,
-                        code,
-                    )
-                    pending.future.set_exception(
-                        CodexRPCError(code=code, message=text, data=err.get("data"))
-                    )
-                else:
-                    logger.debug(
-                        "codex rpc response method=%s request_id=%s",
-                        pending.method,
-                        pending.request_id,
-                    )
-                    pending.future.set_result(message.get("result"))
+        if await self._transport.dispatch_response(message):
             return
 
         # 2) Server-initiated request (contains id + method).
@@ -540,15 +411,7 @@ class CodexClient:
             await self._handle_notification(message)
 
     async def _send_json_message(self, payload: dict[str, Any]) -> None:
-        process = self._process
-        if process is None or process.stdin is None:
-            raise RuntimeError("codex app-server is not running")
-        line = json.dumps(payload, ensure_ascii=False)
-        if self._log_payloads:
-            logger.debug("codex app-server -> %s", line)
-        async with self._write_lock:
-            process.stdin.write((line + "\n").encode("utf-8"))
-            await process.stdin.drain()
+        await self._transport.send_json_message(payload)
 
     async def _rpc_request(
         self,
@@ -558,36 +421,14 @@ class CodexClient:
         _skip_ensure: bool = False,
         timeout_override: float | None | _UnsetType = _UNSET,
     ) -> Any:
-        if not _skip_ensure:
-            await self._ensure_started()
-        request_id = str(self._next_request_id)
-        self._next_request_id += 1
-        loop = asyncio.get_running_loop()
-        future: asyncio.Future[Any] = loop.create_future()
-        correlation_id = get_correlation_id()
-        self._pending_requests[request_id] = _PendingRpcRequest(
-            request_id=request_id,
-            method=method,
-            future=future,
-            correlation_id=correlation_id,
-        )
-        payload: dict[str, Any] = {"id": int(request_id), "method": method}
-        if params is not None:
-            payload["params"] = params
-        logger.debug("codex rpc request method=%s request_id=%s", method, request_id)
-        await self._send_json_message(payload)
         timeout_seconds = self._resolve_timeout_seconds(timeout_override=timeout_override)
-        try:
-            if timeout_seconds is None:
-                return await future
-            return await asyncio.wait_for(future, timeout=timeout_seconds)
-        except TimeoutError as exc:
-            pending = self._pending_requests.pop(request_id, None)
-            with bind_correlation_id(correlation_id):
-                logger.warning("codex rpc timeout method=%s request_id=%s", method, request_id)
-            if pending is not None and not pending.future.done():
-                pending.future.cancel()
-            raise RuntimeError(f"codex rpc timeout: {method}") from exc
+        return await self._transport.rpc_request(
+            method,
+            params,
+            ensure_started=self._ensure_started,
+            skip_ensure=_skip_ensure,
+            timeout_seconds=timeout_seconds,
+        )
 
     async def _enqueue_stream_event(self, event: dict[str, Any]) -> None:
         if not self._event_subscribers:
