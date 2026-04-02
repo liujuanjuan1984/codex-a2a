@@ -30,7 +30,7 @@ flowchart LR
     Codex --> Workspace["Shared workspace and provider credentials"]
 ```
 
-This view emphasizes service responsibility boundaries rather than internal module structure. The root [README](../README.md) keeps the more implementation-oriented logical component view for first-time readers.
+This view emphasizes service responsibility boundaries rather than internal module structure. The root [README](../README.md) keeps the more implementation-oriented logical component view for first-time readers, while [maintainer-architecture.md](./maintainer-architecture.md) covers the internal module graph and request call chains for contributors.
 
 ## Request Flow
 
@@ -90,6 +90,7 @@ Use the docs by responsibility:
 
 - [README](../README.md): project overview, quick-start path, and entry navigation
 - [Usage Guide](guide.md): configuration, transport usage, and runtime examples
+- [Maintainer Architecture Guide](maintainer-architecture.md): internal module boundaries, request call chains, and persistence touchpoints
 - [Extension Specifications](extension-specifications.md): stable extension URI/spec index and public-vs-extended disclosure rules
 - [Compatibility Guide](compatibility.md): current compatibility promises and stability expectations
 - [Contributing Guide](../CONTRIBUTING.md): contributor workflow and validation

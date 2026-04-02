@@ -4,6 +4,14 @@
 
 `codex-a2a` adds an A2A runtime layer to the local Codex runtime, with auth, streaming, session continuity, interrupt handling, a built-in outbound A2A client, and a clear deployment boundary.
 
+## Quick Selection Guide
+
+| Need | Recommended Choice |
+| :--- | :--- |
+| **Expose a local Codex runtime as an A2A peer** | **`codex-a2a` (This project)** |
+| **Integrate multiple A2A peers into one app surface** | [`a2a-client-hub`](https://github.com/liujuanjuan1984/a2a-client-hub) |
+| **General purpose A2A implementation from scratch** | [A2A Core Spec](https://github.com/liujuanjuan1984/a2a-protocol-spec) |
+
 ## What This Is
 
 - An A2A adapter service for the local Codex runtime, with inbound runtime exposure plus outbound peer calling.
@@ -34,6 +42,8 @@ flowchart TD
     Outbound -->|message/send,\nmessage:stream| PeerA2A
     PeerA2A -->|task / stream result| Outbound
 ```
+
+For internal module boundaries and maintainer-facing request call chains, see [Maintainer Architecture Guide](docs/maintainer-architecture.md).
 
 ## Quick Start
 
@@ -140,6 +150,7 @@ It is a better place for higher-level client concerns such as A2A consumption, u
 - [Usage Guide](docs/guide.md) Runtime configuration, outbound access, transport usage, and client examples.
 - [Extension Specifications](docs/extension-specifications.md) Stable extension URI/spec index plus public-vs-extended card disclosure rules.
 - [Architecture Guide](docs/architecture.md) System structure, boundaries, and request flow.
+- [Maintainer Architecture Guide](docs/maintainer-architecture.md) Internal module structure, request call chains, and persistence touchpoints for contributors.
 - [Compatibility Guide](docs/compatibility.md) Supported Python/runtime surface, extension stability, and ecosystem-facing compatibility expectations.
 - [Security Policy](SECURITY.md) Threat model, deployment caveats, and vulnerability disclosure guidance.
 
