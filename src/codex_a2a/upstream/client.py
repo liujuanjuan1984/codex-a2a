@@ -1,10 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
-import os
-import shutil
 import time
 from collections.abc import AsyncIterator, Mapping
 from typing import TYPE_CHECKING, Any
@@ -27,6 +24,11 @@ from codex_a2a.upstream.models import (
     CodexStartupPrerequisiteError,
     _PendingRpcRequest,
     _TurnTracker,
+)
+from codex_a2a.upstream.startup import (
+    build_cli_config_args,
+    build_startup_config_overrides,
+    resolve_cli_bin,
 )
 from codex_a2a.upstream.stream_bridge import (
     CodexStreamEventBridge,
@@ -68,7 +70,7 @@ class CodexClient:
         self._request_timeout = settings.codex_timeout
         self._cli_bin = settings.codex_cli_bin
         self._listen = settings.codex_app_server_listen
-        self._startup_config_overrides = self._build_startup_config_overrides(settings)
+        self._startup_config_overrides = build_startup_config_overrides(settings)
         self._interrupt_request_ttl_seconds = settings.a2a_interrupt_request_ttl_seconds
         self._interrupt_request_tombstone_ttl_seconds = int(INTERRUPT_REQUEST_TOMBSTONE_TTL_SECONDS)
         self._log_payloads = settings.a2a_log_payloads
@@ -76,7 +78,7 @@ class CodexClient:
 
         self._transport = CodexStdioJsonRpcTransport(
             listen=self._listen,
-            startup_cli_args=self._build_cli_config_args(self._startup_config_overrides),
+            startup_cli_args=build_cli_config_args(self._startup_config_overrides),
             log_payloads=self._log_payloads,
         )
         self._stream_bridge = CodexStreamEventBridge(event_queue_maxsize=_EVENT_QUEUE_MAXSIZE)
@@ -148,70 +150,6 @@ class CodexClient:
     def _turn_trackers(self) -> dict[tuple[str, str], _TurnTracker]:
         return self._stream_bridge.turn_trackers
 
-    @staticmethod
-    def _optional_string(value: Any) -> str | None:
-        if not isinstance(value, str):
-            return None
-        normalized = value.strip()
-        return normalized or None
-
-    @classmethod
-    def _build_startup_config_overrides(cls, settings: Settings) -> dict[str, Any]:
-        overrides: dict[str, Any] = {}
-        profile = cls._optional_string(settings.codex_profile)
-        model = cls._optional_string(settings.codex_model)
-        model_explicit = "codex_model" in settings.model_fields_set
-
-        if model is not None and (model_explicit or profile is None):
-            overrides["model"] = model
-
-        for key, value in (
-            ("profile", profile),
-            (
-                "model_reasoning_effort",
-                cls._optional_string(settings.codex_model_reasoning_effort),
-            ),
-            (
-                "model_reasoning_summary",
-                cls._optional_string(settings.codex_model_reasoning_summary),
-            ),
-            ("model_verbosity", cls._optional_string(settings.codex_model_verbosity)),
-            ("approval_policy", cls._optional_string(settings.codex_approval_policy)),
-            ("sandbox_mode", cls._optional_string(settings.codex_sandbox_mode)),
-            ("web_search", cls._optional_string(settings.codex_web_search)),
-            ("review_model", cls._optional_string(settings.codex_review_model)),
-        ):
-            if value is not None:
-                overrides[key] = value
-
-        workspace_write: dict[str, Any] = {}
-        if settings.codex_sandbox_workspace_write_writable_roots:
-            workspace_write["writable_roots"] = list(
-                settings.codex_sandbox_workspace_write_writable_roots
-            )
-        if settings.codex_sandbox_workspace_write_network_access is not None:
-            workspace_write["network_access"] = (
-                settings.codex_sandbox_workspace_write_network_access
-            )
-        if settings.codex_sandbox_workspace_write_exclude_slash_tmp is not None:
-            workspace_write["exclude_slash_tmp"] = (
-                settings.codex_sandbox_workspace_write_exclude_slash_tmp
-            )
-        if settings.codex_sandbox_workspace_write_exclude_tmpdir_env_var is not None:
-            workspace_write["exclude_tmpdir_env_var"] = (
-                settings.codex_sandbox_workspace_write_exclude_tmpdir_env_var
-            )
-        if workspace_write:
-            overrides["sandbox_workspace_write"] = workspace_write
-        return overrides
-
-    @staticmethod
-    def _build_cli_config_args(overrides: Mapping[str, Any]) -> list[str]:
-        cli_args: list[str] = []
-        for key, value in overrides.items():
-            cli_args.extend(["-c", f"{key}={json.dumps(value)}"])
-        return cli_args
-
     def bind_interrupt_context(
         self,
         *,
@@ -280,35 +218,7 @@ class CodexClient:
         return params
 
     def _resolve_cli_bin(self) -> str:
-        cli_bin = self._cli_bin.strip() or "codex"
-        if os.path.sep in cli_bin or (os.path.altsep and os.path.altsep in cli_bin):
-            expanded = os.path.expanduser(cli_bin)
-            if not os.path.exists(expanded):
-                raise CodexStartupPrerequisiteError(
-                    f"Codex prerequisite not satisfied: CLI binary not found at "
-                    f"{expanded!r}. Install Codex or set CODEX_CLI_BIN to a valid "
-                    "executable."
-                )
-            if not os.access(expanded, os.X_OK):
-                raise CodexStartupPrerequisiteError(
-                    f"Codex prerequisite not satisfied: CLI binary at {expanded!r} "
-                    "is not executable. Fix permissions or set CODEX_CLI_BIN to a "
-                    "valid executable."
-                )
-            return expanded
-
-        resolved = shutil.which(cli_bin)
-        if resolved is None and cli_bin == "codex":
-            npm_global_bin = os.path.expanduser("~/.npm-global/bin/codex")
-            if os.path.exists(npm_global_bin) and os.access(npm_global_bin, os.X_OK):
-                resolved = npm_global_bin
-        if resolved is None:
-            raise CodexStartupPrerequisiteError(
-                f"Codex prerequisite not satisfied: {cli_bin!r} was not found on "
-                "PATH. Install Codex and verify the `codex` CLI is available "
-                "before starting codex-a2a."
-            )
-        return resolved
+        return resolve_cli_bin(self._cli_bin)
 
     async def startup_preflight(self) -> None:
         try:
