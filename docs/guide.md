@@ -145,9 +145,10 @@ Current implementation note:
 Use the grouped sections below as the deployment-first reading order:
 
 - Start with the required auth token.
-- Then configure the common A2A runtime surface.
+- Then configure the common A2A runtime surface and service identity.
+- If you use peer calls, configure the outbound A2A client defaults next.
 - Then set the upstream Codex defaults.
-- Only after that reach for advanced runtime toggles or discovery-only metadata.
+- Only after that reach for advanced runtime toggles, advanced Codex overrides, or discovery-only metadata.
 
 ### Required Configuration
 
@@ -161,7 +162,24 @@ Use the grouped sections below as the deployment-first reading order:
 - `A2A_DATABASE_URL`: SQLAlchemy async database URL. Defaults to SQLite under `${CODEX_WORKSPACE_ROOT}/.codex-a2a/codex-a2a.db`.
 - `A2A_LOG_LEVEL`: `DEBUG/INFO/WARNING/ERROR`, default `INFO`
 - `A2A_LOG_PAYLOADS`: log A2A/Codex payload bodies, default `false`
+- `A2A_LOG_BODY_LIMIT`: payload log body size limit, default `0` (no truncation)
 - `A2A_TITLE`: agent name, default `Codex A2A`
+- `A2A_DESCRIPTION`: agent description exposed on Agent Card and docs surfaces
+- `A2A_VERSION`: agent version string
+- `A2A_PROJECT`: optional project label injected into examples and discovery metadata
+- `A2A_PROTOCOL_VERSION`: advertised A2A protocol version, default `0.3.0`
+- `A2A_DOCUMENTATION_URL`: optional external documentation URL exposed on Agent Card
+
+### Outbound A2A Client Defaults
+
+These settings affect peer calls made through `codex-a2a call` or the embedded `a2a_call(...)` tool surface.
+
+- `A2A_CLIENT_TIMEOUT_SECONDS`: default outbound request timeout, default `30.0`
+- `A2A_CLIENT_CARD_FETCH_TIMEOUT_SECONDS`: timeout for outbound Agent Card fetches, default `5.0`
+- `A2A_CLIENT_USE_CLIENT_PREFERENCE`: whether outbound transport negotiation should prefer local client ordering, default `false`
+- `A2A_CLIENT_SUPPORTED_TRANSPORTS`: comma-separated outbound transport preference list, default `JSONRPC,HTTP+JSON`
+- `A2A_CLIENT_BEARER_TOKEN`: optional bearer token for the target peer service
+- `A2A_CLIENT_BASIC_AUTH`: optional Basic auth credential for the target peer service when bearer auth is not configured
 
 ### Upstream Codex Configuration
 
@@ -179,10 +197,27 @@ These variables are forwarded to the local `codex app-server` subprocess.
 
 - `A2A_ENABLE_HEALTH_ENDPOINT`: enable the authenticated lightweight `/health` probe, default `true`
 - `A2A_ENABLE_SESSION_SHELL`: expose `codex.sessions.shell` on JSON-RPC extensions, default `true`
+- `A2A_ALLOW_DIRECTORY_OVERRIDE`: allow `metadata.codex.directory` overrides within the configured workspace boundary, default `true`
 - `A2A_SESSION_CACHE_TTL_SECONDS`: in-memory TTL for session mapping, default `3600`
+- `A2A_SESSION_CACHE_MAXSIZE`: max local process session-cache entries, default `10000`
 - `A2A_CANCEL_ABORT_TIMEOUT_SECONDS`: timeout for task cancellation cleanup, default `1.0`
-- `A2A_CLIENT_BEARER_TOKEN`: optional bearer token for outbound peer calls.
+- `A2A_STREAM_IDLE_DIAGNOSTIC_SECONDS`: threshold before the service emits a stream idle diagnostic log, default `60.0`
+- `A2A_INTERRUPT_REQUEST_TTL_SECONDS`: TTL for pending interrupt callbacks before they expire, default `3600`
+
+### Advanced Upstream Codex Overrides
+
 - `CODEX_APP_SERVER_LISTEN`: Codex app-server listen target, default `stdio://`
+- `CODEX_MODEL_ID`: per-turn model override passed to `turn/start`
+- `CODEX_MODEL_REASONING_EFFORT`: explicit reasoning effort override passed to `codex app-server`
+- `CODEX_MODEL_REASONING_SUMMARY`: reasoning summary mode passed to `codex app-server`
+- `CODEX_MODEL_VERBOSITY`: model verbosity override passed to `codex app-server`
+- `CODEX_PROFILE`: Codex profile name passed to `codex app-server`
+- `CODEX_REVIEW_MODEL`: review model override passed to `codex app-server`
+- `CODEX_TIMEOUT_STREAM`: explicit stream-turn timeout; unset means no dedicated stream timeout override
+- `CODEX_SANDBOX_WORKSPACE_WRITE_WRITABLE_ROOTS`: comma-separated writable roots for workspace-write mode
+- `CODEX_SANDBOX_WORKSPACE_WRITE_NETWORK_ACCESS`: workspace-write network access flag
+- `CODEX_SANDBOX_WORKSPACE_WRITE_EXCLUDE_SLASH_TMP`: workspace-write `/tmp` exclusion flag
+- `CODEX_SANDBOX_WORKSPACE_WRITE_EXCLUDE_TMPDIR_ENV_VAR`: workspace-write `$TMPDIR` exclusion flag
 
 ### Discovery-only Metadata
 
