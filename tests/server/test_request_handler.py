@@ -1,9 +1,14 @@
 from __future__ import annotations
 
 import asyncio
+from typing import cast
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from a2a.server.events import EventConsumer
+from a2a.server.events.event_queue import EventQueue
+from a2a.server.events.queue_manager import QueueManager
+from a2a.server.tasks import TaskManager
 from a2a.server.tasks.inmemory_task_store import InMemoryTaskStore
 from a2a.types import (
     Artifact,
@@ -18,12 +23,18 @@ from a2a.types import (
     Task,
     TaskArtifactUpdateEvent,
     TaskIdParams,
+    TaskQueryParams,
     TaskState,
     TaskStatus,
+    TaskStatusUpdateEvent,
     TextPart,
 )
 from a2a.utils.errors import ServerError
 
+from codex_a2a.server.output_negotiation import (
+    NegotiatingResultAggregator,
+    merge_output_negotiation_metadata,
+)
 from codex_a2a.server.request_handler import CodexRequestHandler
 from codex_a2a.server.task_store import TASK_STORE_ERROR_TYPE, TaskStoreOperationError
 
@@ -109,12 +120,17 @@ async def test_message_send_returns_failed_task_for_task_store_error() -> None:
             self.producer = MagicMock()
 
         async def _setup_message_execution(self, params, context=None):  # noqa: ANN001
-            del params, context
+            del context
+            aggregator = NegotiatingResultAggregator(
+                MagicMock(),
+                params.configuration.accepted_output_modes if params.configuration else None,
+            )
+            aggregator.consume_and_break_on_interrupt = _Aggregator().consume_and_break_on_interrupt
             return (
                 MagicMock(),
                 "task-1",
                 self.queue,
-                _Aggregator(),
+                aggregator,
                 self.producer,
             )
 
@@ -169,12 +185,17 @@ async def test_message_send_stream_emits_failed_events_for_task_store_error() ->
             self.producer = MagicMock()
 
         async def _setup_message_execution(self, params, context=None):  # noqa: ANN001
-            del params, context
+            del context
+            aggregator = NegotiatingResultAggregator(
+                MagicMock(),
+                params.configuration.accepted_output_modes if params.configuration else None,
+            )
+            aggregator.consume_and_emit = _Aggregator().consume_and_emit
             return (
                 MagicMock(),
                 "task-1",
                 self.queue,
-                _Aggregator(),
+                aggregator,
                 self.producer,
             )
 
@@ -289,10 +310,10 @@ async def test_message_send_filters_unaccepted_output_parts_to_text() -> None:
         ],
     )
 
-    class _Aggregator:
+    class _Aggregator(NegotiatingResultAggregator):
         async def consume_and_break_on_interrupt(self, _consumer, *, blocking, event_callback):
             del _consumer, blocking, event_callback
-            return task, False, None
+            return self._transform_event(task), False, None
 
     class _Handler(CodexRequestHandler):
         def __init__(self) -> None:
@@ -301,12 +322,12 @@ async def test_message_send_filters_unaccepted_output_parts_to_text() -> None:
             self.producer = MagicMock()
 
         async def _setup_message_execution(self, params, context=None):  # noqa: ANN001
-            del params, context
+            del context
             return (
                 MagicMock(),
                 "task-1",
                 self.queue,
-                _Aggregator(),
+                _Aggregator(MagicMock(), params.configuration.accepted_output_modes),
                 self.producer,
             )
 
@@ -361,7 +382,7 @@ async def test_message_send_stream_filters_unaccepted_output_parts_to_text() -> 
         last_chunk=True,
     )
 
-    class _Aggregator:
+    class _Aggregator(NegotiatingResultAggregator):
         def consume_and_emit(self, _consumer):
             del _consumer
             return self
@@ -373,7 +394,7 @@ async def test_message_send_stream_filters_unaccepted_output_parts_to_text() -> 
             if getattr(self, "_done", False):
                 raise StopAsyncIteration
             self._done = True
-            return update
+            return self._transform_event(update)
 
     class _Handler(CodexRequestHandler):
         def __init__(self) -> None:
@@ -382,12 +403,12 @@ async def test_message_send_stream_filters_unaccepted_output_parts_to_text() -> 
             self.producer = MagicMock()
 
         async def _setup_message_execution(self, params, context=None):  # noqa: ANN001
-            del params, context
+            del context
             return (
                 MagicMock(),
                 "task-1",
                 self.queue,
-                _Aggregator(),
+                _Aggregator(MagicMock(), params.configuration.accepted_output_modes),
                 self.producer,
             )
 
@@ -416,6 +437,152 @@ async def test_message_send_stream_filters_unaccepted_output_parts_to_text() -> 
     part = events[0].artifact.parts[0].root
     assert isinstance(part, TextPart)
     assert part.text == '{"kind":"state","status":"running","tool":"bash"}'
+
+
+@pytest.mark.asyncio
+async def test_get_task_applies_stored_output_negotiation() -> None:
+    task_store = InMemoryTaskStore()
+    task = Task(
+        id="task-1",
+        context_id="ctx-1",
+        status=TaskStatus(
+            state=TaskState.completed,
+            message=Message(
+                message_id="m-agent",
+                role=Role.agent,
+                parts=[Part(root=DataPart(data={"kind": "state", "tool": "bash"}))],
+            ),
+        ),
+        artifacts=[
+            Artifact(
+                artifact_id="artifact-1",
+                parts=[Part(root=DataPart(data={"kind": "state", "tool": "bash"}))],
+            )
+        ],
+        metadata=merge_output_negotiation_metadata(None, ["text/plain"]),
+    )
+    await task_store.save(task)
+    handler = CodexRequestHandler(agent_executor=MagicMock(), task_store=task_store)
+
+    result = await handler.on_get_task(TaskQueryParams(id="task-1"))
+
+    status_part = result.status.message.parts[0].root
+    artifact_part = result.artifacts[0].parts[0].root
+    assert isinstance(status_part, TextPart)
+    assert isinstance(artifact_part, TextPart)
+    assert status_part.text == '{"kind":"state","tool":"bash"}'
+    assert artifact_part.text == '{"kind":"state","tool":"bash"}'
+
+
+@pytest.mark.asyncio
+async def test_artifact_only_task_persists_output_negotiation_metadata() -> None:
+    task_store = InMemoryTaskStore()
+    task_manager = TaskManager(
+        task_id="task-1",
+        context_id="ctx-1",
+        task_store=task_store,
+        initial_message=None,
+    )
+    aggregator = NegotiatingResultAggregator(task_manager, ["text/plain"])
+    event = TaskArtifactUpdateEvent(
+        task_id="task-1",
+        context_id="ctx-1",
+        artifact=Artifact(
+            artifact_id="artifact-1",
+            parts=[Part(root=DataPart(data={"kind": "state", "tool": "bash"}))],
+        ),
+        append=False,
+        last_chunk=True,
+    )
+
+    class _Consumer:
+        async def consume_all(self):  # noqa: ANN201
+            yield event
+
+    await aggregator.consume_all(cast(EventConsumer, _Consumer()))
+
+    handler = CodexRequestHandler(agent_executor=MagicMock(), task_store=task_store)
+    result = await handler.on_get_task(TaskQueryParams(id="task-1"))
+
+    artifact_part = result.artifacts[0].parts[0].root
+    assert isinstance(artifact_part, TextPart)
+    assert artifact_part.text == '{"kind":"state","tool":"bash"}'
+    assert result.metadata == merge_output_negotiation_metadata(None, ["text/plain"])
+
+
+@pytest.mark.asyncio
+async def test_resubscribe_applies_stored_output_negotiation_to_live_events() -> None:
+    task_store = InMemoryTaskStore()
+    task = Task(
+        id="task-1",
+        context_id="ctx-1",
+        status=TaskStatus(state=TaskState.working),
+        metadata=merge_output_negotiation_metadata(None, ["text/plain"]),
+    )
+    await task_store.save(task)
+
+    source_queue = EventQueue()
+
+    class _QueueManager(QueueManager):
+        async def add(self, task_id: str, queue: EventQueue) -> None:
+            del task_id, queue
+
+        async def get(self, task_id: str) -> EventQueue | None:
+            del task_id
+            return source_queue
+
+        async def tap(self, task_id):  # noqa: ANN001
+            assert task_id == "task-1"
+            return source_queue.tap()
+
+        async def close(self, task_id: str) -> None:
+            del task_id
+
+        async def create_or_tap(self, task_id: str) -> EventQueue:
+            assert task_id == "task-1"
+            return source_queue
+
+    handler = CodexRequestHandler(agent_executor=MagicMock(), task_store=task_store)
+    handler._queue_manager = _QueueManager()
+
+    async def _enqueue_events() -> None:
+        await asyncio.sleep(0)
+        await source_queue.enqueue_event(
+            TaskArtifactUpdateEvent(
+                task_id="task-1",
+                context_id="ctx-1",
+                artifact=Artifact(
+                    artifact_id="artifact-1",
+                    parts=[
+                        Part(
+                            root=DataPart(
+                                data={"kind": "state", "tool": "bash", "status": "running"}
+                            )
+                        )
+                    ],
+                ),
+                append=False,
+                last_chunk=None,
+            )
+        )
+        await source_queue.enqueue_event(
+            TaskStatusUpdateEvent(
+                task_id="task-1",
+                context_id="ctx-1",
+                status=TaskStatus(state=TaskState.completed),
+                final=True,
+            )
+        )
+
+    producer_task = asyncio.create_task(_enqueue_events())
+    events = [event async for event in handler.on_resubscribe_to_task(TaskIdParams(id="task-1"))]
+    await producer_task
+
+    assert len(events) == 2
+    artifact_part = events[0].artifact.parts[0].root
+    assert isinstance(artifact_part, TextPart)
+    assert artifact_part.text == '{"kind":"state","status":"running","tool":"bash"}'
+    assert events[1].status.state == TaskState.completed
 
 
 @pytest.mark.asyncio

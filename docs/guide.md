@@ -378,6 +378,7 @@ This path is for contributors. End users should prefer the released CLI path des
   - `codex.sessions.prompt_async.request.parts[]` accepts `text`, `image`, `mention`, and `skill`
   - core A2A `message/send` and `message/stream` keep standard A2A parts and map `TextPart`, image `FilePart`, and `DataPart(data={"type":"mention"|"skill", ...})` into Codex turn input
 - Agent Card media modes reflect that stable core message surface: default input modes are `text/plain`, `image/*`, and `application/json`; default output modes are `text/plain` and `application/json`.
+- On the core chat surface, the `application/json` input mode is intentionally narrower than arbitrary JSON: only `DataPart(type=mention|skill)` is part of the declared stable contract.
 - Image input maps to upstream `turn/start.input[].type=input_image`.
 - `mention.path` and `skill.path` are forwarded verbatim. The service does not guess app or plugin identifiers from display names.
 - `local_image` is not part of the current declared stable rich-input contract.
@@ -403,6 +404,9 @@ This path is for contributors. End users should prefer the released CLI path des
 - `text` and `reasoning` chunks are emitted as `TextPart`, while `tool_call` chunks are emitted as `DataPart` with a normalized structured payload.
 - Legacy stringified JSON tool payloads are rejected; the stream contract only accepts structured `DataPart(data={...})` payloads.
 - Core `message/send` and `message/stream` honor `configuration.acceptedOutputModes` for emitted A2A parts. When a client accepts `text/plain` but not `application/json`, structured `DataPart` payloads are downgraded to compact text instead of being emitted as raw `DataPart`.
+- `application/json` is additive structured-output support, not a promise that every natural-language reply can be losslessly re-encoded as a JSON `DataPart`. Clients that expect ordinary assistant prose should continue accepting `text/plain`.
+- Negotiated output modes are persisted with the task as soon as the task state is materialized, including artifact-first streams before any later status update arrives.
+- That negotiated output surface is treated as part of the task lifecycle: `tasks/get`, `tasks/resubscribe`, and push notifications continue using the task's negotiated output modes instead of reverting to raw stored `DataPart`.
 - To avoid character-level event floods, the service performs light server-side aggregation before emitting `text` and `reasoning` updates: `text` flushes at `120 chars or 200ms`, `reasoning` flushes at `240 chars or 350ms`, and both flush immediately on block switches, `tool_call`, and request completion boundaries.
 - Final status event metadata may include normalized token usage at `metadata.shared.usage` with fields like `input_tokens`, `output_tokens`, `total_tokens`, optional `metadata.shared.usage.reasoning_tokens`, `metadata.shared.usage.cache_tokens.read_tokens`, `metadata.shared.usage.cache_tokens.write_tokens`, `metadata.shared.usage.raw`, and optional `cost`.
 - Interrupt lifecycle is explicit:

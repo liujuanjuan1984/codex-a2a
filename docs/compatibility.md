@@ -93,7 +93,8 @@ Execution-environment boundary fields are also published through the runtime pro
 - `codex.exec.*` is compatibility-sensitive as the standalone interactive exec contract. Changes to handle shapes, task-stream delivery, or lifecycle method names should be treated as wire-level changes.
 - `codex.discovery.*` is compatibility-sensitive as the stable discovery contract for `skill.path` and `mention_path` identifiers. Changes to normalized item fields, plugin marketplace mapping, or discovery watch task payload kinds should be treated as wire-level changes.
 - `codex.threads.*` is compatibility-sensitive as the provider-private thread lifecycle contract. Changes to lifecycle method names, watch payload kinds, or watch-task bridge event names should be treated as wire-level changes.
-- Agent Card media modes and `acceptedOutputModes` handling are compatibility-sensitive. Changes to declared default modes or to structured-output downgrade behavior should be treated as wire-level changes.
+- Agent Card media modes and `acceptedOutputModes` handling are compatibility-sensitive. Changes to declared default modes, to task-scoped persistence of negotiated modes, or to structured-output downgrade behavior should be treated as wire-level changes.
+- For core chat tasks, negotiated output modes are lifecycle-scoped. `message/send`, `message/stream`, `tasks/get`, `tasks/resubscribe`, and push notifications should not drift apart for the same task.
 
 ## Extension Taxonomy
 
