@@ -16,6 +16,12 @@ class SchemaMigration:
     upgrade: Callable[[Any], None]
 
 
+def _validate_add_column_support(*, table: Table, column_name: str) -> None:
+    column = table.c[column_name]
+    if column.primary_key or not column.nullable:
+        raise RuntimeError(f"Unsupported schema migration for {table.name}.{column_name}")
+
+
 def add_missing_columns(
     sync_conn: Any,
     *,
@@ -28,6 +34,7 @@ def add_missing_columns(
     for column_name in column_names:
         if column_name in existing_columns:
             continue
+        _validate_add_column_support(table=table, column_name=column_name)
         column = table.c[column_name]
         rendered_column = str(CreateColumn(column).compile(dialect=sync_conn.dialect)).strip()
         sync_conn.exec_driver_sql(f"ALTER TABLE {table_name} ADD COLUMN {rendered_column}")
