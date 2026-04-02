@@ -28,6 +28,7 @@ from a2a.types import (
     TaskStatus,
     TaskStatusUpdateEvent,
     TextPart,
+    UnsupportedOperationError,
 )
 from a2a.utils.errors import ServerError
 
@@ -229,6 +230,78 @@ async def test_message_send_stream_emits_failed_events_for_task_store_error() ->
             }
         }
     }
+
+
+@pytest.mark.asyncio
+async def test_message_send_rejects_json_only_output_modes_before_execution() -> None:
+    class _Handler(CodexRequestHandler):
+        def __init__(self) -> None:
+            super().__init__(agent_executor=MagicMock(), task_store=InMemoryTaskStore())
+            self.setup_called = False
+
+        async def _setup_message_execution(self, params, context=None):  # noqa: ANN001
+            del params, context
+            self.setup_called = True
+            raise AssertionError("_setup_message_execution should not be called")
+
+    handler = _Handler()
+    params = MessageSendParams(
+        message=Message(
+            message_id="m-1",
+            role=Role.user,
+            parts=[Part(root=TextPart(text="hello"))],
+        ),
+        configuration=MessageSendConfiguration(accepted_output_modes=["application/json"]),
+    )
+
+    with pytest.raises(ServerError) as exc_info:
+        await handler.on_message_send(params)
+
+    assert isinstance(exc_info.value.error, UnsupportedOperationError)
+    assert exc_info.value.error.message is not None
+    assert "require text/plain" in exc_info.value.error.message
+    assert exc_info.value.error.data == {
+        "accepted_output_modes": ["application/json"],
+        "required_output_modes": ["text/plain"],
+        "supported_output_modes": ["text/plain", "application/json"],
+    }
+    assert handler.setup_called is False
+
+
+@pytest.mark.asyncio
+async def test_message_send_stream_rejects_incompatible_output_modes_before_execution() -> None:
+    class _Handler(CodexRequestHandler):
+        def __init__(self) -> None:
+            super().__init__(agent_executor=MagicMock(), task_store=InMemoryTaskStore())
+            self.setup_called = False
+
+        async def _setup_message_execution(self, params, context=None):  # noqa: ANN001
+            del params, context
+            self.setup_called = True
+            raise AssertionError("_setup_message_execution should not be called")
+
+    handler = _Handler()
+    params = MessageSendParams(
+        message=Message(
+            message_id="m-1",
+            role=Role.user,
+            parts=[Part(root=TextPart(text="hello"))],
+        ),
+        configuration=MessageSendConfiguration(accepted_output_modes=["image/png"]),
+    )
+
+    with pytest.raises(ServerError) as exc_info:
+        events = [event async for event in handler.on_message_send_stream(params)]
+        assert events == []
+
+    assert isinstance(exc_info.value.error, UnsupportedOperationError)
+    assert exc_info.value.error.message is not None
+    assert "not compatible" in exc_info.value.error.message
+    assert exc_info.value.error.data == {
+        "accepted_output_modes": ["image/png"],
+        "supported_output_modes": ["text/plain", "application/json"],
+    }
+    assert handler.setup_called is False
 
 
 @pytest.mark.asyncio

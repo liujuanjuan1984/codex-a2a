@@ -404,6 +404,7 @@ This path is for contributors. End users should prefer the released CLI path des
 - `text` and `reasoning` chunks are emitted as `TextPart`, while `tool_call` chunks are emitted as `DataPart` with a normalized structured payload.
 - Legacy stringified JSON tool payloads are rejected; the stream contract only accepts structured `DataPart(data={...})` payloads.
 - Core `message/send` and `message/stream` honor `configuration.acceptedOutputModes` for emitted A2A parts. When a client accepts `text/plain` but not `application/json`, structured `DataPart` payloads are downgraded to compact text instead of being emitted as raw `DataPart`.
+- Core chat also validates explicit `acceptedOutputModes` up front. Requests that do not accept any declared chat output mode are rejected, and current chat requests must still accept `text/plain`.
 - `application/json` is additive structured-output support, not a promise that every natural-language reply can be losslessly re-encoded as a JSON `DataPart`. Clients that expect ordinary assistant prose should continue accepting `text/plain`.
 - Negotiated output modes are persisted with the task as soon as the task state is materialized, including artifact-first streams before any later status update arrives.
 - That negotiated output surface is treated as part of the task lifecycle: `tasks/get`, `tasks/resubscribe`, and push notifications continue using the task's negotiated output modes instead of reverting to raw stored `DataPart`.

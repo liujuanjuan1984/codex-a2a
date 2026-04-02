@@ -25,9 +25,11 @@ from a2a.types import (
     TaskStatus,
     TaskStatusUpdateEvent,
     TextPart,
+    UnsupportedOperationError,
 )
 from a2a.utils.errors import ServerError
 
+from codex_a2a.media_modes import DEFAULT_OUTPUT_MEDIA_MODES, TEXT_PLAIN_MEDIA_MODE
 from codex_a2a.metrics import (
     A2A_STREAM_ACTIVE,
     A2A_STREAM_REQUESTS_TOTAL,
@@ -37,6 +39,7 @@ from codex_a2a.server.output_negotiation import (
     NegotiatingResultAggregator,
     apply_accepted_output_modes,
     extract_accepted_output_modes_from_metadata,
+    media_mode_is_accepted,
     normalize_accepted_output_modes,
 )
 from codex_a2a.server.task_store import (
@@ -203,6 +206,44 @@ class CodexRequestHandler(DefaultRequestHandler):
             None,
         )
 
+    @classmethod
+    def _validate_chat_output_modes(cls, params) -> None:  # noqa: ANN001
+        accepted_output_modes = normalize_accepted_output_modes(
+            cls._accepted_output_modes_from_params(params)
+        )
+        if accepted_output_modes is None:
+            return
+
+        supported_output_modes = list(DEFAULT_OUTPUT_MEDIA_MODES)
+        if not any(
+            media_mode_is_accepted(media_mode, accepted_output_modes)
+            for media_mode in supported_output_modes
+        ):
+            raise ServerError(
+                error=UnsupportedOperationError(
+                    message=(
+                        "Requested acceptedOutputModes are not compatible "
+                        "with Codex chat responses."
+                    ),
+                    data={
+                        "accepted_output_modes": sorted(accepted_output_modes),
+                        "supported_output_modes": supported_output_modes,
+                    },
+                )
+            )
+
+        if not media_mode_is_accepted(TEXT_PLAIN_MEDIA_MODE, accepted_output_modes):
+            raise ServerError(
+                error=UnsupportedOperationError(
+                    message="Codex chat responses require text/plain in acceptedOutputModes.",
+                    data={
+                        "accepted_output_modes": sorted(accepted_output_modes),
+                        "required_output_modes": [TEXT_PLAIN_MEDIA_MODE],
+                        "supported_output_modes": supported_output_modes,
+                    },
+                )
+            )
+
     def _remember_task_output_modes(
         self,
         task_id: str,
@@ -304,6 +345,7 @@ class CodexRequestHandler(DefaultRequestHandler):
             raise self._task_store_server_error(exc) from exc
 
     async def on_message_send_stream(self, params, context=None):
+        self._validate_chat_output_modes(params)
         self._metrics.inc_counter(A2A_STREAM_REQUESTS_TOTAL)
         self._metrics.inc_gauge(A2A_STREAM_ACTIVE)
         task_id = getattr(getattr(params, "message", None), "task_id", None) or str(uuid.uuid4())
@@ -365,6 +407,7 @@ class CodexRequestHandler(DefaultRequestHandler):
                 self._track_background_task(cleanup_task)
 
     async def on_message_send(self, params, context=None):
+        self._validate_chat_output_modes(params)
         task_id = getattr(getattr(params, "message", None), "task_id", None) or str(uuid.uuid4())
         context_id = self._resolve_context_id_from_params(params, task_id)
         queue = None

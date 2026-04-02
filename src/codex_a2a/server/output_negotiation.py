@@ -314,11 +314,11 @@ def _filter_parts(parts: list[Part], accepted_modes: frozenset[str]) -> list[Par
     for part in parts:
         root = getattr(part, "root", None)
         media_mode = _part_media_mode(root)
-        if media_mode is not None and _mode_is_accepted(media_mode, accepted_modes):
+        if media_mode is not None and media_mode_is_accepted(media_mode, accepted_modes):
             filtered_parts.append(part)
             continue
 
-        if _mode_is_accepted(TEXT_PLAIN_MEDIA_MODE, accepted_modes):
+        if media_mode_is_accepted(TEXT_PLAIN_MEDIA_MODE, accepted_modes):
             fallback_text = _part_text_fallback(root)
             if fallback_text is not None:
                 filtered_parts.append(Part(root=TextPart(text=fallback_text)))
@@ -341,7 +341,7 @@ def _part_media_mode(part: Any) -> str | None:
     return None
 
 
-def _mode_is_accepted(media_mode: str, accepted_modes: frozenset[str]) -> bool:
+def media_mode_is_accepted(media_mode: str, accepted_modes: frozenset[str]) -> bool:
     if media_mode in accepted_modes:
         return True
 
