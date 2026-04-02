@@ -46,9 +46,18 @@ def test_convert_request_parts_to_turn_input_supports_rich_inputs() -> None:
             {"parts": [{"type": "image", "bytes": "YWJj", "mimeType": "text/plain"}]},
             "request.parts\\[\\]\\.mimeType must be an image MIME type when bytes is provided",
         ),
-        ({"parts": [{"type": "image"}]}, "request.parts\\[\\]\\.url or request.parts\\[\\]\\.bytes is required"),
-        ({"parts": [{"type": "mention", "path": "app://demo-app"}]}, "request.parts\\[\\]\\.name must be a string"),
-        ({"parts": [{"type": "skill", "name": "skill-creator"}]}, "request.parts\\[\\]\\.path must be a string"),
+        (
+            {"parts": [{"type": "image"}]},
+            "request.parts\\[\\]\\.url or request.parts\\[\\]\\.bytes is required",
+        ),
+        (
+            {"parts": [{"type": "mention", "path": "app://demo-app"}]},
+            "request.parts\\[\\]\\.name must be a string",
+        ),
+        (
+            {"parts": [{"type": "skill", "name": "skill-creator"}]},
+            "request.parts\\[\\]\\.path must be a string",
+        ),
         (
             {"parts": [{"type": "audio"}]},
             "request.parts\\[\\]\\.type must be one of: text, image, mention, skill",
@@ -69,7 +78,9 @@ def test_map_a2a_message_parts_supports_root_wrappers_and_image_variants() -> No
         {"file": {"uri": "https://example.com/demo.png", "name": "demo.png"}},
         {"file": {"uri": "data:image/png;base64,AAAA"}},
         {"file": {"bytes": "AAAA", "mimeType": "image/jpeg"}},
-        SimpleNamespace(root={"data": {"type": "mention", "name": "Demo App", "path": "app://demo"}}),
+        SimpleNamespace(
+            root={"data": {"type": "mention", "name": "Demo App", "path": "app://demo"}}
+        ),
         {"data": {"type": "skill", "name": "skill-creator", "path": "/tmp/SKILL.md"}},
     ]
 
@@ -124,14 +135,23 @@ def test_normalized_item_helpers_cover_summary_and_mime_guessing() -> None:
     assert is_text_only_normalized_input([{"type": "text", "text": "hello"}], user_text="hello")
     assert not is_text_only_normalized_input(text_items, user_text="hello")
 
-    assert summarize_normalized_items(
-        [
-            {"type": "mention", "name": "Demo App"},
-            {"type": "skill", "name": "skill-creator"},
-        ]
-    ) == "Demo App, skill-creator"
-    assert summarize_normalized_items([{"type": "image", "url": "https://example.com/demo.png"}]) == "Image input"
-    assert summarize_normalized_items([{"type": "skill", "path": "/tmp/SKILL.md"}]) == "Rich input request"
+    assert (
+        summarize_normalized_items(
+            [
+                {"type": "mention", "name": "Demo App"},
+                {"type": "skill", "name": "skill-creator"},
+            ]
+        )
+        == "Demo App, skill-creator"
+    )
+    assert (
+        summarize_normalized_items([{"type": "image", "url": "https://example.com/demo.png"}])
+        == "Image input"
+    )
+    assert (
+        summarize_normalized_items([{"type": "skill", "path": "/tmp/SKILL.md"}])
+        == "Rich input request"
+    )
 
     assert guess_image_mime_type_from_url("data:image/png;base64,AAAA") == "image/png"
     assert guess_image_mime_type_from_url("https://example.com/demo.jpeg") == "image/jpeg"
