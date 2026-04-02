@@ -9,7 +9,7 @@ from tests.support.settings import make_settings
 
 
 class DummyChatCodexClient:
-    def __init__(self, settings: Settings | None = None) -> None:
+    def __init__(self, settings: Settings | None = None, **kwargs: Any) -> None:
         self.created_sessions = 0
         self.sent_session_ids: list[str] = []
         self.sent_inputs: list[dict[str, Any]] = []
@@ -23,6 +23,9 @@ class DummyChatCodexClient:
         return None
 
     async def startup_preflight(self) -> None:
+        return None
+
+    async def restore_persisted_interrupt_requests(self) -> None:
         return None
 
     async def create_session(
@@ -69,7 +72,7 @@ class DummyChatCodexClient:
 
 
 class DummySessionQueryCodexClient:
-    def __init__(self, _settings: Settings) -> None:
+    def __init__(self, _settings: Settings, **kwargs: Any) -> None:
         self.directory = "/workspace"
         self.settings = _settings
         self._sessions_payload: Any = [{"id": "s-1", "title": "Session s-1"}]
@@ -166,6 +169,12 @@ class DummySessionQueryCodexClient:
         self._expired_interrupt_requests: set[str] = set()
 
     async def close(self) -> None:
+        return None
+
+    async def startup_preflight(self) -> None:
+        return None
+
+    async def restore_persisted_interrupt_requests(self) -> None:
         return None
 
     async def list_sessions(self, *, params=None):

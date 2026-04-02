@@ -7,8 +7,7 @@ import logging
 import os
 import shutil
 import time
-from collections.abc import AsyncIterator, Callable, Mapping
-from dataclasses import dataclass
+from collections.abc import AsyncIterator, Mapping
 from typing import TYPE_CHECKING, Any
 
 from codex_a2a import __version__
@@ -17,17 +16,11 @@ from codex_a2a.input_mapping import build_turn_input_from_normalized_items
 from codex_a2a.logging_context import (
     install_log_record_factory,
 )
+from codex_a2a.upstream.interrupt_bridge import CodexInterruptBridge
 from codex_a2a.upstream.interrupts import (
     INTERRUPT_REQUEST_TOMBSTONE_TTL_SECONDS,
     InterruptRequestBinding,
-    InterruptRequestError,
-    InterruptRequestTombstone,
     _PendingInterruptRequest,
-    build_codex_elicitation_interrupt_properties,
-    build_codex_permission_interrupt_properties,
-    build_codex_permissions_interrupt_properties,
-    build_codex_question_interrupt_properties,
-    interrupt_request_status,
 )
 from codex_a2a.upstream.models import (
     CodexMessage,
@@ -35,16 +28,17 @@ from codex_a2a.upstream.models import (
     _PendingRpcRequest,
     _TurnTracker,
 )
-from codex_a2a.upstream.notification_mapping import (
-    build_tool_call_output_event,
-    build_tool_call_state_event,
-)
 from codex_a2a.upstream.request_mapping import (
     build_interactive_exec_params,
     build_shell_exec_params,
     convert_request_parts_to_turn_input,
     format_shell_response,
     uuid_like_suffix,
+)
+from codex_a2a.upstream.stream_bridge import (
+    CodexStreamEventBridge,
+    normalize_thread_status,
+    normalize_thread_summary,
 )
 from codex_a2a.upstream.transport import CodexStdioJsonRpcTransport
 
@@ -62,13 +56,6 @@ _UNSET = _UnsetType()
 _DEFAULT_CLIENT_NAME = "codex_a2a"
 _DEFAULT_CLIENT_TITLE = "Codex A2A"
 _EVENT_QUEUE_MAXSIZE = 2048
-
-
-@dataclass(frozen=True)
-class _InterruptExecutionContext:
-    identity: str | None
-    task_id: str | None
-    context_id: str | None
 
 
 class CodexClient:
@@ -90,7 +77,7 @@ class CodexClient:
         self._listen = settings.codex_app_server_listen
         self._startup_config_overrides = self._build_startup_config_overrides(settings)
         self._interrupt_request_ttl_seconds = settings.a2a_interrupt_request_ttl_seconds
-        self._interrupt_request_tombstone_ttl_seconds = INTERRUPT_REQUEST_TOMBSTONE_TTL_SECONDS
+        self._interrupt_request_tombstone_ttl_seconds = int(INTERRUPT_REQUEST_TOMBSTONE_TTL_SECONDS)
         self._log_payloads = settings.a2a_log_payloads
         self._interrupt_request_store = interrupt_request_store
 
@@ -99,22 +86,16 @@ class CodexClient:
             startup_cli_args=self._build_cli_config_args(self._startup_config_overrides),
             log_payloads=self._log_payloads,
         )
-        self._pending_server_requests: dict[str, _PendingInterruptRequest] = {}
-        self._expired_server_requests: dict[str, InterruptRequestTombstone] = {}
-        self._active_interrupt_contexts: dict[str, _InterruptExecutionContext] = {}
-        self._event_subscribers: set[asyncio.Queue[dict[str, Any]]] = set()
-        self._turn_trackers: dict[tuple[str, str], _TurnTracker] = {}
+        self._stream_bridge = CodexStreamEventBridge(event_queue_maxsize=_EVENT_QUEUE_MAXSIZE)
+        self._interrupt_bridge = CodexInterruptBridge(
+            now=lambda: time.time(),
+            interrupt_request_ttl_seconds=self._interrupt_request_ttl_seconds,
+            interrupt_request_tombstone_ttl_seconds=self._interrupt_request_tombstone_ttl_seconds,
+            interrupt_request_store=interrupt_request_store,
+        )
 
     async def restore_persisted_interrupt_requests(self) -> None:
-        if self._interrupt_request_store is None:
-            return
-        restored = await self._interrupt_request_store.load_interrupt_requests()
-        for entry in restored:
-            self._pending_server_requests[entry.request_id] = _PendingInterruptRequest(
-                binding=entry.binding,
-                rpc_request_id=entry.rpc_request_id,
-                params=entry.params,
-            )
+        await self._interrupt_bridge.restore_persisted_interrupt_requests()
 
     @property
     def _process(self) -> asyncio.subprocess.Process | None:
@@ -131,6 +112,26 @@ class CodexClient:
     @_pending_requests.setter
     def _pending_requests(self, value: dict[str, _PendingRpcRequest]) -> None:
         self._transport.pending_requests = value
+
+    @property
+    def _pending_server_requests(self) -> dict[str, _PendingInterruptRequest]:
+        return self._interrupt_bridge.pending_server_requests
+
+    @property
+    def _expired_server_requests(self) -> dict[str, Any]:
+        return self._interrupt_bridge.expired_server_requests
+
+    @property
+    def _active_interrupt_contexts(self) -> dict[str, Any]:
+        return self._interrupt_bridge.active_interrupt_contexts
+
+    @property
+    def _event_subscribers(self) -> set[asyncio.Queue[dict[str, Any]]]:
+        return self._stream_bridge.event_subscribers
+
+    @property
+    def _turn_trackers(self) -> dict[tuple[str, str], _TurnTracker]:
+        return self._stream_bridge.turn_trackers
 
     @staticmethod
     def _optional_string(value: Any) -> str | None:
@@ -204,66 +205,15 @@ class CodexClient:
         task_id: str | None,
         context_id: str | None,
     ) -> None:
-        normalized_session_id = session_id.strip()
-        if not normalized_session_id:
-            return
-        self._active_interrupt_contexts[normalized_session_id] = _InterruptExecutionContext(
-            identity=self._optional_string(identity),
-            task_id=self._optional_string(task_id),
-            context_id=self._optional_string(context_id),
+        self._interrupt_bridge.bind_interrupt_context(
+            session_id=session_id,
+            identity=identity,
+            task_id=task_id,
+            context_id=context_id,
         )
 
     def release_interrupt_context(self, *, session_id: str) -> None:
-        normalized_session_id = session_id.strip()
-        if not normalized_session_id:
-            return
-        self._active_interrupt_contexts.pop(normalized_session_id, None)
-
-    def _resolve_interrupt_context(
-        self,
-        *,
-        session_id: str,
-        params: dict[str, Any],
-    ) -> _InterruptExecutionContext:
-        active_context = self._active_interrupt_contexts.get(session_id)
-        return _InterruptExecutionContext(
-            identity=(
-                self._optional_string(params.get("identity"))
-                or self._optional_string(params.get("userIdentity"))
-                or (active_context.identity if active_context is not None else None)
-            ),
-            task_id=(
-                self._optional_string(params.get("task_id"))
-                or self._optional_string(params.get("taskId"))
-                or (active_context.task_id if active_context is not None else None)
-            ),
-            context_id=(
-                self._optional_string(params.get("context_id"))
-                or self._optional_string(params.get("contextId"))
-                or (active_context.context_id if active_context is not None else None)
-            ),
-        )
-
-    def _purge_expired_interrupt_tombstones(self) -> None:
-        now = time.time()
-        expired = [
-            request_id
-            for request_id, tombstone in self._expired_server_requests.items()
-            if tombstone.expires_at <= now
-        ]
-        for request_id in expired:
-            self._expired_server_requests.pop(request_id, None)
-
-    def _remember_interrupt_tombstone(self, request_id: str) -> None:
-        ttl_seconds = self._interrupt_request_tombstone_ttl_seconds
-        self._pending_server_requests.pop(request_id, None)
-        if ttl_seconds <= 0:
-            self._expired_server_requests.pop(request_id, None)
-            return
-        self._expired_server_requests[request_id] = InterruptRequestTombstone(
-            request_id=request_id,
-            expires_at=time.time() + ttl_seconds,
-        )
+        self._interrupt_bridge.release_interrupt_context(session_id=session_id)
 
     async def close(self) -> None:
         await self._transport.close()
@@ -431,361 +381,23 @@ class CodexClient:
         )
 
     async def _enqueue_stream_event(self, event: dict[str, Any]) -> None:
-        if not self._event_subscribers:
-            return
-        for queue in tuple(self._event_subscribers):
-            try:
-                queue.put_nowait(event)
-            except asyncio.QueueFull:
-                # Avoid backpressure deadlocks in degraded situations.
-                logger.warning("codex event queue full; dropping oldest event")
-                with contextlib.suppress(asyncio.QueueEmpty):
-                    _ = queue.get_nowait()
-                with contextlib.suppress(asyncio.QueueFull):
-                    queue.put_nowait(event)
+        await self._stream_bridge.enqueue_stream_event(event)
 
     def _get_or_create_tracker(self, thread_id: str, turn_id: str) -> _TurnTracker:
-        key = (thread_id, turn_id)
-        tracker = self._turn_trackers.get(key)
-        if tracker is None:
-            tracker = _TurnTracker(thread_id=thread_id, turn_id=turn_id)
-            self._turn_trackers[key] = tracker
-        return tracker
+        return self._stream_bridge.get_or_create_tracker(thread_id, turn_id)
 
     async def _handle_notification(self, message: dict[str, Any]) -> None:
-        method = message.get("method")
-        params = message.get("params")
-        if not isinstance(method, str):
-            return
-        if not isinstance(params, dict):
-            params = {}
-
-        # v2 stream deltas -> normalized pseudo events consumed by agent.py
-        if method == "item/agentMessage/delta":
-            thread_id = str(params.get("threadId", "")).strip()
-            turn_id = str(params.get("turnId", "")).strip()
-            delta = params.get("delta")
-            if thread_id and turn_id and isinstance(delta, str):
-                tracker = self._get_or_create_tracker(thread_id, turn_id)
-                tracker.text_chunks.append(delta)
-                item_id = params.get("itemId")
-                if isinstance(item_id, str) and item_id.strip():
-                    tracker.message_id = item_id
-                await self._enqueue_stream_event(
-                    {
-                        "type": "message.part.updated",
-                        "properties": {
-                            "part": {
-                                "sessionID": thread_id,
-                                "messageID": tracker.message_id or "",
-                                "id": tracker.message_id or "",
-                                "type": "text",
-                                "role": "assistant",
-                            },
-                            "delta": delta,
-                        },
-                    }
-                )
-            return
-
-        if method == "item/reasoning/summaryTextDelta":
-            thread_id = str(params.get("threadId", "")).strip()
-            delta = params.get("delta")
-            item_id = str(params.get("itemId", "")).strip()
-            if thread_id and isinstance(delta, str):
-                await self._enqueue_stream_event(
-                    {
-                        "type": "message.part.updated",
-                        "properties": {
-                            "part": {
-                                "sessionID": thread_id,
-                                "messageID": item_id,
-                                "id": item_id,
-                                "type": "reasoning",
-                                "role": "assistant",
-                            },
-                            "delta": delta,
-                        },
-                    }
-                )
-            return
-
-        if method in {"item/started", "item/completed"}:
-            event = build_tool_call_state_event(params)
-            if event is not None:
-                await self._enqueue_stream_event(event)
-            return
-
-        if method in {"item/commandExecution/outputDelta", "item/fileChange/outputDelta"}:
-            event = build_tool_call_output_event(method, params)
-            if event is not None:
-                await self._enqueue_stream_event(event)
-            return
-
-        if method == "command/exec/outputDelta":
-            process_id = str(params.get("processId", "")).strip()
-            stream = str(params.get("stream", "")).strip()
-            delta_base64 = params.get("deltaBase64")
-            if process_id and stream and isinstance(delta_base64, str):
-                await self._enqueue_stream_event(
-                    {
-                        "type": "exec.output.delta",
-                        "properties": {
-                            "process_id": process_id,
-                            "stream": stream,
-                            "delta_base64": delta_base64,
-                            "cap_reached": bool(params.get("capReached", False)),
-                        },
-                    }
-                )
-            return
-
-        if method == "skills/changed":
-            await self._enqueue_stream_event(
-                {
-                    "type": "discovery.skills.changed",
-                    "properties": {},
-                }
-            )
-            return
-
-        if method == "app/list/updated":
-            raw_items = params.get("data")
-            items: list[dict[str, Any]] = []
-            if isinstance(raw_items, list):
-                for app in raw_items:
-                    if not isinstance(app, dict):
-                        continue
-                    app_id = app.get("id")
-                    name = app.get("name")
-                    if not isinstance(app_id, str) or not app_id.strip():
-                        continue
-                    if not isinstance(name, str) or not name.strip():
-                        continue
-                    items.append(
-                        {
-                            "id": app_id.strip(),
-                            "name": name.strip(),
-                            "description": app.get("description"),
-                            "is_accessible": bool(app.get("isAccessible", False)),
-                            "is_enabled": bool(app.get("isEnabled", False)),
-                            "install_url": app.get("installUrl"),
-                            "mention_path": f"app://{app_id.strip()}",
-                            "branding": app.get("branding"),
-                            "labels": app.get("labels"),
-                            "codex": {"raw": app},
-                        }
-                    )
-            await self._enqueue_stream_event(
-                {
-                    "type": "discovery.apps.updated",
-                    "properties": {"items": items},
-                }
-            )
-            return
-
-        if method == "thread/started":
-            thread = self._normalize_thread_summary(params.get("thread"))
-            if thread is None:
-                return
-            await self._enqueue_stream_event(
-                {
-                    "type": "thread.lifecycle.started",
-                    "properties": {
-                        "thread_id": thread["id"],
-                        "thread": thread,
-                        "status": thread.get("status"),
-                        "source": "thread/started",
-                        "codex": {"raw": params},
-                    },
-                }
-            )
-            return
-
-        if method == "thread/status/changed":
-            thread_id = str(params.get("threadId", "")).strip()
-            status = self._normalize_thread_status(params.get("status"))
-            if not thread_id or status is None:
-                return
-            await self._enqueue_stream_event(
-                {
-                    "type": "thread.lifecycle.status_changed",
-                    "properties": {
-                        "thread_id": thread_id,
-                        "status": status,
-                        "source": "thread/status/changed",
-                        "codex": {"raw": params},
-                    },
-                }
-            )
-            return
-
-        if method in {"thread/archived", "thread/unarchived", "thread/closed"}:
-            thread_id = str(params.get("threadId", "")).strip()
-            if not thread_id:
-                return
-            normalized_type = method.removeprefix("thread/").replace("/", "_")
-            await self._enqueue_stream_event(
-                {
-                    "type": f"thread.lifecycle.{normalized_type}",
-                    "properties": {
-                        "thread_id": thread_id,
-                        "source": method,
-                        "codex": {"raw": params},
-                    },
-                }
-            )
-            return
-
-        if method == "thread/tokenUsage/updated":
-            thread_id = str(params.get("threadId", "")).strip()
-            token_usage = params.get("tokenUsage")
-            if not thread_id or not isinstance(token_usage, dict):
-                return
-            last = token_usage.get("last")
-            if not isinstance(last, dict):
-                return
-            usage_event = {
-                "type": "message.finalized",
-                "properties": {
-                    "sessionID": thread_id,
-                    "info": {
-                        "tokens": {
-                            "input": last.get("inputTokens"),
-                            "output": last.get("outputTokens"),
-                            "total": last.get("totalTokens"),
-                            "reasoning": last.get("reasoningOutputTokens"),
-                            "cache": {"read": last.get("cachedInputTokens")},
-                        }
-                    },
-                },
-            }
-            await self._enqueue_stream_event(usage_event)
-            return
-
-        if method == "turn/started":
-            thread_id = str(params.get("threadId", "")).strip()
-            turn = params.get("turn")
-            if thread_id and isinstance(turn, dict):
-                turn_id = str(turn.get("id", "")).strip()
-                if turn_id:
-                    self._get_or_create_tracker(thread_id, turn_id)
-            return
-
-        if method == "turn/completed":
-            thread_id = str(params.get("threadId", "")).strip()
-            turn = params.get("turn")
-            if thread_id and isinstance(turn, dict):
-                turn_id = str(turn.get("id", "")).strip()
-                if turn_id:
-                    tracker = self._get_or_create_tracker(thread_id, turn_id)
-                    tracker.raw_turn = turn
-                    turn_status = str(turn.get("status", "")).strip()
-                    if turn_status.lower() in {"failed", "interrupted", "cancelled", "canceled"}:
-                        error = turn.get("error")
-                        if isinstance(error, dict):
-                            error_message = error.get("message")
-                            if isinstance(error_message, str) and error_message.strip():
-                                tracker.error = error_message.strip()
-                            else:
-                                tracker.error = turn_status or "turn failed"
-                        else:
-                            tracker.error = turn_status or "turn failed"
-                    tracker.completed.set()
-            return
-
-        if method == "error":
-            # Optional mid-turn error notification, preserve for observability only.
-            await self._enqueue_stream_event(
-                {"type": "codex.error", "properties": {"payload": params}}
-            )
+        await self._stream_bridge.handle_notification(
+            message,
+            enqueue_stream_event=self._enqueue_stream_event,
+            get_or_create_tracker=self._get_or_create_tracker,
+        )
 
     async def _handle_server_request(self, message: dict[str, Any]) -> None:
-        method = message.get("method")
-        request_id = message.get("id")
-        params = message.get("params")
-        if not isinstance(method, str):
-            return
-        if params is None:
-            params = {}
-        if not isinstance(params, dict):
-            params = {}
-
-        request_key = str(request_id)
-
-        if method in {
-            "item/commandExecution/requestApproval",
-            "item/fileChange/requestApproval",
-            "applyPatchApproval",
-            "execCommandApproval",
-        }:
-            await self._register_interrupt_request(
-                request_id=request_id,
-                request_key=request_key,
-                method=method,
-                params=params,
-                interrupt_type="permission",
-                asked_event_type="permission.asked",
-                session_id=str(
-                    params.get("threadId") or params.get("conversationId") or ""
-                ).strip(),
-                properties_builder=build_codex_permission_interrupt_properties,
-            )
-            return
-
-        if method == "item/tool/requestUserInput":
-            await self._register_interrupt_request(
-                request_id=request_id,
-                request_key=request_key,
-                method=method,
-                params=params,
-                interrupt_type="question",
-                asked_event_type="question.asked",
-                session_id=str(
-                    params.get("threadId") or params.get("conversationId") or ""
-                ).strip(),
-                properties_builder=build_codex_question_interrupt_properties,
-            )
-            return
-
-        if method == "item/permissions/requestApproval":
-            await self._register_interrupt_request(
-                request_id=request_id,
-                request_key=request_key,
-                method=method,
-                params=params,
-                interrupt_type="permissions",
-                asked_event_type="permissions.asked",
-                session_id=str(
-                    params.get("threadId") or params.get("conversationId") or ""
-                ).strip(),
-                properties_builder=build_codex_permissions_interrupt_properties,
-            )
-            return
-
-        if method == "mcpServer/elicitation/request":
-            await self._register_interrupt_request(
-                request_id=request_id,
-                request_key=request_key,
-                method=method,
-                params=params,
-                interrupt_type="elicitation",
-                asked_event_type="elicitation.asked",
-                session_id=str(
-                    params.get("threadId") or params.get("conversationId") or ""
-                ).strip(),
-                properties_builder=build_codex_elicitation_interrupt_properties,
-            )
-            return
-
-        await self._send_json_message(
-            {
-                "id": request_id,
-                "error": {
-                    "code": -32601,
-                    "message": f"Unsupported server request method: {method}",
-                },
-            }
+        await self._interrupt_bridge.handle_server_request(
+            message,
+            send_json_message=self._send_json_message,
+            enqueue_stream_event=self._enqueue_stream_event,
         )
 
     async def stream_events(
@@ -793,19 +405,8 @@ class CodexClient:
     ) -> AsyncIterator[dict[str, Any]]:
         del directory
         await self._ensure_started()
-        queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue(maxsize=_EVENT_QUEUE_MAXSIZE)
-        self._event_subscribers.add(queue)
-        try:
-            while True:
-                if stop_event and stop_event.is_set():
-                    break
-                try:
-                    event = await asyncio.wait_for(queue.get(), timeout=0.25)
-                except TimeoutError:
-                    continue
-                yield event
-        finally:
-            self._event_subscribers.discard(queue)
+        async for event in self._stream_bridge.stream_events(stop_event=stop_event):
+            yield event
 
     async def create_session(
         self, title: str | None = None, *, directory: str | None = None
@@ -831,42 +432,10 @@ class CodexClient:
 
     @staticmethod
     def _normalize_thread_status(value: Any) -> dict[str, Any] | None:
-        if isinstance(value, dict):
-            status_type = value.get("type")
-            if isinstance(status_type, str) and status_type.strip():
-                return dict(value)
-            return None
-        if isinstance(value, str) and value.strip():
-            return {"type": value.strip()}
-        return None
+        return normalize_thread_status(value)
 
     def _normalize_thread_summary(self, value: Any) -> dict[str, Any] | None:
-        if not isinstance(value, dict):
-            return None
-        raw_id = value.get("id")
-        if not isinstance(raw_id, str) or not raw_id.strip():
-            return None
-        thread_id = raw_id.strip()
-        title_candidates = (
-            value.get("name"),
-            value.get("title"),
-            value.get("preview"),
-            thread_id,
-        )
-        title = thread_id
-        for candidate in title_candidates:
-            if isinstance(candidate, str) and candidate.strip():
-                title = candidate.strip()
-                break
-        normalized = {
-            "id": thread_id,
-            "title": title,
-            "raw": value,
-        }
-        status = self._normalize_thread_status(value.get("status"))
-        if status is not None:
-            normalized["status"] = status
-        return normalized
+        return normalize_thread_summary(value)
 
     async def list_skills(self, *, params: dict[str, Any] | None = None) -> Any:
         return await self._rpc_request("skills/list", self._merge_params(params))
@@ -1222,165 +791,15 @@ class CodexClient:
         self,
         binding: InterruptRequestBinding,
     ) -> str:
-        return interrupt_request_status(
-            binding,
-            interrupt_request_ttl_seconds=self._interrupt_request_ttl_seconds,
-        )
+        return self._interrupt_bridge.interrupt_request_status(binding)
 
     async def resolve_interrupt_request(
         self, request_id: str
     ) -> tuple[str, InterruptRequestBinding | None]:
-        request_key = request_id.strip()
-        if not request_key:
-            return "missing", None
-        self._purge_expired_interrupt_tombstones()
-        pending = self._pending_server_requests.get(request_key)
-        if pending is not None:
-            status = self._interrupt_request_status(pending.binding)
-            if status == "expired":
-                self._remember_interrupt_tombstone(request_key)
-                if self._interrupt_request_store is not None:
-                    await self._interrupt_request_store.expire_interrupt_request(
-                        request_id=request_key
-                    )
-                return "expired", None
-            return status, pending.binding
-        if request_key in self._expired_server_requests:
-            return "expired", None
-        if self._interrupt_request_store is None:
-            return "missing", None
-        status, persisted = await self._interrupt_request_store.resolve_interrupt_request(
-            request_id=request_key
-        )
-        if status == "active" and persisted is not None:
-            pending = _PendingInterruptRequest(
-                binding=persisted.binding,
-                rpc_request_id=persisted.rpc_request_id,
-                params=persisted.params,
-            )
-            self._pending_server_requests[request_key] = pending
-            return "active", pending.binding
-        if status == "expired":
-            self._remember_interrupt_tombstone(request_key)
-            return "expired", None
-        return "missing", None
+        return await self._interrupt_bridge.resolve_interrupt_request(request_id)
 
     async def discard_interrupt_request(self, request_id: str) -> None:
-        request_key = request_id.strip()
-        self._pending_server_requests.pop(request_key, None)
-        self._expired_server_requests.pop(request_key, None)
-        if self._interrupt_request_store is not None:
-            await self._interrupt_request_store.delete_interrupt_request(request_id=request_key)
-
-    async def _require_pending_interrupt_request(
-        self,
-        request_id: str,
-        *,
-        expected_interrupt_type: str,
-    ) -> _PendingInterruptRequest:
-        request_key = request_id.strip()
-        status, binding = await self.resolve_interrupt_request(request_key)
-        if status == "missing":
-            raise InterruptRequestError(
-                error_type="INTERRUPT_REQUEST_NOT_FOUND",
-                request_id=request_key,
-            )
-        if status == "expired" or binding is None:
-            raise InterruptRequestError(
-                error_type="INTERRUPT_REQUEST_EXPIRED",
-                request_id=request_key,
-            )
-        if binding.interrupt_type != expected_interrupt_type:
-            raise InterruptRequestError(
-                error_type="INTERRUPT_TYPE_MISMATCH",
-                request_id=request_key,
-                expected_interrupt_type=expected_interrupt_type,
-                actual_interrupt_type=binding.interrupt_type,
-            )
-        pending = self._pending_server_requests.get(request_key)
-        if pending is None:
-            raise InterruptRequestError(
-                error_type="INTERRUPT_REQUEST_NOT_FOUND",
-                request_id=request_key,
-            )
-        return pending
-
-    async def _register_interrupt_request(
-        self,
-        *,
-        request_id: Any,
-        request_key: str,
-        method: str,
-        params: dict[str, Any],
-        interrupt_type: str,
-        asked_event_type: str,
-        session_id: str,
-        properties_builder: Callable[..., dict[str, Any]],
-    ) -> None:
-        interrupt_context = self._resolve_interrupt_context(session_id=session_id, params=params)
-        rpc_request_id = request_id if isinstance(request_id, str | int) else request_key
-        created_at = time.time()
-        self._pending_server_requests[request_key] = _PendingInterruptRequest(
-            binding=InterruptRequestBinding(
-                request_id=request_key,
-                interrupt_type=interrupt_type,
-                session_id=session_id,
-                created_at=created_at,
-                expires_at=created_at + float(self._interrupt_request_ttl_seconds),
-                identity=interrupt_context.identity,
-                task_id=interrupt_context.task_id,
-                context_id=interrupt_context.context_id,
-            ),
-            rpc_request_id=rpc_request_id,
-            params=params,
-        )
-        self._expired_server_requests.pop(request_key, None)
-        if self._interrupt_request_store is not None:
-            binding = self._pending_server_requests[request_key].binding
-            await self._interrupt_request_store.save_interrupt_request(
-                request_id=request_key,
-                interrupt_type=binding.interrupt_type,
-                session_id=binding.session_id,
-                identity=binding.identity,
-                task_id=binding.task_id,
-                context_id=binding.context_id,
-                created_at=binding.created_at,
-                expires_at=binding.expires_at or binding.created_at,
-                rpc_request_id=rpc_request_id,
-                params=params,
-            )
-        await self._enqueue_stream_event(
-            {
-                "type": asked_event_type,
-                "properties": properties_builder(
-                    request_key=request_key,
-                    session_id=session_id,
-                    method=method,
-                    params=params,
-                ),
-            }
-        )
-
-    async def _reply_to_server_request(
-        self,
-        *,
-        request_id: str,
-        pending: _PendingInterruptRequest,
-        result: dict[str, Any],
-        resolved_event_type: str,
-    ) -> None:
-        await self._send_json_message({"id": pending.rpc_request_id, "result": result})
-        await self._enqueue_stream_event(
-            {
-                "type": resolved_event_type,
-                "properties": {
-                    "id": request_id,
-                    "requestID": request_id,
-                    "sessionID": pending.binding.session_id,
-                },
-            }
-        )
-        await self.discard_interrupt_request(request_id)
+        await self._interrupt_bridge.discard_interrupt_request(request_id)
 
     async def permission_reply(
         self,
@@ -1391,26 +810,12 @@ class CodexClient:
         directory: str | None = None,
     ) -> bool:
         del message, directory
-        normalized = (reply or "").strip().lower()
-        pending = await self._require_pending_interrupt_request(
+        return await self._interrupt_bridge.permission_reply(
             request_id,
-            expected_interrupt_type="permission",
+            reply=reply,
+            send_json_message=self._send_json_message,
+            enqueue_stream_event=self._enqueue_stream_event,
         )
-        decision = "decline"
-        if normalized == "once":
-            decision = "accept"
-        elif normalized == "always":
-            decision = "acceptForSession"
-        elif normalized in {"reject", "deny"}:
-            decision = "decline"
-
-        await self._reply_to_server_request(
-            request_id=request_id,
-            pending=pending,
-            result={"decision": decision},
-            resolved_event_type="permission.replied",
-        )
-        return True
 
     async def question_reply(
         self,
@@ -1420,30 +825,12 @@ class CodexClient:
         directory: str | None = None,
     ) -> bool:
         del directory
-        pending = await self._require_pending_interrupt_request(
+        return await self._interrupt_bridge.question_reply(
             request_id,
-            expected_interrupt_type="question",
+            answers=answers,
+            send_json_message=self._send_json_message,
+            enqueue_stream_event=self._enqueue_stream_event,
         )
-        # requestUserInput expects a dict keyed by question id.
-        questions = pending.params.get("questions")
-        answer_map: dict[str, dict[str, list[str]]] = {}
-        if isinstance(questions, list):
-            for index, q in enumerate(questions):
-                if not isinstance(q, dict):
-                    continue
-                qid = q.get("id")
-                if not isinstance(qid, str) or not qid:
-                    continue
-                selected = answers[index] if index < len(answers) else []
-                selected = [v for v in selected if isinstance(v, str)]
-                answer_map[qid] = {"answers": selected}
-        await self._reply_to_server_request(
-            request_id=request_id,
-            pending=pending,
-            result={"answers": answer_map},
-            resolved_event_type="question.replied",
-        )
-        return True
 
     async def question_reject(
         self,
@@ -1452,24 +839,11 @@ class CodexClient:
         directory: str | None = None,
     ) -> bool:
         del directory
-        pending = await self._require_pending_interrupt_request(
+        return await self._interrupt_bridge.question_reject(
             request_id,
-            expected_interrupt_type="question",
+            send_json_message=self._send_json_message,
+            enqueue_stream_event=self._enqueue_stream_event,
         )
-        # For requestUserInput, an empty answers map acts as reject/abort.
-        await self._send_json_message({"id": pending.rpc_request_id, "result": {"answers": {}}})
-        await self._enqueue_stream_event(
-            {
-                "type": "question.rejected",
-                "properties": {
-                    "id": request_id,
-                    "requestID": request_id,
-                    "sessionID": pending.binding.session_id,
-                },
-            }
-        )
-        await self.discard_interrupt_request(request_id)
-        return True
 
     async def permissions_reply(
         self,
@@ -1480,20 +854,13 @@ class CodexClient:
         directory: str | None = None,
     ) -> bool:
         del directory
-        pending = await self._require_pending_interrupt_request(
+        return await self._interrupt_bridge.permissions_reply(
             request_id,
-            expected_interrupt_type="permissions",
+            permissions=permissions,
+            scope=scope,
+            send_json_message=self._send_json_message,
+            enqueue_stream_event=self._enqueue_stream_event,
         )
-        result: dict[str, Any] = {"permissions": dict(permissions)}
-        if scope is not None:
-            result["scope"] = scope
-        await self._reply_to_server_request(
-            request_id=request_id,
-            pending=pending,
-            result=result,
-            resolved_event_type="permissions.replied",
-        )
-        return True
 
     async def elicitation_reply(
         self,
@@ -1504,17 +871,10 @@ class CodexClient:
         directory: str | None = None,
     ) -> bool:
         del directory
-        pending = await self._require_pending_interrupt_request(
+        return await self._interrupt_bridge.elicitation_reply(
             request_id,
-            expected_interrupt_type="elicitation",
+            action=action,
+            content=content,
+            send_json_message=self._send_json_message,
+            enqueue_stream_event=self._enqueue_stream_event,
         )
-        result: dict[str, Any] = {"action": action, "content": content}
-        await self._reply_to_server_request(
-            request_id=request_id,
-            pending=pending,
-            result=result,
-            resolved_event_type=(
-                "elicitation.replied" if action == "accept" else "elicitation.rejected"
-            ),
-        )
-        return True

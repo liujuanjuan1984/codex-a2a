@@ -1,4 +1,5 @@
 import logging
+from typing import Any
 from unittest.mock import MagicMock
 
 import httpx
@@ -137,7 +138,7 @@ async def test_session_query_extension_returns_jsonrpc_result(monkeypatch):
     dummy = DummyCodexClient(
         make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
-    monkeypatch.setattr(app_module, "CodexClient", lambda _settings: dummy)
+    monkeypatch.setattr(app_module, "CodexClient", lambda _settings, **kwargs: dummy)
     app = app_module.create_app(
         make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
@@ -201,7 +202,7 @@ async def test_session_query_extension_applies_default_limit_when_omitted(monkey
     dummy = DummyCodexClient(
         make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
-    monkeypatch.setattr(app_module, "CodexClient", lambda _settings: dummy)
+    monkeypatch.setattr(app_module, "CodexClient", lambda _settings, **kwargs: dummy)
     app = app_module.create_app(
         make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
@@ -236,8 +237,8 @@ async def test_session_query_extension_rejects_non_array_upstream_payload(monkey
     import codex_a2a.server.application as app_module
 
     class WeirdPayloadClient(DummyCodexClient):
-        def __init__(self, _settings: Settings) -> None:
-            super().__init__(_settings)
+        def __init__(self, _settings: Settings, **kwargs: Any) -> None:
+            super().__init__(_settings, **kwargs)
             self._sessions_payload = {"foo": "bar"}  # no items
 
     monkeypatch.setattr(app_module, "CodexClient", WeirdPayloadClient)
@@ -269,8 +270,8 @@ async def test_session_query_extension_session_title_is_extracted_or_placeholder
     import codex_a2a.server.application as app_module
 
     class TitlePayloadClient(DummyCodexClient):
-        def __init__(self, _settings: Settings) -> None:
-            super().__init__(_settings)
+        def __init__(self, _settings: Settings, **kwargs: Any) -> None:
+            super().__init__(_settings, **kwargs)
             self._sessions_payload = [{"id": "s-1", "title": "My Session"}]
 
     monkeypatch.setattr(app_module, "CodexClient", TitlePayloadClient)
@@ -297,8 +298,8 @@ async def test_session_query_extension_message_role_and_id_from_info(monkeypatch
     import codex_a2a.server.application as app_module
 
     class InfoRoleClient(DummyCodexClient):
-        def __init__(self, _settings: Settings) -> None:
-            super().__init__(_settings)
+        def __init__(self, _settings: Settings, **kwargs: Any) -> None:
+            super().__init__(_settings, **kwargs)
             self._messages_payload = [
                 {
                     "info": {"id": "msg-1", "role": "user"},
@@ -336,8 +337,8 @@ async def test_session_query_extension_accepts_top_level_list_payload(monkeypatc
     import codex_a2a.server.application as app_module
 
     class ListPayloadClient(DummyCodexClient):
-        def __init__(self, _settings: Settings) -> None:
-            super().__init__(_settings)
+        def __init__(self, _settings: Settings, **kwargs: Any) -> None:
+            super().__init__(_settings, **kwargs)
             self._sessions_payload = [{"id": "s-1", "title": "s1"}]
             self._messages_payload = [
                 {
@@ -382,8 +383,8 @@ async def test_session_query_extension_rejects_non_list_wrapped_payload(monkeypa
     import codex_a2a.server.application as app_module
 
     class AltKeyPayloadClient(DummyCodexClient):
-        def __init__(self, _settings: Settings) -> None:
-            super().__init__(_settings)
+        def __init__(self, _settings: Settings, **kwargs: Any) -> None:
+            super().__init__(_settings, **kwargs)
             self._sessions_payload = {"sessions": [{"id": "s-1"}]}
             self._messages_payload = {"messages": [{"id": "m-1", "text": "SECRET_HISTORY"}]}
 
@@ -426,7 +427,7 @@ async def test_session_query_extension_rejects_cursor_limit(monkeypatch):
     dummy = DummyCodexClient(
         make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
-    monkeypatch.setattr(app_module, "CodexClient", lambda _settings: dummy)
+    monkeypatch.setattr(app_module, "CodexClient", lambda _settings, **kwargs: dummy)
     app = app_module.create_app(
         make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
@@ -458,7 +459,7 @@ async def test_session_query_extension_rejects_page_size_pagination(monkeypatch)
     dummy = DummyCodexClient(
         make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
-    monkeypatch.setattr(app_module, "CodexClient", lambda _settings: dummy)
+    monkeypatch.setattr(app_module, "CodexClient", lambda _settings, **kwargs: dummy)
     app = app_module.create_app(
         make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
@@ -489,7 +490,7 @@ async def test_session_query_extension_rejects_limit_above_declared_max(monkeypa
     dummy = DummyCodexClient(
         make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
-    monkeypatch.setattr(app_module, "CodexClient", lambda _settings: dummy)
+    monkeypatch.setattr(app_module, "CodexClient", lambda _settings, **kwargs: dummy)
     app = app_module.create_app(
         make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
@@ -587,7 +588,7 @@ async def test_session_control_prompt_async_returns_turn_handle(monkeypatch):
     dummy = DummyCodexClient(
         make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
-    monkeypatch.setattr(app_module, "CodexClient", lambda _settings: dummy)
+    monkeypatch.setattr(app_module, "CodexClient", lambda _settings, **kwargs: dummy)
     app = app_module.create_app(
         make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
@@ -631,7 +632,7 @@ async def test_session_control_prompt_async_accepts_rich_input(monkeypatch):
     dummy = DummyCodexClient(
         make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
-    monkeypatch.setattr(app_module, "CodexClient", lambda _settings: dummy)
+    monkeypatch.setattr(app_module, "CodexClient", lambda _settings, **kwargs: dummy)
     app = app_module.create_app(
         make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
@@ -704,7 +705,7 @@ async def test_session_control_command_maps_response_to_a2a_message(monkeypatch)
     dummy = DummyCodexClient(
         make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
-    monkeypatch.setattr(app_module, "CodexClient", lambda _settings: dummy)
+    monkeypatch.setattr(app_module, "CodexClient", lambda _settings, **kwargs: dummy)
     app = app_module.create_app(
         make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
@@ -753,7 +754,7 @@ async def test_session_control_command_accepts_missing_arguments(monkeypatch):
     dummy = DummyCodexClient(
         make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
-    monkeypatch.setattr(app_module, "CodexClient", lambda _settings: dummy)
+    monkeypatch.setattr(app_module, "CodexClient", lambda _settings, **kwargs: dummy)
     app = app_module.create_app(
         make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
@@ -799,7 +800,7 @@ async def test_session_control_shell_maps_response_to_a2a_message(monkeypatch):
     dummy = DummyCodexClient(
         make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
-    monkeypatch.setattr(app_module, "CodexClient", lambda _settings: dummy)
+    monkeypatch.setattr(app_module, "CodexClient", lambda _settings, **kwargs: dummy)
     app = app_module.create_app(
         make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
@@ -839,7 +840,7 @@ async def test_session_control_rejects_invalid_request_shape(monkeypatch):
     dummy = DummyCodexClient(
         make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
-    monkeypatch.setattr(app_module, "CodexClient", lambda _settings: dummy)
+    monkeypatch.setattr(app_module, "CodexClient", lambda _settings, **kwargs: dummy)
     app = app_module.create_app(
         make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
@@ -895,7 +896,7 @@ async def test_session_control_shell_method_is_not_exposed_when_disabled(monkeyp
             **_BASE_SETTINGS,
         )
     )
-    monkeypatch.setattr(app_module, "CodexClient", lambda _settings: dummy)
+    monkeypatch.setattr(app_module, "CodexClient", lambda _settings, **kwargs: dummy)
     app = app_module.create_app(
         make_settings(
             a2a_bearer_token="t-1",
@@ -941,7 +942,7 @@ async def test_session_control_rejects_invalid_metadata_directory(monkeypatch):
             **_BASE_SETTINGS,
         )
     )
-    monkeypatch.setattr(app_module, "CodexClient", lambda _settings: dummy)
+    monkeypatch.setattr(app_module, "CodexClient", lambda _settings, **kwargs: dummy)
     app = app_module.create_app(
         make_settings(
             a2a_bearer_token="t-1",
@@ -981,7 +982,7 @@ async def test_interrupt_callback_extension_permission_reply(monkeypatch):
         make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
     dummy.prime_interrupt_request("perm-1", interrupt_type="permission")
-    monkeypatch.setattr(app_module, "CodexClient", lambda _settings: dummy)
+    monkeypatch.setattr(app_module, "CodexClient", lambda _settings, **kwargs: dummy)
     app = app_module.create_app(
         make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
@@ -1024,7 +1025,7 @@ async def test_interrupt_callback_extension_rejects_legacy_permission_fields(mon
     dummy = DummyCodexClient(
         make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
-    monkeypatch.setattr(app_module, "CodexClient", lambda _settings: dummy)
+    monkeypatch.setattr(app_module, "CodexClient", lambda _settings, **kwargs: dummy)
     app = app_module.create_app(
         make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
@@ -1055,7 +1056,7 @@ async def test_interrupt_callback_extension_question_reply_and_reject(monkeypatc
     )
     dummy.prime_interrupt_request("q-1", interrupt_type="question")
     dummy.prime_interrupt_request("q-2", interrupt_type="question")
-    monkeypatch.setattr(app_module, "CodexClient", lambda _settings: dummy)
+    monkeypatch.setattr(app_module, "CodexClient", lambda _settings, **kwargs: dummy)
     app = app_module.create_app(
         make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
@@ -1103,7 +1104,7 @@ async def test_interrupt_callback_extension_permissions_reply(monkeypatch):
         make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
     dummy.prime_interrupt_request("perm-v2-1", interrupt_type="permissions")
-    monkeypatch.setattr(app_module, "CodexClient", lambda _settings: dummy)
+    monkeypatch.setattr(app_module, "CodexClient", lambda _settings, **kwargs: dummy)
     app = app_module.create_app(
         make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
@@ -1149,7 +1150,7 @@ async def test_interrupt_callback_extension_elicitation_reply(monkeypatch):
         make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
     dummy.prime_interrupt_request("eli-1", interrupt_type="elicitation")
-    monkeypatch.setattr(app_module, "CodexClient", lambda _settings: dummy)
+    monkeypatch.setattr(app_module, "CodexClient", lambda _settings, **kwargs: dummy)
     app = app_module.create_app(
         make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
@@ -1207,7 +1208,7 @@ async def test_interrupt_callback_extension_maps_404_to_interrupt_not_found(monk
         make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
     dummy.prime_interrupt_request("perm-404", interrupt_type="permission")
-    monkeypatch.setattr(app_module, "CodexClient", lambda _settings: dummy)
+    monkeypatch.setattr(app_module, "CodexClient", lambda _settings, **kwargs: dummy)
     app = app_module.create_app(
         make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
@@ -1240,7 +1241,7 @@ async def test_interrupt_callback_extension_returns_not_found_for_missing_local_
     dummy = DummyCodexClient(
         make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
-    monkeypatch.setattr(app_module, "CodexClient", lambda _settings: dummy)
+    monkeypatch.setattr(app_module, "CodexClient", lambda _settings, **kwargs: dummy)
     app = app_module.create_app(
         make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
@@ -1272,7 +1273,7 @@ async def test_interrupt_callback_extension_returns_expired_for_stale_request(mo
         make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
     dummy.prime_interrupt_request("perm-expired", interrupt_type="permission", created_at=1.0)
-    monkeypatch.setattr(app_module, "CodexClient", lambda _settings: dummy)
+    monkeypatch.setattr(app_module, "CodexClient", lambda _settings, **kwargs: dummy)
     app = app_module.create_app(
         make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
@@ -1304,7 +1305,7 @@ async def test_interrupt_callback_extension_rejects_interrupt_type_mismatch(monk
         make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
     dummy.prime_interrupt_request("perm-type", interrupt_type="permission")
-    monkeypatch.setattr(app_module, "CodexClient", lambda _settings: dummy)
+    monkeypatch.setattr(app_module, "CodexClient", lambda _settings, **kwargs: dummy)
     app = app_module.create_app(
         make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
@@ -1339,7 +1340,7 @@ async def test_interrupt_callback_extension_masks_owner_mismatch_as_not_found(mo
         make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
     dummy.prime_interrupt_request("perm-owned", interrupt_type="permission", session_id="ses-owned")
-    monkeypatch.setattr(app_module, "CodexClient", lambda _settings: dummy)
+    monkeypatch.setattr(app_module, "CodexClient", lambda _settings, **kwargs: dummy)
     app = app_module.create_app(
         make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )

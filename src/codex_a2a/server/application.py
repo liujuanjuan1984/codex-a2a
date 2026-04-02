@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import inspect
 import logging
 from contextlib import asynccontextmanager
 from typing import Any
@@ -21,7 +20,6 @@ from codex_a2a.contracts.extensions import (
     THREAD_LIFECYCLE_METHODS,
     build_capability_snapshot,
 )
-from codex_a2a.execution.directory_policy import resolve_and_validate_directory
 from codex_a2a.execution.discovery_runtime import CodexDiscoveryRuntime
 from codex_a2a.execution.exec_runtime import CodexExecRuntime
 from codex_a2a.execution.executor import CodexAgentExecutor, SessionGuardBindings
@@ -49,41 +47,11 @@ from .http_middlewares import (
 )
 
 
-def _factory_accepts_keyword(factory: Any, keyword: str) -> bool:
-    try:
-        signature = inspect.signature(factory)
-    except (TypeError, ValueError):
-        return False
-
-    if keyword in signature.parameters:
-        return True
-
-    return any(
-        parameter.kind is inspect.Parameter.VAR_KEYWORD
-        for parameter in signature.parameters.values()
-    )
-
-
-def _build_codex_client(
-    settings: Settings,
-    *,
-    interrupt_request_store: Any | None,
-) -> CodexClient:
-    client_kwargs: dict[str, Any] = {}
-    if interrupt_request_store is not None and _factory_accepts_keyword(
-        CodexClient, "interrupt_request_store"
-    ):
-        client_kwargs["interrupt_request_store"] = interrupt_request_store
-    return CodexClient(settings, **client_kwargs)
-
-
 def _build_session_guard_hooks(
-    *,
-    client: CodexClient,
     bindings: SessionGuardBindings,
 ) -> SessionGuardHooks:
     return SessionGuardHooks(
-        directory_resolver=lambda requested: resolve_and_validate_directory(client, requested),
+        directory_resolver=bindings.directory_resolver,
         session_claim=bindings.session_claim,
         session_claim_finalize=bindings.session_claim_finalize,
         session_claim_release=bindings.session_claim_release,
@@ -97,7 +65,7 @@ def create_app(settings: Settings) -> FastAPI:
         build_database_engine(settings) if settings.a2a_database_url is not None else None
     )
     runtime_state_runtime = build_runtime_state_runtime(settings, engine=shared_database_engine)
-    client = _build_codex_client(
+    client = CodexClient(
         settings,
         interrupt_request_store=runtime_state_runtime.state_store,
     )
@@ -136,12 +104,8 @@ def create_app(settings: Settings) -> FastAPI:
         await task_store_runtime.startup()
         await runtime_state_runtime.startup()
         try:
-            restore_interrupts = getattr(client, "restore_persisted_interrupt_requests", None)
-            if callable(restore_interrupts):
-                await restore_interrupts()
-            startup_preflight = getattr(client, "startup_preflight", None)
-            if callable(startup_preflight):
-                await startup_preflight()
+            await client.restore_persisted_interrupt_requests()
+            await client.startup_preflight()
             yield
         finally:
             await a2a_client_manager.close_all()
@@ -173,10 +137,7 @@ def create_app(settings: Settings) -> FastAPI:
     }
     if "shell" not in capability_snapshot.session_query_method_keys:
         jsonrpc_methods.pop("shell", None)
-    session_guard_hooks = _build_session_guard_hooks(
-        client=client,
-        bindings=executor.session_guard_bindings,
-    )
+    session_guard_hooks = _build_session_guard_hooks(executor.session_guard_bindings)
 
     # Compose the shared FastAPI app from the SDK JSON-RPC and REST application wrappers.
     jsonrpc_app = CodexSessionQueryJSONRPCApplication(

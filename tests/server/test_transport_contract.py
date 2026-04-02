@@ -159,6 +159,7 @@ def test_create_app_uses_executor_public_session_guard_bindings(monkeypatch) -> 
                 session_claim_finalize=finalize,
                 session_claim_release=release,
                 session_owner_matcher=owner_matcher,
+                directory_resolver=lambda requested: requested,
             )
 
     class DummyJSONRPCApp:

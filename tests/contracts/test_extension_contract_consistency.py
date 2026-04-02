@@ -192,7 +192,7 @@ async def test_session_query_runtime_result_envelope_matches_declared_contract(
     expected_result = method_contracts[method]["result"]
 
     dummy = DummyCodexClient(settings)
-    monkeypatch.setattr(app_module, "CodexClient", lambda _settings: dummy)
+    monkeypatch.setattr(app_module, "CodexClient", lambda _settings, **kwargs: dummy)
     app = create_app(settings)
     transport = httpx.ASGITransport(app=app)
 

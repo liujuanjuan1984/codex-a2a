@@ -67,6 +67,7 @@ class SessionGuardBindings:
     session_claim_finalize: SessionFinalizeHook
     session_claim_release: SessionFinalizeHook
     session_owner_matcher: SessionOwnerMatcher
+    directory_resolver: Callable[[str | None], str | None]
 
 
 class CodexAgentExecutor(AgentExecutor):
@@ -97,6 +98,7 @@ class CodexAgentExecutor(AgentExecutor):
             session_claim_finalize=self._session_runtime.finalize_session_claim,
             session_claim_release=self._session_runtime.release_session_claim,
             session_owner_matcher=self._session_runtime.session_owner_matches,
+            directory_resolver=self._resolve_and_validate_directory,
         )
 
     @property

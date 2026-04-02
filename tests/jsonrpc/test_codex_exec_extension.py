@@ -19,7 +19,7 @@ async def test_exec_start_routes_to_exec_runtime(monkeypatch) -> None:
     dummy = DummyCodexClient(
         make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
-    monkeypatch.setattr(app_module, "CodexClient", lambda _settings: dummy)
+    monkeypatch.setattr(app_module, "CodexClient", lambda _settings, **kwargs: dummy)
     app = app_module.create_app(
         make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
@@ -85,7 +85,7 @@ async def test_exec_write_resize_and_terminate_route_to_exec_runtime(monkeypatch
     dummy = DummyCodexClient(
         make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
-    monkeypatch.setattr(app_module, "CodexClient", lambda _settings: dummy)
+    monkeypatch.setattr(app_module, "CodexClient", lambda _settings, **kwargs: dummy)
     app = app_module.create_app(
         make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
@@ -157,7 +157,7 @@ async def test_exec_control_rejects_invalid_request_shapes(monkeypatch) -> None:
     dummy = DummyCodexClient(
         make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
-    monkeypatch.setattr(app_module, "CodexClient", lambda _settings: dummy)
+    monkeypatch.setattr(app_module, "CodexClient", lambda _settings, **kwargs: dummy)
     app = app_module.create_app(
         make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
@@ -211,7 +211,7 @@ async def test_exec_control_maps_missing_session_lookup_to_business_error(monkey
     dummy = DummyCodexClient(
         make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
-    monkeypatch.setattr(app_module, "CodexClient", lambda _settings: dummy)
+    monkeypatch.setattr(app_module, "CodexClient", lambda _settings, **kwargs: dummy)
     app = app_module.create_app(
         make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
