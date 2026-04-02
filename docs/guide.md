@@ -378,6 +378,9 @@ This path is for contributors. End users should prefer the released CLI path des
   - `codex.sessions.prompt_async.request.parts[]` accepts `text`, `image`, `mention`, and `skill`
   - core A2A `message/send` and `message/stream` keep standard A2A parts and map `TextPart`, image `FilePart`, and `DataPart(data={"type":"mention"|"skill", ...})` into Codex turn input
 - Agent Card media modes reflect that stable core message surface: default input modes are `text/plain`, `image/*`, and `application/json`; default output modes are `text/plain` and `application/json`.
+- The authenticated extended Agent Card also decomposes provider-private JSON-RPC surfaces into narrower skills: `codex.sessions.query`, `codex.sessions.control`, `codex.discovery.query`, `codex.discovery.watch`, `codex.threads.control`, `codex.threads.watch`, `codex.exec.control`, `codex.exec.stream`, and `codex.interrupt.callback`.
+- Those provider-private skills use narrower `output_modes` where practical: query/control/watch handle surfaces declare `application/json` when their primary contract is a structured JSON-RPC result or `DataPart` watch payload, while `codex.exec.stream` declares `text/plain` because stdout/stderr deltas and terminal summaries are emitted as `TextPart`.
+- `codex.sessions.control` intentionally remains mixed: `codex.sessions.prompt_async` returns a structured handle, while `codex.sessions.command` and `codex.sessions.shell` return A2A message items that contain `TextPart`.
 - On the core chat surface, the `application/json` input mode is intentionally narrower than arbitrary JSON: only `DataPart(type=mention|skill)` is part of the declared stable contract.
 - Image input maps to upstream `turn/start.input[].type=input_image`.
 - `mention.path` and `skill.path` are forwarded verbatim. The service does not guess app or plugin identifiers from display names.

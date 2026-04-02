@@ -37,7 +37,9 @@ from codex_a2a.contracts.extensions import (
 from codex_a2a.media_modes import (
     DEFAULT_INPUT_MEDIA_MODES,
     DEFAULT_OUTPUT_MEDIA_MODES,
+    JSON_OUTPUT_MEDIA_MODES,
     JSON_RPC_INPUT_MEDIA_MODES,
+    TEXT_OUTPUT_MEDIA_MODES,
 )
 from codex_a2a.profile.runtime import RuntimeProfile, build_runtime_profile
 
@@ -326,29 +328,62 @@ def _build_agent_skills(
                 ),
                 tags=["codex", "sessions", "history", "provider-private"],
                 input_modes=list(JSON_RPC_INPUT_MEDIA_MODES),
+                output_modes=list(JSON_OUTPUT_MEDIA_MODES),
+            ),
+            AgentSkill(
+                id="codex.sessions.control",
+                name="Codex Sessions Control",
+                description=(
+                    "Start async Codex session turns and issue provider-private "
+                    "session command or shell control methods."
+                ),
+                tags=["codex", "sessions", "control", "provider-private"],
+                input_modes=list(JSON_RPC_INPUT_MEDIA_MODES),
                 output_modes=list(DEFAULT_OUTPUT_MEDIA_MODES),
             ),
             AgentSkill(
                 id="codex.discovery.query",
                 name="Codex Discovery Query",
                 description=(
-                    "Discover skills, apps, and plugins through provider-private "
-                    "JSON-RPC extensions."
+                    "List skills, apps, and plugins through provider-private "
+                    "JSON-RPC discovery methods."
                 ),
                 tags=["codex", "discovery", "provider-private"],
                 input_modes=list(JSON_RPC_INPUT_MEDIA_MODES),
-                output_modes=list(DEFAULT_OUTPUT_MEDIA_MODES),
+                output_modes=list(JSON_OUTPUT_MEDIA_MODES),
             ),
             AgentSkill(
-                id="codex.threads.lifecycle",
-                name="Codex Thread Lifecycle",
+                id="codex.discovery.watch",
+                name="Codex Discovery Watch",
                 description=(
-                    "Manage provider-private thread lifecycle actions and watch "
-                    "status/archive signals through JSON-RPC extensions."
+                    "Start provider-private discovery watch tasks that emit "
+                    "structured invalidation events through A2A task streams."
                 ),
-                tags=["codex", "threads", "lifecycle", "provider-private"],
+                tags=["codex", "discovery", "watch", "provider-private"],
                 input_modes=list(JSON_RPC_INPUT_MEDIA_MODES),
-                output_modes=list(DEFAULT_OUTPUT_MEDIA_MODES),
+                output_modes=list(JSON_OUTPUT_MEDIA_MODES),
+            ),
+            AgentSkill(
+                id="codex.threads.control",
+                name="Codex Thread Control",
+                description=(
+                    "Manage provider-private thread fork, archive, unarchive, "
+                    "and metadata-update actions."
+                ),
+                tags=["codex", "threads", "control", "provider-private"],
+                input_modes=list(JSON_RPC_INPUT_MEDIA_MODES),
+                output_modes=list(JSON_OUTPUT_MEDIA_MODES),
+            ),
+            AgentSkill(
+                id="codex.threads.watch",
+                name="Codex Thread Watch",
+                description=(
+                    "Start provider-private thread lifecycle watch tasks that "
+                    "emit structured events through A2A task streams."
+                ),
+                tags=["codex", "threads", "watch", "provider-private"],
+                input_modes=list(JSON_RPC_INPUT_MEDIA_MODES),
+                output_modes=list(JSON_OUTPUT_MEDIA_MODES),
             ),
             AgentSkill(
                 id="codex.interrupt.callback",
@@ -356,18 +391,29 @@ def _build_agent_skills(
                 description=("Reply to shared interrupt callbacks emitted during streaming."),
                 tags=["interrupt", "shared"],
                 input_modes=list(JSON_RPC_INPUT_MEDIA_MODES),
-                output_modes=list(DEFAULT_OUTPUT_MEDIA_MODES),
+                output_modes=list(JSON_OUTPUT_MEDIA_MODES),
             ),
             AgentSkill(
-                id="codex.exec.interactive",
-                name="Codex Interactive Exec",
+                id="codex.exec.control",
+                name="Codex Exec Control",
                 description=(
                     "Start and control standalone interactive command execution "
                     "through provider-private JSON-RPC extensions."
                 ),
-                tags=["codex", "exec", "interactive", "provider-private"],
+                tags=["codex", "exec", "control", "provider-private"],
                 input_modes=list(JSON_RPC_INPUT_MEDIA_MODES),
-                output_modes=list(DEFAULT_OUTPUT_MEDIA_MODES),
+                output_modes=list(JSON_OUTPUT_MEDIA_MODES),
+            ),
+            AgentSkill(
+                id="codex.exec.stream",
+                name="Codex Exec Stream",
+                description=(
+                    "Consume interactive exec stdout/stderr and terminal summaries "
+                    "through A2A task streams after codex.exec.start."
+                ),
+                tags=["codex", "exec", "stream", "provider-private"],
+                input_modes=list(JSON_RPC_INPUT_MEDIA_MODES),
+                output_modes=list(TEXT_OUTPUT_MEDIA_MODES),
             ),
         ]
 
@@ -398,38 +444,82 @@ def _build_agent_skills(
                 "List messages for a session (method codex.sessions.messages.list).",
             ],
             input_modes=list(JSON_RPC_INPUT_MEDIA_MODES),
+            output_modes=list(JSON_OUTPUT_MEDIA_MODES),
+        ),
+        AgentSkill(
+            id="codex.sessions.control",
+            name="Codex Sessions Control",
+            description=(
+                "Start async session turns and issue session-scoped command or "
+                "one-shot shell control methods via provider-private JSON-RPC."
+            ),
+            tags=["codex", "sessions", "control", "commands"],
+            examples=[
+                "Start an async session turn (method codex.sessions.prompt_async).",
+                "Run a one-shot shell snapshot for a session (method codex.sessions.shell).",
+            ],
+            input_modes=list(JSON_RPC_INPUT_MEDIA_MODES),
             output_modes=list(DEFAULT_OUTPUT_MEDIA_MODES),
         ),
         AgentSkill(
             id="codex.discovery.query",
             name="Codex Discovery Query",
             description=(
-                "Discover skills, apps, and plugins plus stable path identifiers via "
-                "codex.discovery.* JSON-RPC extension methods."
+                "List skills, apps, plugins, and stable path identifiers via "
+                "codex.discovery.* query methods."
             ),
             tags=["codex", "discovery", "skills", "apps", "plugins"],
             examples=[
                 "List available Codex skills (method codex.discovery.skills.list).",
                 "List available apps or plugins before constructing mention.path values.",
-                "Start a discovery watch stream (method codex.discovery.watch).",
             ],
             input_modes=list(JSON_RPC_INPUT_MEDIA_MODES),
-            output_modes=list(DEFAULT_OUTPUT_MEDIA_MODES),
+            output_modes=list(JSON_OUTPUT_MEDIA_MODES),
         ),
         AgentSkill(
-            id="codex.threads.lifecycle",
-            name="Codex Thread Lifecycle",
+            id="codex.discovery.watch",
+            name="Codex Discovery Watch",
             description=(
-                "Manage thread fork/archive/unarchive/metadata-update flows and watch "
-                "thread lifecycle signals via codex.threads.* JSON-RPC extension methods."
+                "Start discovery watch tasks via codex.discovery.watch and consume "
+                "structured invalidation events through A2A task streams."
             ),
-            tags=["codex", "threads", "lifecycle"],
+            tags=["codex", "discovery", "watch", "tasks"],
             examples=[
-                "Fork a Codex thread (method codex.threads.fork).",
-                "Start a lifecycle watch stream (method codex.threads.watch).",
+                "Start a discovery watch stream (method codex.discovery.watch).",
+                "Resume a discovery watch task with tasks/resubscribe.",
             ],
             input_modes=list(JSON_RPC_INPUT_MEDIA_MODES),
-            output_modes=list(DEFAULT_OUTPUT_MEDIA_MODES),
+            output_modes=list(JSON_OUTPUT_MEDIA_MODES),
+        ),
+        AgentSkill(
+            id="codex.threads.control",
+            name="Codex Thread Control",
+            description=(
+                "Manage thread fork/archive/unarchive/metadata-update flows via "
+                "codex.threads.* control methods."
+            ),
+            tags=["codex", "threads", "control", "lifecycle"],
+            examples=[
+                "Fork a Codex thread (method codex.threads.fork).",
+                "Update persisted git_info for a thread (method codex.threads.metadata.update).",
+            ],
+            input_modes=list(JSON_RPC_INPUT_MEDIA_MODES),
+            output_modes=list(JSON_OUTPUT_MEDIA_MODES),
+        ),
+        AgentSkill(
+            id="codex.threads.watch",
+            name="Codex Thread Watch",
+            description=(
+                "Start thread lifecycle watch tasks via codex.threads.watch and "
+                "consume structured lifecycle events through A2A task streams."
+            ),
+            tags=["codex", "threads", "watch", "lifecycle"],
+            examples=[
+                "Start a lifecycle watch stream (method codex.threads.watch).",
+                "Resume a lifecycle watch task with tasks/resubscribe.",
+            ],
+            input_modes=list(JSON_RPC_INPUT_MEDIA_MODES),
+            output_modes=list(JSON_OUTPUT_MEDIA_MODES),
         ),
         AgentSkill(
             id="codex.interrupt.callback",
@@ -453,23 +543,37 @@ def _build_agent_skills(
                 "Grant a permissions subset or answer an elicitation request by request_id.",
             ],
             input_modes=list(JSON_RPC_INPUT_MEDIA_MODES),
-            output_modes=list(DEFAULT_OUTPUT_MEDIA_MODES),
+            output_modes=list(JSON_OUTPUT_MEDIA_MODES),
         ),
         AgentSkill(
-            id="codex.exec.interactive",
-            name="Codex Interactive Exec",
+            id="codex.exec.control",
+            name="Codex Exec Control",
             description=(
                 "Start and control standalone interactive command execution via "
-                "codex.exec.start/write/resize/terminate and consume output through "
-                "A2A task streams."
+                "codex.exec.start/write/resize/terminate."
             ),
-            tags=["codex", "exec", "terminal", "interactive"],
+            tags=["codex", "exec", "terminal", "control"],
             examples=[
                 "Start an interactive exec session (method codex.exec.start).",
                 "Write stdin bytes or resize the exec PTY by process_id.",
             ],
             input_modes=list(JSON_RPC_INPUT_MEDIA_MODES),
-            output_modes=list(DEFAULT_OUTPUT_MEDIA_MODES),
+            output_modes=list(JSON_OUTPUT_MEDIA_MODES),
+        ),
+        AgentSkill(
+            id="codex.exec.stream",
+            name="Codex Exec Stream",
+            description=(
+                "Consume interactive exec stdout/stderr deltas and terminal result "
+                "summaries through A2A task streams after codex.exec.start."
+            ),
+            tags=["codex", "exec", "terminal", "stream"],
+            examples=[
+                "Resume an exec task stream with tasks/resubscribe after codex.exec.start.",
+                "Read final exec result text from the completed task artifact or status message.",
+            ],
+            input_modes=list(JSON_RPC_INPUT_MEDIA_MODES),
+            output_modes=list(TEXT_OUTPUT_MEDIA_MODES),
         ),
     ]
     return skills

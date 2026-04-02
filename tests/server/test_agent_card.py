@@ -16,6 +16,8 @@ from codex_a2a.media_modes import (
     DEFAULT_INPUT_MEDIA_MODES,
     DEFAULT_OUTPUT_MEDIA_MODES,
     IMAGE_ANY_MEDIA_MODE,
+    JSON_OUTPUT_MEDIA_MODES,
+    TEXT_OUTPUT_MEDIA_MODES,
     TEXT_PLAIN_MEDIA_MODE,
 )
 from codex_a2a.server.agent_card import (
@@ -65,13 +67,41 @@ def test_agent_card_declares_media_modes_that_match_runtime_contract() -> None:
     assert chat_skill.input_modes == DEFAULT_INPUT_MEDIA_MODES
     assert chat_skill.output_modes == DEFAULT_OUTPUT_MEDIA_MODES
 
+    sessions_query_skill = skill_by_id["codex.sessions.query"]
+    assert sessions_query_skill.input_modes == [APPLICATION_JSON_MEDIA_MODE]
+    assert sessions_query_skill.output_modes == JSON_OUTPUT_MEDIA_MODES
+
+    sessions_control_skill = skill_by_id["codex.sessions.control"]
+    assert sessions_control_skill.input_modes == [APPLICATION_JSON_MEDIA_MODE]
+    assert sessions_control_skill.output_modes == DEFAULT_OUTPUT_MEDIA_MODES
+
     discovery_skill = skill_by_id["codex.discovery.query"]
     assert discovery_skill.input_modes == [APPLICATION_JSON_MEDIA_MODE]
-    assert discovery_skill.output_modes == DEFAULT_OUTPUT_MEDIA_MODES
+    assert discovery_skill.output_modes == JSON_OUTPUT_MEDIA_MODES
 
-    thread_skill = skill_by_id["codex.threads.lifecycle"]
-    assert thread_skill.input_modes == [APPLICATION_JSON_MEDIA_MODE]
-    assert thread_skill.output_modes == DEFAULT_OUTPUT_MEDIA_MODES
+    discovery_watch_skill = skill_by_id["codex.discovery.watch"]
+    assert discovery_watch_skill.input_modes == [APPLICATION_JSON_MEDIA_MODE]
+    assert discovery_watch_skill.output_modes == JSON_OUTPUT_MEDIA_MODES
+
+    thread_control_skill = skill_by_id["codex.threads.control"]
+    assert thread_control_skill.input_modes == [APPLICATION_JSON_MEDIA_MODE]
+    assert thread_control_skill.output_modes == JSON_OUTPUT_MEDIA_MODES
+
+    thread_watch_skill = skill_by_id["codex.threads.watch"]
+    assert thread_watch_skill.input_modes == [APPLICATION_JSON_MEDIA_MODE]
+    assert thread_watch_skill.output_modes == JSON_OUTPUT_MEDIA_MODES
+
+    interrupt_skill = skill_by_id["codex.interrupt.callback"]
+    assert interrupt_skill.input_modes == [APPLICATION_JSON_MEDIA_MODE]
+    assert interrupt_skill.output_modes == JSON_OUTPUT_MEDIA_MODES
+
+    exec_control_skill = skill_by_id["codex.exec.control"]
+    assert exec_control_skill.input_modes == [APPLICATION_JSON_MEDIA_MODE]
+    assert exec_control_skill.output_modes == JSON_OUTPUT_MEDIA_MODES
+
+    exec_stream_skill = skill_by_id["codex.exec.stream"]
+    assert exec_stream_skill.input_modes == [APPLICATION_JSON_MEDIA_MODE]
+    assert exec_stream_skill.output_modes == TEXT_OUTPUT_MEDIA_MODES
 
     assert DEFAULT_INPUT_MEDIA_MODES == [
         TEXT_PLAIN_MEDIA_MODE,
@@ -443,12 +473,22 @@ def test_authenticated_extended_agent_card_chat_examples_include_project_hint_wh
 def test_public_agent_card_skills_are_minimal() -> None:
     card = build_agent_card(make_settings(a2a_bearer_token="test-token"))
     session_skill = next(skill for skill in card.skills if skill.id == "codex.sessions.query")
-    thread_skill = next(skill for skill in card.skills if skill.id == "codex.threads.lifecycle")
+    session_control_skill = next(
+        skill for skill in card.skills if skill.id == "codex.sessions.control"
+    )
+    thread_control_skill = next(
+        skill for skill in card.skills if skill.id == "codex.threads.control"
+    )
+    thread_watch_skill = next(skill for skill in card.skills if skill.id == "codex.threads.watch")
 
     assert session_skill.examples is None
     assert "provider-private" in session_skill.tags
-    assert thread_skill.examples is None
-    assert "provider-private" in thread_skill.tags
+    assert session_control_skill.examples is None
+    assert "provider-private" in session_control_skill.tags
+    assert thread_control_skill.examples is None
+    assert "provider-private" in thread_control_skill.tags
+    assert thread_watch_skill.examples is None
+    assert "provider-private" in thread_watch_skill.tags
 
 
 def test_authenticated_extended_agent_card_omits_shell_method_when_disabled() -> None:
