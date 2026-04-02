@@ -25,13 +25,22 @@ from a2a.types import (
     TaskStatus,
     TaskStatusUpdateEvent,
     TextPart,
+    UnsupportedOperationError,
 )
 from a2a.utils.errors import ServerError
 
+from codex_a2a.media_modes import DEFAULT_OUTPUT_MEDIA_MODES, TEXT_PLAIN_MEDIA_MODE
 from codex_a2a.metrics import (
     A2A_STREAM_ACTIVE,
     A2A_STREAM_REQUESTS_TOTAL,
     get_metrics_registry,
+)
+from codex_a2a.server.output_negotiation import (
+    NegotiatingResultAggregator,
+    apply_accepted_output_modes,
+    extract_accepted_output_modes_from_metadata,
+    media_mode_is_accepted,
+    normalize_accepted_output_modes,
 )
 from codex_a2a.server.task_store import (
     TaskStoreOperationError,
@@ -47,15 +56,43 @@ class CodexRequestHandler(DefaultRequestHandler):
 
     _metrics = get_metrics_registry()
 
+    def __init__(self, *args, **kwargs) -> None:  # noqa: ANN002, ANN003
+        super().__init__(*args, **kwargs)
+        self._task_output_modes: dict[str, frozenset[str]] = {}
+
     async def on_get_task(
         self,
         params,
         context=None,
     ):
         try:
-            return await super().on_get_task(params, context)
+            task = await super().on_get_task(params, context)
+            if task is None:
+                return None
+            accepted_output_modes = self._accepted_output_modes_for_task(
+                task_id=params.id, task=task
+            )
+            return apply_accepted_output_modes(task, accepted_output_modes)
         except TaskStoreOperationError as exc:
             raise self._task_store_server_error(exc) from exc
+
+    async def _setup_message_execution(self, params, context=None):  # noqa: ANN001
+        (
+            task_manager,
+            task_id,
+            queue,
+            _result_aggregator,
+            producer_task,
+        ) = await super()._setup_message_execution(params, context)
+        accepted_output_modes = self._accepted_output_modes_from_params(params)
+        self._remember_task_output_modes(task_id, accepted_output_modes)
+        return (
+            task_manager,
+            task_id,
+            queue,
+            NegotiatingResultAggregator(task_manager, accepted_output_modes),
+            producer_task,
+        )
 
     async def start_background_task_stream(
         self,
@@ -158,6 +195,81 @@ class CodexRequestHandler(DefaultRequestHandler):
         context_id = getattr(message, "contextId", None) or getattr(message, "context_id", None)
         return context_id or task_id
 
+    @staticmethod
+    def _accepted_output_modes_from_params(params) -> list[str] | None:  # noqa: ANN001
+        configuration = getattr(params, "configuration", None)
+        if configuration is None:
+            return None
+        return getattr(configuration, "accepted_output_modes", None) or getattr(
+            configuration,
+            "acceptedOutputModes",
+            None,
+        )
+
+    @classmethod
+    def _validate_chat_output_modes(cls, params) -> None:  # noqa: ANN001
+        accepted_output_modes = normalize_accepted_output_modes(
+            cls._accepted_output_modes_from_params(params)
+        )
+        if accepted_output_modes is None:
+            return
+
+        supported_output_modes = list(DEFAULT_OUTPUT_MEDIA_MODES)
+        if not any(
+            media_mode_is_accepted(media_mode, accepted_output_modes)
+            for media_mode in supported_output_modes
+        ):
+            raise ServerError(
+                error=UnsupportedOperationError(
+                    message=(
+                        "Requested acceptedOutputModes are not compatible "
+                        "with Codex chat responses."
+                    ),
+                    data={
+                        "accepted_output_modes": sorted(accepted_output_modes),
+                        "supported_output_modes": supported_output_modes,
+                    },
+                )
+            )
+
+        if not media_mode_is_accepted(TEXT_PLAIN_MEDIA_MODE, accepted_output_modes):
+            raise ServerError(
+                error=UnsupportedOperationError(
+                    message="Codex chat responses require text/plain in acceptedOutputModes.",
+                    data={
+                        "accepted_output_modes": sorted(accepted_output_modes),
+                        "required_output_modes": [TEXT_PLAIN_MEDIA_MODE],
+                        "supported_output_modes": supported_output_modes,
+                    },
+                )
+            )
+
+    def _remember_task_output_modes(
+        self,
+        task_id: str,
+        accepted_output_modes: list[str] | None,
+    ) -> None:
+        normalized = normalize_accepted_output_modes(accepted_output_modes)
+        if normalized is None:
+            self._task_output_modes.pop(task_id, None)
+            return
+        self._task_output_modes[task_id] = normalized
+
+    def _accepted_output_modes_for_task(
+        self,
+        *,
+        task_id: str,
+        task: Task | None,
+    ) -> frozenset[str] | None:
+        if task_id in self._task_output_modes:
+            return self._task_output_modes[task_id]
+        if task is None:
+            return None
+        return extract_accepted_output_modes_from_metadata(task.metadata)
+
+    def _clear_task_output_modes(self, task_id: str) -> None:
+        self._task_output_modes.pop(task_id, None)
+
     async def on_cancel_task(
         self,
         params: TaskIdParams,
@@ -202,15 +314,38 @@ class CodexRequestHandler(DefaultRequestHandler):
 
             # Terminal tasks replay once and close cleanly.
             if task.status.state in TERMINAL_TASK_STATES:
-                yield task
+                accepted_output_modes = self._accepted_output_modes_for_task(
+                    task_id=params.id,
+                    task=task,
+                )
+                negotiated_task = apply_accepted_output_modes(task, accepted_output_modes)
+                if negotiated_task is not None:
+                    yield negotiated_task
                 return
 
-            async for event in super().on_resubscribe_to_task(params, context):
+            accepted_output_modes = self._accepted_output_modes_for_task(
+                task_id=params.id,
+                task=task,
+            )
+            task_manager = TaskManager(
+                task_id=task.id,
+                context_id=task.context_id,
+                task_store=self.task_store,
+                initial_message=None,
+                context=context,
+            )
+            result_aggregator = NegotiatingResultAggregator(task_manager, accepted_output_modes)
+            queue = await self._queue_manager.tap(task.id)
+            if not queue:
+                raise ServerError(error=TaskNotFoundError())
+            consumer = EventConsumer(queue)
+            async for event in result_aggregator.consume_and_emit(consumer):
                 yield event
         except TaskStoreOperationError as exc:
             raise self._task_store_server_error(exc) from exc
 
     async def on_message_send_stream(self, params, context=None):
+        self._validate_chat_output_modes(params)
         self._metrics.inc_counter(A2A_STREAM_REQUESTS_TOTAL)
         self._metrics.inc_gauge(A2A_STREAM_ACTIVE)
         task_id = getattr(getattr(params, "message", None), "task_id", None) or str(uuid.uuid4())
@@ -264,12 +399,15 @@ class CodexRequestHandler(DefaultRequestHandler):
                 task_id,
                 stream_completed,
             )
+            if stream_completed:
+                self._clear_task_output_modes(task_id)
             if producer_task is not None:
                 cleanup_task = asyncio.create_task(self._cleanup_producer(producer_task, task_id))
                 cleanup_task.set_name(f"cleanup_producer:{task_id}")
                 self._track_background_task(cleanup_task)
 
     async def on_message_send(self, params, context=None):
+        self._validate_chat_output_modes(params)
         task_id = getattr(getattr(params, "message", None), "task_id", None) or str(uuid.uuid4())
         context_id = self._resolve_context_id_from_params(params, task_id)
         queue = None
@@ -354,6 +492,10 @@ class CodexRequestHandler(DefaultRequestHandler):
                 from a2a.utils.task import apply_history_length
 
                 result = apply_history_length(result, params.configuration.history_length)
+            if result.status.state in TERMINAL_TASK_STATES:
+                self._clear_task_output_modes(task_id)
+        elif isinstance(result, Message):
+            self._clear_task_output_modes(task_id)
 
         try:
             if result_aggregator is not None:

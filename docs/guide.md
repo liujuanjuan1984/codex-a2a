@@ -377,6 +377,11 @@ This path is for contributors. End users should prefer the released CLI path des
 - Rich input is supported on two surfaces:
   - `codex.sessions.prompt_async.request.parts[]` accepts `text`, `image`, `mention`, and `skill`
   - core A2A `message/send` and `message/stream` keep standard A2A parts and map `TextPart`, image `FilePart`, and `DataPart(data={"type":"mention"|"skill", ...})` into Codex turn input
+- Agent Card media modes reflect that stable core message surface: default input modes are `text/plain`, `image/*`, and `application/json`; default output modes are `text/plain` and `application/json`.
+- The authenticated extended Agent Card also decomposes provider-private JSON-RPC surfaces into narrower skills: `codex.sessions.query`, `codex.sessions.control`, `codex.discovery.query`, `codex.discovery.watch`, `codex.threads.control`, `codex.threads.watch`, `codex.exec.control`, `codex.exec.stream`, and `codex.interrupt.callback`.
+- Those provider-private skills use narrower `output_modes` where practical: query/control/watch handle surfaces declare `application/json` when their primary contract is a structured JSON-RPC result or `DataPart` watch payload, while `codex.exec.stream` declares `text/plain` because stdout/stderr deltas and terminal summaries are emitted as `TextPart`.
+- `codex.sessions.control` intentionally remains mixed: `codex.sessions.prompt_async` returns a structured handle, while `codex.sessions.command` and `codex.sessions.shell` return A2A message items that contain `TextPart`.
+- On the core chat surface, the `application/json` input mode is intentionally narrower than arbitrary JSON: only `DataPart(type=mention|skill)` is part of the declared stable contract.
 - Image input maps to upstream `turn/start.input[].type=input_image`.
 - `mention.path` and `skill.path` are forwarded verbatim. The service does not guess app or plugin identifiers from display names.
 - `local_image` is not part of the current declared stable rich-input contract.
@@ -401,6 +406,11 @@ This path is for contributors. End users should prefer the released CLI path des
 - `message.part.delta` and `message.part.updated` are merged per `part_id`; out-of-order deltas are buffered and replayed when the corresponding `part.updated` arrives.
 - `text` and `reasoning` chunks are emitted as `TextPart`, while `tool_call` chunks are emitted as `DataPart` with a normalized structured payload.
 - Legacy stringified JSON tool payloads are rejected; the stream contract only accepts structured `DataPart(data={...})` payloads.
+- Core `message/send` and `message/stream` honor `configuration.acceptedOutputModes` for emitted A2A parts. When a client accepts `text/plain` but not `application/json`, structured `DataPart` payloads are downgraded to compact text instead of being emitted as raw `DataPart`.
+- Core chat also validates explicit `acceptedOutputModes` up front. Requests that do not accept any declared chat output mode are rejected, and current chat requests must still accept `text/plain`.
+- `application/json` is additive structured-output support, not a promise that every natural-language reply can be losslessly re-encoded as a JSON `DataPart`. Clients that expect ordinary assistant prose should continue accepting `text/plain`.
+- Negotiated output modes are persisted with the task as soon as the task state is materialized, including artifact-first streams before any later status update arrives.
+- That negotiated output surface is treated as part of the task lifecycle: `tasks/get`, `tasks/resubscribe`, and push notifications continue using the task's negotiated output modes instead of reverting to raw stored `DataPart`.
 - To avoid character-level event floods, the service performs light server-side aggregation before emitting `text` and `reasoning` updates: `text` flushes at `120 chars or 200ms`, `reasoning` flushes at `240 chars or 350ms`, and both flush immediately on block switches, `tool_call`, and request completion boundaries.
 - Final status event metadata may include normalized token usage at `metadata.shared.usage` with fields like `input_tokens`, `output_tokens`, `total_tokens`, optional `metadata.shared.usage.reasoning_tokens`, `metadata.shared.usage.cache_tokens.read_tokens`, `metadata.shared.usage.cache_tokens.write_tokens`, `metadata.shared.usage.raw`, and optional `cost`.
 - Interrupt lifecycle is explicit:

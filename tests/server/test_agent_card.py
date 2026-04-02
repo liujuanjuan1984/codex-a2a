@@ -1,3 +1,7 @@
+from typing import Any
+
+from a2a.types import AgentExtension, AgentSkill
+
 from codex_a2a.contracts.extensions import (
     COMPATIBILITY_PROFILE_EXTENSION_URI,
     DISCOVERY_EXTENSION_URI,
@@ -11,11 +15,30 @@ from codex_a2a.contracts.extensions import (
     THREAD_LIFECYCLE_EXTENSION_URI,
     WIRE_CONTRACT_EXTENSION_URI,
 )
+from codex_a2a.media_modes import (
+    APPLICATION_JSON_MEDIA_MODE,
+    DEFAULT_INPUT_MEDIA_MODES,
+    DEFAULT_OUTPUT_MEDIA_MODES,
+    IMAGE_ANY_MEDIA_MODE,
+    JSON_OUTPUT_MEDIA_MODES,
+    TEXT_OUTPUT_MEDIA_MODES,
+    TEXT_PLAIN_MEDIA_MODE,
+)
 from codex_a2a.server.agent_card import (
     build_agent_card,
     build_authenticated_extended_agent_card,
 )
 from tests.support.settings import make_settings
+
+
+def _require_params(extension: AgentExtension) -> dict[str, Any]:
+    assert extension.params is not None
+    return extension.params
+
+
+def _require_examples(skill: AgentSkill) -> list[str]:
+    assert skill.examples is not None
+    return skill.examples
 
 
 def test_public_agent_card_description_reflects_discovery_surface() -> None:
@@ -47,12 +70,67 @@ def test_agent_card_declares_bearer_only_security() -> None:
     assert card.security == [{"bearerAuth": []}]
 
 
+def test_agent_card_declares_media_modes_that_match_runtime_contract() -> None:
+    card = build_agent_card(make_settings(a2a_bearer_token="test-token"))
+    skill_by_id = {skill.id: skill for skill in card.skills or []}
+
+    assert card.default_input_modes == DEFAULT_INPUT_MEDIA_MODES
+    assert card.default_output_modes == DEFAULT_OUTPUT_MEDIA_MODES
+
+    chat_skill = skill_by_id["codex.chat"]
+    assert chat_skill.input_modes == DEFAULT_INPUT_MEDIA_MODES
+    assert chat_skill.output_modes == DEFAULT_OUTPUT_MEDIA_MODES
+
+    sessions_query_skill = skill_by_id["codex.sessions.query"]
+    assert sessions_query_skill.input_modes == [APPLICATION_JSON_MEDIA_MODE]
+    assert sessions_query_skill.output_modes == JSON_OUTPUT_MEDIA_MODES
+
+    sessions_control_skill = skill_by_id["codex.sessions.control"]
+    assert sessions_control_skill.input_modes == [APPLICATION_JSON_MEDIA_MODE]
+    assert sessions_control_skill.output_modes == DEFAULT_OUTPUT_MEDIA_MODES
+
+    discovery_skill = skill_by_id["codex.discovery.query"]
+    assert discovery_skill.input_modes == [APPLICATION_JSON_MEDIA_MODE]
+    assert discovery_skill.output_modes == JSON_OUTPUT_MEDIA_MODES
+
+    discovery_watch_skill = skill_by_id["codex.discovery.watch"]
+    assert discovery_watch_skill.input_modes == [APPLICATION_JSON_MEDIA_MODE]
+    assert discovery_watch_skill.output_modes == JSON_OUTPUT_MEDIA_MODES
+
+    thread_control_skill = skill_by_id["codex.threads.control"]
+    assert thread_control_skill.input_modes == [APPLICATION_JSON_MEDIA_MODE]
+    assert thread_control_skill.output_modes == JSON_OUTPUT_MEDIA_MODES
+
+    thread_watch_skill = skill_by_id["codex.threads.watch"]
+    assert thread_watch_skill.input_modes == [APPLICATION_JSON_MEDIA_MODE]
+    assert thread_watch_skill.output_modes == JSON_OUTPUT_MEDIA_MODES
+
+    interrupt_skill = skill_by_id["codex.interrupt.callback"]
+    assert interrupt_skill.input_modes == [APPLICATION_JSON_MEDIA_MODE]
+    assert interrupt_skill.output_modes == JSON_OUTPUT_MEDIA_MODES
+
+    exec_control_skill = skill_by_id["codex.exec.control"]
+    assert exec_control_skill.input_modes == [APPLICATION_JSON_MEDIA_MODE]
+    assert exec_control_skill.output_modes == JSON_OUTPUT_MEDIA_MODES
+
+    exec_stream_skill = skill_by_id["codex.exec.stream"]
+    assert exec_stream_skill.input_modes == [APPLICATION_JSON_MEDIA_MODE]
+    assert exec_stream_skill.output_modes == TEXT_OUTPUT_MEDIA_MODES
+
+    assert DEFAULT_INPUT_MEDIA_MODES == [
+        TEXT_PLAIN_MEDIA_MODE,
+        IMAGE_ANY_MEDIA_MODE,
+        APPLICATION_JSON_MEDIA_MODE,
+    ]
+
+
 def test_public_agent_card_minimizes_provider_private_contracts() -> None:
     card = build_agent_card(make_settings(a2a_bearer_token="test-token"))
     ext_by_uri = {ext.uri: ext for ext in card.capabilities.extensions or []}
 
     session_binding = ext_by_uri[SESSION_BINDING_EXTENSION_URI]
-    assert session_binding.params == {
+    session_binding_params = _require_params(session_binding)
+    assert session_binding_params == {
         "metadata_field": "metadata.shared.session.id",
         "behavior": "prefer_metadata_binding_else_create_session",
         "supported_metadata": ["shared.session.id", "codex.directory"],
@@ -60,15 +138,16 @@ def test_public_agent_card_minimizes_provider_private_contracts() -> None:
     }
 
     streaming = ext_by_uri[STREAMING_EXTENSION_URI]
-    assert streaming.params["artifact_metadata_field"] == "metadata.shared.stream"
-    assert streaming.params["status_metadata_field"] == "metadata.shared.stream"
-    assert streaming.params["interrupt_metadata_field"] == "metadata.shared.interrupt"
-    assert streaming.params["session_fields"] == {
+    streaming_params = _require_params(streaming)
+    assert streaming_params["artifact_metadata_field"] == "metadata.shared.stream"
+    assert streaming_params["status_metadata_field"] == "metadata.shared.stream"
+    assert streaming_params["interrupt_metadata_field"] == "metadata.shared.interrupt"
+    assert streaming_params["session_fields"] == {
         "id": "metadata.shared.session.id",
         "title": "metadata.shared.session.title",
     }
-    assert streaming.params["usage_fields"]["total_tokens"] == "metadata.shared.usage.total_tokens"
-    assert "tool_call_payload_contract" not in streaming.params
+    assert streaming_params["usage_fields"]["total_tokens"] == "metadata.shared.usage.total_tokens"
+    assert "tool_call_payload_contract" not in streaming_params
 
     assert ext_by_uri[SESSION_QUERY_EXTENSION_URI].params is None
     assert ext_by_uri[DISCOVERY_EXTENSION_URI].params is None
@@ -78,7 +157,8 @@ def test_public_agent_card_minimizes_provider_private_contracts() -> None:
     assert ext_by_uri[WIRE_CONTRACT_EXTENSION_URI].params is None
 
     interrupt = ext_by_uri[INTERRUPT_CALLBACK_EXTENSION_URI]
-    assert interrupt.params == {
+    interrupt_params = _require_params(interrupt)
+    assert interrupt_params == {
         "methods": {
             "reply_permission": "a2a.interrupt.permission.reply",
             "reply_question": "a2a.interrupt.question.reply",
@@ -117,7 +197,8 @@ def test_authenticated_extended_agent_card_injects_profile_into_extensions() -> 
     ext_by_uri = {ext.uri: ext for ext in card.capabilities.extensions or []}
 
     binding = ext_by_uri[SESSION_BINDING_EXTENSION_URI]
-    profile = binding.params["profile"]
+    binding_params = _require_params(binding)
+    profile = binding_params["profile"]
     assert profile["profile_id"] == "codex-a2a-single-tenant-coding-v1"
     assert profile["deployment"] == {
         "id": "single_tenant_shared_workspace",
@@ -163,51 +244,52 @@ def test_authenticated_extended_agent_card_injects_profile_into_extensions() -> 
             "outside_workspace": False,
         },
     }
-    assert binding.params["metadata_field"] == "metadata.shared.session.id"
-    assert binding.params["supported_metadata"] == [
+    assert binding_params["metadata_field"] == "metadata.shared.session.id"
+    assert binding_params["supported_metadata"] == [
         "shared.session.id",
         "codex.directory",
     ]
-    assert binding.params["provider_private_metadata"] == ["codex.directory"]
+    assert binding_params["provider_private_metadata"] == ["codex.directory"]
 
     streaming = ext_by_uri[STREAMING_EXTENSION_URI]
-    assert streaming.params["artifact_metadata_field"] == "metadata.shared.stream"
-    assert streaming.params["interrupt_metadata_field"] == "metadata.shared.interrupt"
-    assert streaming.params["session_metadata_field"] == "metadata.shared.session"
-    assert streaming.params["usage_metadata_field"] == "metadata.shared.usage"
-    assert streaming.params["block_part_types"] == {
+    streaming_params = _require_params(streaming)
+    assert streaming_params["artifact_metadata_field"] == "metadata.shared.stream"
+    assert streaming_params["interrupt_metadata_field"] == "metadata.shared.interrupt"
+    assert streaming_params["session_metadata_field"] == "metadata.shared.session"
+    assert streaming_params["usage_metadata_field"] == "metadata.shared.usage"
+    assert streaming_params["block_part_types"] == {
         "text": "TextPart",
         "reasoning": "TextPart",
         "tool_call": "DataPart",
     }
-    assert streaming.params["stream_fields"]["sequence"] == "metadata.shared.stream.sequence"
-    assert streaming.params["status_stream_fields"]["event_id"] == "metadata.shared.stream.event_id"
-    assert streaming.params["session_fields"]["title"] == "metadata.shared.session.title"
-    assert streaming.params["interrupt_fields"]["phase"] == "metadata.shared.interrupt.phase"
+    assert streaming_params["stream_fields"]["sequence"] == "metadata.shared.stream.sequence"
+    assert streaming_params["status_stream_fields"]["event_id"] == "metadata.shared.stream.event_id"
+    assert streaming_params["session_fields"]["title"] == "metadata.shared.session.title"
+    assert streaming_params["interrupt_fields"]["phase"] == "metadata.shared.interrupt.phase"
     assert (
-        streaming.params["interrupt_fields"]["resolution"] == "metadata.shared.interrupt.resolution"
+        streaming_params["interrupt_fields"]["resolution"] == "metadata.shared.interrupt.resolution"
     )
     assert (
-        streaming.params["usage_fields"]["reasoning_tokens"]
+        streaming_params["usage_fields"]["reasoning_tokens"]
         == "metadata.shared.usage.reasoning_tokens"
     )
     assert (
-        streaming.params["usage_fields"]["cache_read_tokens"]
+        streaming_params["usage_fields"]["cache_read_tokens"]
         == "metadata.shared.usage.cache_tokens.read_tokens"
     )
-    assert streaming.params["usage_fields"]["raw"] == "metadata.shared.usage.raw"
-    assert streaming.params["artifact_stream_contract"]["required_fields"] == [
+    assert streaming_params["usage_fields"]["raw"] == "metadata.shared.usage.raw"
+    assert streaming_params["artifact_stream_contract"]["required_fields"] == [
         "block_type",
         "source",
     ]
-    assert streaming.params["status_stream_contract"]["required_fields"] == ["source"]
-    assert streaming.params["session_contract"]["required_fields"] == ["id"]
-    assert streaming.params["interrupt_contract"]["open_object_fields"] == ["details"]
-    assert streaming.params["usage_contract"]["nested_objects"]["cache_tokens"] == {
+    assert streaming_params["status_stream_contract"]["required_fields"] == ["source"]
+    assert streaming_params["session_contract"]["required_fields"] == ["id"]
+    assert streaming_params["interrupt_contract"]["open_object_fields"] == ["details"]
+    assert streaming_params["usage_contract"]["nested_objects"]["cache_tokens"] == {
         "required_fields": [],
         "optional_fields": ["read_tokens", "write_tokens"],
     }
-    tool_call_contract = streaming.params["tool_call_payload_contract"]
+    tool_call_contract = streaming_params["tool_call_payload_contract"]
     assert tool_call_contract["a2a_part_type"] == "DataPart"
     assert tool_call_contract["discriminator"] == {
         "field": "kind",
@@ -221,177 +303,189 @@ def test_authenticated_extended_agent_card_injects_profile_into_extensions() -> 
     }
 
     session_query = ext_by_uri[SESSION_QUERY_EXTENSION_URI]
-    assert session_query.params["profile"] == profile
-    assert session_query.params["supported_metadata"] == ["codex.directory"]
-    assert session_query.params["provider_private_metadata"] == ["codex.directory"]
-    assert session_query.params["pagination"]["mode"] == "limit"
-    assert session_query.params["pagination"]["default_limit"] == SESSION_QUERY_DEFAULT_LIMIT
-    assert session_query.params["pagination"]["max_limit"] == SESSION_QUERY_MAX_LIMIT
-    assert session_query.params["pagination"]["behavior"] == "mixed"
-    assert session_query.params["pagination"]["by_method"] == {
+    session_query_params = _require_params(session_query)
+    assert session_query_params["profile"] == profile
+    assert session_query_params["supported_metadata"] == ["codex.directory"]
+    assert session_query_params["provider_private_metadata"] == ["codex.directory"]
+    assert session_query_params["pagination"]["mode"] == "limit"
+    assert session_query_params["pagination"]["default_limit"] == SESSION_QUERY_DEFAULT_LIMIT
+    assert session_query_params["pagination"]["max_limit"] == SESSION_QUERY_MAX_LIMIT
+    assert session_query_params["pagination"]["behavior"] == "mixed"
+    assert session_query_params["pagination"]["by_method"] == {
         "codex.sessions.list": "upstream_passthrough",
         "codex.sessions.messages.list": "local_tail_slice",
     }
-    assert session_query.params["rich_input"]["prompt_async_part_types"] == [
+    assert session_query_params["rich_input"]["prompt_async_part_types"] == [
         "text",
         "image",
         "mention",
         "skill",
     ]
-    assert session_query.params["rich_input"]["core_message_part_mapping"] == {
+    assert session_query_params["rich_input"]["core_message_part_mapping"] == {
         "TextPart": "text",
         "FilePart(image only)": "input_image",
         "DataPart(type=mention|skill)": "mention|skill",
     }
     assert (
-        session_query.params["rich_input"]["prompt_async_part_contracts"]["image"]["maps_to"]
+        session_query_params["rich_input"]["prompt_async_part_contracts"]["image"]["maps_to"]
         == "turn/start.input[].type=input_image"
     )
     assert any(
         "mention.path values are forwarded verbatim" in note
-        for note in session_query.params["rich_input"]["notes"]
+        for note in session_query_params["rich_input"]["notes"]
     )
-    assert session_query.params["result_envelope"] == {}
+    assert session_query_params["result_envelope"] == {}
     assert any(
-        "forwards limit upstream" in note for note in session_query.params["pagination"]["notes"]
+        "forwards limit upstream" in note for note in session_query_params["pagination"]["notes"]
     )
     assert (
-        session_query.params["context_semantics"]["upstream_session_id_field"]
+        session_query_params["context_semantics"]["upstream_session_id_field"]
         == "metadata.shared.session.id"
     )
-    assert session_query.params["context_semantics"]["context_id_strategy"] == (
+    assert session_query_params["context_semantics"]["context_id_strategy"] == (
         "equals_upstream_session_id"
     )
     assert any(
         "contextId equal to the upstream session_id" in note
-        for note in session_query.params["context_semantics"]["notes"]
+        for note in session_query_params["context_semantics"]["notes"]
     )
-    shell_contract = session_query.params["method_contracts"]["codex.sessions.shell"]
+    shell_contract = session_query_params["method_contracts"]["codex.sessions.shell"]
     assert shell_contract["execution_binding"] == "standalone_command_exec"
     assert shell_contract["session_binding"] == "ownership_attribution_only"
     assert shell_contract["uses_upstream_session_context"] is False
     assert any("command/exec" in note for note in shell_contract["notes"])
     assert any("one-shot shell snapshot" in note for note in shell_contract["notes"])
-    prompt_contract = session_query.params["method_contracts"]["codex.sessions.prompt_async"]
+    prompt_contract = session_query_params["method_contracts"]["codex.sessions.prompt_async"]
     assert any("type=text, image, mention, and skill" in note for note in prompt_contract["notes"])
     assert any("local_image" in note for note in prompt_contract["notes"])
 
     discovery = ext_by_uri[DISCOVERY_EXTENSION_URI]
-    assert discovery.params["profile"] == profile
-    assert discovery.params["methods"]["list_skills"] == "codex.discovery.skills.list"
-    assert discovery.params["methods"]["list_apps"] == "codex.discovery.apps.list"
-    assert discovery.params["methods"]["list_plugins"] == "codex.discovery.plugins.list"
-    assert discovery.params["methods"]["read_plugin"] == "codex.discovery.plugins.read"
-    assert discovery.params["notification_bridge"]["current_delivery"] == (
+    discovery_params = _require_params(discovery)
+    assert discovery_params["profile"] == profile
+    assert discovery_params["methods"]["list_skills"] == "codex.discovery.skills.list"
+    assert discovery_params["methods"]["list_apps"] == "codex.discovery.apps.list"
+    assert discovery_params["methods"]["list_plugins"] == "codex.discovery.plugins.list"
+    assert discovery_params["methods"]["read_plugin"] == "codex.discovery.plugins.read"
+    assert discovery_params["notification_bridge"]["current_delivery"] == (
         "codex.discovery.watch task stream"
     )
-    assert "mention_path" in discovery.params["stable_item_fields"]["app"]
-    apps_contract = discovery.params["method_contracts"]["codex.discovery.apps.list"]
+    assert "mention_path" in discovery_params["stable_item_fields"]["app"]
+    apps_contract = discovery_params["method_contracts"]["codex.discovery.apps.list"]
     assert apps_contract["result"]["fields"] == ["items", "next_cursor"]
     assert any("mention_path" in note for note in apps_contract["notes"])
 
     thread_lifecycle = ext_by_uri[THREAD_LIFECYCLE_EXTENSION_URI]
-    assert thread_lifecycle.params["profile"] == profile
-    assert thread_lifecycle.params["methods"]["fork"] == "codex.threads.fork"
-    assert thread_lifecycle.params["methods"]["archive"] == "codex.threads.archive"
-    assert thread_lifecycle.params["methods"]["unarchive"] == "codex.threads.unarchive"
-    assert thread_lifecycle.params["methods"]["metadata_update"] == "codex.threads.metadata.update"
-    assert thread_lifecycle.params["methods"]["watch"] == "codex.threads.watch"
-    assert thread_lifecycle.params["notification_bridge"]["current_delivery"] == (
+    thread_lifecycle_params = _require_params(thread_lifecycle)
+    assert thread_lifecycle_params["profile"] == profile
+    assert thread_lifecycle_params["methods"]["fork"] == "codex.threads.fork"
+    assert thread_lifecycle_params["methods"]["archive"] == "codex.threads.archive"
+    assert thread_lifecycle_params["methods"]["unarchive"] == "codex.threads.unarchive"
+    assert thread_lifecycle_params["methods"]["metadata_update"] == "codex.threads.metadata.update"
+    assert thread_lifecycle_params["methods"]["watch"] == "codex.threads.watch"
+    assert thread_lifecycle_params["notification_bridge"]["current_delivery"] == (
         "codex.threads.watch task stream"
     )
-    assert thread_lifecycle.params["task_streaming"]["task_stream_method"] == "tasks/resubscribe"
-    assert thread_lifecycle.params["stable_thread_fields"] == ["id", "title", "status", "codex.raw"]
+    assert thread_lifecycle_params["task_streaming"]["task_stream_method"] == "tasks/resubscribe"
+    assert thread_lifecycle_params["stable_thread_fields"] == [
+        "id",
+        "title",
+        "status",
+        "codex.raw",
+    ]
     assert any(
         "thread/unsubscribe is intentionally excluded" in note
-        for note in thread_lifecycle.params["notification_bridge"]["notes"]
+        for note in thread_lifecycle_params["notification_bridge"]["notes"]
     )
     assert (
-        thread_lifecycle.params["method_contracts"]["codex.threads.watch"][
+        thread_lifecycle_params["method_contracts"]["codex.threads.watch"][
             "notification_response_status"
         ]
         == 204
     )
 
     interrupt = ext_by_uri[INTERRUPT_CALLBACK_EXTENSION_URI]
-    assert interrupt.params["profile"] == profile
-    assert interrupt.params["request_id_field"] == "metadata.shared.interrupt.request_id"
-    assert interrupt.params["supported_metadata"] == ["codex.directory"]
-    assert interrupt.params["provider_private_metadata"] == ["codex.directory"]
-    assert interrupt.params["methods"]["reply_permissions"] == "a2a.interrupt.permissions.reply"
-    assert interrupt.params["methods"]["reply_elicitation"] == "a2a.interrupt.elicitation.reply"
-    assert "permissions.asked" in interrupt.params["supported_interrupt_events"]
-    assert "elicitation.asked" in interrupt.params["supported_interrupt_events"]
-    assert interrupt.params["permissions_reply_contract"]["scope"] == (
+    interrupt_params = _require_params(interrupt)
+    assert interrupt_params["profile"] == profile
+    assert interrupt_params["request_id_field"] == "metadata.shared.interrupt.request_id"
+    assert interrupt_params["supported_metadata"] == ["codex.directory"]
+    assert interrupt_params["provider_private_metadata"] == ["codex.directory"]
+    assert interrupt_params["methods"]["reply_permissions"] == "a2a.interrupt.permissions.reply"
+    assert interrupt_params["methods"]["reply_elicitation"] == "a2a.interrupt.elicitation.reply"
+    assert "permissions.asked" in interrupt_params["supported_interrupt_events"]
+    assert "elicitation.asked" in interrupt_params["supported_interrupt_events"]
+    assert interrupt_params["permissions_reply_contract"]["scope"] == (
         "optional persistence scope: turn or session"
     )
-    assert interrupt.params["elicitation_reply_contract"]["action"] == (
+    assert interrupt_params["elicitation_reply_contract"]["action"] == (
         "accept, decline, or cancel"
     )
-    assert interrupt.params["errors"]["business_codes"]["INTERRUPT_REQUEST_EXPIRED"] == -32007
-    assert interrupt.params["errors"]["business_codes"]["INTERRUPT_TYPE_MISMATCH"] == -32008
-    assert "expected_interrupt_type" in interrupt.params["errors"]["error_data_fields"]
-    assert "actual_interrupt_type" in interrupt.params["errors"]["error_data_fields"]
+    assert interrupt_params["errors"]["business_codes"]["INTERRUPT_REQUEST_EXPIRED"] == -32007
+    assert interrupt_params["errors"]["business_codes"]["INTERRUPT_TYPE_MISMATCH"] == -32008
+    assert "expected_interrupt_type" in interrupt_params["errors"]["error_data_fields"]
+    assert "actual_interrupt_type" in interrupt_params["errors"]["error_data_fields"]
 
     exec_control = ext_by_uri[EXEC_CONTROL_EXTENSION_URI]
-    assert exec_control.params["profile"] == profile
-    assert exec_control.params["supported_metadata"] == ["codex.directory"]
-    assert exec_control.params["provider_private_metadata"] == ["codex.directory"]
-    assert exec_control.params["task_streaming"]["task_stream_method"] == "tasks/resubscribe"
-    start_contract = exec_control.params["method_contracts"]["codex.exec.start"]
+    exec_control_params = _require_params(exec_control)
+    assert exec_control_params["profile"] == profile
+    assert exec_control_params["supported_metadata"] == ["codex.directory"]
+    assert exec_control_params["provider_private_metadata"] == ["codex.directory"]
+    assert exec_control_params["task_streaming"]["task_stream_method"] == "tasks/resubscribe"
+    start_contract = exec_control_params["method_contracts"]["codex.exec.start"]
     assert start_contract["execution_binding"] == "standalone_interactive_command_exec"
     assert start_contract["result"]["fields"] == ["ok", "task_id", "context_id", "process_id"]
     assert any("codex.sessions.shell" in note for note in start_contract["notes"])
 
     wire_contract = ext_by_uri[WIRE_CONTRACT_EXTENSION_URI]
-    assert wire_contract.params["protocol_version"] == "0.3.0"
-    assert "agent/getAuthenticatedExtendedCard" in wire_contract.params["all_jsonrpc_methods"]
-    assert "tasks/pushNotificationConfig/set" in wire_contract.params["all_jsonrpc_methods"]
-    assert "POST /v1/message:send" in wire_contract.params["core"]["http_endpoints"]
-    assert "GET /v1/card" in wire_contract.params["core"]["http_endpoints"]
+    wire_contract_params = _require_params(wire_contract)
+    assert wire_contract_params["protocol_version"] == "0.3.0"
+    assert "agent/getAuthenticatedExtendedCard" in wire_contract_params["all_jsonrpc_methods"]
+    assert "tasks/pushNotificationConfig/set" in wire_contract_params["all_jsonrpc_methods"]
+    assert "POST /v1/message:send" in wire_contract_params["core"]["http_endpoints"]
+    assert "GET /v1/card" in wire_contract_params["core"]["http_endpoints"]
 
     compatibility = ext_by_uri[COMPATIBILITY_PROFILE_EXTENSION_URI]
-    assert compatibility.params["profile_id"] == "codex-a2a-single-tenant-coding-v1"
-    assert compatibility.params["protocol_version"] == "0.3.0"
-    assert compatibility.params["deployment"] == profile["deployment"]
-    assert compatibility.params["runtime_features"] == profile["runtime_features"]
-    assert "agent/getAuthenticatedExtendedCard" in compatibility.params["core"]["jsonrpc_methods"]
-    assert compatibility.params["extension_taxonomy"]["provider_private_metadata"] == [
+    compatibility_params = _require_params(compatibility)
+    assert compatibility_params["profile_id"] == "codex-a2a-single-tenant-coding-v1"
+    assert compatibility_params["protocol_version"] == "0.3.0"
+    assert compatibility_params["deployment"] == profile["deployment"]
+    assert compatibility_params["runtime_features"] == profile["runtime_features"]
+    assert "agent/getAuthenticatedExtendedCard" in compatibility_params["core"]["jsonrpc_methods"]
+    assert compatibility_params["extension_taxonomy"]["provider_private_metadata"] == [
         "codex.directory"
     ]
-    assert compatibility.params["method_retention"]["agent/getAuthenticatedExtendedCard"] == {
+    assert compatibility_params["method_retention"]["agent/getAuthenticatedExtendedCard"] == {
         "surface": "core",
         "availability": "always",
         "retention": "required",
     }
-    assert compatibility.params["method_retention"]["tasks/pushNotificationConfig/set"] == {
+    assert compatibility_params["method_retention"]["tasks/pushNotificationConfig/set"] == {
         "surface": "core",
         "availability": "always",
         "retention": "required",
     }
     assert any(
         "single-tenant, shared-workspace coding profile" in note
-        for note in compatibility.params["consumer_guidance"]
+        for note in compatibility_params["consumer_guidance"]
     )
-    assert any("urn:a2a:*" in note for note in compatibility.params["consumer_guidance"])
+    assert any("urn:a2a:*" in note for note in compatibility_params["consumer_guidance"])
     assert any(
-        "execution_environment" in note for note in compatibility.params["consumer_guidance"]
+        "execution_environment" in note for note in compatibility_params["consumer_guidance"]
     )
     assert any(
         "terminal tasks/resubscribe replay-once behavior" in note
-        for note in compatibility.params["consumer_guidance"]
+        for note in compatibility_params["consumer_guidance"]
     )
-    assert any("codex.threads.*" in note for note in compatibility.params["consumer_guidance"])
-    assert any("codex.exec.*" in note for note in compatibility.params["consumer_guidance"])
-    shell_policy = compatibility.params["method_retention"]["codex.sessions.shell"]
+    assert any("codex.threads.*" in note for note in compatibility_params["consumer_guidance"])
+    assert any("codex.exec.*" in note for note in compatibility_params["consumer_guidance"])
+    shell_policy = compatibility_params["method_retention"]["codex.sessions.shell"]
     assert shell_policy["availability"] == "enabled"
     assert shell_policy["retention"] == "deployment-conditional"
     assert shell_policy["toggle"] == "A2A_ENABLE_SESSION_SHELL"
-    exec_policy = compatibility.params["method_retention"]["codex.exec.start"]
+    exec_policy = compatibility_params["method_retention"]["codex.exec.start"]
     assert exec_policy["availability"] == "always"
     assert exec_policy["retention"] == "stable"
     assert exec_policy["extension_uri"] == "urn:codex-a2a:codex-exec/v1"
-    thread_policy = compatibility.params["method_retention"]["codex.threads.watch"]
+    thread_policy = compatibility_params["method_retention"]["codex.threads.watch"]
     assert thread_policy["availability"] == "always"
     assert thread_policy["retention"] == "stable"
     assert thread_policy["extension_uri"] == "urn:codex-a2a:codex-thread-lifecycle/v1"
@@ -404,18 +498,28 @@ def test_authenticated_extended_agent_card_chat_examples_include_project_hint_wh
         make_settings(a2a_bearer_token="test-token", a2a_project="alpha")
     )
     chat_skill = next(skill for skill in card.skills if skill.id == "codex.chat")
-    assert any("project alpha" in example for example in chat_skill.examples)
+    assert any("project alpha" in example for example in _require_examples(chat_skill))
 
 
 def test_public_agent_card_skills_are_minimal() -> None:
     card = build_agent_card(make_settings(a2a_bearer_token="test-token"))
     session_skill = next(skill for skill in card.skills if skill.id == "codex.sessions.query")
-    thread_skill = next(skill for skill in card.skills if skill.id == "codex.threads.lifecycle")
+    session_control_skill = next(
+        skill for skill in card.skills if skill.id == "codex.sessions.control"
+    )
+    thread_control_skill = next(
+        skill for skill in card.skills if skill.id == "codex.threads.control"
+    )
+    thread_watch_skill = next(skill for skill in card.skills if skill.id == "codex.threads.watch")
 
     assert session_skill.examples is None
     assert "provider-private" in session_skill.tags
-    assert thread_skill.examples is None
-    assert "provider-private" in thread_skill.tags
+    assert session_control_skill.examples is None
+    assert "provider-private" in session_control_skill.tags
+    assert thread_control_skill.examples is None
+    assert "provider-private" in thread_control_skill.tags
+    assert thread_watch_skill.examples is None
+    assert "provider-private" in thread_watch_skill.tags
 
 
 def test_authenticated_extended_agent_card_omits_shell_method_when_disabled() -> None:
@@ -428,19 +532,20 @@ def test_authenticated_extended_agent_card_omits_shell_method_when_disabled() ->
     )
     ext_by_uri = {ext.uri: ext for ext in card.capabilities.extensions or []}
     session_query = ext_by_uri[SESSION_QUERY_EXTENSION_URI]
+    session_query_params = _require_params(session_query)
 
-    assert "shell" not in session_query.params["methods"]
-    assert "shell" not in session_query.params["control_methods"]
-    assert "codex.sessions.shell" not in session_query.params["method_contracts"]
-    assert session_query.params["profile"]["runtime_features"]["session_shell"] == {
+    assert "shell" not in session_query_params["methods"]
+    assert "shell" not in session_query_params["control_methods"]
+    assert "codex.sessions.shell" not in session_query_params["method_contracts"]
+    assert session_query_params["profile"]["runtime_features"]["session_shell"] == {
         "enabled": False,
         "availability": "disabled",
         "toggle": "A2A_ENABLE_SESSION_SHELL",
     }
-    assert session_query.params["profile"]["runtime_features"]["interrupts"] == {
+    assert session_query_params["profile"]["runtime_features"]["interrupts"] == {
         "request_ttl_seconds": 45
     }
-    assert session_query.params["profile"]["runtime_features"]["execution_environment"] == {
+    assert session_query_params["profile"]["runtime_features"]["execution_environment"] == {
         "sandbox": {
             "mode": "unknown",
             "filesystem_scope": "unknown",
@@ -456,17 +561,19 @@ def test_authenticated_extended_agent_card_omits_shell_method_when_disabled() ->
         },
     }
     wire_contract = ext_by_uri[WIRE_CONTRACT_EXTENSION_URI]
-    assert "codex.sessions.shell" not in wire_contract.params["all_jsonrpc_methods"]
-    assert wire_contract.params["extensions"]["conditionally_available_methods"] == {
+    wire_contract_params = _require_params(wire_contract)
+    assert "codex.sessions.shell" not in wire_contract_params["all_jsonrpc_methods"]
+    assert wire_contract_params["extensions"]["conditionally_available_methods"] == {
         "codex.sessions.shell": {
             "reason": "disabled_by_configuration",
             "toggle": "A2A_ENABLE_SESSION_SHELL",
         }
     }
     compatibility = ext_by_uri[COMPATIBILITY_PROFILE_EXTENSION_URI]
-    shell_policy = compatibility.params["method_retention"]["codex.sessions.shell"]
+    compatibility_params = _require_params(compatibility)
+    shell_policy = compatibility_params["method_retention"]["codex.sessions.shell"]
     assert shell_policy["availability"] == "disabled"
-    assert compatibility.params["runtime_features"]["session_shell"] == {
+    assert compatibility_params["runtime_features"]["session_shell"] == {
         "enabled": False,
         "availability": "disabled",
         "toggle": "A2A_ENABLE_SESSION_SHELL",
