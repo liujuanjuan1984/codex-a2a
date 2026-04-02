@@ -10,7 +10,7 @@
 | :--- | :--- |
 | **Expose a local Codex runtime as an A2A peer** | **`codex-a2a` (This project)** |
 | **Integrate multiple A2A peers into one app surface** | [`a2a-client-hub`](https://github.com/liujuanjuan1984/a2a-client-hub) |
-| **General purpose A2A implementation from scratch** | [A2A Core Spec](https://github.com/liujuanjuan1984/a2a-protocol-spec) |
+| **General purpose A2A implementation from scratch** | [Official A2A Protocol](https://github.com/a2aproject/A2A) |
 
 ## What This Is
 
