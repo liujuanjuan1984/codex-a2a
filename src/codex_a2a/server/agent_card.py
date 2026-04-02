@@ -34,6 +34,11 @@ from codex_a2a.contracts.extensions import (
     build_thread_lifecycle_extension_params,
     build_wire_contract_extension_params,
 )
+from codex_a2a.media_modes import (
+    DEFAULT_INPUT_MEDIA_MODES,
+    DEFAULT_OUTPUT_MEDIA_MODES,
+    JSON_RPC_INPUT_MEDIA_MODES,
+)
 from codex_a2a.profile.runtime import RuntimeProfile, build_runtime_profile
 
 
@@ -309,6 +314,8 @@ def _build_agent_skills(
                     "Codex-backed streaming."
                 ),
                 tags=["assistant", "coding", "codex", "core-a2a"],
+                input_modes=list(DEFAULT_INPUT_MEDIA_MODES),
+                output_modes=list(DEFAULT_OUTPUT_MEDIA_MODES),
             ),
             AgentSkill(
                 id="codex.sessions.query",
@@ -318,6 +325,8 @@ def _build_agent_skills(
                     "JSON-RPC extensions."
                 ),
                 tags=["codex", "sessions", "history", "provider-private"],
+                input_modes=list(JSON_RPC_INPUT_MEDIA_MODES),
+                output_modes=list(DEFAULT_OUTPUT_MEDIA_MODES),
             ),
             AgentSkill(
                 id="codex.discovery.query",
@@ -327,6 +336,8 @@ def _build_agent_skills(
                     "JSON-RPC extensions."
                 ),
                 tags=["codex", "discovery", "provider-private"],
+                input_modes=list(JSON_RPC_INPUT_MEDIA_MODES),
+                output_modes=list(DEFAULT_OUTPUT_MEDIA_MODES),
             ),
             AgentSkill(
                 id="codex.threads.lifecycle",
@@ -336,12 +347,16 @@ def _build_agent_skills(
                     "status/archive signals through JSON-RPC extensions."
                 ),
                 tags=["codex", "threads", "lifecycle", "provider-private"],
+                input_modes=list(JSON_RPC_INPUT_MEDIA_MODES),
+                output_modes=list(DEFAULT_OUTPUT_MEDIA_MODES),
             ),
             AgentSkill(
                 id="codex.interrupt.callback",
                 name="Codex Interrupt Callback",
                 description=("Reply to shared interrupt callbacks emitted during streaming."),
                 tags=["interrupt", "shared"],
+                input_modes=list(JSON_RPC_INPUT_MEDIA_MODES),
+                output_modes=list(DEFAULT_OUTPUT_MEDIA_MODES),
             ),
             AgentSkill(
                 id="codex.exec.interactive",
@@ -351,6 +366,8 @@ def _build_agent_skills(
                     "through provider-private JSON-RPC extensions."
                 ),
                 tags=["codex", "exec", "interactive", "provider-private"],
+                input_modes=list(JSON_RPC_INPUT_MEDIA_MODES),
+                output_modes=list(DEFAULT_OUTPUT_MEDIA_MODES),
             ),
         ]
 
@@ -365,6 +382,8 @@ def _build_agent_skills(
             ),
             tags=["assistant", "coding", "codex"],
             examples=_build_chat_examples(settings.a2a_project),
+            input_modes=list(DEFAULT_INPUT_MEDIA_MODES),
+            output_modes=list(DEFAULT_OUTPUT_MEDIA_MODES),
         ),
         AgentSkill(
             id="codex.sessions.query",
@@ -378,6 +397,8 @@ def _build_agent_skills(
                 "List Codex sessions (method codex.sessions.list).",
                 "List messages for a session (method codex.sessions.messages.list).",
             ],
+            input_modes=list(JSON_RPC_INPUT_MEDIA_MODES),
+            output_modes=list(DEFAULT_OUTPUT_MEDIA_MODES),
         ),
         AgentSkill(
             id="codex.discovery.query",
@@ -392,6 +413,8 @@ def _build_agent_skills(
                 "List available apps or plugins before constructing mention.path values.",
                 "Start a discovery watch stream (method codex.discovery.watch).",
             ],
+            input_modes=list(JSON_RPC_INPUT_MEDIA_MODES),
+            output_modes=list(DEFAULT_OUTPUT_MEDIA_MODES),
         ),
         AgentSkill(
             id="codex.threads.lifecycle",
@@ -405,6 +428,8 @@ def _build_agent_skills(
                 "Fork a Codex thread (method codex.threads.fork).",
                 "Start a lifecycle watch stream (method codex.threads.watch).",
             ],
+            input_modes=list(JSON_RPC_INPUT_MEDIA_MODES),
+            output_modes=list(DEFAULT_OUTPUT_MEDIA_MODES),
         ),
         AgentSkill(
             id="codex.interrupt.callback",
@@ -427,6 +452,8 @@ def _build_agent_skills(
                 "Submit answers for a question request by request_id.",
                 "Grant a permissions subset or answer an elicitation request by request_id.",
             ],
+            input_modes=list(JSON_RPC_INPUT_MEDIA_MODES),
+            output_modes=list(DEFAULT_OUTPUT_MEDIA_MODES),
         ),
         AgentSkill(
             id="codex.exec.interactive",
@@ -441,6 +468,8 @@ def _build_agent_skills(
                 "Start an interactive exec session (method codex.exec.start).",
                 "Write stdin bytes or resize the exec PTY by process_id.",
             ],
+            input_modes=list(JSON_RPC_INPUT_MEDIA_MODES),
+            output_modes=list(DEFAULT_OUTPUT_MEDIA_MODES),
         ),
     ]
     return skills
@@ -477,8 +506,8 @@ def _build_agent_card(
         version=settings.a2a_version,
         protocol_version=settings.a2a_protocol_version,
         preferred_transport=TransportProtocol.http_json,
-        default_input_modes=["text/plain"],
-        default_output_modes=["text/plain"],
+        default_input_modes=list(DEFAULT_INPUT_MEDIA_MODES),
+        default_output_modes=list(DEFAULT_OUTPUT_MEDIA_MODES),
         capabilities=AgentCapabilities(
             streaming=True,
             extensions=_build_agent_extensions(

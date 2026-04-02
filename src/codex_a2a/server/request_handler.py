@@ -33,6 +33,7 @@ from codex_a2a.metrics import (
     A2A_STREAM_REQUESTS_TOTAL,
     get_metrics_registry,
 )
+from codex_a2a.server.output_negotiation import apply_accepted_output_modes
 from codex_a2a.server.task_store import (
     TaskStoreOperationError,
     build_task_store_failure_metadata,
@@ -158,6 +159,17 @@ class CodexRequestHandler(DefaultRequestHandler):
         context_id = getattr(message, "contextId", None) or getattr(message, "context_id", None)
         return context_id or task_id
 
+    @staticmethod
+    def _accepted_output_modes_from_params(params) -> list[str] | None:  # noqa: ANN001
+        configuration = getattr(params, "configuration", None)
+        if configuration is None:
+            return None
+        return getattr(configuration, "accepted_output_modes", None) or getattr(
+            configuration,
+            "acceptedOutputModes",
+            None,
+        )
+
     async def on_cancel_task(
         self,
         params: TaskIdParams,
@@ -213,6 +225,7 @@ class CodexRequestHandler(DefaultRequestHandler):
     async def on_message_send_stream(self, params, context=None):
         self._metrics.inc_counter(A2A_STREAM_REQUESTS_TOTAL)
         self._metrics.inc_gauge(A2A_STREAM_ACTIVE)
+        accepted_output_modes = self._accepted_output_modes_from_params(params)
         task_id = getattr(getattr(params, "message", None), "task_id", None) or str(uuid.uuid4())
         context_id = self._resolve_context_id_from_params(params, task_id)
         queue = None
@@ -236,7 +249,9 @@ class CodexRequestHandler(DefaultRequestHandler):
                 if isinstance(event, Task):
                     self._validate_task_id_match(task_id, event.id)
                 await self._send_push_notification_if_needed(task_id, result_aggregator)
-                yield event
+                negotiated_event = apply_accepted_output_modes(event, accepted_output_modes)
+                if negotiated_event is not None:
+                    yield negotiated_event
             stream_completed = True
         except TaskStoreOperationError as exc:
             logger.exception(
@@ -270,6 +285,7 @@ class CodexRequestHandler(DefaultRequestHandler):
                 self._track_background_task(cleanup_task)
 
     async def on_message_send(self, params, context=None):
+        accepted_output_modes = self._accepted_output_modes_from_params(params)
         task_id = getattr(getattr(params, "message", None), "task_id", None) or str(uuid.uuid4())
         context_id = self._resolve_context_id_from_params(params, task_id)
         queue = None
@@ -354,6 +370,7 @@ class CodexRequestHandler(DefaultRequestHandler):
                 from a2a.utils.task import apply_history_length
 
                 result = apply_history_length(result, params.configuration.history_length)
+        result = apply_accepted_output_modes(result, accepted_output_modes)
 
         try:
             if result_aggregator is not None:

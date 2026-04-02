@@ -11,6 +11,13 @@ from codex_a2a.contracts.extensions import (
     THREAD_LIFECYCLE_EXTENSION_URI,
     WIRE_CONTRACT_EXTENSION_URI,
 )
+from codex_a2a.media_modes import (
+    APPLICATION_JSON_MEDIA_MODE,
+    DEFAULT_INPUT_MEDIA_MODES,
+    DEFAULT_OUTPUT_MEDIA_MODES,
+    IMAGE_ANY_MEDIA_MODE,
+    TEXT_PLAIN_MEDIA_MODE,
+)
 from codex_a2a.server.agent_card import (
     build_agent_card,
     build_authenticated_extended_agent_card,
@@ -45,6 +52,32 @@ def test_agent_card_declares_bearer_only_security() -> None:
 
     assert set((card.security_schemes or {}).keys()) == {"bearerAuth"}
     assert card.security == [{"bearerAuth": []}]
+
+
+def test_agent_card_declares_media_modes_that_match_runtime_contract() -> None:
+    card = build_agent_card(make_settings(a2a_bearer_token="test-token"))
+    skill_by_id = {skill.id: skill for skill in card.skills or []}
+
+    assert card.default_input_modes == DEFAULT_INPUT_MEDIA_MODES
+    assert card.default_output_modes == DEFAULT_OUTPUT_MEDIA_MODES
+
+    chat_skill = skill_by_id["codex.chat"]
+    assert chat_skill.input_modes == DEFAULT_INPUT_MEDIA_MODES
+    assert chat_skill.output_modes == DEFAULT_OUTPUT_MEDIA_MODES
+
+    discovery_skill = skill_by_id["codex.discovery.query"]
+    assert discovery_skill.input_modes == [APPLICATION_JSON_MEDIA_MODE]
+    assert discovery_skill.output_modes == DEFAULT_OUTPUT_MEDIA_MODES
+
+    thread_skill = skill_by_id["codex.threads.lifecycle"]
+    assert thread_skill.input_modes == [APPLICATION_JSON_MEDIA_MODE]
+    assert thread_skill.output_modes == DEFAULT_OUTPUT_MEDIA_MODES
+
+    assert DEFAULT_INPUT_MEDIA_MODES == [
+        TEXT_PLAIN_MEDIA_MODE,
+        IMAGE_ANY_MEDIA_MODE,
+        APPLICATION_JSON_MEDIA_MODE,
+    ]
 
 
 def test_public_agent_card_minimizes_provider_private_contracts() -> None:

@@ -6,11 +6,17 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from a2a.server.tasks.inmemory_task_store import InMemoryTaskStore
 from a2a.types import (
+    Artifact,
+    DataPart,
+    FilePart,
+    FileWithUri,
     Message,
+    MessageSendConfiguration,
     MessageSendParams,
     Part,
     Role,
     Task,
+    TaskArtifactUpdateEvent,
     TaskIdParams,
     TaskState,
     TaskStatus,
@@ -243,6 +249,173 @@ async def test_stream_disconnect_cancels_producer() -> None:
 
     assert handler._producer_task.cancelled()
     handler._queue.close.assert_awaited_once_with(immediate=True)
+
+
+@pytest.mark.asyncio
+async def test_message_send_filters_unaccepted_output_parts_to_text() -> None:
+    data_part = Part(root=DataPart(data={"kind": "state", "tool": "bash", "status": "running"}))
+    image_part = Part(
+        root=FilePart(
+            file=FileWithUri(
+                uri="https://example.com/screenshot.png",
+                mime_type="image/png",
+                name="screenshot.png",
+            )
+        )
+    )
+    task = Task(
+        id="task-1",
+        context_id="ctx-1",
+        status=TaskStatus(
+            state=TaskState.completed,
+            message=Message(
+                message_id="m-agent",
+                role=Role.agent,
+                parts=[data_part],
+            ),
+        ),
+        history=[
+            Message(
+                message_id="m-user",
+                role=Role.user,
+                parts=[image_part],
+            )
+        ],
+        artifacts=[
+            Artifact(
+                artifact_id="artifact-1",
+                parts=[data_part],
+            )
+        ],
+    )
+
+    class _Aggregator:
+        async def consume_and_break_on_interrupt(self, _consumer, *, blocking, event_callback):
+            del _consumer, blocking, event_callback
+            return task, False, None
+
+    class _Handler(CodexRequestHandler):
+        def __init__(self) -> None:
+            super().__init__(agent_executor=MagicMock(), task_store=MagicMock())
+            self.queue = AsyncMock()
+            self.producer = MagicMock()
+
+        async def _setup_message_execution(self, params, context=None):  # noqa: ANN001
+            del params, context
+            return (
+                MagicMock(),
+                "task-1",
+                self.queue,
+                _Aggregator(),
+                self.producer,
+            )
+
+        async def _cleanup_producer(self, producer_task, task_id):  # noqa: ANN001
+            del producer_task, task_id
+
+        async def _send_push_notification_if_needed(self, task_id, result_aggregator):  # noqa: ANN001
+            del task_id, result_aggregator
+
+        def _track_background_task(self, task):  # noqa: ANN001
+            task.cancel()
+
+    params = MessageSendParams(
+        message=Message(
+            message_id="m-1",
+            role=Role.user,
+            parts=[Part(root=TextPart(text="hello"))],
+            task_id="task-1",
+            context_id="ctx-1",
+        ),
+        configuration=MessageSendConfiguration(accepted_output_modes=["text/plain"]),
+    )
+    result = await _Handler().on_message_send(params)
+
+    status_part = result.status.message.parts[0].root
+    artifact_part = result.artifacts[0].parts[0].root
+    history_part = result.history[0].parts[0].root
+
+    assert isinstance(status_part, TextPart)
+    assert status_part.text == '{"kind":"state","status":"running","tool":"bash"}'
+    assert isinstance(artifact_part, TextPart)
+    assert artifact_part.text == '{"kind":"state","status":"running","tool":"bash"}'
+    assert isinstance(history_part, TextPart)
+    assert (
+        history_part.text
+        == "[file omitted: screenshot.png | image/png | https://example.com/screenshot.png]"
+    )
+
+
+@pytest.mark.asyncio
+async def test_message_send_stream_filters_unaccepted_output_parts_to_text() -> None:
+    update = TaskArtifactUpdateEvent(
+        task_id="task-1",
+        context_id="ctx-1",
+        artifact=Artifact(
+            artifact_id="artifact-1",
+            parts=[
+                Part(root=DataPart(data={"kind": "state", "tool": "bash", "status": "running"}))
+            ],
+        ),
+        append=False,
+        last_chunk=True,
+    )
+
+    class _Aggregator:
+        def consume_and_emit(self, _consumer):
+            del _consumer
+            return self
+
+        def __aiter__(self):
+            return self
+
+        async def __anext__(self):
+            if getattr(self, "_done", False):
+                raise StopAsyncIteration
+            self._done = True
+            return update
+
+    class _Handler(CodexRequestHandler):
+        def __init__(self) -> None:
+            super().__init__(agent_executor=MagicMock(), task_store=MagicMock())
+            self.queue = AsyncMock()
+            self.producer = MagicMock()
+
+        async def _setup_message_execution(self, params, context=None):  # noqa: ANN001
+            del params, context
+            return (
+                MagicMock(),
+                "task-1",
+                self.queue,
+                _Aggregator(),
+                self.producer,
+            )
+
+        async def _cleanup_producer(self, producer_task, task_id):  # noqa: ANN001
+            del producer_task, task_id
+
+        async def _send_push_notification_if_needed(self, task_id, result_aggregator):  # noqa: ANN001
+            del task_id, result_aggregator
+
+        def _track_background_task(self, task):  # noqa: ANN001
+            task.cancel()
+
+    params = MessageSendParams(
+        message=Message(
+            message_id="m-1",
+            role=Role.user,
+            parts=[Part(root=TextPart(text="hello"))],
+            task_id="task-1",
+            context_id="ctx-1",
+        ),
+        configuration=MessageSendConfiguration(accepted_output_modes=["text/plain"]),
+    )
+    events = [event async for event in _Handler().on_message_send_stream(params)]
+
+    assert len(events) == 1
+    part = events[0].artifact.parts[0].root
+    assert isinstance(part, TextPart)
+    assert part.text == '{"kind":"state","status":"running","tool":"bash"}'
 
 
 @pytest.mark.asyncio
