@@ -35,6 +35,30 @@ def mock_client():
     return client
 
 
+def test_executor_exposes_public_session_guard_bindings(mock_client) -> None:
+    executor = CodexAgentExecutor(mock_client, streaming_enabled=False)
+
+    bindings = executor.session_guard_bindings
+
+    assert bindings.session_claim.__self__ is executor._session_runtime
+    assert bindings.session_claim.__func__ is executor._session_runtime.claim_session.__func__
+    assert bindings.session_claim_finalize.__self__ is executor._session_runtime
+    assert (
+        bindings.session_claim_finalize.__func__
+        is executor._session_runtime.finalize_session_claim.__func__
+    )
+    assert bindings.session_claim_release.__self__ is executor._session_runtime
+    assert (
+        bindings.session_claim_release.__func__
+        is executor._session_runtime.release_session_claim.__func__
+    )
+    assert bindings.session_owner_matcher.__self__ is executor._session_runtime
+    assert (
+        bindings.session_owner_matcher.__func__
+        is executor._session_runtime.session_owner_matches.__func__
+    )
+
+
 @pytest.mark.asyncio
 async def test_identity_isolation(mock_client):
     executor = CodexAgentExecutor(mock_client, streaming_enabled=False)

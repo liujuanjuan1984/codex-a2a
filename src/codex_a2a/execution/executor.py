@@ -3,8 +3,9 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
-from collections.abc import Mapping
+from collections.abc import Awaitable, Callable, Mapping
 from contextlib import suppress
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from a2a.server.agent_execution import AgentExecutor, RequestContext
@@ -55,6 +56,20 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+SessionClaimHook = Callable[..., Awaitable[bool]]
+SessionFinalizeHook = Callable[..., Awaitable[None]]
+SessionOwnerMatcher = Callable[..., Awaitable[bool | None]]
+
+
+@dataclass(frozen=True)
+class SessionGuardBindings:
+    session_claim: SessionClaimHook
+    session_claim_finalize: SessionFinalizeHook
+    session_claim_release: SessionFinalizeHook
+    session_owner_matcher: SessionOwnerMatcher
+    directory_resolver: Callable[[str | None], str | None]
+
+
 class CodexAgentExecutor(AgentExecutor):
     def __init__(
         self,
@@ -78,6 +93,17 @@ class CodexAgentExecutor(AgentExecutor):
             session_cache_maxsize=session_cache_maxsize,
             state_store=session_state_store,
         )
+        self._session_guard_bindings = SessionGuardBindings(
+            session_claim=self._session_runtime.claim_session,
+            session_claim_finalize=self._session_runtime.finalize_session_claim,
+            session_claim_release=self._session_runtime.release_session_claim,
+            session_owner_matcher=self._session_runtime.session_owner_matches,
+            directory_resolver=self._resolve_and_validate_directory,
+        )
+
+    @property
+    def session_guard_bindings(self) -> SessionGuardBindings:
+        return self._session_guard_bindings
 
     def _resolve_and_validate_directory(self, requested: str | None) -> str | None:
         return resolve_and_validate_directory(self._client, requested)

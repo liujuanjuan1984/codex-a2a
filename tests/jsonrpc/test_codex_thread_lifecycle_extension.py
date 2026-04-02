@@ -19,7 +19,7 @@ async def test_thread_lifecycle_extension_routes_control_methods(monkeypatch) ->
     dummy = DummyCodexClient(
         make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
-    monkeypatch.setattr(app_module, "CodexClient", lambda _settings: dummy)
+    monkeypatch.setattr(app_module, "CodexClient", lambda _settings, **kwargs: dummy)
     app = app_module.create_app(
         make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
@@ -106,7 +106,7 @@ async def test_thread_lifecycle_watch_routes_to_runtime(monkeypatch) -> None:
     dummy = DummyCodexClient(
         make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
-    monkeypatch.setattr(app_module, "CodexClient", lambda _settings: dummy)
+    monkeypatch.setattr(app_module, "CodexClient", lambda _settings, **kwargs: dummy)
     app = app_module.create_app(
         make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
@@ -151,7 +151,7 @@ async def test_thread_lifecycle_extension_rejects_invalid_request_shapes(monkeyp
     dummy = DummyCodexClient(
         make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )
-    monkeypatch.setattr(app_module, "CodexClient", lambda _settings: dummy)
+    monkeypatch.setattr(app_module, "CodexClient", lambda _settings, **kwargs: dummy)
     app = app_module.create_app(
         make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
     )

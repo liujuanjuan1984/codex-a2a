@@ -132,6 +132,102 @@ def test_create_app_propagates_stream_idle_diagnostic_setting(monkeypatch) -> No
     assert app.state.codex_executor._stream_idle_diagnostic_seconds == 42.0
 
 
+def test_create_app_uses_executor_public_session_guard_bindings(monkeypatch) -> None:
+    import codex_a2a.server.application as app_module
+
+    captured: dict[str, object] = {}
+
+    async def claim(*, identity: str, session_id: str) -> bool:
+        del identity, session_id
+        return False
+
+    async def finalize(*, identity: str, session_id: str) -> None:
+        del identity, session_id
+
+    async def release(*, identity: str, session_id: str) -> None:
+        del identity, session_id
+
+    async def owner_matcher(*, identity: str, session_id: str) -> bool | None:
+        del identity, session_id
+        return True
+
+    class DummyExecutor:
+        def __init__(self, *_args, stream_idle_diagnostic_seconds=None, **_kwargs) -> None:
+            self._stream_idle_diagnostic_seconds = stream_idle_diagnostic_seconds
+            self.session_guard_bindings = SimpleNamespace(
+                session_claim=claim,
+                session_claim_finalize=finalize,
+                session_claim_release=release,
+                session_owner_matcher=owner_matcher,
+                directory_resolver=lambda requested: requested,
+            )
+
+    class DummyJSONRPCApp:
+        def __init__(self, *args, guard_hooks, **kwargs) -> None:  # noqa: ANN002, ANN003
+            del args, kwargs
+            captured["guard_hooks"] = guard_hooks
+
+        def add_routes_to_app(self, _app) -> None:  # noqa: ANN001
+            return None
+
+    class DummyRESTAdapter:
+        def __init__(self, *args, **kwargs) -> None:  # noqa: ANN002, ANN003
+            del args, kwargs
+
+        def routes(self) -> dict[tuple[str, str], object]:
+            return {}
+
+    monkeypatch.setattr(app_module, "CodexClient", DummyChatCodexClient)
+    monkeypatch.setattr(app_module, "CodexAgentExecutor", DummyExecutor)
+    monkeypatch.setattr(app_module, "CodexExecRuntime", lambda **_kwargs: SimpleNamespace())
+    monkeypatch.setattr(app_module, "CodexDiscoveryRuntime", lambda **_kwargs: SimpleNamespace())
+    monkeypatch.setattr(
+        app_module, "CodexThreadLifecycleRuntime", lambda **_kwargs: SimpleNamespace()
+    )
+    monkeypatch.setattr(app_module, "CodexSessionQueryJSONRPCApplication", DummyJSONRPCApp)
+    monkeypatch.setattr(app_module, "RESTAdapter", DummyRESTAdapter)
+
+    app_module.create_app(make_settings(a2a_bearer_token="test-token"))
+
+    guard_hooks = captured["guard_hooks"]
+    assert guard_hooks.session_claim is claim
+    assert guard_hooks.session_claim_finalize is finalize
+    assert guard_hooks.session_claim_release is release
+    assert guard_hooks.session_owner_matcher is owner_matcher
+
+
+def test_create_app_does_not_swallow_client_type_error_when_interrupt_store_is_supported(
+    monkeypatch,
+) -> None:
+    import codex_a2a.server.application as app_module
+
+    settings = make_settings(
+        a2a_bearer_token="test-token",
+        a2a_database_url="sqlite+aiosqlite:////tmp/test-create-app.db",
+    )
+
+    monkeypatch.setattr(app_module, "build_database_engine", lambda _settings: object())
+    monkeypatch.setattr(
+        app_module,
+        "build_runtime_state_runtime",
+        lambda _settings, *, engine=None: SimpleNamespace(  # noqa: ARG005
+            state_store=object(),
+            startup=AsyncMock(),
+            shutdown=AsyncMock(),
+        ),
+    )
+
+    class BrokenClient:
+        def __init__(self, _settings, *, interrupt_request_store=None) -> None:  # noqa: ANN001
+            if interrupt_request_store is not None:
+                raise TypeError("boom")
+
+    monkeypatch.setattr(app_module, "CodexClient", BrokenClient)
+
+    with pytest.raises(TypeError, match="boom"):
+        app_module.create_app(settings)
+
+
 @pytest.mark.asyncio
 async def test_create_app_shares_database_engine_across_runtime_components(monkeypatch) -> None:
     import codex_a2a.server.application as app_module
