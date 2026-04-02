@@ -37,6 +37,104 @@ def _make_conversation_facade(*, rpc_request, workspace_root="/workspace", model
 
 
 @pytest.mark.asyncio
+async def test_conversation_facade_overrides() -> None:
+    seen: list[tuple[str, dict | None]] = []
+
+    async def fake_rpc_request(method: str, params: dict | None = None, **_kwargs):
+        seen.append((method, params))
+        if method == "thread/start":
+            return {"thread": {"id": "thr-1"}}
+        return {"turn": {"id": "turn-1"}}
+
+    facade, _turn_trackers, tracker_factory = _make_conversation_facade(
+        rpc_request=fake_rpc_request,
+        workspace_root="/root",
+        model_id="gpt-default",
+    )
+
+    await facade.create_session(directory="/override")
+    assert seen[-1][1]["cwd"] == "/override"
+    assert seen[-1][1]["model"] == "gpt-default"
+
+    tracker = tracker_factory("thr-1", "turn-1")
+    tracker.completed.set()
+    await facade.send_message("thr-1", "hi", directory="/dir2", timeout_seconds=1.0)
+    assert seen[-1][1]["cwd"] == "/dir2"
+    assert seen[-1][1]["model"] == "gpt-default"
+
+
+@pytest.mark.asyncio
+async def test_conversation_facade_lifecycle_methods_success() -> None:
+    seen: list[tuple[str, dict | None]] = []
+
+    async def fake_rpc_request(method: str, params: dict | None = None, **_kwargs):
+        seen.append((method, params))
+        if method == "thread/list":
+            return {"data": [{"id": "thr-1", "preview": "p1"}]}
+        if method == "thread/fork":
+            return {"thread": {"id": "thr-1-fork", "preview": "f1"}}
+        if method == "thread/unarchive":
+            return {"thread": {"id": "thr-1", "preview": "p1"}}
+        if method == "thread/metadata/update":
+            return {"thread": {"id": "thr-1", "preview": "p1"}}
+        return {}
+
+    facade, _turn_trackers, _tracker_factory = _make_conversation_facade(
+        rpc_request=fake_rpc_request,
+    )
+
+    sessions = await facade.list_sessions(query={"limit": 10})
+    assert len(sessions) == 1
+    assert sessions[0]["id"] == "thr-1"
+
+    fork = await facade.thread_fork("thr-1", params={"ephemeral": True})
+    assert fork["id"] == "thr-1-fork"
+
+    await facade.thread_archive("thr-1")
+    assert seen[-1][0] == "thread/archive"
+
+    unarchive = await facade.thread_unarchive("thr-1")
+    assert unarchive["id"] == "thr-1"
+
+    metadata = await facade.thread_metadata_update("thr-1", params={"title": "new"})
+    assert metadata["id"] == "thr-1"
+
+
+@pytest.mark.asyncio
+async def test_conversation_facade_create_session_passes_title_as_name() -> None:
+    seen: list[tuple[str, dict | None]] = []
+
+    async def fake_rpc_request(method: str, params: dict | None = None, **_kwargs):
+        seen.append((method, params))
+        return {"thread": {"id": "thr-1"}}
+
+    facade, _turn_trackers, _tracker_factory = _make_conversation_facade(
+        rpc_request=fake_rpc_request,
+        model_id=None,
+    )
+
+    await facade.create_session(title="Demo Session")
+    assert seen[0] == ("thread/start", {"name": "Demo Session", "cwd": "/workspace"})
+
+
+@pytest.mark.asyncio
+async def test_conversation_facade_ignores_blank_session_title() -> None:
+    seen: list[tuple[str, dict | None]] = []
+
+    async def fake_rpc_request(method: str, params: dict | None = None, **_kwargs):
+        seen.append((method, params))
+        return {"thread": {"id": "thr-1"}}
+
+    facade, _turn_trackers, _tracker_factory = _make_conversation_facade(
+        rpc_request=fake_rpc_request,
+        model_id=None,
+    )
+
+    await facade.create_session(title="   ")
+    assert seen[0] == ("thread/start", {"cwd": "/workspace"})
+
+
+@pytest.mark.asyncio
 async def test_conversation_facade_handles_malformed_thread_responses() -> None:
     responses = iter(
         [

@@ -117,6 +117,30 @@ async def test_create_session_relies_on_startup_default_model_when_model_id_unse
 
 
 @pytest.mark.asyncio
+async def test_create_session_passes_session_title_to_thread_start_name() -> None:
+    client = CodexClient(
+        make_settings(
+            a2a_bearer_token="t-1",
+            codex_workspace_root="/safe",
+            codex_timeout=1.0,
+        )
+    )
+
+    seen: list[tuple[str, dict | None]] = []
+
+    async def fake_rpc_request(method: str, params: dict | None = None):
+        seen.append((method, params))
+        return {"thread": {"id": "thr-3"}}
+
+    client._rpc_request = fake_rpc_request
+
+    session_id = await client.create_session(title="Demo Session")
+
+    assert session_id == "thr-3"
+    assert seen == [("thread/start", {"name": "Demo Session", "cwd": "/safe"})]
+
+
+@pytest.mark.asyncio
 async def test_list_messages_applies_limit_locally_after_mapping() -> None:
     client = CodexClient(
         make_settings(
