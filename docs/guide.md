@@ -1,6 +1,6 @@
 # Usage Guide
 
-This guide covers runtime configuration, transport contracts, streaming/session/interrupt behavior, and client examples. [README.md](../README.md) stays at overview level, the stable extension URI/spec index lives in [extension-specifications.md](./extension-specifications.md), and compatibility promises live in [compatibility.md](./compatibility.md).
+This guide covers runtime configuration, transport contracts, streaming/session/interrupt behavior, and client examples. [README.md](../README.md) stays at overview level, [maintainer-architecture.md](./maintainer-architecture.md) covers internal call chains and module boundaries, the stable extension URI/spec index lives in [extension-specifications.md](./extension-specifications.md), and compatibility promises live in [compatibility.md](./compatibility.md).
 
 ## Transport Contracts
 
@@ -142,66 +142,155 @@ Current implementation note:
 
 ## Environment Variables
 
-- `CODEX_CLI_BIN`: Codex CLI binary path, default `codex`
-- `CODEX_APP_SERVER_LISTEN`: Codex app-server listen target, default `stdio://`
-- `CODEX_MODEL`: default Codex model, passed to `codex app-server` via `-c model=...`, default `gpt-5.1-codex`
-- `CODEX_MODEL_ID`: per-turn model override passed to `turn/start` (optional)
-- `CODEX_MODEL_REASONING_EFFORT`: explicit reasoning effort override passed to Codex CLI app-server via `-c model_reasoning_effort=...` (optional)
-- `CODEX_PROFILE`: Codex profile name passed to `codex app-server` via `-c profile=...` (optional)
-- `CODEX_MODEL_REASONING_SUMMARY`: default reasoning summary mode passed to `codex app-server` via `-c model_reasoning_summary=...` (optional)
-- `CODEX_MODEL_VERBOSITY`: default model verbosity passed to `codex app-server` via `-c model_verbosity=...` (optional)
-- `CODEX_APPROVAL_POLICY`: default approval policy passed to `codex app-server` via `-c approval_policy=...` (optional)
-- `CODEX_SANDBOX_MODE`: default sandbox mode passed to `codex app-server` via `-c sandbox_mode=...` (optional)
-- `CODEX_SANDBOX_WORKSPACE_WRITE_WRITABLE_ROOTS`: comma-separated writable roots for `sandbox_workspace_write` passed to `codex app-server` via `-c sandbox_workspace_write=...` (optional)
-- `CODEX_SANDBOX_WORKSPACE_WRITE_NETWORK_ACCESS`: default workspace-write network access flag passed through `sandbox_workspace_write` (optional)
-- `CODEX_SANDBOX_WORKSPACE_WRITE_EXCLUDE_SLASH_TMP`: default workspace-write `/tmp` exclusion flag passed through `sandbox_workspace_write` (optional)
-- `CODEX_SANDBOX_WORKSPACE_WRITE_EXCLUDE_TMPDIR_ENV_VAR`: default workspace-write `$TMPDIR` exclusion flag passed through `sandbox_workspace_write` (optional)
-- `CODEX_WEB_SEARCH`: default Codex web search mode passed to `codex app-server` via `-c web_search=...` (optional)
-- `CODEX_REVIEW_MODEL`: default review model passed to `codex app-server` via `-c review_model=...` (optional)
-- `CODEX_WORKSPACE_ROOT`: default Codex workspace root (optional)
-- `CODEX_PROVIDER_ID`: deployment metadata only (optional)
-- `CODEX_AGENT`: deployment metadata only (optional)
-- `CODEX_VARIANT`: deployment metadata only (optional)
-- `CODEX_TIMEOUT`: request timeout in seconds, default `120`
-- `CODEX_TIMEOUT_STREAM`: streaming turn timeout in seconds (optional); unset means no explicit stream timeout for the streaming send path
+Use the grouped sections below as the deployment-first reading order:
 
-- `A2A_PUBLIC_URL`: externally reachable A2A URL prefix, default `http://127.0.0.1:8000`
-- `A2A_PROJECT`: optional project label injected into Agent Card extensions and examples
-- `A2A_TITLE`: agent name, default `Codex A2A`
-- `A2A_DESCRIPTION`: agent description
-- `A2A_VERSION`: agent version
-- `A2A_PROTOCOL_VERSION`: A2A protocol version, default `0.3.0`
+- Start with the required auth token.
+- Then configure the common A2A runtime surface and service identity.
+- If you use peer calls, configure the outbound A2A client defaults next.
+- Then set the upstream Codex defaults.
+- Only after that reach for advanced runtime toggles, advanced Codex overrides, or discovery-only metadata.
+
+### Required Configuration
+
+- `A2A_BEARER_TOKEN`: required; service fails fast if unset. Used for inbound A2A request authentication.
+
+### Common Runtime Configuration (A2A)
+
 - `A2A_HOST`: bind host, default `127.0.0.1`
 - `A2A_PORT`: bind port, default `8000`
-- `A2A_BEARER_TOKEN`: required; service fails fast if unset
-- `A2A_DATABASE_URL`: SQLAlchemy async database URL shared by the database task store and runtime-state persistence. When unset and `CODEX_WORKSPACE_ROOT` is configured, it defaults to a SQLite database under `${CODEX_WORKSPACE_ROOT}/.codex-a2a/codex-a2a.db`; otherwise it falls back to `sqlite+aiosqlite:///./codex-a2a.db` relative to the service start directory. This enables database-backed task persistence and also backs session-binding ownership state plus pending interrupt callback requests for cross-restart recovery. Persisted session binding and ownership state are retained independently from the in-memory session cache TTL. In the default SQLite-backed deployment, terminal-task persistence also uses an atomic database upsert so late conflicting writes do not depend on a process-local pre-read. SQLite engines started by `codex-a2a` now default to `journal_mode=WAL`, `busy_timeout=30000`, and `synchronous=NORMAL`; for multi-instance deployments, still prefer an explicit per-instance `A2A_DATABASE_URL` instead of sharing a default SQLite file.
-- `A2A_ENABLE_HEALTH_ENDPOINT`: enable the authenticated lightweight `/health` probe, default `true`
-- `A2A_ENABLE_SESSION_SHELL`: expose `codex.sessions.shell` on JSON-RPC extensions, default `true`
+- `A2A_PUBLIC_URL`: externally reachable A2A URL prefix, default `http://127.0.0.1:8000`
+- `A2A_DATABASE_URL`: SQLAlchemy async database URL. Defaults to SQLite under `${CODEX_WORKSPACE_ROOT}/.codex-a2a/codex-a2a.db`.
 - `A2A_LOG_LEVEL`: `DEBUG/INFO/WARNING/ERROR`, default `INFO`
 - `A2A_LOG_PAYLOADS`: log A2A/Codex payload bodies, default `false`
 - `A2A_LOG_BODY_LIMIT`: payload log body size limit, default `0` (no truncation)
-- `A2A_DOCUMENTATION_URL`: optional URL exposed via Agent Card `documentationUrl`
-- `A2A_ALLOW_DIRECTORY_OVERRIDE`: allow `metadata.codex.directory` overrides within the configured workspace boundary, default `true`
-- `A2A_SESSION_CACHE_TTL_SECONDS`: in-memory TTL for `(identity, contextId) -> Codex session_id`, default `3600`. When `A2A_DATABASE_URL` is configured, this only controls the local process cache.
-- `A2A_SESSION_CACHE_MAXSIZE`: max cache entries, default `10000`
-- `A2A_CANCEL_ABORT_TIMEOUT_SECONDS`: how long `tasks/cancel` waits for in-flight execution/session-create cleanup after issuing cancellation, default `1.0`; `0` means best-effort cancel without waiting
-- `A2A_STREAM_IDLE_DIAGNOSTIC_SECONDS`: threshold before the server emits a stream idle diagnostic log, default `60.0`
-- `A2A_CLIENT_TIMEOUT_SECONDS`: default outbound A2A client request timeout in seconds, default `30.0`
+- `A2A_TITLE`: agent name, default `Codex A2A`
+- `A2A_DESCRIPTION`: agent description exposed on Agent Card and docs surfaces
+- `A2A_VERSION`: agent version string
+- `A2A_PROJECT`: optional project label injected into examples and discovery metadata
+- `A2A_PROTOCOL_VERSION`: advertised A2A protocol version, default `0.3.0`
+- `A2A_DOCUMENTATION_URL`: optional external documentation URL exposed on Agent Card
+
+### Outbound A2A Client Defaults
+
+These settings affect peer calls made through `codex-a2a call` or the embedded `a2a_call(...)` tool surface.
+
+- `A2A_CLIENT_TIMEOUT_SECONDS`: default outbound request timeout, default `30.0`
 - `A2A_CLIENT_CARD_FETCH_TIMEOUT_SECONDS`: timeout for outbound Agent Card fetches, default `5.0`
-- `A2A_CLIENT_USE_CLIENT_PREFERENCE`: whether outbound transport negotiation should prefer the local client ordering, default `false`
-- `A2A_CLIENT_BEARER_TOKEN`: optional bearer token injected into outbound A2A requests, including Agent Card fetches when configured. This applies to the target peer service used by `codex-a2a call` or `a2a_call(url, message)`, not to this service's inbound `A2A_BEARER_TOKEN`.
-- `A2A_CLIENT_BASIC_AUTH`: optional Basic auth credential injected into outbound A2A requests when bearer auth is not configured. Accepts `username:password` or its base64-encoded form. This also applies to the target peer service, not to inbound auth on this runtime.
+- `A2A_CLIENT_USE_CLIENT_PREFERENCE`: whether outbound transport negotiation should prefer local client ordering, default `false`
 - `A2A_CLIENT_SUPPORTED_TRANSPORTS`: comma-separated outbound transport preference list, default `JSONRPC,HTTP+JSON`
-- `A2A_INTERRUPT_REQUEST_TTL_SECONDS`: TTL for pending interrupt callbacks before they become expired, default `3600`
-- `A2A_EXECUTION_SANDBOX_MODE`: declarative sandbox mode for machine-readable discovery, default `unknown`
-- `A2A_EXECUTION_SANDBOX_FILESYSTEM_SCOPE`: optional filesystem scope override for machine-readable discovery
-- `A2A_EXECUTION_SANDBOX_WRITABLE_ROOTS`: optional comma-separated writable root list for machine-readable discovery
-- `A2A_EXECUTION_NETWORK_ACCESS`: declarative network access policy for machine-readable discovery, default `unknown`
-- `A2A_EXECUTION_NETWORK_ALLOWED_DOMAINS`: optional comma-separated allowlist exposed only when safe to disclose
-- `A2A_EXECUTION_APPROVAL_POLICY`: declarative approval policy for machine-readable discovery, default `unknown`
-- `A2A_EXECUTION_APPROVAL_ESCALATION_BEHAVIOR`: optional declarative approval escalation behavior override
-- `A2A_EXECUTION_WRITE_ACCESS_SCOPE`: optional declarative write-access scope override for machine-readable discovery
-- `A2A_EXECUTION_WRITE_OUTSIDE_WORKSPACE`: optional declarative override for whether write access extends outside the workspace
+- `A2A_CLIENT_BEARER_TOKEN`: optional bearer token for the target peer service
+- `A2A_CLIENT_BASIC_AUTH`: optional Basic auth credential for the target peer service when bearer auth is not configured
+
+### Upstream Codex Configuration
+
+These variables are forwarded to the local `codex app-server` subprocess.
+
+- `CODEX_WORKSPACE_ROOT`: default Codex workspace root (optional)
+- `CODEX_CLI_BIN`: Codex CLI binary path, default `codex`
+- `CODEX_MODEL`: default Codex model, default `gpt-5.1-codex`
+- `CODEX_APPROVAL_POLICY`: default approval policy (`never`, `on-request`, etc.)
+- `CODEX_SANDBOX_MODE`: default sandbox mode (`danger-full-access`, `read-only`, etc.)
+- `CODEX_TIMEOUT`: request timeout in seconds, default `120`
+- `CODEX_WEB_SEARCH`: default Codex web search mode (`live`, `disabled`)
+
+### Advanced Runtime Settings
+
+- `A2A_ENABLE_HEALTH_ENDPOINT`: enable the authenticated lightweight `/health` probe, default `true`
+- `A2A_ENABLE_SESSION_SHELL`: expose `codex.sessions.shell` on JSON-RPC extensions, default `true`
+- `A2A_ALLOW_DIRECTORY_OVERRIDE`: allow `metadata.codex.directory` overrides within the configured workspace boundary, default `true`
+- `A2A_SESSION_CACHE_TTL_SECONDS`: in-memory TTL for session mapping, default `3600`
+- `A2A_SESSION_CACHE_MAXSIZE`: max local process session-cache entries, default `10000`
+- `A2A_CANCEL_ABORT_TIMEOUT_SECONDS`: timeout for task cancellation cleanup, default `1.0`
+- `A2A_STREAM_IDLE_DIAGNOSTIC_SECONDS`: threshold before the service emits a stream idle diagnostic log, default `60.0`
+- `A2A_INTERRUPT_REQUEST_TTL_SECONDS`: TTL for pending interrupt callbacks before they expire, default `3600`
+
+### Advanced Upstream Codex Overrides
+
+- `CODEX_APP_SERVER_LISTEN`: Codex app-server listen target, default `stdio://`
+- `CODEX_MODEL_ID`: per-turn model override passed to `turn/start`
+- `CODEX_MODEL_REASONING_EFFORT`: explicit reasoning effort override passed to `codex app-server`
+- `CODEX_MODEL_REASONING_SUMMARY`: reasoning summary mode passed to `codex app-server`
+- `CODEX_MODEL_VERBOSITY`: model verbosity override passed to `codex app-server`
+- `CODEX_PROFILE`: Codex profile name passed to `codex app-server`
+- `CODEX_REVIEW_MODEL`: review model override passed to `codex app-server`
+- `CODEX_TIMEOUT_STREAM`: explicit stream-turn timeout; unset means no dedicated stream timeout override
+- `CODEX_SANDBOX_WORKSPACE_WRITE_WRITABLE_ROOTS`: comma-separated writable roots for workspace-write mode
+- `CODEX_SANDBOX_WORKSPACE_WRITE_NETWORK_ACCESS`: workspace-write network access flag
+- `CODEX_SANDBOX_WORKSPACE_WRITE_EXCLUDE_SLASH_TMP`: workspace-write `/tmp` exclusion flag
+- `CODEX_SANDBOX_WORKSPACE_WRITE_EXCLUDE_TMPDIR_ENV_VAR`: workspace-write `$TMPDIR` exclusion flag
+
+### Discovery-only Metadata
+
+- `A2A_EXECUTION_*`: declarative execution-environment metadata published through discovery surfaces; does not control runtime startup.
+- `CODEX_PROVIDER_ID`: deployment metadata only
+- `CODEX_AGENT`: deployment metadata only
+- `CODEX_VARIANT`: deployment metadata only
+
+### Full Configuration Matrix
+
+| Variable | Description |
+| :--- | :--- |
+| `A2A_BEARER_TOKEN` | Inbound auth token |
+| `A2A_HOST` | Bind host |
+| `A2A_PORT` | Bind port |
+| `A2A_PUBLIC_URL` | Public URL prefix |
+| `A2A_DATABASE_URL` | Persistence DB URL |
+| `A2A_LOG_LEVEL` | Log level |
+| `A2A_LOG_PAYLOADS` | Log bodies |
+| `A2A_LOG_BODY_LIMIT` | Body log limit |
+| `A2A_TITLE` | Agent title |
+| `A2A_DESCRIPTION` | Agent description |
+| `A2A_VERSION` | Agent version |
+| `A2A_PROJECT` | Project label |
+| `A2A_PROTOCOL_VERSION` | Protocol version |
+| `A2A_DOCUMENTATION_URL` | Documentation URL |
+| `A2A_ENABLE_HEALTH_ENDPOINT` | Enable /health |
+| `A2A_ENABLE_SESSION_SHELL` | Enable session shell |
+| `A2A_ALLOW_DIRECTORY_OVERRIDE` | Allow cwd override |
+| `A2A_SESSION_CACHE_TTL_SECONDS` | Session cache TTL |
+| `A2A_SESSION_CACHE_MAXSIZE` | Session cache max size |
+| `A2A_CANCEL_ABORT_TIMEOUT_SECONDS` | Cancel timeout |
+| `A2A_STREAM_IDLE_DIAGNOSTIC_SECONDS` | Stream idle log threshold |
+| `A2A_CLIENT_BEARER_TOKEN` | Outbound bearer token |
+| `A2A_CLIENT_BASIC_AUTH` | Outbound basic auth |
+| `A2A_CLIENT_TIMEOUT_SECONDS` | Outbound timeout |
+| `A2A_CLIENT_CARD_FETCH_TIMEOUT_SECONDS` | Card fetch timeout |
+| `A2A_CLIENT_USE_CLIENT_PREFERENCE` | Transport preference |
+| `A2A_CLIENT_SUPPORTED_TRANSPORTS` | Supported transports |
+| `A2A_INTERRUPT_REQUEST_TTL_SECONDS` | Interrupt TTL |
+| `A2A_EXECUTION_SANDBOX_MODE` | Discovery sandbox mode |
+| `A2A_EXECUTION_SANDBOX_FILESYSTEM_SCOPE` | Discovery FS scope |
+| `A2A_EXECUTION_SANDBOX_WRITABLE_ROOTS` | Discovery writable roots |
+| `A2A_EXECUTION_NETWORK_ACCESS` | Discovery network access |
+| `A2A_EXECUTION_NETWORK_ALLOWED_DOMAINS` | Discovery net allowlist |
+| `A2A_EXECUTION_APPROVAL_POLICY` | Discovery approval policy |
+| `A2A_EXECUTION_APPROVAL_ESCALATION_BEHAVIOR` | Discovery escalation |
+| `A2A_EXECUTION_WRITE_ACCESS_SCOPE` | Discovery write scope |
+| `A2A_EXECUTION_WRITE_OUTSIDE_WORKSPACE` | Discovery write outside |
+| `CODEX_CLI_BIN` | Codex CLI path |
+| `CODEX_APP_SERVER_LISTEN` | Codex listen target |
+| `CODEX_WORKSPACE_ROOT` | Workspace root |
+| `CODEX_MODEL` | Default model |
+| `CODEX_MODEL_ID` | Turn model override |
+| `CODEX_MODEL_REASONING_EFFORT` | Reasoning effort |
+| `CODEX_MODEL_REASONING_SUMMARY` | Reasoning summary mode |
+| `CODEX_MODEL_VERBOSITY` | Model verbosity |
+| `CODEX_PROFILE` | Codex profile |
+| `CODEX_APPROVAL_POLICY` | Approval policy |
+| `CODEX_SANDBOX_MODE` | Sandbox mode |
+| `CODEX_SANDBOX_WORKSPACE_WRITE_WRITABLE_ROOTS` | Writable roots |
+| `CODEX_SANDBOX_WORKSPACE_WRITE_NETWORK_ACCESS` | Network access flag |
+| `CODEX_SANDBOX_WORKSPACE_WRITE_EXCLUDE_SLASH_TMP` | Exclude /tmp |
+| `CODEX_SANDBOX_WORKSPACE_WRITE_EXCLUDE_TMPDIR_ENV_VAR` | Exclude $TMPDIR |
+| `CODEX_WEB_SEARCH` | Web search mode |
+| `CODEX_REVIEW_MODEL` | Review model |
+| `CODEX_TIMEOUT` | Request timeout |
+| `CODEX_TIMEOUT_STREAM` | Stream turn timeout |
+| `CODEX_PROVIDER_ID` | Provider ID metadata |
+| `CODEX_AGENT` | Agent metadata |
+| `CODEX_VARIANT` | Variant metadata |
+
+For more details on each variable, see the internal configuration schema in `src/codex_a2a/config.py`.
 
 Configuration note:
 - The service configuration layer only accepts `CODEX_*` names for Codex-facing settings.

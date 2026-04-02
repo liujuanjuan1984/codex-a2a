@@ -37,8 +37,10 @@ class CodexConversationFacade:
     async def create_session(
         self, title: str | None = None, *, directory: str | None = None
     ) -> str:
-        del title
         params: dict[str, Any] = {}
+        normalized_title = title.strip() if title else ""
+        if normalized_title:
+            params["name"] = normalized_title
         if self._model_id:
             params["model"] = self._model_id
         if directory:

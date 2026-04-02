@@ -35,6 +35,8 @@ flowchart TD
     PeerA2A -->|task / stream result| Outbound
 ```
 
+For internal module boundaries and maintainer-facing request call chains, see [Maintainer Architecture Guide](docs/maintainer-architecture.md).
+
 ## Quick Start
 
 Install the released CLI with `uv tool`:
@@ -74,6 +76,10 @@ CODEX_WORKSPACE_ROOT=/abs/path/to/workspace \
 codex-a2a
 ```
 
+For the full runtime configuration matrix, outbound client settings, and deployment notes, see [Usage Guide](docs/guide.md).
+
+## Operational Notes
+
 When `A2A_DATABASE_URL` is unset and `CODEX_WORKSPACE_ROOT` is configured, the default SQLite database is created under `${CODEX_WORKSPACE_ROOT}/.codex-a2a/codex-a2a.db`.
 
 YOLO-equivalent startup note:
@@ -91,6 +97,27 @@ Authenticated extended card:
 - HTTP: `GET /v1/card`
 
 Outbound peer auth is configured with `A2A_CLIENT_BEARER_TOKEN` or `A2A_CLIENT_BASIC_AUTH`; see the Usage Guide for the complete client-side matrix.
+
+## When To Use It
+
+Use this project when:
+
+- you want to keep Codex as the runtime
+- you need A2A transports and Agent Card discovery
+- you want a thin service boundary instead of building your own adapter
+- you want inbound serving and outbound peer access in one deployable unit
+
+Prefer [a2a-client-hub](https://github.com/liujuanjuan1984/a2a-client-hub) when:
+
+- you need a broader application-facing client integration layer
+- you want higher-level A2A consumption and upstream adapter normalization
+- you want client-side integration concerns separated from the Codex runtime boundary
+
+Look elsewhere if:
+
+- you need hard multi-tenant isolation inside one shared runtime
+- you want this project to manage your process supervisor or host bootstrap
+- you want a general runtime-agnostic A2A server rather than a Codex adapter
 
 ## Highlights
 
@@ -114,32 +141,12 @@ Portable vs Private Surface:
 
 The normative compatibility split and deployment model live in [Compatibility Guide](docs/compatibility.md) and [Security Policy](SECURITY.md).
 
-## When To Use It
-
-Use this project when:
-
-- you want to keep Codex as the runtime
-- you need A2A transports and Agent Card discovery
-- you want a thin service boundary instead of building your own adapter
-- you want inbound serving and outbound peer access in one deployable unit
-
-Look elsewhere if:
-
-- you need hard multi-tenant isolation inside one shared runtime
-- you want this project to manage your process supervisor or host bootstrap
-- you want a general client integration layer rather than a runtime adapter
-
-## Recommended Client Side
-
-If you want a broader application-facing client integration layer, prefer [a2a-client-hub](https://github.com/liujuanjuan1984/a2a-client-hub).
-
-It is a better place for higher-level client concerns such as A2A consumption, upstream adapter normalization, and application-facing integration, while `codex-a2a` stays focused on the runtime boundary around Codex plus embedded peer calling.
-
 ## Further Reading
 
 - [Usage Guide](docs/guide.md) Runtime configuration, outbound access, transport usage, and client examples.
 - [Extension Specifications](docs/extension-specifications.md) Stable extension URI/spec index plus public-vs-extended card disclosure rules.
 - [Architecture Guide](docs/architecture.md) System structure, boundaries, and request flow.
+- [Maintainer Architecture Guide](docs/maintainer-architecture.md) Internal module structure, request call chains, and persistence touchpoints for contributors.
 - [Compatibility Guide](docs/compatibility.md) Supported Python/runtime surface, extension stability, and ecosystem-facing compatibility expectations.
 - [Security Policy](SECURITY.md) Threat model, deployment caveats, and vulnerability disclosure guidance.
 
