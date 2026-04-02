@@ -36,7 +36,9 @@ def normalize_accepted_output_modes(
         return None
 
     normalized = frozenset(
-        mode.strip() for mode in accepted_output_modes if isinstance(mode, str) and mode.strip()
+        mode.strip().lower()
+        for mode in accepted_output_modes
+        if isinstance(mode, str) and mode.strip()
     )
     if not normalized or "*/*" in normalized or "*" in normalized:
         return None

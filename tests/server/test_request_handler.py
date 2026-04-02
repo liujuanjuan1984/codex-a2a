@@ -305,6 +305,68 @@ async def test_message_send_stream_rejects_incompatible_output_modes_before_exec
 
 
 @pytest.mark.asyncio
+async def test_message_send_accepts_case_insensitive_output_modes() -> None:
+    class _Aggregator:
+        async def consume_and_break_on_interrupt(self, _consumer, *, blocking, event_callback):
+            del _consumer, blocking, event_callback
+            return (
+                Task(
+                    id="task-1",
+                    context_id="ctx-1",
+                    status=TaskStatus(state=TaskState.completed),
+                ),
+                False,
+                None,
+            )
+
+    class _Handler(CodexRequestHandler):
+        def __init__(self) -> None:
+            super().__init__(agent_executor=MagicMock(), task_store=MagicMock())
+            self.queue = AsyncMock()
+            self.producer = MagicMock()
+            self.setup_called = False
+
+        async def _setup_message_execution(self, params, context=None):  # noqa: ANN001
+            del params, context
+            self.setup_called = True
+            return (
+                MagicMock(),
+                "task-1",
+                self.queue,
+                _Aggregator(),
+                self.producer,
+            )
+
+        async def _cleanup_producer(self, producer_task, task_id):  # noqa: ANN001
+            del producer_task, task_id
+
+        async def _send_push_notification_if_needed(self, task_id, result_aggregator):  # noqa: ANN001
+            del task_id, result_aggregator
+
+        def _track_background_task(self, task):  # noqa: ANN001
+            task.cancel()
+
+    handler = _Handler()
+
+    params = MessageSendParams(
+        message=Message(
+            message_id="m-1",
+            role=Role.user,
+            parts=[Part(root=TextPart(text="hello"))],
+            task_id="task-1",
+            context_id="ctx-1",
+        ),
+        configuration=MessageSendConfiguration(accepted_output_modes=["Text/Plain"]),
+    )
+
+    result = await handler.on_message_send(params)
+
+    assert isinstance(result, Task)
+    assert result.status.state == TaskState.completed
+    assert handler.setup_called is True
+
+
+@pytest.mark.asyncio
 async def test_stream_disconnect_cancels_producer() -> None:
     class _FakeAggregator:
         async def consume_and_emit(self, _consumer):
