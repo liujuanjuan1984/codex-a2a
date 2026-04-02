@@ -9,13 +9,13 @@ from sqlalchemy import (
     JSON,
     Column,
     Float,
+    Integer,
     MetaData,
     String,
     Table,
     and_,
     delete,
     insert,
-    inspect,
     select,
     update,
 )
@@ -32,8 +32,11 @@ from codex_a2a.upstream.interrupts import (
 )
 
 from .database import build_database_engine
+from .migrations import SchemaMigration, add_missing_columns, apply_schema_migrations
 
 _STATE_METADATA = MetaData()
+_RUNTIME_STATE_SCHEMA_SCOPE = "runtime_state"
+CURRENT_RUNTIME_STATE_SCHEMA_VERSION = 1
 
 _SESSION_BINDINGS = Table(
     "a2a_session_bindings",
@@ -74,12 +77,34 @@ _PENDING_INTERRUPT_REQUESTS = Table(
     Column("params", JSON, nullable=False),
 )
 
-_INTERRUPT_REQUEST_SCHEMA_UPDATES = {
-    "identity": "TEXT",
-    "task_id": "TEXT",
-    "context_id": "TEXT",
-    "expires_at": "FLOAT",
-    "tombstone_expires_at": "FLOAT",
+_SCHEMA_VERSION = Table(
+    "a2a_schema_version",
+    _STATE_METADATA,
+    Column("scope", String, primary_key=True),
+    Column("version", Integer, nullable=False),
+)
+
+
+def _upgrade_runtime_state_schema_to_v1(sync_conn: Any) -> None:
+    add_missing_columns(
+        sync_conn,
+        table=_PENDING_INTERRUPT_REQUESTS,
+        column_names=(
+            "identity",
+            "task_id",
+            "context_id",
+            "expires_at",
+            "tombstone_expires_at",
+        ),
+    )
+
+
+_RUNTIME_STATE_MIGRATIONS = {
+    1: SchemaMigration(
+        version=1,
+        description="Add persisted interrupt binding metadata and expiry columns.",
+        upgrade=_upgrade_runtime_state_schema_to_v1,
+    )
 }
 
 
@@ -185,7 +210,7 @@ class RuntimeStateStore:
             return
         async with self._engine.begin() as conn:
             await conn.run_sync(_STATE_METADATA.create_all)
-            await conn.run_sync(self._upgrade_interrupt_request_schema)
+            await conn.run_sync(self._apply_schema_migrations)
         self._initialized = True
 
     async def dispose(self) -> None:
@@ -200,18 +225,14 @@ class RuntimeStateStore:
         return time.time() + float(ttl_seconds)
 
     @staticmethod
-    def _upgrade_interrupt_request_schema(sync_conn: Any) -> None:
-        inspector = inspect(sync_conn)
-        existing_columns = {
-            column["name"] for column in inspector.get_columns(_PENDING_INTERRUPT_REQUESTS.name)
-        }
-        for column_name, sql_type in _INTERRUPT_REQUEST_SCHEMA_UPDATES.items():
-            if column_name in existing_columns:
-                continue
-            sync_conn.exec_driver_sql(
-                f"ALTER TABLE {_PENDING_INTERRUPT_REQUESTS.name} "
-                f"ADD COLUMN {column_name} {sql_type}"
-            )
+    def _apply_schema_migrations(sync_conn: Any) -> None:
+        apply_schema_migrations(
+            sync_conn,
+            scope=_RUNTIME_STATE_SCHEMA_SCOPE,
+            current_version=CURRENT_RUNTIME_STATE_SCHEMA_VERSION,
+            version_table=_SCHEMA_VERSION,
+            migrations=_RUNTIME_STATE_MIGRATIONS,
+        )
 
     def _interrupt_request_tombstone_expires_at(self, *, now: float) -> float | None:
         ttl_seconds = self._interrupt_request_tombstone_ttl_seconds

@@ -82,6 +82,8 @@ For the full runtime configuration matrix, outbound client settings, and deploym
 
 When `A2A_DATABASE_URL` is unset and `CODEX_WORKSPACE_ROOT` is configured, the default SQLite database is created under `${CODEX_WORKSPACE_ROOT}/.codex-a2a/codex-a2a.db`.
 
+On startup, `codex-a2a` auto-creates its own runtime-state tables and applies versioned runtime-state schema migrations in place. This migration ownership currently covers only the adapter-managed `a2a_*` runtime-state tables and intentionally excludes the A2A SDK task-store schema.
+
 YOLO-equivalent startup note:
 
 - `codex-a2a` does not add a separate `--yolo` flag or `YOLO` environment variable.
