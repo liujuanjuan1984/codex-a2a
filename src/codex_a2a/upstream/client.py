@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import json
 import logging
 import os
@@ -12,10 +11,10 @@ from typing import TYPE_CHECKING, Any
 
 from codex_a2a import __version__
 from codex_a2a.config import Settings
-from codex_a2a.input_mapping import build_turn_input_from_normalized_items
 from codex_a2a.logging_context import (
     install_log_record_factory,
 )
+from codex_a2a.upstream.conversation_facade import CodexConversationFacade
 from codex_a2a.upstream.interrupt_bridge import CodexInterruptBridge
 from codex_a2a.upstream.interrupts import (
     INTERRUPT_REQUEST_TOMBSTONE_TTL_SECONDS,
@@ -28,13 +27,7 @@ from codex_a2a.upstream.models import (
     _PendingRpcRequest,
     _TurnTracker,
 )
-from codex_a2a.upstream.request_mapping import (
-    build_interactive_exec_params,
-    build_shell_exec_params,
-    convert_request_parts_to_turn_input,
-    format_shell_response,
-    uuid_like_suffix,
-)
+from codex_a2a.upstream.request_mapping import build_interactive_exec_params
 from codex_a2a.upstream.stream_bridge import (
     CodexStreamEventBridge,
     normalize_thread_status,
@@ -87,6 +80,20 @@ class CodexClient:
             log_payloads=self._log_payloads,
         )
         self._stream_bridge = CodexStreamEventBridge(event_queue_maxsize=_EVENT_QUEUE_MAXSIZE)
+        self._conversation_facade = CodexConversationFacade(
+            workspace_root=self._workspace_root,
+            model_id=self._model_id,
+            rpc_request=lambda method, params=None, **kwargs: self._rpc_request(
+                method,
+                params,
+                **kwargs,
+            ),
+            get_or_create_tracker=lambda thread_id, turn_id: self._get_or_create_tracker(
+                thread_id,
+                turn_id,
+            ),
+            turn_trackers=self._turn_trackers,
+        )
         self._interrupt_bridge = CodexInterruptBridge(
             now=lambda: time.time(),
             interrupt_request_ttl_seconds=self._interrupt_request_ttl_seconds,
@@ -411,24 +418,7 @@ class CodexClient:
     async def create_session(
         self, title: str | None = None, *, directory: str | None = None
     ) -> str:
-        del title
-        params: dict[str, Any] = {}
-        if self._model_id:
-            params["model"] = self._model_id
-        if directory:
-            params["cwd"] = directory
-        elif self._workspace_root:
-            params["cwd"] = self._workspace_root
-        result = await self._rpc_request("thread/start", params)
-        if not isinstance(result, dict):
-            raise RuntimeError("codex thread/start response missing result object")
-        thread = result.get("thread")
-        if not isinstance(thread, dict):
-            raise RuntimeError("codex thread/start response missing thread")
-        session_id = thread.get("id")
-        if not isinstance(session_id, str) or not session_id.strip():
-            raise RuntimeError("codex thread/start response missing thread id")
-        return session_id.strip()
+        return await self._conversation_facade.create_session(title=title, directory=directory)
 
     @staticmethod
     def _normalize_thread_status(value: Any) -> dict[str, Any] | None:
@@ -450,58 +440,16 @@ class CodexClient:
         return await self._rpc_request("plugin/read", self._merge_params(params))
 
     async def list_sessions(self, *, params: dict[str, Any] | None = None) -> Any:
-        query = self._merge_params(params)
-        rpc_params: dict[str, Any] = {}
-        if "limit" in query:
-            with contextlib.suppress(ValueError):
-                rpc_params["limit"] = int(query["limit"])
-        result = await self._rpc_request("thread/list", rpc_params)
-        if not isinstance(result, dict):
-            return []
-        data = result.get("data")
-        if not isinstance(data, list):
-            return []
-        # Normalize to the shape expected by the JSON-RPC session query mapping.
-        sessions: list[dict[str, Any]] = []
-        for item in data:
-            session = self._normalize_thread_summary(item)
-            if session is None:
-                continue
-            sessions.append(session)
-        return sessions
+        return await self._conversation_facade.list_sessions(query=self._merge_params(params))
 
     async def thread_fork(self, thread_id: str, *, params: dict[str, Any] | None = None) -> Any:
-        rpc_params: dict[str, Any] = {"threadId": thread_id}
-        if isinstance(params, dict):
-            rpc_params.update(
-                {
-                    key: value
-                    for key, value in params.items()
-                    if key != "directory" and value is not None
-                }
-            )
-        result = await self._rpc_request(
-            "thread/fork",
-            rpc_params,
-        )
-        if not isinstance(result, dict):
-            raise RuntimeError("codex thread/fork response missing result object")
-        thread = self._normalize_thread_summary(result.get("thread"))
-        if thread is None:
-            raise RuntimeError("codex thread/fork response missing thread")
-        return thread
+        return await self._conversation_facade.thread_fork(thread_id, params=params)
 
     async def thread_archive(self, thread_id: str) -> None:
-        await self._rpc_request("thread/archive", {"threadId": thread_id})
+        await self._conversation_facade.thread_archive(thread_id)
 
     async def thread_unarchive(self, thread_id: str) -> Any:
-        result = await self._rpc_request("thread/unarchive", {"threadId": thread_id})
-        if not isinstance(result, dict):
-            raise RuntimeError("codex thread/unarchive response missing result object")
-        thread = self._normalize_thread_summary(result.get("thread"))
-        if thread is None:
-            raise RuntimeError("codex thread/unarchive response missing thread")
-        return thread
+        return await self._conversation_facade.thread_unarchive(thread_id)
 
     async def thread_metadata_update(
         self,
@@ -509,76 +457,16 @@ class CodexClient:
         *,
         params: dict[str, Any] | None = None,
     ) -> Any:
-        rpc_params: dict[str, Any] = {"threadId": thread_id}
-        if isinstance(params, dict):
-            rpc_params.update(
-                {
-                    key: value
-                    for key, value in params.items()
-                    if key != "directory" and value is not None
-                }
-            )
-        result = await self._rpc_request(
-            "thread/metadata/update",
-            rpc_params,
+        return await self._conversation_facade.thread_metadata_update(
+            thread_id,
+            params=params,
         )
-        if not isinstance(result, dict):
-            raise RuntimeError("codex thread/metadata/update response missing result object")
-        thread = self._normalize_thread_summary(result.get("thread"))
-        if thread is None:
-            raise RuntimeError("codex thread/metadata/update response missing thread")
-        return thread
 
     async def list_messages(self, session_id: str, *, params: dict[str, Any] | None = None) -> Any:
-        query = self._merge_params(params)
-        limit: int | None = None
-        if "limit" in query:
-            with contextlib.suppress(ValueError):
-                limit = int(query["limit"])
-        result = await self._rpc_request(
-            "thread/read",
-            {"threadId": session_id, "includeTurns": True},
+        return await self._conversation_facade.list_messages(
+            session_id,
+            query=self._merge_params(params),
         )
-        if not isinstance(result, dict):
-            return []
-        thread = result.get("thread")
-        if not isinstance(thread, dict):
-            return []
-        turns = thread.get("turns")
-        if not isinstance(turns, list):
-            return []
-
-        # Best-effort mapping into the message shape consumed by the JSON-RPC layer.
-        messages: list[dict[str, Any]] = []
-        for turn in turns:
-            if not isinstance(turn, dict):
-                continue
-            items = turn.get("items")
-            if not isinstance(items, list):
-                continue
-            for item in items:
-                if not isinstance(item, dict):
-                    continue
-                item_type = str(item.get("type", "")).lower()
-                if item_type not in {"usermessage", "agentmessage"}:
-                    continue
-                item_id = item.get("id")
-                if not isinstance(item_id, str) or not item_id:
-                    continue
-                text = item.get("text")
-                if not isinstance(text, str):
-                    text = ""
-                role = "assistant" if item_type == "agentmessage" else "user"
-                messages.append(
-                    {
-                        "info": {"id": item_id, "role": role},
-                        "parts": [{"type": "text", "text": text}],
-                        "raw": item,
-                    }
-                )
-        if limit is not None:
-            messages = messages[-limit:]
-        return messages
 
     async def send_message(
         self,
@@ -589,65 +477,13 @@ class CodexClient:
         directory: str | None = None,
         timeout_override: float | None | _UnsetType = _UNSET,
     ) -> CodexMessage:
-        timeout_seconds: float | None
-        if isinstance(timeout_override, _UnsetType):
-            timeout_seconds = self._request_timeout
-        elif timeout_override is None:
-            timeout_seconds = None
-        else:
-            timeout_seconds = float(timeout_override)
-            if timeout_seconds <= 0:
-                timeout_seconds = self._request_timeout
-
-        input_payload = (
-            build_turn_input_from_normalized_items(input_items)
-            if input_items is not None
-            else [{"type": "text", "text": text, "text_elements": []}]
+        return await self._conversation_facade.send_message(
+            session_id,
+            text,
+            input_items=input_items,
+            directory=directory,
+            timeout_seconds=self._resolve_timeout_seconds(timeout_override=timeout_override),
         )
-
-        params: dict[str, Any] = {
-            "threadId": session_id,
-            "input": input_payload,
-        }
-        if directory:
-            params["cwd"] = directory
-        elif self._workspace_root:
-            params["cwd"] = self._workspace_root
-
-        if self._model_id:
-            params["model"] = self._model_id
-
-        result = await self._rpc_request("turn/start", params)
-        if not isinstance(result, dict):
-            raise RuntimeError("codex turn/start response missing result object")
-        turn = result.get("turn")
-        if not isinstance(turn, dict):
-            raise RuntimeError("codex turn/start response missing turn")
-        turn_id = turn.get("id")
-        if not isinstance(turn_id, str) or not turn_id.strip():
-            raise RuntimeError("codex turn/start response missing turn id")
-
-        turn_id = turn_id.strip()
-        tracker_key = (session_id, turn_id)
-        tracker = self._get_or_create_tracker(session_id, turn_id)
-        try:
-            if timeout_seconds is None:
-                await tracker.completed.wait()
-            else:
-                await asyncio.wait_for(tracker.completed.wait(), timeout=timeout_seconds)
-            if tracker.error:
-                raise RuntimeError(f"codex turn failed: {tracker.error}")
-            return CodexMessage(
-                text=tracker.text,
-                session_id=session_id,
-                message_id=tracker.message_id,
-                raw={"turn": tracker.raw_turn or turn},
-            )
-        except TimeoutError as exc:
-            raise RuntimeError("codex turn did not complete before timeout") from exc
-        finally:
-            # Completed/failed/timeout turns should not accumulate indefinitely.
-            self._turn_trackers.pop(tracker_key, None)
 
     async def session_prompt_async(
         self,
@@ -656,26 +492,11 @@ class CodexClient:
         *,
         directory: str | None = None,
     ) -> dict[str, Any]:
-        params: dict[str, Any] = {
-            "threadId": session_id,
-            "input": convert_request_parts_to_turn_input(request),
-        }
-        if directory:
-            params["cwd"] = directory
-        elif self._workspace_root:
-            params["cwd"] = self._workspace_root
-        if self._model_id:
-            params["model"] = self._model_id
-        result = await self._rpc_request("turn/start", params)
-        if not isinstance(result, dict):
-            raise RuntimeError("codex turn/start response missing result object")
-        turn = result.get("turn")
-        if not isinstance(turn, dict):
-            raise RuntimeError("codex turn/start response missing turn")
-        turn_id = turn.get("id")
-        if not isinstance(turn_id, str) or not turn_id.strip():
-            raise RuntimeError("codex turn/start response missing turn id")
-        return {"ok": True, "session_id": session_id, "turn_id": turn_id.strip()}
+        return await self._conversation_facade.session_prompt_async(
+            session_id,
+            request,
+            directory=directory,
+        )
 
     async def session_command(
         self,
@@ -684,10 +505,12 @@ class CodexClient:
         *,
         directory: str | None = None,
     ) -> CodexMessage:
-        command = str(request["command"]).strip()
-        arguments = str(request.get("arguments", "")).strip()
-        prompt = f"/{command}" if not arguments else f"/{command} {arguments}"
-        return await self.send_message(session_id, prompt, directory=directory)
+        return await self._conversation_facade.session_command(
+            session_id,
+            request,
+            directory=directory,
+            timeout_seconds=self._request_timeout,
+        )
 
     async def session_shell(
         self,
@@ -696,34 +519,11 @@ class CodexClient:
         *,
         directory: str | None = None,
     ) -> dict[str, Any]:
-        command_text = str(request["command"]).strip()
-        if not command_text:
-            raise RuntimeError("shell command must not be empty")
-        # Shell execution remains a standalone Codex command/exec call. session_id
-        # is preserved here for ownership/attribution, not to bind upstream thread context.
-        result = await self._rpc_request(
-            "command/exec",
-            build_shell_exec_params(
-                command_text=command_text,
-                directory=directory,
-                default_workspace_root=self._workspace_root,
-            ),
+        return await self._conversation_facade.session_shell(
+            session_id,
+            request,
+            directory=directory,
         )
-        if not isinstance(result, dict):
-            raise RuntimeError("codex command/exec response missing result object")
-        return {
-            "info": {
-                "id": f"shell:{session_id}:{uuid_like_suffix(command_text)}",
-                "role": "assistant",
-            },
-            "parts": [
-                {
-                    "type": "text",
-                    "text": format_shell_response(result),
-                }
-            ],
-            "raw": result,
-        }
 
     async def exec_start(
         self,
