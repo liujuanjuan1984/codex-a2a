@@ -30,11 +30,7 @@ from codex_a2a.upstream.startup import (
     build_startup_config_overrides,
     resolve_cli_bin,
 )
-from codex_a2a.upstream.stream_bridge import (
-    CodexStreamEventBridge,
-    normalize_thread_status,
-    normalize_thread_summary,
-)
+from codex_a2a.upstream.stream_bridge import CodexStreamEventBridge
 from codex_a2a.upstream.transport import CodexStdioJsonRpcTransport
 
 logger = logging.getLogger(__name__)
@@ -338,13 +334,6 @@ class CodexClient:
     ) -> str:
         return await self._conversation_facade.create_session(title=title, directory=directory)
 
-    @staticmethod
-    def _normalize_thread_status(value: Any) -> dict[str, Any] | None:
-        return normalize_thread_status(value)
-
-    def _normalize_thread_summary(self, value: Any) -> dict[str, Any] | None:
-        return normalize_thread_summary(value)
-
     async def list_skills(self, *, params: dict[str, Any] | None = None) -> Any:
         return await self._rpc_request("skills/list", self._merge_params(params))
 
@@ -488,12 +477,6 @@ class CodexClient:
         process_id: str,
     ) -> None:
         await self._exec_facade.exec_terminate(process_id=process_id)
-
-    def _interrupt_request_status(
-        self,
-        binding: InterruptRequestBinding,
-    ) -> str:
-        return self._interrupt_bridge.interrupt_request_status(binding)
 
     async def resolve_interrupt_request(
         self, request_id: str
