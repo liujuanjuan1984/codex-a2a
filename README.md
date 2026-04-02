@@ -4,18 +4,38 @@
 
 `codex-a2a` adds an A2A runtime layer to the local Codex runtime, with auth, streaming, session continuity, interrupt handling, a built-in outbound A2A client, and a clear deployment boundary.
 
-## Quick Selection Guide
-
-| Need | Recommended Choice |
-| :--- | :--- |
-| **Expose a local Codex runtime as an A2A peer** | **`codex-a2a` (This project)** |
-| **Integrate multiple A2A peers into one app surface** | [`a2a-client-hub`](https://github.com/liujuanjuan1984/a2a-client-hub) |
-| **General purpose A2A implementation from scratch** | [Official A2A Protocol](https://github.com/a2aproject/A2A) |
-
 ## What This Is
 
 - An A2A adapter service for the local Codex runtime, with inbound runtime exposure plus outbound peer calling.
 - It supports both roles in one process: serving as an A2A Server and hosting an embedded A2A Client for `a2a_call` and CLI-driven peer calls.
+
+## Architecture
+
+```mermaid
+flowchart TD
+    External["A2A Clients / a2a-client-hub / Gateways"]
+
+    subgraph Adapter["codex-a2a Runtime"]
+        Ingress["Inbound A2A Surface\nHTTP+JSON + JSON-RPC"]
+        Codex["Codex Runtime / Executor"]
+        Outbound["Embedded A2A Client\nCLI call + a2a_call"]
+    end
+
+    subgraph Peers["Peer A2A Services"]
+        PeerA2A["Peer A2A Agent"]
+        PeerRuntime["Peer Runtime"]
+        PeerA2A --> PeerRuntime
+    end
+
+    External -->|message/send,\nmessage:stream| Ingress
+    Ingress -->|task execution| Codex
+    Codex -->|stream events / tool results| Ingress
+    Codex -->|a2a_call tool| Outbound
+    Outbound -->|message/send,\nmessage:stream| PeerA2A
+    PeerA2A -->|task / stream result| Outbound
+```
+
+For internal module boundaries and maintainer-facing request call chains, see [Maintainer Architecture Guide](docs/maintainer-architecture.md).
 
 ## Quick Start
 
@@ -110,34 +130,6 @@ Look elsewhere if:
 - Interrupt lifecycle mapping and callback validation
 - Transport selection, Agent Card discovery, timeout control, and bearer/basic auth for outbound A2A calls
 - Payload logging controls, secret-handling guardrails, and released-CLI startup / source-based runtime paths
-
-## Architecture
-
-```mermaid
-flowchart TD
-    External["A2A Clients / a2a-client-hub / Gateways"]
-
-    subgraph Adapter["codex-a2a Runtime"]
-        Ingress["Inbound A2A Surface\nHTTP+JSON + JSON-RPC"]
-        Codex["Codex Runtime / Executor"]
-        Outbound["Embedded A2A Client\nCLI call + a2a_call"]
-    end
-
-    subgraph Peers["Peer A2A Services"]
-        PeerA2A["Peer A2A Agent"]
-        PeerRuntime["Peer Runtime"]
-        PeerA2A --> PeerRuntime
-    end
-
-    External -->|message/send,\nmessage:stream| Ingress
-    Ingress -->|task execution| Codex
-    Codex -->|stream events / tool results| Ingress
-    Codex -->|a2a_call tool| Outbound
-    Outbound -->|message/send,\nmessage:stream| PeerA2A
-    PeerA2A -->|task / stream result| Outbound
-```
-
-For internal module boundaries and maintainer-facing request call chains, see [Maintainer Architecture Guide](docs/maintainer-architecture.md).
 
 ## Boundaries
 
