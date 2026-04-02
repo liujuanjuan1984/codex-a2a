@@ -89,7 +89,8 @@ def test_security_policy_declares_single_tenant_boundary() -> None:
 
 def test_released_cli_entrypoint_points_to_cli_module() -> None:
     assert 'codex-a2a = "codex_a2a.cli:main"' in PYPROJECT_TEXT
-    assert "[tool.setuptools.package-data]" not in PYPROJECT_TEXT
+    assert "[tool.setuptools.package-data]" in PYPROJECT_TEXT
+    assert 'codex_a2a = ["py.typed"]' in PYPROJECT_TEXT
 
 
 def test_project_metadata_exposes_open_source_entrypoints_cleanly() -> None:
@@ -119,6 +120,10 @@ def test_repository_wrappers_only_keep_remaining_user_or_maintainer_entrypoints(
     assert "--python 3.13" not in SMOKE_TEST_SCRIPT_TEXT
     assert 'export PATH="${tool_bin_dir}:${PATH}"' in SMOKE_TEST_SCRIPT_TEXT
     assert 'UV_LINK_MODE="copy"' in SMOKE_TEST_SCRIPT_TEXT
+    assert 'find "${tool_dir}" \\( -type f -o -type l \\) -path ' in SMOKE_TEST_SCRIPT_TEXT
+    assert '"${installed_python}" -c "import codex_a2a; print(codex_a2a.__version__)"' in (
+        SMOKE_TEST_SCRIPT_TEXT
+    )
     assert "uv run pytest --no-cov" in RUNTIME_MATRIX_SCRIPT_TEXT
     assert 'CODEX_CLI_BIN="${fake_codex_bin}"' in SMOKE_TEST_SCRIPT_TEXT
     assert 'cat >"${fake_codex_bin}"' in SMOKE_TEST_SCRIPT_TEXT

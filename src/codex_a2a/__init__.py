@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import logging
 from importlib.metadata import PackageNotFoundError, version
 
 _PACKAGE_NAME = "codex-a2a"
 _UNKNOWN_VERSION = "0.0.0+unknown"
+logger = logging.getLogger(__name__)
+logger.addHandler(logging.NullHandler())
 
 
 def _package_version() -> str | None:
