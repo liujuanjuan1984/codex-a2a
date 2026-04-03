@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import time
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from typing import Any, Protocol
 
@@ -19,6 +19,7 @@ from sqlalchemy import (
     select,
     update,
 )
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -191,6 +192,23 @@ async def _noop() -> None:
     return None
 
 
+async def _insert_then_update_on_conflict(
+    session: AsyncSession,
+    *,
+    table: Table,
+    key_values: Mapping[str, Any],
+    update_values: Mapping[str, Any],
+) -> None:
+    values = {**key_values, **update_values}
+    try:
+        await session.execute(insert(table).values(**values))
+    except IntegrityError:
+        statement = update(table)
+        for key, value in key_values.items():
+            statement = statement.where(table.c[key] == value)
+        await session.execute(statement.values(**update_values))
+
+
 class RuntimeStateStore:
     def __init__(
         self,
@@ -321,33 +339,16 @@ class RuntimeStateStore:
         session_id: str,
     ) -> None:
         await self._ensure_initialized()
-        values = {
-            "identity": identity,
-            "context_id": context_id,
-            "session_id": session_id,
-        }
         async with self._session_maker.begin() as session:
-            existing = await session.execute(
-                select(_SESSION_BINDINGS.c.session_id).where(
-                    and_(
-                        _SESSION_BINDINGS.c.identity == identity,
-                        _SESSION_BINDINGS.c.context_id == context_id,
-                    )
-                )
+            await _insert_then_update_on_conflict(
+                session,
+                table=_SESSION_BINDINGS,
+                key_values={
+                    "identity": identity,
+                    "context_id": context_id,
+                },
+                update_values={"session_id": session_id},
             )
-            if existing.scalar_one_or_none() is None:
-                await session.execute(insert(_SESSION_BINDINGS).values(**values))
-            else:
-                await session.execute(
-                    update(_SESSION_BINDINGS)
-                    .where(
-                        and_(
-                            _SESSION_BINDINGS.c.identity == identity,
-                            _SESSION_BINDINGS.c.context_id == context_id,
-                        )
-                    )
-                    .values(**values)
-                )
 
     async def delete_session_binding(self, *, identity: str, context_id: str) -> None:
         await self._ensure_initialized()
@@ -378,24 +379,13 @@ class RuntimeStateStore:
         identity: str,
     ) -> None:
         await self._ensure_initialized()
-        values = {
-            "session_id": session_id,
-            "owner_identity": identity,
-        }
         async with self._session_maker.begin() as session:
-            existing = await session.execute(
-                select(_SESSION_OWNERS.c.session_id).where(
-                    _SESSION_OWNERS.c.session_id == session_id
-                )
+            await _insert_then_update_on_conflict(
+                session,
+                table=_SESSION_OWNERS,
+                key_values={"session_id": session_id},
+                update_values={"owner_identity": identity},
             )
-            if existing.scalar_one_or_none() is None:
-                await session.execute(insert(_SESSION_OWNERS).values(**values))
-            else:
-                await session.execute(
-                    update(_SESSION_OWNERS)
-                    .where(_SESSION_OWNERS.c.session_id == session_id)
-                    .values(**values)
-                )
 
     async def load_pending_session_claim(self, *, session_id: str) -> str | None:
         await self._ensure_initialized()
@@ -416,25 +406,16 @@ class RuntimeStateStore:
         ttl_seconds: int,
     ) -> None:
         await self._ensure_initialized()
-        values = {
-            "session_id": session_id,
-            "pending_identity": identity,
-            "expires_at": self._expires_at(ttl_seconds=ttl_seconds),
-        }
         async with self._session_maker.begin() as session:
-            existing = await session.execute(
-                select(_PENDING_SESSION_CLAIMS.c.session_id).where(
-                    _PENDING_SESSION_CLAIMS.c.session_id == session_id
-                )
+            await _insert_then_update_on_conflict(
+                session,
+                table=_PENDING_SESSION_CLAIMS,
+                key_values={"session_id": session_id},
+                update_values={
+                    "pending_identity": identity,
+                    "expires_at": self._expires_at(ttl_seconds=ttl_seconds),
+                },
             )
-            if existing.scalar_one_or_none() is None:
-                await session.execute(insert(_PENDING_SESSION_CLAIMS).values(**values))
-            else:
-                await session.execute(
-                    update(_PENDING_SESSION_CLAIMS)
-                    .where(_PENDING_SESSION_CLAIMS.c.session_id == session_id)
-                    .values(**values)
-                )
 
     async def delete_pending_session_claim(self, *, session_id: str) -> None:
         await self._ensure_initialized()
@@ -460,33 +441,24 @@ class RuntimeStateStore:
         params: dict[str, Any],
     ) -> None:
         await self._ensure_initialized()
-        values = {
-            "request_id": request_id,
-            "interrupt_type": interrupt_type,
-            "session_id": session_id,
-            "identity": identity,
-            "task_id": task_id,
-            "context_id": context_id,
-            "created_at": created_at,
-            "expires_at": expires_at,
-            "tombstone_expires_at": None,
-            "rpc_request_id": rpc_request_id,
-            "params": params,
-        }
         async with self._session_maker.begin() as session:
-            existing = await session.execute(
-                select(_PENDING_INTERRUPT_REQUESTS.c.request_id).where(
-                    _PENDING_INTERRUPT_REQUESTS.c.request_id == request_id
-                )
+            await _insert_then_update_on_conflict(
+                session,
+                table=_PENDING_INTERRUPT_REQUESTS,
+                key_values={"request_id": request_id},
+                update_values={
+                    "interrupt_type": interrupt_type,
+                    "session_id": session_id,
+                    "identity": identity,
+                    "task_id": task_id,
+                    "context_id": context_id,
+                    "created_at": created_at,
+                    "expires_at": expires_at,
+                    "tombstone_expires_at": None,
+                    "rpc_request_id": rpc_request_id,
+                    "params": params,
+                },
             )
-            if existing.scalar_one_or_none() is None:
-                await session.execute(insert(_PENDING_INTERRUPT_REQUESTS).values(**values))
-            else:
-                await session.execute(
-                    update(_PENDING_INTERRUPT_REQUESTS)
-                    .where(_PENDING_INTERRUPT_REQUESTS.c.request_id == request_id)
-                    .values(**values)
-                )
 
     async def expire_interrupt_request(self, *, request_id: str) -> None:
         await self._ensure_initialized()

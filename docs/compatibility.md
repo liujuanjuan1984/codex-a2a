@@ -64,6 +64,8 @@ Task durability is deployment-dependent:
 - `A2A_DATABASE_URL=<sqlalchemy-async-url>` preserves task lookup/cancel/resubscribe state across process restarts.
 - `A2A_DATABASE_URL` now defaults to a workspace-local SQLite database at `${CODEX_WORKSPACE_ROOT}/.codex-a2a/codex-a2a.db` when `CODEX_WORKSPACE_ROOT` is configured; otherwise it falls back to `sqlite+aiosqlite:///./codex-a2a.db`. Persistence therefore remains the default runtime behavior.
 - The same database-backed mode also preserves session-binding ownership state and pending interrupt callback requests that still fall within their TTL. Session-binding and ownership persistence are independent from the in-memory session cache TTL.
+- The default SQLite + WAL profile is intended for a stable local filesystem path, not for network filesystems or sync-managed folders with weaker locking behavior.
+- The repository-local migration helper remains intentionally lightweight: it supports additive, adapter-owned schema evolution such as creating tables, adding nullable columns, and writing per-scope schema versions. It should not be read as a promise that heavier schema rewrites will stay in-scope without a tooling change.
 
 ## Deployment Profile
 

@@ -103,8 +103,14 @@ def apply_schema_migrations(
                 f"Missing migration for schema scope {scope!r} version {next_version}."
             )
         migration.upgrade(sync_conn)
+        write_schema_version(
+            sync_conn,
+            version_table=version_table,
+            scope=scope,
+            version=next_version,
+        )
 
-    if current_schema_version != current_version:
+    if starting_version == current_version and current_schema_version != current_version:
         write_schema_version(
             sync_conn,
             version_table=version_table,
