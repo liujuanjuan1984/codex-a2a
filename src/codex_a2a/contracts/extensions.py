@@ -811,9 +811,33 @@ def build_capability_snapshot(*, runtime_profile: RuntimeProfile) -> CapabilityS
     session_query_methods = tuple(SESSION_QUERY_METHODS[key] for key in session_query_method_keys)
     discovery_methods = tuple(DISCOVERY_METHODS.values())
     thread_lifecycle_methods = tuple(THREAD_LIFECYCLE_METHODS.values())
-    turn_control_methods = tuple(TURN_CONTROL_METHODS.values())
-    review_control_methods = tuple(REVIEW_CONTROL_METHODS.values())
-    exec_control_methods = tuple(EXEC_CONTROL_METHODS.values())
+    if runtime_profile.turn_control_enabled:
+        turn_control_methods = tuple(TURN_CONTROL_METHODS.values())
+    else:
+        turn_control_methods = ()
+        for method in TURN_CONTROL_METHODS.values():
+            conditional_methods[method] = {
+                "reason": "disabled_by_configuration",
+                "toggle": "A2A_ENABLE_TURN_CONTROL",
+            }
+    if runtime_profile.review_control_enabled:
+        review_control_methods = tuple(REVIEW_CONTROL_METHODS.values())
+    else:
+        review_control_methods = ()
+        for method in REVIEW_CONTROL_METHODS.values():
+            conditional_methods[method] = {
+                "reason": "disabled_by_configuration",
+                "toggle": "A2A_ENABLE_REVIEW_CONTROL",
+            }
+    if runtime_profile.exec_control_enabled:
+        exec_control_methods = tuple(EXEC_CONTROL_METHODS.values())
+    else:
+        exec_control_methods = ()
+        for method in EXEC_CONTROL_METHODS.values():
+            conditional_methods[method] = {
+                "reason": "disabled_by_configuration",
+                "toggle": "A2A_ENABLE_EXEC_CONTROL",
+            }
     extension_jsonrpc_methods = (
         *session_query_methods,
         *discovery_methods,
@@ -956,22 +980,24 @@ def build_compatibility_profile_params(
         {
             method: {
                 "surface": "extension",
-                "availability": "always",
-                "retention": "stable",
+                "availability": runtime_profile.turn_control.availability,
+                "retention": "deployment-conditional",
                 "extension_uri": TURN_CONTROL_EXTENSION_URI,
+                "toggle": runtime_profile.turn_control.toggle,
             }
-            for method in snapshot.turn_control_methods
+            for method in TURN_CONTROL_METHODS.values()
         }
     )
     method_retention.update(
         {
             method: {
                 "surface": "extension",
-                "availability": "always",
-                "retention": "stable",
+                "availability": runtime_profile.review_control.availability,
+                "retention": "deployment-conditional",
                 "extension_uri": REVIEW_CONTROL_EXTENSION_URI,
+                "toggle": runtime_profile.review_control.toggle,
             }
-            for method in snapshot.review_control_methods
+            for method in REVIEW_CONTROL_METHODS.values()
         }
     )
     method_retention.update(
@@ -996,11 +1022,12 @@ def build_compatibility_profile_params(
         {
             method: {
                 "surface": "extension",
-                "availability": "always",
-                "retention": "stable",
+                "availability": runtime_profile.exec_control.availability,
+                "retention": "deployment-conditional",
                 "extension_uri": EXEC_CONTROL_EXTENSION_URI,
+                "toggle": runtime_profile.exec_control.toggle,
             }
-            for method in snapshot.exec_control_methods
+            for method in EXEC_CONTROL_METHODS.values()
         }
     )
     method_retention.update(
@@ -1043,18 +1070,21 @@ def build_compatibility_profile_params(
         },
         TURN_CONTROL_EXTENSION_URI: {
             "surface": "jsonrpc-extension",
-            "availability": "always",
-            "retention": "stable",
+            "availability": runtime_profile.turn_control.availability,
+            "retention": "deployment-conditional",
+            "toggle": runtime_profile.turn_control.toggle,
         },
         REVIEW_CONTROL_EXTENSION_URI: {
             "surface": "jsonrpc-extension",
-            "availability": "always",
-            "retention": "stable",
+            "availability": runtime_profile.review_control.availability,
+            "retention": "deployment-conditional",
+            "toggle": runtime_profile.review_control.toggle,
         },
         EXEC_CONTROL_EXTENSION_URI: {
             "surface": "jsonrpc-extension",
-            "availability": "always",
-            "retention": "stable",
+            "availability": runtime_profile.exec_control.availability,
+            "retention": "deployment-conditional",
+            "toggle": runtime_profile.exec_control.toggle,
         },
         INTERRUPT_CALLBACK_EXTENSION_URI: {
             "surface": "jsonrpc-extension",
@@ -1631,8 +1661,11 @@ def build_turn_control_extension_params(
     *,
     runtime_profile: RuntimeProfile,
 ) -> dict[str, Any]:
+    active_methods = dict(TURN_CONTROL_METHODS) if runtime_profile.turn_control_enabled else {}
     method_contracts: dict[str, Any] = {}
-    for contract in TURN_CONTROL_METHOD_CONTRACTS.values():
+    for key, contract in TURN_CONTROL_METHOD_CONTRACTS.items():
+        if key not in active_methods:
+            continue
         method_contract_doc: dict[str, Any] = {
             "params": _build_method_contract_params(
                 required=contract.required_params,
@@ -1650,9 +1683,11 @@ def build_turn_control_extension_params(
         method_contracts[contract.method] = method_contract_doc
 
     return {
-        "methods": dict(TURN_CONTROL_METHODS),
+        "methods": active_methods,
         "method_contracts": method_contracts,
         "profile": runtime_profile.summary_dict(),
+        "availability": runtime_profile.turn_control.availability,
+        "toggle": runtime_profile.turn_control.toggle,
         "supported_metadata": [],
         "provider_private_metadata": [],
         "consumer_guidance": [
@@ -1678,8 +1713,11 @@ def build_review_control_extension_params(
     *,
     runtime_profile: RuntimeProfile,
 ) -> dict[str, Any]:
+    active_methods = dict(REVIEW_CONTROL_METHODS) if runtime_profile.review_control_enabled else {}
     method_contracts: dict[str, Any] = {}
-    for contract in REVIEW_CONTROL_METHOD_CONTRACTS.values():
+    for key, contract in REVIEW_CONTROL_METHOD_CONTRACTS.items():
+        if key not in active_methods:
+            continue
         method_contract_doc: dict[str, Any] = {
             "params": _build_method_contract_params(
                 required=contract.required_params,
@@ -1697,9 +1735,11 @@ def build_review_control_extension_params(
         method_contracts[contract.method] = method_contract_doc
 
     return {
-        "methods": dict(REVIEW_CONTROL_METHODS),
+        "methods": active_methods,
         "method_contracts": method_contracts,
         "profile": runtime_profile.summary_dict(),
+        "availability": runtime_profile.review_control.availability,
+        "toggle": runtime_profile.review_control.toggle,
         "supported_metadata": [],
         "provider_private_metadata": [],
         "target_contracts": {
@@ -1780,8 +1820,11 @@ def build_exec_control_extension_params(
     *,
     runtime_profile: RuntimeProfile,
 ) -> dict[str, Any]:
+    active_methods = dict(EXEC_CONTROL_METHODS) if runtime_profile.exec_control_enabled else {}
     method_contracts: dict[str, Any] = {}
-    for contract in EXEC_CONTROL_METHOD_CONTRACTS.values():
+    for key, contract in EXEC_CONTROL_METHOD_CONTRACTS.items():
+        if key not in active_methods:
+            continue
         method_contract_doc: dict[str, Any] = {
             "params": _build_method_contract_params(
                 required=contract.required_params,
@@ -1801,9 +1844,11 @@ def build_exec_control_extension_params(
         method_contracts[contract.method] = method_contract_doc
 
     return {
-        "methods": dict(EXEC_CONTROL_METHODS),
+        "methods": active_methods,
         "method_contracts": method_contracts,
         "profile": runtime_profile.summary_dict(),
+        "availability": runtime_profile.exec_control.availability,
+        "toggle": runtime_profile.exec_control.toggle,
         "supported_metadata": ["codex.directory"],
         "provider_private_metadata": ["codex.directory"],
         "task_streaming": {

@@ -38,7 +38,7 @@ class DirectoryBindingProfile:
 
 
 @dataclass(frozen=True)
-class SessionShellProfile:
+class ConditionalSurfaceProfile:
     enabled: bool
     availability: str
     toggle: str
@@ -178,7 +178,10 @@ class RuntimeProfile:
     profile_id: str
     deployment: DeploymentProfile
     directory_binding: DirectoryBindingProfile
-    session_shell: SessionShellProfile
+    session_shell: ConditionalSurfaceProfile
+    turn_control: ConditionalSurfaceProfile
+    review_control: ConditionalSurfaceProfile
+    exec_control: ConditionalSurfaceProfile
     interrupts: InterruptProfile
     service_features: ServiceFeaturesProfile
     execution_environment: ExecutionEnvironmentProfile
@@ -188,10 +191,25 @@ class RuntimeProfile:
     def session_shell_enabled(self) -> bool:
         return self.session_shell.enabled
 
+    @property
+    def turn_control_enabled(self) -> bool:
+        return self.turn_control.enabled
+
+    @property
+    def review_control_enabled(self) -> bool:
+        return self.review_control.enabled
+
+    @property
+    def exec_control_enabled(self) -> bool:
+        return self.exec_control.enabled
+
     def runtime_features_dict(self) -> dict[str, Any]:
         return {
             "directory_binding": self.directory_binding.as_dict(),
             "session_shell": self.session_shell.as_dict(),
+            "turn_control": self.turn_control.as_dict(),
+            "review_control": self.review_control.as_dict(),
+            "exec_control": self.exec_control.as_dict(),
             "interrupts": self.interrupts.as_dict(),
             "service_features": self.service_features.as_dict(),
             "execution_environment": self.execution_environment.as_dict(),
@@ -300,10 +318,25 @@ def build_runtime_profile(settings: Settings) -> RuntimeProfile:
             allow_override=settings.a2a_allow_directory_override,
             scope=directory_scope,
         ),
-        session_shell=SessionShellProfile(
+        session_shell=ConditionalSurfaceProfile(
             enabled=settings.a2a_enable_session_shell,
             availability="enabled" if settings.a2a_enable_session_shell else "disabled",
             toggle="A2A_ENABLE_SESSION_SHELL",
+        ),
+        turn_control=ConditionalSurfaceProfile(
+            enabled=settings.a2a_enable_turn_control,
+            availability="enabled" if settings.a2a_enable_turn_control else "disabled",
+            toggle="A2A_ENABLE_TURN_CONTROL",
+        ),
+        review_control=ConditionalSurfaceProfile(
+            enabled=settings.a2a_enable_review_control,
+            availability="enabled" if settings.a2a_enable_review_control else "disabled",
+            toggle="A2A_ENABLE_REVIEW_CONTROL",
+        ),
+        exec_control=ConditionalSurfaceProfile(
+            enabled=settings.a2a_enable_exec_control,
+            availability="enabled" if settings.a2a_enable_exec_control else "disabled",
+            toggle="A2A_ENABLE_EXEC_CONTROL",
         ),
         interrupts=InterruptProfile(
             request_ttl_seconds=settings.a2a_interrupt_request_ttl_seconds,

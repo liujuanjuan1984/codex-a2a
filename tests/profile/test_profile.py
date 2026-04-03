@@ -9,6 +9,9 @@ def test_runtime_profile_splits_stable_deployment_and_runtime_features() -> None
             a2a_project="alpha",
             a2a_allow_directory_override=False,
             a2a_enable_session_shell=False,
+            a2a_enable_turn_control=False,
+            a2a_enable_review_control=False,
+            a2a_enable_exec_control=False,
             a2a_enable_health_endpoint=True,
             a2a_interrupt_request_ttl_seconds=90,
             codex_workspace_root="/srv/workspaces/alpha",
@@ -42,6 +45,21 @@ def test_runtime_profile_splits_stable_deployment_and_runtime_features() -> None
             "enabled": False,
             "availability": "disabled",
             "toggle": "A2A_ENABLE_SESSION_SHELL",
+        },
+        "turn_control": {
+            "enabled": False,
+            "availability": "disabled",
+            "toggle": "A2A_ENABLE_TURN_CONTROL",
+        },
+        "review_control": {
+            "enabled": False,
+            "availability": "disabled",
+            "toggle": "A2A_ENABLE_REVIEW_CONTROL",
+        },
+        "exec_control": {
+            "enabled": False,
+            "availability": "disabled",
+            "toggle": "A2A_ENABLE_EXEC_CONTROL",
         },
         "interrupts": {
             "request_ttl_seconds": 90,

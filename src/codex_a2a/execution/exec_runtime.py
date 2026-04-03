@@ -41,6 +41,7 @@ class ExecSessionHandle:
     context_id: str
     stop_event: asyncio.Event
     command_text: str
+    owner_identity: str | None = None
     terminate_requested: bool = False
     producer_task: asyncio.Task[None] | None = None
 
@@ -63,6 +64,7 @@ class CodexExecRuntime:
         request: dict[str, Any],
         directory: str | None,
         context: ServerCallContext | None,
+        owner_identity: str | None,
     ) -> dict[str, Any]:
         process_id = str(request.get("processId") or "").strip() or f"exec-{uuid.uuid4().hex}"
         task_id = str(uuid.uuid4())
@@ -74,6 +76,7 @@ class CodexExecRuntime:
             context_id=context_id,
             stop_event=asyncio.Event(),
             command_text=command_text,
+            owner_identity=owner_identity,
         )
         async with self._lock:
             if process_id in self._sessions:
@@ -127,8 +130,9 @@ class CodexExecRuntime:
         process_id: str,
         delta_base64: str | None,
         close_stdin: bool | None,
+        owner_identity: str | None,
     ) -> dict[str, Any]:
-        handle = await self._require_session(process_id)
+        handle = await self._require_session(process_id, owner_identity=owner_identity)
         await self._client.exec_write(
             process_id=handle.process_id,
             delta_base64=delta_base64,
@@ -142,8 +146,9 @@ class CodexExecRuntime:
         process_id: str,
         rows: int,
         cols: int,
+        owner_identity: str | None,
     ) -> dict[str, Any]:
-        handle = await self._require_session(process_id)
+        handle = await self._require_session(process_id, owner_identity=owner_identity)
         await self._client.exec_resize(process_id=handle.process_id, rows=rows, cols=cols)
         return {"ok": True, "process_id": handle.process_id}
 
@@ -151,8 +156,9 @@ class CodexExecRuntime:
         self,
         *,
         process_id: str,
+        owner_identity: str | None,
     ) -> dict[str, Any]:
-        handle = await self._require_session(process_id)
+        handle = await self._require_session(process_id, owner_identity=owner_identity)
         handle.terminate_requested = True
         await self._client.exec_terminate(process_id=handle.process_id)
         return {"ok": True, "process_id": handle.process_id}
@@ -161,11 +167,18 @@ class CodexExecRuntime:
         async with self._lock:
             self._sessions.pop(process_id, None)
 
-    async def _require_session(self, process_id: str) -> ExecSessionHandle:
+    async def _require_session(
+        self,
+        process_id: str,
+        *,
+        owner_identity: str | None,
+    ) -> ExecSessionHandle:
         async with self._lock:
             handle = self._sessions.get(process_id)
         if handle is None:
             raise LookupError(f"Unknown exec session: {process_id}")
+        if handle.owner_identity is not None and owner_identity != handle.owner_identity:
+            raise PermissionError(f"Exec session forbidden: {process_id}")
         return handle
 
     async def _run_exec_session(

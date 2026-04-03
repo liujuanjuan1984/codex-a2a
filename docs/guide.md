@@ -51,6 +51,9 @@ Current behavior:
   - `/v1/tasks/{id}:subscribe`
 - extension JSON-RPC methods are declared separately from the core baseline
 - `codex.sessions.shell` becomes deployment-conditional when `A2A_ENABLE_SESSION_SHELL=false`
+- `codex.turns.steer` becomes deployment-conditional when `A2A_ENABLE_TURN_CONTROL=false`
+- `codex.review.start` and `codex.review.watch` become deployment-conditional when `A2A_ENABLE_REVIEW_CONTROL=false`
+- `codex.exec.*` becomes deployment-conditional when `A2A_ENABLE_EXEC_CONTROL=false`
 
 Unsupported method contract:
 
@@ -94,6 +97,12 @@ Current profile shape:
   - `directory_binding.scope=workspace_root_or_descendant|workspace_root_only`
   - `session_shell.enabled=true|false`
   - `session_shell.availability=enabled|disabled`
+  - `turn_control.enabled=true|false`
+  - `turn_control.availability=enabled|disabled`
+  - `review_control.enabled=true|false`
+  - `review_control.availability=enabled|disabled`
+  - `exec_control.enabled=true|false`
+  - `exec_control.availability=enabled|disabled`
   - `interrupts.request_ttl_seconds=<int>`
   - `service_features.streaming.enabled=true`
   - `service_features.health_endpoint.enabled=true|false`
@@ -130,7 +139,9 @@ Retention guidance:
 - Treat `codex.*` methods plus `metadata.codex.directory` and `metadata.codex.execution` as Codex-specific extensions or provider-private operational surfaces rather than portable A2A baseline capabilities.
 - Treat `codex.sessions.shell` as deployment-conditional. Discover it from the declared compatibility profile and extension contracts before calling it.
 - Treat `codex.sessions.shell` as a one-shot shell snapshot surface. It is not an interactive shell session and does not imply PTY lifecycle support.
+- Treat `codex.turns.steer`, `codex.review.*`, and `codex.exec.*` as deployment-conditional provider-private controls. Discover them from the authenticated extended card or OpenAPI before calling them.
 - Treat `codex.exec.*` as the standalone interactive exec surface. Use it for stdin write, PTY resize, and terminate flows instead of inferring those capabilities from `codex.sessions.shell`.
+- Default deployment posture is conservative: `codex.sessions.shell`, `codex.turns.steer`, `codex.review.*`, and `codex.exec.*` are disabled by default and must be explicitly enabled per deployment.
 - Generic A2A clients should remain usable without the `codex.*` control plane. Opt into those methods only when you are intentionally integrating with Codex-specific workflows such as session continuation, discovery-backed mentions, or interactive exec.
 - Treat `execution_environment.*` as deployment-configured discovery metadata. It does not promise per-request snapshots of temporary approvals, escalations, or host-side runtime mutations.
 
@@ -213,7 +224,10 @@ These variables are forwarded to the local `codex app-server` subprocess.
 ### Advanced Runtime Settings
 
 - `A2A_ENABLE_HEALTH_ENDPOINT`: enable the authenticated lightweight `/health` probe, default `true`
-- `A2A_ENABLE_SESSION_SHELL`: expose `codex.sessions.shell` on JSON-RPC extensions, default `true`
+- `A2A_ENABLE_SESSION_SHELL`: expose `codex.sessions.shell` on JSON-RPC extensions, default `false`
+- `A2A_ENABLE_TURN_CONTROL`: expose `codex.turns.steer` on JSON-RPC extensions, default `false`
+- `A2A_ENABLE_REVIEW_CONTROL`: expose `codex.review.start` and `codex.review.watch` on JSON-RPC extensions, default `false`
+- `A2A_ENABLE_EXEC_CONTROL`: expose `codex.exec.*` on JSON-RPC extensions, default `false`
 - `A2A_ALLOW_DIRECTORY_OVERRIDE`: allow `metadata.codex.directory` overrides within the configured workspace boundary, default `true`
 - `A2A_SESSION_CACHE_TTL_SECONDS`: in-memory TTL for session mapping, default `3600`
 - `A2A_SESSION_CACHE_MAXSIZE`: max local process session-cache entries, default `10000`
@@ -263,6 +277,9 @@ These variables are forwarded to the local `codex app-server` subprocess.
 | `A2A_DOCUMENTATION_URL` | Documentation URL |
 | `A2A_ENABLE_HEALTH_ENDPOINT` | Enable /health |
 | `A2A_ENABLE_SESSION_SHELL` | Enable session shell |
+| `A2A_ENABLE_TURN_CONTROL` | Enable turn control |
+| `A2A_ENABLE_REVIEW_CONTROL` | Enable review control |
+| `A2A_ENABLE_EXEC_CONTROL` | Enable interactive exec |
 | `A2A_ALLOW_DIRECTORY_OVERRIDE` | Allow cwd override |
 | `A2A_SESSION_CACHE_TTL_SECONDS` | Session cache TTL |
 | `A2A_SESSION_CACHE_MAXSIZE` | Session cache max size |
@@ -391,12 +408,13 @@ This path is for contributors. End users should prefer the released CLI path des
 - Streaming is always enabled for this service surface. `/v1/message:stream` and JSON-RPC `message/stream` are compatibility-sensitive core capabilities rather than deployment-time toggles.
 - `codex.sessions.shell` is a session-scoped shell control method for ownership, attribution, and traceability. It keeps `session_id` in the A2A contract, but the underlying execution still uses Codex `command/exec` rather than resuming or creating an upstream Codex thread.
 - `codex.sessions.shell` returns a one-shot shell snapshot only. It does not expose PTY lifecycle methods such as stdin write, resize, or terminate, and it should not be treated as an interactive shell session.
-- `codex.exec.start`, `codex.exec.write`, `codex.exec.resize`, and `codex.exec.terminate` expose a standalone interactive `command/exec` runtime. `codex.exec.start` returns process/task handles immediately, while stdout/stderr deltas and the final result flow through normal A2A task streaming and `tasks/resubscribe`.
+- `codex.exec.start`, `codex.exec.write`, `codex.exec.resize`, and `codex.exec.terminate` expose a standalone interactive `command/exec` runtime when `A2A_ENABLE_EXEC_CONTROL=true`. `codex.exec.start` returns process/task handles immediately, while stdout/stderr deltas and the final result flow through normal A2A task streaming and `tasks/resubscribe`.
 - Rich input is supported on two surfaces:
   - `codex.sessions.prompt_async.request.parts[]` accepts `text`, `image`, `mention`, and `skill`
   - core A2A `message/send` and `message/stream` keep standard A2A parts and map `TextPart`, image `FilePart`, and `DataPart(data={"type":"mention"|"skill", ...})` into Codex turn input
 - Agent Card media modes reflect that stable core message surface: default input modes are `text/plain`, `image/*`, and `application/json`; default output modes are `text/plain` and `application/json`.
 - The authenticated extended Agent Card also decomposes provider-private JSON-RPC surfaces into narrower skills: `codex.sessions.query`, `codex.sessions.control`, `codex.discovery.query`, `codex.discovery.watch`, `codex.threads.control`, `codex.threads.watch`, `codex.turns.control`, `codex.review.control`, `codex.exec.control`, `codex.exec.stream`, and `codex.interrupt.callback`.
+- `codex.sessions.shell`, `codex.turns.control`, `codex.review.*`, and `codex.exec.*` only appear in the authenticated extended card when their deployment toggles are enabled.
 - Those provider-private skills use narrower `output_modes` where practical: query/control/watch handle surfaces declare `application/json` when their primary contract is a structured JSON-RPC result or `DataPart` watch payload, while `codex.exec.stream` declares `text/plain` because stdout/stderr deltas and terminal summaries are emitted as `TextPart`.
 - `codex.sessions.control` intentionally remains mixed: `codex.sessions.prompt_async` returns a structured handle, while `codex.sessions.command` and `codex.sessions.shell` return A2A message items that contain `TextPart`.
 - On the core chat surface, the `application/json` input mode is intentionally narrower than arbitrary JSON: only `DataPart(type=mention|skill)` is part of the declared stable contract.

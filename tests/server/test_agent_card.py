@@ -241,6 +241,21 @@ def test_authenticated_extended_agent_card_injects_profile_into_extensions() -> 
         "availability": "enabled",
         "toggle": "A2A_ENABLE_SESSION_SHELL",
     }
+    assert profile["runtime_features"]["turn_control"] == {
+        "enabled": True,
+        "availability": "enabled",
+        "toggle": "A2A_ENABLE_TURN_CONTROL",
+    }
+    assert profile["runtime_features"]["review_control"] == {
+        "enabled": True,
+        "availability": "enabled",
+        "toggle": "A2A_ENABLE_REVIEW_CONTROL",
+    }
+    assert profile["runtime_features"]["exec_control"] == {
+        "enabled": True,
+        "availability": "enabled",
+        "toggle": "A2A_ENABLE_EXEC_CONTROL",
+    }
     assert profile["runtime_features"]["interrupts"] == {
         "request_ttl_seconds": 3600,
     }
@@ -589,25 +604,29 @@ def test_authenticated_extended_agent_card_injects_profile_into_extensions() -> 
     assert shell_policy["retention"] == "deployment-conditional"
     assert shell_policy["toggle"] == "A2A_ENABLE_SESSION_SHELL"
     exec_policy = compatibility_params["method_retention"]["codex.exec.start"]
-    assert exec_policy["availability"] == "always"
-    assert exec_policy["retention"] == "stable"
+    assert exec_policy["availability"] == "enabled"
+    assert exec_policy["retention"] == "deployment-conditional"
     assert exec_policy["extension_uri"] == "urn:codex-a2a:codex-exec/v1"
+    assert exec_policy["toggle"] == "A2A_ENABLE_EXEC_CONTROL"
     thread_policy = compatibility_params["method_retention"]["codex.threads.watch"]
     assert thread_policy["availability"] == "always"
     assert thread_policy["retention"] == "stable"
     assert thread_policy["extension_uri"] == "urn:codex-a2a:codex-thread-lifecycle/v1"
     turn_policy = compatibility_params["method_retention"]["codex.turns.steer"]
-    assert turn_policy["availability"] == "always"
-    assert turn_policy["retention"] == "stable"
+    assert turn_policy["availability"] == "enabled"
+    assert turn_policy["retention"] == "deployment-conditional"
     assert turn_policy["extension_uri"] == "urn:codex-a2a:codex-turn-control/v1"
+    assert turn_policy["toggle"] == "A2A_ENABLE_TURN_CONTROL"
     review_policy = compatibility_params["method_retention"]["codex.review.start"]
-    assert review_policy["availability"] == "always"
-    assert review_policy["retention"] == "stable"
+    assert review_policy["availability"] == "enabled"
+    assert review_policy["retention"] == "deployment-conditional"
     assert review_policy["extension_uri"] == "urn:codex-a2a:codex-review/v1"
+    assert review_policy["toggle"] == "A2A_ENABLE_REVIEW_CONTROL"
     review_watch_policy = compatibility_params["method_retention"]["codex.review.watch"]
-    assert review_watch_policy["availability"] == "always"
-    assert review_watch_policy["retention"] == "stable"
+    assert review_watch_policy["availability"] == "enabled"
+    assert review_watch_policy["retention"] == "deployment-conditional"
     assert review_watch_policy["extension_uri"] == "urn:codex-a2a:codex-review/v1"
+    assert review_watch_policy["toggle"] == "A2A_ENABLE_REVIEW_CONTROL"
 
 
 def test_authenticated_extended_agent_card_chat_examples_include_project_hint_when_configured() -> (
@@ -707,4 +726,85 @@ def test_authenticated_extended_agent_card_omits_shell_method_when_disabled() ->
         "enabled": False,
         "availability": "disabled",
         "toggle": "A2A_ENABLE_SESSION_SHELL",
+    }
+
+
+def test_agent_card_hides_boundary_sensitive_control_surfaces_when_disabled() -> None:
+    settings = make_settings(
+        a2a_bearer_token="test-token",
+        a2a_enable_session_shell=False,
+        a2a_enable_turn_control=False,
+        a2a_enable_review_control=False,
+        a2a_enable_exec_control=False,
+    )
+    public_card = build_agent_card(settings)
+    extended_card = build_authenticated_extended_agent_card(settings)
+
+    public_skill_ids = {skill.id for skill in public_card.skills or []}
+    extended_skill_ids = {skill.id for skill in extended_card.skills or []}
+    for skill_id in (
+        "codex.turns.control",
+        "codex.review.control",
+        "codex.review.watch",
+        "codex.exec.control",
+        "codex.exec.stream",
+    ):
+        assert skill_id not in public_skill_ids
+        assert skill_id not in extended_skill_ids
+
+    ext_by_uri = {ext.uri: ext for ext in extended_card.capabilities.extensions or []}
+    turn_params = _require_params(ext_by_uri[TURN_CONTROL_EXTENSION_URI])
+    review_params = _require_params(ext_by_uri[REVIEW_CONTROL_EXTENSION_URI])
+    exec_params = _require_params(ext_by_uri[EXEC_CONTROL_EXTENSION_URI])
+    wire_contract_params = _require_params(ext_by_uri[WIRE_CONTRACT_EXTENSION_URI])
+
+    assert turn_params["methods"] == {}
+    assert turn_params["method_contracts"] == {}
+    assert turn_params["availability"] == "disabled"
+    assert turn_params["toggle"] == "A2A_ENABLE_TURN_CONTROL"
+    assert review_params["methods"] == {}
+    assert review_params["method_contracts"] == {}
+    assert review_params["availability"] == "disabled"
+    assert review_params["toggle"] == "A2A_ENABLE_REVIEW_CONTROL"
+    assert exec_params["methods"] == {}
+    assert exec_params["method_contracts"] == {}
+    assert exec_params["availability"] == "disabled"
+    assert exec_params["toggle"] == "A2A_ENABLE_EXEC_CONTROL"
+    assert "codex.turns.steer" not in wire_contract_params["all_jsonrpc_methods"]
+    assert "codex.review.start" not in wire_contract_params["all_jsonrpc_methods"]
+    assert "codex.review.watch" not in wire_contract_params["all_jsonrpc_methods"]
+    assert "codex.exec.start" not in wire_contract_params["all_jsonrpc_methods"]
+    assert wire_contract_params["extensions"]["conditionally_available_methods"] == {
+        "codex.sessions.shell": {
+            "reason": "disabled_by_configuration",
+            "toggle": "A2A_ENABLE_SESSION_SHELL",
+        },
+        "codex.turns.steer": {
+            "reason": "disabled_by_configuration",
+            "toggle": "A2A_ENABLE_TURN_CONTROL",
+        },
+        "codex.review.start": {
+            "reason": "disabled_by_configuration",
+            "toggle": "A2A_ENABLE_REVIEW_CONTROL",
+        },
+        "codex.review.watch": {
+            "reason": "disabled_by_configuration",
+            "toggle": "A2A_ENABLE_REVIEW_CONTROL",
+        },
+        "codex.exec.start": {
+            "reason": "disabled_by_configuration",
+            "toggle": "A2A_ENABLE_EXEC_CONTROL",
+        },
+        "codex.exec.write": {
+            "reason": "disabled_by_configuration",
+            "toggle": "A2A_ENABLE_EXEC_CONTROL",
+        },
+        "codex.exec.resize": {
+            "reason": "disabled_by_configuration",
+            "toggle": "A2A_ENABLE_EXEC_CONTROL",
+        },
+        "codex.exec.terminate": {
+            "reason": "disabled_by_configuration",
+            "toggle": "A2A_ENABLE_EXEC_CONTROL",
+        },
     }

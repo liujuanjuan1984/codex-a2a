@@ -90,6 +90,9 @@ def test_settings_parse_ops_flags_and_timeouts():
         "A2A_BEARER_TOKEN": "test",
         "A2A_ENABLE_HEALTH_ENDPOINT": "false",
         "A2A_ENABLE_SESSION_SHELL": "false",
+        "A2A_ENABLE_TURN_CONTROL": "false",
+        "A2A_ENABLE_REVIEW_CONTROL": "false",
+        "A2A_ENABLE_EXEC_CONTROL": "false",
         "A2A_CANCEL_ABORT_TIMEOUT_SECONDS": "0.25",
         "A2A_STREAM_IDLE_DIAGNOSTIC_SECONDS": "45",
         "A2A_INTERRUPT_REQUEST_TTL_SECONDS": "90",
@@ -98,6 +101,9 @@ def test_settings_parse_ops_flags_and_timeouts():
         settings = Settings.from_env()
         assert settings.a2a_enable_health_endpoint is False
         assert settings.a2a_enable_session_shell is False
+        assert settings.a2a_enable_turn_control is False
+        assert settings.a2a_enable_review_control is False
+        assert settings.a2a_enable_exec_control is False
         assert settings.a2a_cancel_abort_timeout_seconds == 0.25
         assert settings.a2a_stream_idle_diagnostic_seconds == 45
         assert settings.a2a_interrupt_request_ttl_seconds == 90

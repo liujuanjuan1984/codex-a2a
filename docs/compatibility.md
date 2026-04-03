@@ -125,6 +125,7 @@ Current repository judgment under those rules:
 - `codex.turns.steer` is boundary-sensitive and should remain narrowly scoped, provider-private, and resistant to scope creep into a general orchestration API.
 - `codex.review.*` is also boundary-sensitive and should stay framed as a provider-private reviewer surface rather than a generic A2A review standard.
 - `codex.sessions.shell` and `codex.exec.*` are the most likely to exceed the preferred adapter boundary because they expose standalone command execution semantics instead of a stable session/message projection. They remain supported today, but should be treated as deployment-conditional or tightly provider-private operational surfaces rather than exemplars for future extension growth.
+- Current default posture is conservative: `codex.sessions.shell`, `codex.turns.steer`, `codex.review.*`, and `codex.exec.*` are disabled by default and must be explicitly enabled per deployment.
 
 ## Extension Taxonomy
 
@@ -154,6 +155,7 @@ Discovery note:
 - `codex.review.start` is the declared review-start control method for `uncommittedChanges`, `baseBranch`, `commit`, and `custom` review targets.
 - `codex.review.watch` is the declared review lifecycle watch-task bridge for `review.started`, `review.status.changed`, `review.completed`, and `review.failed`.
 - `codex.review.start` remains a control-handle surface; clients should use `codex.review.watch` plus `tasks/resubscribe` for review lifecycle observation.
+- `codex.sessions.shell`, `codex.turns.steer`, `codex.review.*`, and `codex.exec.*` are deployment-conditional rather than always-on surfaces and should be discovered from machine-readable contracts before use.
 - `thread/unsubscribe` is intentionally excluded from the stable public contract until this service exposes connection-safe subscription ownership.
 - This repository does not claim a generic standalone server-push JSON-RPC transport for those notifications; the compatibility contract is the watch-task bridge published through Agent Card and OpenAPI.
 
