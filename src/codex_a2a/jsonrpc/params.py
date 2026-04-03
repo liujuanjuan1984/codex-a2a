@@ -44,6 +44,10 @@ from codex_a2a.jsonrpc.query_params import (
     parse_get_session_messages_params,
     parse_list_sessions_params,
 )
+from codex_a2a.jsonrpc.review_control_params import (
+    ReviewStartControlParams,
+    parse_review_start_params,
+)
 from codex_a2a.jsonrpc.thread_lifecycle_params import (
     ThreadArchiveControlParams,
     ThreadForkControlParams,
@@ -55,6 +59,10 @@ from codex_a2a.jsonrpc.thread_lifecycle_params import (
     parse_thread_metadata_update_params,
     parse_thread_unarchive_params,
     parse_thread_watch_params,
+)
+from codex_a2a.jsonrpc.turn_control_params import (
+    TurnSteerControlParams,
+    parse_turn_steer_params,
 )
 
 __all__ = [
@@ -76,12 +84,14 @@ __all__ = [
     "PromptAsyncControlParams",
     "QuestionRejectParams",
     "QuestionReplyParams",
+    "ReviewStartControlParams",
     "ShellControlParams",
     "ThreadArchiveControlParams",
     "ThreadForkControlParams",
     "ThreadMetadataUpdateControlParams",
     "ThreadUnarchiveControlParams",
     "ThreadWatchControlParams",
+    "TurnSteerControlParams",
     "parse_command_params",
     "parse_discovery_apps_list_params",
     "parse_discovery_plugin_read_params",
@@ -100,10 +110,12 @@ __all__ = [
     "parse_prompt_async_params",
     "parse_question_reject_params",
     "parse_question_reply_params",
+    "parse_review_start_params",
     "parse_shell_params",
     "parse_thread_archive_params",
     "parse_thread_fork_params",
     "parse_thread_metadata_update_params",
     "parse_thread_unarchive_params",
     "parse_thread_watch_params",
+    "parse_turn_steer_params",
 ]

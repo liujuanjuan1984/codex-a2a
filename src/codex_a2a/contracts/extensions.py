@@ -23,6 +23,8 @@ STREAMING_EXTENSION_URI = "urn:a2a:stream-hints/v1"
 SESSION_QUERY_EXTENSION_URI = "urn:codex-a2a:codex-session-query/v1"
 DISCOVERY_EXTENSION_URI = "urn:codex-a2a:codex-discovery/v1"
 THREAD_LIFECYCLE_EXTENSION_URI = "urn:codex-a2a:codex-thread-lifecycle/v1"
+TURN_CONTROL_EXTENSION_URI = "urn:codex-a2a:codex-turn-control/v1"
+REVIEW_CONTROL_EXTENSION_URI = "urn:codex-a2a:codex-review/v1"
 EXEC_CONTROL_EXTENSION_URI = "urn:codex-a2a:codex-exec/v1"
 INTERRUPT_CALLBACK_EXTENSION_URI = "urn:a2a:interactive-interrupt/v1"
 
@@ -112,6 +114,28 @@ class ThreadLifecycleMethodContract:
     method: str
     required_params: tuple[str, ...] = ()
     optional_params: tuple[str, ...] = ()
+    result_fields: tuple[str, ...] = ()
+    notification_response_status: int | None = None
+    notes: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class TurnControlMethodContract:
+    method: str
+    required_params: tuple[str, ...] = ()
+    optional_params: tuple[str, ...] = ()
+    unsupported_params: tuple[str, ...] = ()
+    result_fields: tuple[str, ...] = ()
+    notification_response_status: int | None = None
+    notes: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class ReviewControlMethodContract:
+    method: str
+    required_params: tuple[str, ...] = ()
+    optional_params: tuple[str, ...] = ()
+    unsupported_params: tuple[str, ...] = ()
     result_fields: tuple[str, ...] = ()
     notification_response_status: int | None = None
     notes: tuple[str, ...] = ()
@@ -452,6 +476,113 @@ THREAD_LIFECYCLE_INVALID_PARAMS_DATA_FIELDS: tuple[str, ...] = (
     "fields",
 )
 
+TURN_CONTROL_METHOD_CONTRACTS: dict[str, TurnControlMethodContract] = {
+    "steer": TurnControlMethodContract(
+        method="codex.turns.steer",
+        required_params=("thread_id", "expected_turn_id", "request.parts"),
+        unsupported_params=(
+            "metadata",
+            CODEX_DIRECTORY_METADATA_FIELD,
+            CODEX_EXECUTION_METADATA_FIELD,
+            "request.agent",
+            "request.system",
+            "request.variant",
+            "request.messageID",
+        ),
+        result_fields=("ok", "thread_id", "turn_id"),
+        notification_response_status=204,
+        notes=(
+            (
+                "Steering appends input to the currently active regular turn without "
+                "creating a new turn."
+            ),
+            (
+                "request.parts accepts the same rich input item types as "
+                "codex.sessions.prompt_async, but turn-level overrides are intentionally "
+                "not accepted on this surface."
+            ),
+            (
+                "Upstream rejects steering when there is no active turn, expected_turn_id "
+                "does not match, or the active turn kind does not accept same-turn input."
+            ),
+        ),
+    ),
+}
+TURN_CONTROL_METHODS: dict[str, str] = {
+    key: contract.method for key, contract in TURN_CONTROL_METHOD_CONTRACTS.items()
+}
+TURN_CONTROL_ERROR_BUSINESS_CODES: dict[str, int] = {
+    "TURN_NOT_STEERABLE": -32012,
+    "TURN_FORBIDDEN": -32013,
+}
+TURN_CONTROL_ERROR_DATA_FIELDS: tuple[str, ...] = (
+    "type",
+    "thread_id",
+    "expected_turn_id",
+    "upstream_code",
+    "detail",
+)
+TURN_CONTROL_INVALID_PARAMS_DATA_FIELDS: tuple[str, ...] = (
+    "type",
+    "field",
+    "fields",
+)
+
+REVIEW_CONTROL_METHOD_CONTRACTS: dict[str, ReviewControlMethodContract] = {
+    "start": ReviewControlMethodContract(
+        method="codex.review.start",
+        required_params=("thread_id", "target.type"),
+        optional_params=(
+            "delivery",
+            "target.branch",
+            "target.sha",
+            "target.title",
+            "target.instructions",
+        ),
+        unsupported_params=(
+            "metadata",
+            CODEX_DIRECTORY_METADATA_FIELD,
+            CODEX_EXECUTION_METADATA_FIELD,
+        ),
+        result_fields=("ok", "turn_id", "turn", "review_thread_id"),
+        notification_response_status=204,
+        notes=(
+            (
+                "Supported targets are uncommittedChanges, baseBranch, commit, and custom. "
+                "Target shapes intentionally mirror the upstream app-server review/start "
+                "schema."
+            ),
+            (
+                "delivery defaults to inline. detached forks a new review thread and "
+                "returns its review_thread_id."
+            ),
+            (
+                "This method starts a review turn but does not currently create a separate "
+                "A2A watch task. Consumers should treat the response as a control handle "
+                "rather than a full review-stream subscription."
+            ),
+        ),
+    ),
+}
+REVIEW_CONTROL_METHODS: dict[str, str] = {
+    key: contract.method for key, contract in REVIEW_CONTROL_METHOD_CONTRACTS.items()
+}
+REVIEW_CONTROL_ERROR_BUSINESS_CODES: dict[str, int] = {
+    "REVIEW_FORBIDDEN": -32016,
+    "REVIEW_REJECTED": -32017,
+}
+REVIEW_CONTROL_ERROR_DATA_FIELDS: tuple[str, ...] = (
+    "type",
+    "thread_id",
+    "upstream_code",
+    "detail",
+)
+REVIEW_CONTROL_INVALID_PARAMS_DATA_FIELDS: tuple[str, ...] = (
+    "type",
+    "field",
+    "fields",
+)
+
 INTERRUPT_CALLBACK_METHOD_CONTRACTS: dict[str, InterruptMethodContract] = {
     "reply_permission": InterruptMethodContract(
         method="a2a.interrupt.permission.reply",
@@ -625,6 +756,8 @@ class CapabilitySnapshot:
     session_query_methods: tuple[str, ...]
     discovery_methods: tuple[str, ...]
     thread_lifecycle_methods: tuple[str, ...]
+    turn_control_methods: tuple[str, ...]
+    review_control_methods: tuple[str, ...]
     exec_control_methods: tuple[str, ...]
     conditional_methods: dict[str, dict[str, str]]
 
@@ -647,11 +780,15 @@ def build_capability_snapshot(*, runtime_profile: RuntimeProfile) -> CapabilityS
     session_query_methods = tuple(SESSION_QUERY_METHODS[key] for key in session_query_method_keys)
     discovery_methods = tuple(DISCOVERY_METHODS.values())
     thread_lifecycle_methods = tuple(THREAD_LIFECYCLE_METHODS.values())
+    turn_control_methods = tuple(TURN_CONTROL_METHODS.values())
+    review_control_methods = tuple(REVIEW_CONTROL_METHODS.values())
     exec_control_methods = tuple(EXEC_CONTROL_METHODS.values())
     extension_jsonrpc_methods = (
         *session_query_methods,
         *discovery_methods,
         *thread_lifecycle_methods,
+        *turn_control_methods,
+        *review_control_methods,
         *exec_control_methods,
         *INTERRUPT_CALLBACK_METHODS.values(),
     )
@@ -665,6 +802,8 @@ def build_capability_snapshot(*, runtime_profile: RuntimeProfile) -> CapabilityS
         session_query_methods=session_query_methods,
         discovery_methods=discovery_methods,
         thread_lifecycle_methods=thread_lifecycle_methods,
+        turn_control_methods=turn_control_methods,
+        review_control_methods=review_control_methods,
         exec_control_methods=exec_control_methods,
         conditional_methods=conditional_methods,
     )
@@ -710,6 +849,8 @@ def build_wire_contract_extension_params(
                 SESSION_QUERY_EXTENSION_URI,
                 DISCOVERY_EXTENSION_URI,
                 THREAD_LIFECYCLE_EXTENSION_URI,
+                TURN_CONTROL_EXTENSION_URI,
+                REVIEW_CONTROL_EXTENSION_URI,
                 EXEC_CONTROL_EXTENSION_URI,
                 INTERRUPT_CALLBACK_EXTENSION_URI,
             ],
@@ -786,6 +927,28 @@ def build_compatibility_profile_params(
                 "surface": "extension",
                 "availability": "always",
                 "retention": "stable",
+                "extension_uri": TURN_CONTROL_EXTENSION_URI,
+            }
+            for method in snapshot.turn_control_methods
+        }
+    )
+    method_retention.update(
+        {
+            method: {
+                "surface": "extension",
+                "availability": "always",
+                "retention": "stable",
+                "extension_uri": REVIEW_CONTROL_EXTENSION_URI,
+            }
+            for method in snapshot.review_control_methods
+        }
+    )
+    method_retention.update(
+        {
+            method: {
+                "surface": "extension",
+                "availability": "always",
+                "retention": "stable",
                 "extension_uri": SESSION_QUERY_EXTENSION_URI,
             }
             for method in snapshot.session_query_methods
@@ -847,6 +1010,16 @@ def build_compatibility_profile_params(
             "availability": "always",
             "retention": "stable",
         },
+        TURN_CONTROL_EXTENSION_URI: {
+            "surface": "jsonrpc-extension",
+            "availability": "always",
+            "retention": "stable",
+        },
+        REVIEW_CONTROL_EXTENSION_URI: {
+            "surface": "jsonrpc-extension",
+            "availability": "always",
+            "retention": "stable",
+        },
         EXEC_CONTROL_EXTENSION_URI: {
             "surface": "jsonrpc-extension",
             "availability": "always",
@@ -881,6 +1054,8 @@ def build_compatibility_profile_params(
                 SESSION_QUERY_EXTENSION_URI,
                 DISCOVERY_EXTENSION_URI,
                 THREAD_LIFECYCLE_EXTENSION_URI,
+                TURN_CONTROL_EXTENSION_URI,
+                REVIEW_CONTROL_EXTENSION_URI,
                 EXEC_CONTROL_EXTENSION_URI,
                 COMPATIBILITY_PROFILE_EXTENSION_URI,
                 WIRE_CONTRACT_EXTENSION_URI,
@@ -917,6 +1092,14 @@ def build_compatibility_profile_params(
             (
                 "Treat codex.threads.* as provider-private lifecycle management surfaces "
                 "separate from codex.sessions.* query/control methods."
+            ),
+            (
+                "Treat codex.turns.* as active-turn control surfaces rather than session "
+                "query/history methods."
+            ),
+            (
+                "Treat codex.review.* as reviewer control surfaces. review/start starts a "
+                "review turn but does not currently imply a standalone review watch task."
             ),
             (
                 "codex.sessions.shell is deployment-conditional: discover it from the "
@@ -1408,6 +1591,106 @@ def build_thread_lifecycle_extension_params(
             "business_codes": dict(THREAD_LIFECYCLE_ERROR_BUSINESS_CODES),
             "error_data_fields": list(THREAD_LIFECYCLE_ERROR_DATA_FIELDS),
             "invalid_params_data_fields": list(THREAD_LIFECYCLE_INVALID_PARAMS_DATA_FIELDS),
+        },
+    }
+
+
+def build_turn_control_extension_params(
+    *,
+    runtime_profile: RuntimeProfile,
+) -> dict[str, Any]:
+    method_contracts: dict[str, Any] = {}
+    for contract in TURN_CONTROL_METHOD_CONTRACTS.values():
+        method_contract_doc: dict[str, Any] = {
+            "params": _build_method_contract_params(
+                required=contract.required_params,
+                optional=contract.optional_params,
+                unsupported=contract.unsupported_params,
+            ),
+            "result": {"fields": list(contract.result_fields)},
+        }
+        if contract.notification_response_status is not None:
+            method_contract_doc["notification_response_status"] = (
+                contract.notification_response_status
+            )
+        if contract.notes:
+            method_contract_doc["notes"] = list(contract.notes)
+        method_contracts[contract.method] = method_contract_doc
+
+    return {
+        "methods": dict(TURN_CONTROL_METHODS),
+        "method_contracts": method_contracts,
+        "profile": runtime_profile.summary_dict(),
+        "supported_metadata": [],
+        "provider_private_metadata": [],
+        "consumer_guidance": [
+            (
+                "Use codex.turns.steer only when the target thread already has an active "
+                "regular turn that is still in progress."
+            ),
+            (
+                "Do not treat codex.turns.steer as an alias for turn/start. It appends "
+                "input to an existing active turn and intentionally rejects turn-level "
+                "override fields."
+            ),
+        ],
+        "errors": {
+            "business_codes": dict(TURN_CONTROL_ERROR_BUSINESS_CODES),
+            "error_data_fields": list(TURN_CONTROL_ERROR_DATA_FIELDS),
+            "invalid_params_data_fields": list(TURN_CONTROL_INVALID_PARAMS_DATA_FIELDS),
+        },
+    }
+
+
+def build_review_control_extension_params(
+    *,
+    runtime_profile: RuntimeProfile,
+) -> dict[str, Any]:
+    method_contracts: dict[str, Any] = {}
+    for contract in REVIEW_CONTROL_METHOD_CONTRACTS.values():
+        method_contract_doc: dict[str, Any] = {
+            "params": _build_method_contract_params(
+                required=contract.required_params,
+                optional=contract.optional_params,
+                unsupported=contract.unsupported_params,
+            ),
+            "result": {"fields": list(contract.result_fields)},
+        }
+        if contract.notification_response_status is not None:
+            method_contract_doc["notification_response_status"] = (
+                contract.notification_response_status
+            )
+        if contract.notes:
+            method_contract_doc["notes"] = list(contract.notes)
+        method_contracts[contract.method] = method_contract_doc
+
+    return {
+        "methods": dict(REVIEW_CONTROL_METHODS),
+        "method_contracts": method_contracts,
+        "profile": runtime_profile.summary_dict(),
+        "supported_metadata": [],
+        "provider_private_metadata": [],
+        "target_contracts": {
+            "uncommittedChanges": {"required_fields": ["type"]},
+            "baseBranch": {"required_fields": ["type", "branch"]},
+            "commit": {"required_fields": ["type", "sha"], "optional_fields": ["title"]},
+            "custom": {"required_fields": ["type", "instructions"]},
+        },
+        "delivery_values": ["inline", "detached"],
+        "consumer_guidance": [
+            (
+                "Use review/start when you want the upstream reviewer surface, not when you "
+                "simply want to send a slash command through codex.sessions.command."
+            ),
+            (
+                "review/start returns the spawned review turn handle immediately. This "
+                "service does not currently publish a dedicated review watch task bridge."
+            ),
+        ],
+        "errors": {
+            "business_codes": dict(REVIEW_CONTROL_ERROR_BUSINESS_CODES),
+            "error_data_fields": list(REVIEW_CONTROL_ERROR_DATA_FIELDS),
+            "invalid_params_data_fields": list(REVIEW_CONTROL_INVALID_PARAMS_DATA_FIELDS),
         },
     }
 

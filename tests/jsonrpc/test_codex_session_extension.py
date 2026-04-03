@@ -10,11 +10,13 @@ from codex_a2a.contracts.extensions import (
     DISCOVERY_METHODS,
     EXEC_CONTROL_METHODS,
     INTERRUPT_CALLBACK_METHODS,
+    REVIEW_CONTROL_METHODS,
     SESSION_CONTROL_METHODS,
     SESSION_QUERY_DEFAULT_LIMIT,
     SESSION_QUERY_MAX_LIMIT,
     SESSION_QUERY_METHODS,
     THREAD_LIFECYCLE_METHODS,
+    TURN_CONTROL_METHODS,
     build_capability_snapshot,
 )
 from codex_a2a.jsonrpc.application import CodexSessionQueryJSONRPCApplication
@@ -47,6 +49,8 @@ def _build_extension_app(
         "thread_unarchive": THREAD_LIFECYCLE_METHODS["unarchive"],
         "thread_metadata_update": THREAD_LIFECYCLE_METHODS["metadata_update"],
         "thread_watch": THREAD_LIFECYCLE_METHODS["watch"],
+        "turn_steer": TURN_CONTROL_METHODS["steer"],
+        "review_start": REVIEW_CONTROL_METHODS["start"],
         **EXEC_CONTROL_METHODS,
         **INTERRUPT_CALLBACK_METHODS,
     }

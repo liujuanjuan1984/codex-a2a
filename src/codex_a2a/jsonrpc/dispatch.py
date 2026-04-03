@@ -10,6 +10,8 @@ class ExtensionMethodRegistry:
     discovery_query_methods: frozenset[str]
     discovery_control_methods: frozenset[str]
     thread_lifecycle_control_methods: frozenset[str]
+    turn_control_methods: frozenset[str]
+    review_control_methods: frozenset[str]
     exec_control_methods: frozenset[str]
     interrupt_callback_methods: frozenset[str]
     extension_methods: frozenset[str]
@@ -48,6 +50,8 @@ class ExtensionMethodRegistry:
                 methods["thread_watch"],
             }
         )
+        turn_control_methods = frozenset({methods["turn_steer"]})
+        review_control_methods = frozenset({methods["review_start"]})
         exec_control_methods = frozenset(
             {
                 methods["exec_start"],
@@ -71,6 +75,8 @@ class ExtensionMethodRegistry:
             | discovery_query_methods
             | discovery_control_methods
             | thread_lifecycle_control_methods
+            | turn_control_methods
+            | review_control_methods
             | exec_control_methods
             | interrupt_callback_methods
         )
@@ -80,6 +86,8 @@ class ExtensionMethodRegistry:
             discovery_query_methods=discovery_query_methods,
             discovery_control_methods=discovery_control_methods,
             thread_lifecycle_control_methods=thread_lifecycle_control_methods,
+            turn_control_methods=turn_control_methods,
+            review_control_methods=review_control_methods,
             exec_control_methods=exec_control_methods,
             interrupt_callback_methods=interrupt_callback_methods,
             extension_methods=extension_methods,

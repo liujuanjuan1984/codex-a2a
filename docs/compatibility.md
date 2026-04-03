@@ -95,7 +95,9 @@ Execution-environment boundary fields are also published through the runtime pro
 - `codex.exec.*` is compatibility-sensitive as the standalone interactive exec contract. Changes to handle shapes, task-stream delivery, or lifecycle method names should be treated as wire-level changes.
 - `codex.discovery.*` is compatibility-sensitive as the stable discovery contract for `skill.path` and `mention_path` identifiers. Changes to normalized item fields, plugin marketplace mapping, or discovery watch task payload kinds should be treated as wire-level changes.
 - `codex.threads.*` is compatibility-sensitive as the provider-private thread lifecycle contract. Changes to lifecycle method names, watch payload kinds, or watch-task bridge event names should be treated as wire-level changes.
-- Provider-private Agent Card skill decomposition is also compatibility-sensitive. Renaming or re-merging `codex.sessions.query/control`, `codex.discovery.query/watch`, `codex.threads.control/watch`, `codex.exec.control/stream`, or narrowing `codex.interrupt.callback` output modes should be treated as discoverability contract changes.
+- `codex.turns.*` is compatibility-sensitive as the active-turn control contract. Changes to `expected_turn_id` semantics, same-turn rich-input handling, or rejected override fields should be treated as wire-level changes.
+- `codex.review.*` is compatibility-sensitive as the review-start control contract. Changes to supported target types, `delivery` semantics, or the absence/presence of a dedicated review watch task bridge should be treated as wire-level changes.
+- Provider-private Agent Card skill decomposition is also compatibility-sensitive. Renaming or re-merging `codex.sessions.query/control`, `codex.discovery.query/watch`, `codex.threads.control/watch`, `codex.turns.control`, `codex.review.control`, `codex.exec.control/stream`, or narrowing `codex.interrupt.callback` output modes should be treated as discoverability contract changes.
 - Agent Card media modes and `acceptedOutputModes` handling are compatibility-sensitive. Changes to declared default modes, to task-scoped persistence of negotiated modes, or to structured-output downgrade behavior should be treated as wire-level changes.
 - For core chat tasks, negotiated output modes are lifecycle-scoped. `message/send`, `message/stream`, `tasks/get`, `tasks/resubscribe`, and push notifications should not drift apart for the same task.
 - For core chat requests, explicit `acceptedOutputModes` are also a compatibility-sensitive fail-fast boundary: requests must remain compatible with declared chat output modes, and current chat turns require `text/plain`.
@@ -115,6 +117,8 @@ This repository distinguishes between three layers:
     - discovery/query surfaces
     - discovery watch task bridge
     - thread lifecycle watch-task bridge
+    - active-turn control
+    - review start control
     - standalone interactive exec
 
 Discovery note:
@@ -122,6 +126,9 @@ Discovery note:
 - `codex.discovery.skills.list`, `codex.discovery.apps.list`, `codex.discovery.plugins.list`, and `codex.discovery.plugins.read` are declared read-only discovery methods.
 - `codex.discovery.watch` is the declared bridge for upstream `skills/changed` and `app/list/updated` notifications.
 - `codex.threads.watch` is the declared thread lifecycle watch-task bridge for upstream `thread/started`, `thread/status/changed`, `thread/archived`, `thread/unarchived`, and `thread/closed` notifications.
+- `codex.turns.steer` is the declared active-turn control method for appending additional input to an already-running regular turn.
+- `codex.review.start` is the declared review-start control method for `uncommittedChanges`, `baseBranch`, `commit`, and `custom` review targets.
+- There is currently no dedicated review watch task bridge. Clients should treat `codex.review.start` as a control-handle surface rather than a separate streaming subscription API.
 - `thread/unsubscribe` is intentionally excluded from the stable public contract until this service exposes connection-safe subscription ownership.
 - This repository does not claim a generic standalone server-push JSON-RPC transport for those notifications; the compatibility contract is the watch-task bridge published through Agent Card and OpenAPI.
 

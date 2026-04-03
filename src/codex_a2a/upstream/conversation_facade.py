@@ -276,6 +276,61 @@ class CodexConversationFacade:
             raise RuntimeError("codex turn/start response missing turn id")
         return {"ok": True, "session_id": session_id, "turn_id": turn_id.strip()}
 
+    async def turn_steer(
+        self,
+        thread_id: str,
+        *,
+        expected_turn_id: str,
+        request: dict[str, Any],
+    ) -> dict[str, Any]:
+        result = await self._rpc_request(
+            "turn/steer",
+            {
+                "threadId": thread_id,
+                "input": convert_request_parts_to_turn_input(request),
+                "expectedTurnId": expected_turn_id,
+            },
+        )
+        if not isinstance(result, dict):
+            raise RuntimeError("codex turn/steer response missing result object")
+        turn_id = result.get("turnId")
+        if not isinstance(turn_id, str) or not turn_id.strip():
+            raise RuntimeError("codex turn/steer response missing turn id")
+        return {"ok": True, "thread_id": thread_id, "turn_id": turn_id.strip()}
+
+    async def review_start(
+        self,
+        thread_id: str,
+        *,
+        target: dict[str, Any],
+        delivery: str | None = None,
+    ) -> dict[str, Any]:
+        params: dict[str, Any] = {"threadId": thread_id, "target": target}
+        if delivery is not None:
+            params["delivery"] = delivery
+        result = await self._rpc_request("review/start", params)
+        if not isinstance(result, dict):
+            raise RuntimeError("codex review/start response missing result object")
+        turn = result.get("turn")
+        if not isinstance(turn, dict):
+            raise RuntimeError("codex review/start response missing turn")
+        turn_id = turn.get("id")
+        if not isinstance(turn_id, str) or not turn_id.strip():
+            raise RuntimeError("codex review/start response missing turn id")
+        review_thread_id = result.get("reviewThreadId")
+        if delivery != "detached" and (
+            not isinstance(review_thread_id, str) or not review_thread_id.strip()
+        ):
+            review_thread_id = thread_id
+        if not isinstance(review_thread_id, str) or not review_thread_id.strip():
+            raise RuntimeError("codex review/start response missing review thread id")
+        return {
+            "ok": True,
+            "turn_id": turn_id.strip(),
+            "turn": turn,
+            "review_thread_id": review_thread_id.strip(),
+        }
+
     async def session_command(
         self,
         session_id: str,

@@ -382,7 +382,7 @@ This path is for contributors. End users should prefer the released CLI path des
   - `codex.sessions.prompt_async.request.parts[]` accepts `text`, `image`, `mention`, and `skill`
   - core A2A `message/send` and `message/stream` keep standard A2A parts and map `TextPart`, image `FilePart`, and `DataPart(data={"type":"mention"|"skill", ...})` into Codex turn input
 - Agent Card media modes reflect that stable core message surface: default input modes are `text/plain`, `image/*`, and `application/json`; default output modes are `text/plain` and `application/json`.
-- The authenticated extended Agent Card also decomposes provider-private JSON-RPC surfaces into narrower skills: `codex.sessions.query`, `codex.sessions.control`, `codex.discovery.query`, `codex.discovery.watch`, `codex.threads.control`, `codex.threads.watch`, `codex.exec.control`, `codex.exec.stream`, and `codex.interrupt.callback`.
+- The authenticated extended Agent Card also decomposes provider-private JSON-RPC surfaces into narrower skills: `codex.sessions.query`, `codex.sessions.control`, `codex.discovery.query`, `codex.discovery.watch`, `codex.threads.control`, `codex.threads.watch`, `codex.turns.control`, `codex.review.control`, `codex.exec.control`, `codex.exec.stream`, and `codex.interrupt.callback`.
 - Those provider-private skills use narrower `output_modes` where practical: query/control/watch handle surfaces declare `application/json` when their primary contract is a structured JSON-RPC result or `DataPart` watch payload, while `codex.exec.stream` declares `text/plain` because stdout/stderr deltas and terminal summaries are emitted as `TextPart`.
 - `codex.sessions.control` intentionally remains mixed: `codex.sessions.prompt_async` returns a structured handle, while `codex.sessions.command` and `codex.sessions.shell` return A2A message items that contain `TextPart`.
 - On the core chat surface, the `application/json` input mode is intentionally narrower than arbitrary JSON: only `DataPart(type=mention|skill)` is part of the declared stable contract.
@@ -804,6 +804,102 @@ The JSON-RPC result returns `task_id` and `context_id`. Then use the standard ta
 curl -sS http://127.0.0.1:8000/v1/tasks/<task_id>:subscribe \
   -H "Authorization: Bearer ${A2A_BEARER_TOKEN}"
 ```
+
+## Codex Turn Control (A2A Extension)
+
+This service exposes provider-private active-turn steering through JSON-RPC:
+
+- `codex.turns.steer`
+
+Turn-control guidance:
+
+- use `codex.turns.steer` only when the target thread already has an active regular turn
+- pass `expected_turn_id` so the request fails fast if the active turn changed before the steer request arrived
+- `request.parts` accepts the same stable rich input items as `codex.sessions.prompt_async`
+- turn-level override fields are intentionally rejected, including `metadata`, `metadata.codex.directory`, `metadata.codex.execution`, and request-level model/agent/system variants
+
+### Turn Steer (`codex.turns.steer`)
+
+```bash
+curl -sS http://127.0.0.1:8000/ \
+  -H 'content-type: application/json' \
+  -H "Authorization: Bearer ${A2A_BEARER_TOKEN}" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 21,
+    "method": "codex.turns.steer",
+    "params": {
+      "thread_id": "thr-1",
+      "expected_turn_id": "turn-9",
+      "request": {
+        "parts": [
+          {"type": "text", "text": "Focus on the failing tests first."}
+        ]
+      }
+    }
+  }'
+```
+
+The result returns a minimal control envelope with `ok`, `thread_id`, and `turn_id`.
+
+## Codex Review Control (A2A Extension)
+
+This service exposes provider-private review-start control through JSON-RPC:
+
+- `codex.review.start`
+
+Review-control guidance:
+
+- use `codex.review.start` when you want the upstream reviewer surface rather than a slash command sent through `codex.sessions.command`
+- supported target types are `uncommittedChanges`, `baseBranch`, `commit`, and `custom`
+- `delivery` supports `inline` and `detached`
+- there is currently no dedicated review watch task bridge; clients should treat the response as a control handle rather than a review stream subscription
+
+### Review Start (`codex.review.start`)
+
+Inline commit review example:
+
+```bash
+curl -sS http://127.0.0.1:8000/ \
+  -H 'content-type: application/json' \
+  -H "Authorization: Bearer ${A2A_BEARER_TOKEN}" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 22,
+    "method": "codex.review.start",
+    "params": {
+      "thread_id": "thr-1",
+      "delivery": "inline",
+      "target": {
+        "type": "commit",
+        "sha": "commit-demo-123",
+        "title": "Polish tui colors"
+      }
+    }
+  }'
+```
+
+Detached review for current uncommitted changes:
+
+```bash
+curl -sS http://127.0.0.1:8000/ \
+  -H 'content-type: application/json' \
+  -H "Authorization: Bearer ${A2A_BEARER_TOKEN}" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 23,
+    "method": "codex.review.start",
+    "params": {
+      "thread_id": "thr-1",
+      "delivery": "detached",
+      "target": {
+        "type": "uncommittedChanges"
+      }
+    }
+  }'
+```
+
+The result returns `ok`, `turn_id`, the spawned `turn`, and `review_thread_id`. When `delivery=detached`, `review_thread_id` identifies the detached review thread.
 
 ## Codex Interrupt Callback (A2A Extension)
 
