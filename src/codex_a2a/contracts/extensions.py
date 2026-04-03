@@ -451,6 +451,31 @@ THREAD_LIFECYCLE_METHOD_CONTRACTS: dict[str, ThreadLifecycleMethodContract] = {
                 "task stream."
             ),
             ("request.thread_ids narrows the watch to specific upstream thread ids when provided."),
+            ("Use codex.threads.watch.release with the returned task_id to stop an owned watch."),
+        ),
+    ),
+    "watch_release": ThreadLifecycleMethodContract(
+        method="codex.threads.watch.release",
+        required_params=("task_id",),
+        result_fields=(
+            "ok",
+            "task_id",
+            "owner_status",
+            "release_reason",
+            "subscription_key",
+            "remaining_owner_count",
+            "subscription_released",
+        ),
+        notification_response_status=204,
+        notes=(
+            (
+                "Release a previously-started codex.threads.watch task by the task_id returned "
+                "from watch creation."
+            ),
+            (
+                "This method releases ownership-scoped local watch state; it does not expose raw "
+                "upstream thread/unsubscribe."
+            ),
         ),
     ),
 }
@@ -460,6 +485,8 @@ THREAD_LIFECYCLE_METHODS: dict[str, str] = {
 THREAD_LIFECYCLE_ERROR_BUSINESS_CODES: dict[str, int] = {
     "THREAD_NOT_FOUND": -32010,
     "THREAD_FORBIDDEN": -32011,
+    "WATCH_NOT_FOUND": -32014,
+    "WATCH_FORBIDDEN": -32015,
     "UPSTREAM_UNREACHABLE": -32002,
     "UPSTREAM_HTTP_ERROR": -32003,
 }
@@ -467,6 +494,7 @@ THREAD_LIFECYCLE_ERROR_DATA_FIELDS: tuple[str, ...] = (
     "type",
     "method",
     "thread_id",
+    "task_id",
     "upstream_status",
     "detail",
 )
@@ -1575,6 +1603,10 @@ def build_thread_lifecycle_extension_params(
                     "thread/unsubscribe is intentionally excluded from this first-stage "
                     "stable surface because upstream unsubscribe is connection-scoped while "
                     "this service currently shares one underlying Codex client connection."
+                ),
+                (
+                    "Use codex.threads.watch.release or tasks/cancel to release a watch that "
+                    "was created by the current owner."
                 ),
             ],
         },

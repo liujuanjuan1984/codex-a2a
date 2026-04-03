@@ -126,6 +126,7 @@ Discovery note:
 - `codex.discovery.skills.list`, `codex.discovery.apps.list`, `codex.discovery.plugins.list`, and `codex.discovery.plugins.read` are declared read-only discovery methods.
 - `codex.discovery.watch` is the declared bridge for upstream `skills/changed` and `app/list/updated` notifications.
 - `codex.threads.watch` is the declared thread lifecycle watch-task bridge for upstream `thread/started`, `thread/status/changed`, `thread/archived`, `thread/unarchived`, and `thread/closed` notifications.
+- `codex.threads.watch.release` is the declared ownership-scoped control method for releasing a watch task created by `codex.threads.watch`.
 - `codex.turns.steer` is the declared active-turn control method for appending additional input to an already-running regular turn.
 - `codex.review.start` is the declared review-start control method for `uncommittedChanges`, `baseBranch`, `commit`, and `custom` review targets.
 - `codex.review.watch` is the declared review lifecycle watch-task bridge for `review.started`, `review.status.changed`, `review.completed`, and `review.failed`.

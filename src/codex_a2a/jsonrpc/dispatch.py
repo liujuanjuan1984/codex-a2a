@@ -48,6 +48,7 @@ class ExtensionMethodRegistry:
                 methods["thread_unarchive"],
                 methods["thread_metadata_update"],
                 methods["thread_watch"],
+                methods["thread_watch_release"],
             }
         )
         turn_control_methods = frozenset({methods["turn_steer"]})

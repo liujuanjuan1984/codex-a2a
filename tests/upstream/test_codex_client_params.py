@@ -424,6 +424,7 @@ async def test_thread_lifecycle_methods_forward_expected_rpc_calls() -> None:
 
     fork = await client.thread_fork("thr-1", params={"ephemeral": True})
     await client.thread_archive("thr-1")
+    await client.thread_unsubscribe("thr-1")
     unarchive = await client.thread_unarchive("thr-1")
     metadata = await client.thread_metadata_update(
         "thr-1", params={"gitInfo": {"branch": "feat/thread-lifecycle"}}
@@ -447,6 +448,7 @@ async def test_thread_lifecycle_methods_forward_expected_rpc_calls() -> None:
     assert seen == [
         ("thread/fork", {"threadId": "thr-1", "ephemeral": True}),
         ("thread/archive", {"threadId": "thr-1"}),
+        ("thread/unsubscribe", {"threadId": "thr-1"}),
         ("thread/unarchive", {"threadId": "thr-1"}),
         (
             "thread/metadata/update",
