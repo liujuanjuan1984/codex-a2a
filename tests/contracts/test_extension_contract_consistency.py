@@ -8,22 +8,26 @@ from codex_a2a.contracts.extensions import (
     DISCOVERY_EXTENSION_URI,
     EXEC_CONTROL_EXTENSION_URI,
     INTERRUPT_CALLBACK_EXTENSION_URI,
+    REVIEW_CONTROL_EXTENSION_URI,
     SESSION_BINDING_EXTENSION_URI,
     SESSION_QUERY_DEFAULT_LIMIT,
     SESSION_QUERY_EXTENSION_URI,
     SESSION_QUERY_MAX_LIMIT,
     STREAMING_EXTENSION_URI,
     THREAD_LIFECYCLE_EXTENSION_URI,
+    TURN_CONTROL_EXTENSION_URI,
     WIRE_CONTRACT_EXTENSION_URI,
     build_capability_snapshot,
     build_compatibility_profile_params,
     build_discovery_extension_params,
     build_exec_control_extension_params,
     build_interrupt_callback_extension_params,
+    build_review_control_extension_params,
     build_session_binding_extension_params,
     build_session_query_extension_params,
     build_streaming_extension_params,
     build_thread_lifecycle_extension_params,
+    build_turn_control_extension_params,
     build_wire_contract_extension_params,
 )
 from codex_a2a.profile.runtime import build_runtime_profile
@@ -149,6 +153,34 @@ def test_thread_lifecycle_extension_ssot_matches_agent_card_contract() -> None:
     )
 
 
+def test_turn_control_extension_ssot_matches_agent_card_contract() -> None:
+    settings = make_settings(a2a_bearer_token="test-token")
+    runtime_profile = build_runtime_profile(settings)
+    card = build_authenticated_extended_agent_card(settings)
+    ext_by_uri = {ext.uri: ext for ext in card.capabilities.extensions or []}
+
+    turn_control = ext_by_uri[TURN_CONTROL_EXTENSION_URI]
+    expected = build_turn_control_extension_params(runtime_profile=runtime_profile)
+
+    assert turn_control.params == expected, (
+        "Turn control extension drifted from extension_contracts SSOT."
+    )
+
+
+def test_review_control_extension_ssot_matches_agent_card_contract() -> None:
+    settings = make_settings(a2a_bearer_token="test-token")
+    runtime_profile = build_runtime_profile(settings)
+    card = build_authenticated_extended_agent_card(settings)
+    ext_by_uri = {ext.uri: ext for ext in card.capabilities.extensions or []}
+
+    review_control = ext_by_uri[REVIEW_CONTROL_EXTENSION_URI]
+    expected = build_review_control_extension_params(runtime_profile=runtime_profile)
+
+    assert review_control.params == expected, (
+        "Review control extension drifted from extension_contracts SSOT."
+    )
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("method", "params"),
@@ -240,6 +272,8 @@ def test_openapi_jsonrpc_contract_extension_matches_ssot() -> None:
     interrupt_callback = contract["interrupt_callback"]
     exec_control = contract["exec_control"]
     thread_lifecycle = contract["thread_lifecycle"]
+    turn_control = contract["turn_control"]
+    review_control = contract["review_control"]
     wire_contract = contract["wire_contract"]
     compatibility_profile = contract["compatibility_profile"]
     expected_session_binding = build_session_binding_extension_params(
@@ -259,6 +293,12 @@ def test_openapi_jsonrpc_contract_extension_matches_ssot() -> None:
         runtime_profile=runtime_profile,
     )
     expected_thread_lifecycle = build_thread_lifecycle_extension_params(
+        runtime_profile=runtime_profile,
+    )
+    expected_turn_control = build_turn_control_extension_params(
+        runtime_profile=runtime_profile,
+    )
+    expected_review_control = build_review_control_extension_params(
         runtime_profile=runtime_profile,
     )
     expected_wire_contract = build_wire_contract_extension_params(
@@ -291,6 +331,12 @@ def test_openapi_jsonrpc_contract_extension_matches_ssot() -> None:
     assert thread_lifecycle == expected_thread_lifecycle, (
         "OpenAPI thread lifecycle contract drifted from extension_contracts SSOT."
     )
+    assert turn_control == expected_turn_control, (
+        "OpenAPI turn control contract drifted from extension_contracts SSOT."
+    )
+    assert review_control == expected_review_control, (
+        "OpenAPI review control contract drifted from extension_contracts SSOT."
+    )
     assert wire_contract == expected_wire_contract, (
         "OpenAPI wire contract drifted from extension_contracts SSOT."
     )
@@ -311,6 +357,8 @@ def test_openapi_and_agent_card_extension_contracts_match() -> None:
     assert post_contract["session_query"] == ext_by_uri[SESSION_QUERY_EXTENSION_URI].params
     assert post_contract["discovery"] == ext_by_uri[DISCOVERY_EXTENSION_URI].params
     assert post_contract["thread_lifecycle"] == ext_by_uri[THREAD_LIFECYCLE_EXTENSION_URI].params
+    assert post_contract["turn_control"] == ext_by_uri[TURN_CONTROL_EXTENSION_URI].params
+    assert post_contract["review_control"] == ext_by_uri[REVIEW_CONTROL_EXTENSION_URI].params
     assert post_contract["exec_control"] == ext_by_uri[EXEC_CONTROL_EXTENSION_URI].params
     assert (
         post_contract["interrupt_callback"] == ext_by_uri[INTERRUPT_CALLBACK_EXTENSION_URI].params
@@ -420,6 +468,30 @@ def test_guide_mentions_declared_thread_lifecycle_contract() -> None:
         assert fragment in guide_text
 
 
+def test_guide_mentions_declared_turn_control_contract() -> None:
+    guide_text = Path("docs/guide.md").read_text()
+    compatibility_text = Path("docs/compatibility.md").read_text()
+
+    assert "codex.turns.steer" in guide_text
+    assert "active regular turn" in guide_text
+    assert "expected_turn_id" in guide_text
+    assert "request.parts" in guide_text
+    assert "turn-level override fields are intentionally rejected" in guide_text
+    assert "codex.turns.*" in compatibility_text
+
+
+def test_guide_mentions_declared_review_control_contract() -> None:
+    guide_text = Path("docs/guide.md").read_text()
+    compatibility_text = Path("docs/compatibility.md").read_text()
+
+    assert "codex.review.start" in guide_text
+    assert "uncommittedChanges" in guide_text
+    assert "baseBranch" in guide_text
+    assert "detached" in guide_text
+    assert "review watch task bridge" in guide_text
+    assert "codex.review.*" in compatibility_text
+
+
 def test_guide_environment_variables_match_settings_aliases() -> None:
     import re
 
@@ -447,6 +519,8 @@ def test_openapi_jsonrpc_examples_match_declared_extension_contracts() -> None:
     extension_contracts = post["x-a2a-extension-contracts"]
     session_method_contracts = extension_contracts["session_query"]["method_contracts"]
     discovery_method_contracts = extension_contracts["discovery"]["method_contracts"]
+    turn_control_method_contracts = extension_contracts["turn_control"]["method_contracts"]
+    review_control_method_contracts = extension_contracts["review_control"]["method_contracts"]
     exec_method_contracts = extension_contracts["exec_control"]["method_contracts"]
     thread_lifecycle_method_contracts = extension_contracts["thread_lifecycle"]["method_contracts"]
     interrupt_method_contracts = extension_contracts["interrupt_callback"]["method_contracts"]
@@ -454,6 +528,8 @@ def test_openapi_jsonrpc_examples_match_declared_extension_contracts() -> None:
         set(session_method_contracts)
         | set(discovery_method_contracts)
         | set(thread_lifecycle_method_contracts)
+        | set(turn_control_method_contracts)
+        | set(review_control_method_contracts)
         | set(exec_method_contracts)
         | set(interrupt_method_contracts)
     )
@@ -478,6 +554,8 @@ def test_openapi_jsonrpc_examples_match_declared_extension_contracts() -> None:
             session_method_contracts.get(method)
             or discovery_method_contracts.get(method)
             or thread_lifecycle_method_contracts.get(method)
+            or turn_control_method_contracts.get(method)
+            or review_control_method_contracts.get(method)
             or exec_method_contracts.get(method)
             or interrupt_method_contracts[method]
         )

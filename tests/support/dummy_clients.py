@@ -158,6 +158,8 @@ class DummySessionQueryCodexClient:
         self.last_thread_archive: dict[str, Any] | None = None
         self.last_thread_unarchive: dict[str, Any] | None = None
         self.last_thread_metadata_update: dict[str, Any] | None = None
+        self.last_turn_steer: dict[str, Any] | None = None
+        self.last_review_start: dict[str, Any] | None = None
         self.last_prompt_async: dict[str, Any] | None = None
         self.last_command: dict[str, Any] | None = None
         self.last_shell: dict[str, Any] | None = None
@@ -252,6 +254,45 @@ class DummySessionQueryCodexClient:
                 "status": {"type": "notLoaded"},
                 "gitInfo": {"branch": branch},
             },
+        }
+
+    async def turn_steer(
+        self,
+        thread_id: str,
+        *,
+        expected_turn_id: str,
+        request: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        self.last_turn_steer = {
+            "thread_id": thread_id,
+            "expected_turn_id": expected_turn_id,
+            "request": request,
+        }
+        return {"ok": True, "thread_id": thread_id, "turn_id": expected_turn_id}
+
+    async def review_start(
+        self,
+        thread_id: str,
+        *,
+        target: dict[str, Any],
+        delivery: str | None = None,
+    ) -> dict[str, Any]:
+        self.last_review_start = {
+            "thread_id": thread_id,
+            "target": target,
+            "delivery": delivery,
+        }
+        review_thread_id = thread_id if delivery != "detached" else f"{thread_id}-review"
+        return {
+            "ok": True,
+            "turn_id": "turn-review-1",
+            "turn": {
+                "id": "turn-review-1",
+                "status": "inProgress",
+                "items": [],
+                "error": None,
+            },
+            "review_thread_id": review_thread_id,
         }
 
     async def session_prompt_async(

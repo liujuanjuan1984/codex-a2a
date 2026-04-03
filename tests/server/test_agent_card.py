@@ -7,12 +7,14 @@ from codex_a2a.contracts.extensions import (
     DISCOVERY_EXTENSION_URI,
     EXEC_CONTROL_EXTENSION_URI,
     INTERRUPT_CALLBACK_EXTENSION_URI,
+    REVIEW_CONTROL_EXTENSION_URI,
     SESSION_BINDING_EXTENSION_URI,
     SESSION_QUERY_DEFAULT_LIMIT,
     SESSION_QUERY_EXTENSION_URI,
     SESSION_QUERY_MAX_LIMIT,
     STREAMING_EXTENSION_URI,
     THREAD_LIFECYCLE_EXTENSION_URI,
+    TURN_CONTROL_EXTENSION_URI,
     WIRE_CONTRACT_EXTENSION_URI,
 )
 from codex_a2a.media_modes import (
@@ -58,6 +60,8 @@ def test_authenticated_extended_agent_card_description_reflects_detailed_contrac
     assert "tasks/get, tasks/cancel, tasks/resubscribe" in card.description
     assert "agent/getAuthenticatedExtendedCard" in card.description
     assert "interactive exec extensions" in card.description
+    assert "active-turn control" in card.description
+    assert "review control" in card.description
     assert "machine-readable wire contract" in card.description
     assert "machine-readable compatibility profile" in card.description
     assert "all consumers share the same underlying Codex workspace/environment" in card.description
@@ -104,6 +108,18 @@ def test_agent_card_declares_media_modes_that_match_runtime_contract() -> None:
     thread_watch_skill = skill_by_id["codex.threads.watch"]
     assert thread_watch_skill.input_modes == [APPLICATION_JSON_MEDIA_MODE]
     assert thread_watch_skill.output_modes == JSON_OUTPUT_MEDIA_MODES
+
+    turn_control_skill = skill_by_id["codex.turns.control"]
+    assert turn_control_skill.input_modes == [APPLICATION_JSON_MEDIA_MODE]
+    assert turn_control_skill.output_modes == JSON_OUTPUT_MEDIA_MODES
+
+    review_control_skill = skill_by_id["codex.review.control"]
+    assert review_control_skill.input_modes == [APPLICATION_JSON_MEDIA_MODE]
+    assert review_control_skill.output_modes == JSON_OUTPUT_MEDIA_MODES
+
+    review_watch_skill = skill_by_id["codex.review.watch"]
+    assert review_watch_skill.input_modes == [APPLICATION_JSON_MEDIA_MODE]
+    assert review_watch_skill.output_modes == JSON_OUTPUT_MEDIA_MODES
 
     interrupt_skill = skill_by_id["codex.interrupt.callback"]
     assert interrupt_skill.input_modes == [APPLICATION_JSON_MEDIA_MODE]
@@ -152,6 +168,8 @@ def test_public_agent_card_minimizes_provider_private_contracts() -> None:
     assert ext_by_uri[SESSION_QUERY_EXTENSION_URI].params is None
     assert ext_by_uri[DISCOVERY_EXTENSION_URI].params is None
     assert ext_by_uri[THREAD_LIFECYCLE_EXTENSION_URI].params is None
+    assert ext_by_uri[TURN_CONTROL_EXTENSION_URI].params is None
+    assert ext_by_uri[REVIEW_CONTROL_EXTENSION_URI].params is None
     assert ext_by_uri[EXEC_CONTROL_EXTENSION_URI].params is None
     assert ext_by_uri[COMPATIBILITY_PROFILE_EXTENSION_URI].params is None
     assert ext_by_uri[WIRE_CONTRACT_EXTENSION_URI].params is None
@@ -427,6 +445,68 @@ def test_authenticated_extended_agent_card_injects_profile_into_extensions() -> 
         == 204
     )
 
+    turn_control = ext_by_uri[TURN_CONTROL_EXTENSION_URI]
+    turn_control_params = _require_params(turn_control)
+    assert turn_control_params["profile"] == profile
+    assert turn_control_params["methods"]["steer"] == "codex.turns.steer"
+    assert turn_control_params["supported_metadata"] == []
+    assert turn_control_params["provider_private_metadata"] == []
+    steer_contract = turn_control_params["method_contracts"]["codex.turns.steer"]
+    assert steer_contract["params"]["required"] == [
+        "thread_id",
+        "expected_turn_id",
+        "request.parts",
+    ]
+    assert "metadata" in steer_contract["params"]["unsupported"]
+    assert "metadata.codex.directory" in steer_contract["params"]["unsupported"]
+    assert "metadata.codex.execution" in steer_contract["params"]["unsupported"]
+    assert steer_contract["result"]["fields"] == ["ok", "thread_id", "turn_id"]
+    assert any("active regular turn" in note for note in turn_control_params["consumer_guidance"])
+
+    review_control = ext_by_uri[REVIEW_CONTROL_EXTENSION_URI]
+    review_control_params = _require_params(review_control)
+    assert review_control_params["profile"] == profile
+    assert review_control_params["methods"]["start"] == "codex.review.start"
+    assert review_control_params["methods"]["watch"] == "codex.review.watch"
+    assert review_control_params["supported_metadata"] == []
+    assert review_control_params["provider_private_metadata"] == []
+    assert review_control_params["target_contracts"]["uncommittedChanges"] == {
+        "required_fields": ["type"]
+    }
+    assert review_control_params["target_contracts"]["baseBranch"] == {
+        "required_fields": ["type", "branch"]
+    }
+    assert review_control_params["target_contracts"]["commit"] == {
+        "required_fields": ["type", "sha"],
+        "optional_fields": ["title"],
+    }
+    assert review_control_params["target_contracts"]["custom"] == {
+        "required_fields": ["type", "instructions"]
+    }
+    assert review_control_params["delivery_values"] == ["inline", "detached"]
+    review_contract = review_control_params["method_contracts"]["codex.review.start"]
+    assert review_contract["params"]["required"] == ["thread_id", "target.type"]
+    assert "delivery" in review_contract["params"]["optional"]
+    assert "metadata.codex.directory" in review_contract["params"]["unsupported"]
+    assert review_contract["result"]["fields"] == ["ok", "turn_id", "turn", "review_thread_id"]
+    watch_contract = review_control_params["method_contracts"]["codex.review.watch"]
+    assert watch_contract["params"]["required"] == [
+        "thread_id",
+        "review_thread_id",
+        "turn_id",
+    ]
+    assert watch_contract["params"]["optional"] == ["request.events"]
+    assert watch_contract["result"]["fields"] == ["ok", "task_id", "context_id"]
+    assert review_control_params["task_streaming"]["task_stream_method"] == "tasks/resubscribe"
+    assert review_control_params["task_streaming"]["watch_method"] == "codex.review.watch"
+    assert review_control_params["task_streaming"]["supported_events"] == [
+        "review.started",
+        "review.status.changed",
+        "review.completed",
+        "review.failed",
+    ]
+    assert any("codex.review.watch" in note for note in review_control_params["consumer_guidance"])
+
     interrupt = ext_by_uri[INTERRUPT_CALLBACK_EXTENSION_URI]
     interrupt_params = _require_params(interrupt)
     assert interrupt_params["profile"] == profile
@@ -501,6 +581,8 @@ def test_authenticated_extended_agent_card_injects_profile_into_extensions() -> 
         for note in compatibility_params["consumer_guidance"]
     )
     assert any("codex.threads.*" in note for note in compatibility_params["consumer_guidance"])
+    assert any("codex.turns.*" in note for note in compatibility_params["consumer_guidance"])
+    assert any("codex.review.*" in note for note in compatibility_params["consumer_guidance"])
     assert any("codex.exec.*" in note for note in compatibility_params["consumer_guidance"])
     shell_policy = compatibility_params["method_retention"]["codex.sessions.shell"]
     assert shell_policy["availability"] == "enabled"
@@ -514,6 +596,18 @@ def test_authenticated_extended_agent_card_injects_profile_into_extensions() -> 
     assert thread_policy["availability"] == "always"
     assert thread_policy["retention"] == "stable"
     assert thread_policy["extension_uri"] == "urn:codex-a2a:codex-thread-lifecycle/v1"
+    turn_policy = compatibility_params["method_retention"]["codex.turns.steer"]
+    assert turn_policy["availability"] == "always"
+    assert turn_policy["retention"] == "stable"
+    assert turn_policy["extension_uri"] == "urn:codex-a2a:codex-turn-control/v1"
+    review_policy = compatibility_params["method_retention"]["codex.review.start"]
+    assert review_policy["availability"] == "always"
+    assert review_policy["retention"] == "stable"
+    assert review_policy["extension_uri"] == "urn:codex-a2a:codex-review/v1"
+    review_watch_policy = compatibility_params["method_retention"]["codex.review.watch"]
+    assert review_watch_policy["availability"] == "always"
+    assert review_watch_policy["retention"] == "stable"
+    assert review_watch_policy["extension_uri"] == "urn:codex-a2a:codex-review/v1"
 
 
 def test_authenticated_extended_agent_card_chat_examples_include_project_hint_when_configured() -> (
@@ -536,6 +630,11 @@ def test_public_agent_card_skills_are_minimal() -> None:
         skill for skill in card.skills if skill.id == "codex.threads.control"
     )
     thread_watch_skill = next(skill for skill in card.skills if skill.id == "codex.threads.watch")
+    turn_control_skill = next(skill for skill in card.skills if skill.id == "codex.turns.control")
+    review_control_skill = next(
+        skill for skill in card.skills if skill.id == "codex.review.control"
+    )
+    review_watch_skill = next(skill for skill in card.skills if skill.id == "codex.review.watch")
 
     assert session_skill.examples is None
     assert "provider-private" in session_skill.tags
@@ -545,6 +644,12 @@ def test_public_agent_card_skills_are_minimal() -> None:
     assert "provider-private" in thread_control_skill.tags
     assert thread_watch_skill.examples is None
     assert "provider-private" in thread_watch_skill.tags
+    assert turn_control_skill.examples is None
+    assert "provider-private" in turn_control_skill.tags
+    assert review_control_skill.examples is None
+    assert "provider-private" in review_control_skill.tags
+    assert review_watch_skill.examples is None
+    assert "provider-private" in review_watch_skill.tags
 
 
 def test_authenticated_extended_agent_card_omits_shell_method_when_disabled() -> None:

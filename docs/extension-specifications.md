@@ -56,6 +56,24 @@ URI: `urn:codex-a2a:codex-thread-lifecycle/v1`
 - Authenticated extended card: full method contracts, stable thread fields, and watch-task bridge metadata
 - Transport: A2A JSON-RPC extension methods
 
+## Codex Turn Control v1
+
+URI: `urn:codex-a2a:codex-turn-control/v1`
+
+- Scope: provider-private active-turn steering for already-running regular turns
+- Public Agent Card: capability declaration only
+- Authenticated extended card: full method contracts, rejected override fields, and error metadata
+- Transport: A2A JSON-RPC extension methods
+
+## Codex Review Control v1
+
+URI: `urn:codex-a2a:codex-review/v1`
+
+- Scope: provider-private review-start control and review lifecycle watch bridge for uncommitted changes, branches, commits, and custom reviewer instructions
+- Public Agent Card: capability declaration only
+- Authenticated extended card: full target contracts, delivery options, watch-task bridge metadata, and error metadata
+- Transport: A2A JSON-RPC extension methods
+
 ## Codex Exec v1
 
 URI: `urn:codex-a2a:codex-exec/v1`

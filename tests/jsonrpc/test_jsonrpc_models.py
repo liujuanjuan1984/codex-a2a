@@ -17,10 +17,13 @@ from codex_a2a.jsonrpc.params import (
     parse_permission_reply_params,
     parse_permissions_reply_params,
     parse_prompt_async_params,
+    parse_review_start_params,
+    parse_review_watch_params,
     parse_thread_archive_params,
     parse_thread_fork_params,
     parse_thread_metadata_update_params,
     parse_thread_watch_params,
+    parse_turn_steer_params,
 )
 
 
@@ -353,6 +356,63 @@ def test_parse_thread_lifecycle_params_preserve_aliases() -> None:
     }
 
 
+def test_parse_turn_and_review_control_params_preserve_aliases() -> None:
+    steer = parse_turn_steer_params(
+        {
+            "threadId": "thr-1",
+            "expectedTurnId": "turn-1",
+            "request": {
+                "parts": [
+                    {"type": "text", "text": "Focus on the failing tests first."},
+                    {"type": "mention", "name": "Demo App", "path": "app://demo-app"},
+                ]
+            },
+        }
+    )
+    review = parse_review_start_params(
+        {
+            "thread_id": "thr-1",
+            "delivery": "detached",
+            "target": {
+                "type": "commit",
+                "sha": "commit-demo-123",
+                "title": "Polish tui colors",
+            },
+        }
+    )
+    review_watch = parse_review_watch_params(
+        {
+            "threadId": "thr-1",
+            "reviewThreadId": "thr-1-review",
+            "turnId": "turn-review-1",
+            "request": {"events": ["review.started", "review.completed", "review.started"]},
+        }
+    )
+
+    assert steer.thread_id == "thr-1"
+    assert steer.expected_turn_id == "turn-1"
+    assert steer.request.model_dump(by_alias=True, exclude_none=True) == {
+        "parts": [
+            {"type": "text", "text": "Focus on the failing tests first."},
+            {"type": "mention", "name": "Demo App", "path": "app://demo-app"},
+        ]
+    }
+    assert review.thread_id == "thr-1"
+    assert review.delivery == "detached"
+    assert review.target.model_dump(by_alias=True, exclude_none=True) == {
+        "type": "commit",
+        "sha": "commit-demo-123",
+        "title": "Polish tui colors",
+    }
+    assert review_watch.thread_id == "thr-1"
+    assert review_watch.review_thread_id == "thr-1-review"
+    assert review_watch.turn_id == "turn-review-1"
+    assert review_watch.request is not None
+    assert review_watch.request.model_dump(by_alias=True, exclude_none=True) == {
+        "events": ["review.started", "review.completed"]
+    }
+
+
 @pytest.mark.parametrize(
     ("parser", "payload", "message", "field"),
     [
@@ -402,6 +462,88 @@ def test_parse_thread_lifecycle_params_reject_invalid_fields(
 
     assert str(exc_info.value) == message
     assert exc_info.value.data["type"] in {"MISSING_FIELD", "INVALID_FIELD"}
+    assert exc_info.value.data["field"] == field
+
+
+@pytest.mark.parametrize(
+    ("parser", "payload", "message", "field"),
+    [
+        (
+            parse_turn_steer_params,
+            {
+                "thread_id": "thr-1",
+                "expected_turn_id": "turn-1",
+                "request": {"parts": []},
+            },
+            "request.parts must be a non-empty array",
+            "request.parts",
+        ),
+        (
+            parse_turn_steer_params,
+            {
+                "thread_id": "thr-1",
+                "expected_turn_id": "turn-1",
+                "request": {"parts": [{"type": "file", "path": "/tmp/x"}]},
+            },
+            "request.parts[].type must be one of: text, image, mention, skill",
+            "request.parts[0].type",
+        ),
+        (
+            parse_review_start_params,
+            {"thread_id": "thr-1", "delivery": "queued", "target": {"type": "commit", "sha": "a"}},
+            "delivery must be one of: inline, detached",
+            "delivery",
+        ),
+        (
+            parse_review_start_params,
+            {"thread_id": "thr-1", "target": {"type": "baseBranch"}},
+            "target.branch must be a non-empty string",
+            "target.branch",
+        ),
+        (
+            parse_review_start_params,
+            {"thread_id": "thr-1", "target": {"type": "custom", "instructions": "   "}},
+            "target.instructions must be a non-empty string",
+            "target.instructions",
+        ),
+        (
+            parse_review_watch_params,
+            {
+                "thread_id": "thr-1",
+                "review_thread_id": "thr-1-review",
+                "turn_id": "turn-review-1",
+                "request": {"events": ["review.delta"]},
+            },
+            (
+                "request.events entries must be one of: review.started, "
+                "review.status.changed, review.completed, review.failed"
+            ),
+            "request.events",
+        ),
+        (
+            parse_review_watch_params,
+            {
+                "thread_id": "thr-1",
+                "review_thread_id": "thr-1-review",
+                "turn_id": "turn-review-1",
+                "request": {"events": []},
+            },
+            "request.events must be a non-empty array",
+            "request.events",
+        ),
+    ],
+)
+def test_parse_turn_and_review_control_params_reject_invalid_fields(
+    parser,
+    payload: dict,
+    message: str,
+    field: str,
+) -> None:
+    with pytest.raises(JsonRpcParamsValidationError) as exc_info:
+        parser(payload)
+
+    assert str(exc_info.value) == message
+    assert exc_info.value.data["type"] == "INVALID_FIELD"
     assert exc_info.value.data["field"] == field
 
 

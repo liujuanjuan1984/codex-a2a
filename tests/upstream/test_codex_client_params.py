@@ -639,6 +639,68 @@ async def test_thread_lifecycle_notifications_map_to_stream_events() -> None:
 
 
 @pytest.mark.asyncio
+async def test_turn_lifecycle_notifications_map_to_stream_events() -> None:
+    client = CodexClient(make_settings(a2a_bearer_token="t-1", codex_timeout=1.0))
+    events: list[dict] = []
+
+    async def fake_enqueue(event: dict) -> None:
+        events.append(event)
+
+    client._enqueue_stream_event = fake_enqueue
+
+    await client._handle_notification(
+        {
+            "method": "turn/started",
+            "params": {"threadId": "thr-1", "turn": {"id": "turn-1", "status": "inProgress"}},
+        }
+    )
+    await client._handle_notification(
+        {
+            "method": "turn/completed",
+            "params": {
+                "threadId": "thr-1",
+                "turn": {"id": "turn-1", "status": "completed", "items": []},
+            },
+        }
+    )
+
+    assert events == [
+        {
+            "type": "turn.lifecycle.started",
+            "properties": {
+                "thread_id": "thr-1",
+                "turn_id": "turn-1",
+                "turn": {"id": "turn-1", "status": "inProgress"},
+                "status": "inProgress",
+                "source": "turn/started",
+                "codex": {
+                    "raw": {
+                        "threadId": "thr-1",
+                        "turn": {"id": "turn-1", "status": "inProgress"},
+                    }
+                },
+            },
+        },
+        {
+            "type": "turn.lifecycle.completed",
+            "properties": {
+                "thread_id": "thr-1",
+                "turn_id": "turn-1",
+                "turn": {"id": "turn-1", "status": "completed", "items": []},
+                "status": "completed",
+                "source": "turn/completed",
+                "codex": {
+                    "raw": {
+                        "threadId": "thr-1",
+                        "turn": {"id": "turn-1", "status": "completed", "items": []},
+                    }
+                },
+            },
+        },
+    ]
+
+
+@pytest.mark.asyncio
 async def test_permission_reply_maps_to_codex_decision() -> None:
     client = CodexClient(make_settings(a2a_bearer_token="t-1", codex_timeout=1.0))
     client._pending_server_requests["100"] = _PendingInterruptRequest(
@@ -1091,7 +1153,11 @@ async def test_handle_notification_replays_real_command_execution_fixture() -> N
         "codex_app_server",
         "command_execution_output_delta.json",
     )
-    tool_events = [event for event in events if event["properties"]["part"]["type"] == "tool_call"]
+    tool_events = [
+        event
+        for event in events
+        if event.get("properties", {}).get("part", {}).get("type") == "tool_call"
+    ]
     expected_command = (
         '/bin/bash -lc "python3 -c \\"import sys,time; '
         "[print(f'chunk-{i}', flush=True) or time.sleep(0.2) for i in range(3)]"
@@ -1150,7 +1216,11 @@ async def test_read_stdout_loop_replays_real_command_execution_jsonrpc_lines() -
         "command_execution_output_delta.json",
         chunk_sizes=(97, 211, 503),
     )
-    tool_events = [event for event in events if event["properties"]["part"]["type"] == "tool_call"]
+    tool_events = [
+        event
+        for event in events
+        if event.get("properties", {}).get("part", {}).get("type") == "tool_call"
+    ]
 
     assert fixture["response_text"] == "DONE"
     assert [event["type"] for event in tool_events] == [
@@ -1174,7 +1244,11 @@ async def test_handle_notification_replays_real_file_change_fixture() -> None:
         "codex_app_server",
         "file_change_output_delta.json",
     )
-    tool_events = [event for event in events if event["properties"]["part"]["type"] == "tool_call"]
+    tool_events = [
+        event
+        for event in events
+        if event.get("properties", {}).get("part", {}).get("type") == "tool_call"
+    ]
 
     assert fixture["response_text"] == "DONE"
     assert [event["type"] for event in tool_events] == [
@@ -1223,7 +1297,11 @@ async def test_read_stdout_loop_replays_real_file_change_jsonrpc_lines() -> None
         "file_change_output_delta.json",
         chunk_sizes=(41, 89, 233),
     )
-    tool_events = [event for event in events if event["properties"]["part"]["type"] == "tool_call"]
+    tool_events = [
+        event
+        for event in events
+        if event.get("properties", {}).get("part", {}).get("type") == "tool_call"
+    ]
 
     assert fixture["response_text"] == "DONE"
     assert [event["type"] for event in tool_events] == [

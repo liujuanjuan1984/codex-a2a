@@ -418,6 +418,32 @@ class CodexClient:
             execution_options=execution_options,
         )
 
+    async def turn_steer(
+        self,
+        thread_id: str,
+        *,
+        expected_turn_id: str,
+        request: dict[str, Any],
+    ) -> dict[str, Any]:
+        return await self._conversation_facade.turn_steer(
+            thread_id,
+            expected_turn_id=expected_turn_id,
+            request=request,
+        )
+
+    async def review_start(
+        self,
+        thread_id: str,
+        *,
+        target: dict[str, Any],
+        delivery: str | None = None,
+    ) -> dict[str, Any]:
+        return await self._conversation_facade.review_start(
+            thread_id,
+            target=target,
+            delivery=delivery,
+        )
+
     async def session_command(
         self,
         session_id: str,

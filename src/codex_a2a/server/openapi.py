@@ -8,18 +8,22 @@ from codex_a2a.contracts.extensions import (
     DISCOVERY_METHODS,
     EXEC_CONTROL_METHODS,
     INTERRUPT_CALLBACK_METHODS,
+    REVIEW_CONTROL_METHODS,
     SESSION_CONTROL_METHODS,
     SESSION_QUERY_DEFAULT_LIMIT,
     SESSION_QUERY_METHODS,
     THREAD_LIFECYCLE_METHODS,
+    TURN_CONTROL_METHODS,
     build_compatibility_profile_params,
     build_discovery_extension_params,
     build_exec_control_extension_params,
     build_interrupt_callback_extension_params,
+    build_review_control_extension_params,
     build_session_binding_extension_params,
     build_session_query_extension_params,
     build_streaming_extension_params,
     build_thread_lifecycle_extension_params,
+    build_turn_control_extension_params,
     build_wire_contract_extension_params,
 )
 from codex_a2a.profile.runtime import RuntimeProfile
@@ -36,6 +40,8 @@ def _build_jsonrpc_extension_openapi_description(*, session_shell_enabled: bool)
         session_methods.append(SESSION_CONTROL_METHODS["shell"])
     discovery_methods = ", ".join(DISCOVERY_METHODS.values())
     thread_lifecycle_methods = ", ".join(THREAD_LIFECYCLE_METHODS.values())
+    turn_methods = ", ".join(TURN_CONTROL_METHODS.values())
+    review_methods = ", ".join(REVIEW_CONTROL_METHODS.values())
     exec_methods = ", ".join(EXEC_CONTROL_METHODS.values())
     interrupt_methods = ", ".join(sorted(INTERRUPT_CALLBACK_METHODS.values()))
     return (
@@ -43,10 +49,13 @@ def _build_jsonrpc_extension_openapi_description(*, session_shell_enabled: bool)
         "(message/send, message/stream, tasks/get, tasks/cancel, "
         "tasks/pushNotificationConfig/*, tasks/resubscribe, "
         "agent/getAuthenticatedExtendedCard) plus Codex session extensions, "
-        "Codex thread lifecycle extensions, Codex discovery extensions, "
-        "interactive exec extensions, and shared interrupt callback methods.\n\n"
+        "Codex thread lifecycle extensions, active-turn control extensions, review "
+        "control extensions, Codex discovery extensions, interactive exec "
+        "extensions, and shared interrupt callback methods.\n\n"
         f"Codex session query/control methods: {', '.join(session_methods)}.\n"
         f"Codex thread lifecycle methods: {thread_lifecycle_methods}.\n"
+        f"Codex active-turn control methods: {turn_methods}.\n"
+        f"Codex review control methods: {review_methods}.\n"
         f"Codex discovery methods: {discovery_methods}.\n"
         f"Codex interactive exec methods: {exec_methods}.\n"
         f"Shared interrupt callback methods: {interrupt_methods}.\n\n"
@@ -256,6 +265,56 @@ def _build_jsonrpc_extension_openapi_examples(*, session_shell_enabled: bool) ->
                 },
             },
         },
+        "turn_steer": {
+            "summary": "Append user input to the active regular turn",
+            "value": {
+                "jsonrpc": "2.0",
+                "id": 276,
+                "method": TURN_CONTROL_METHODS["steer"],
+                "params": {
+                    "thread_id": "thr-1",
+                    "expected_turn_id": "turn-9",
+                    "request": {
+                        "parts": [
+                            {"type": "text", "text": "Focus on the failing tests first."},
+                        ]
+                    },
+                },
+            },
+        },
+        "review_start": {
+            "summary": "Start a provider-private review turn",
+            "value": {
+                "jsonrpc": "2.0",
+                "id": 277,
+                "method": REVIEW_CONTROL_METHODS["start"],
+                "params": {
+                    "thread_id": "thr-1",
+                    "delivery": "inline",
+                    "target": {
+                        "type": "commit",
+                        "sha": "commit-demo-123",
+                        "title": "Polish tui colors",
+                    },
+                },
+            },
+        },
+        "review_watch": {
+            "summary": "Watch coarse-grained review lifecycle signals through a task stream",
+            "value": {
+                "jsonrpc": "2.0",
+                "id": 278,
+                "method": REVIEW_CONTROL_METHODS["watch"],
+                "params": {
+                    "thread_id": "thr-1",
+                    "review_thread_id": "thr-1-review",
+                    "turn_id": "turn-review-1",
+                    "request": {
+                        "events": ["review.started", "review.completed", "review.failed"],
+                    },
+                },
+            },
+        },
         "exec_start": {
             "summary": "Start standalone interactive command execution",
             "value": {
@@ -433,6 +492,12 @@ def patch_openapi_contract(
     thread_lifecycle = build_thread_lifecycle_extension_params(
         runtime_profile=runtime_profile,
     )
+    turn_control = build_turn_control_extension_params(
+        runtime_profile=runtime_profile,
+    )
+    review_control = build_review_control_extension_params(
+        runtime_profile=runtime_profile,
+    )
     exec_control = build_exec_control_extension_params(
         runtime_profile=runtime_profile,
     )
@@ -470,6 +535,8 @@ def patch_openapi_contract(
                         "session_query": session_query,
                         "discovery": discovery,
                         "thread_lifecycle": thread_lifecycle,
+                        "turn_control": turn_control,
+                        "review_control": review_control,
                         "exec_control": exec_control,
                         "interrupt_callback": interrupt_callback,
                         "wire_contract": wire_contract,

@@ -348,6 +348,139 @@ async def test_conversation_facade_session_command_and_shell_errors() -> None:
         await facade.session_shell("thr-1", {"command": "pwd"})
 
 
+@pytest.mark.asyncio
+async def test_conversation_facade_turn_and_review_control_methods() -> None:
+    seen: list[tuple[str, dict | None]] = []
+    responses = iter(
+        [
+            {"turnId": "turn-9"},
+            {
+                "turn": {"id": "turn-review-1", "status": "inProgress"},
+                "reviewThreadId": "thr-1-review",
+            },
+            {
+                "turn": {"id": "turn-review-inline-1", "status": "inProgress"},
+            },
+        ]
+    )
+
+    async def fake_rpc_request(method: str, params=None, **_kwargs):
+        seen.append((method, params))
+        return next(responses)
+
+    facade, _turn_trackers, _tracker_factory = _make_conversation_facade(
+        rpc_request=fake_rpc_request,
+    )
+
+    steer_result = await facade.turn_steer(
+        "thr-1",
+        expected_turn_id="turn-9",
+        request={"parts": [{"type": "text", "text": "Focus on the failing tests first."}]},
+    )
+    detached_review = await facade.review_start(
+        "thr-1",
+        target={"type": "commit", "sha": "commit-demo-123"},
+        delivery="detached",
+    )
+    inline_review = await facade.review_start(
+        "thr-1",
+        target={"type": "uncommittedChanges"},
+        delivery="inline",
+    )
+
+    assert seen[0] == (
+        "turn/steer",
+        {
+            "threadId": "thr-1",
+            "input": [
+                {
+                    "type": "text",
+                    "text": "Focus on the failing tests first.",
+                    "text_elements": [],
+                }
+            ],
+            "expectedTurnId": "turn-9",
+        },
+    )
+    assert seen[1] == (
+        "review/start",
+        {
+            "threadId": "thr-1",
+            "target": {"type": "commit", "sha": "commit-demo-123"},
+            "delivery": "detached",
+        },
+    )
+    assert seen[2] == (
+        "review/start",
+        {
+            "threadId": "thr-1",
+            "target": {"type": "uncommittedChanges"},
+            "delivery": "inline",
+        },
+    )
+    assert steer_result == {"ok": True, "thread_id": "thr-1", "turn_id": "turn-9"}
+    assert detached_review["review_thread_id"] == "thr-1-review"
+    assert inline_review["review_thread_id"] == "thr-1"
+
+
+@pytest.mark.asyncio
+async def test_conversation_facade_turn_and_review_control_errors() -> None:
+    responses = iter(
+        [
+            None,
+            {"turnId": "  "},
+            None,
+            {"turn": None},
+            {"turn": {"id": "  "}},
+            {"turn": {"id": "turn-review-1"}},
+        ]
+    )
+
+    async def fake_rpc_request(_method: str, _params=None, **_kwargs):
+        return next(responses)
+
+    facade, _turn_trackers, _tracker_factory = _make_conversation_facade(
+        rpc_request=fake_rpc_request,
+    )
+
+    with pytest.raises(RuntimeError, match="turn/steer response missing result object"):
+        await facade.turn_steer(
+            "thr-1",
+            expected_turn_id="turn-9",
+            request={"parts": [{"type": "text", "text": "hello"}]},
+        )
+    with pytest.raises(RuntimeError, match="turn/steer response missing turn id"):
+        await facade.turn_steer(
+            "thr-1",
+            expected_turn_id="turn-9",
+            request={"parts": [{"type": "text", "text": "hello"}]},
+        )
+    with pytest.raises(RuntimeError, match="review/start response missing result object"):
+        await facade.review_start(
+            "thr-1",
+            target={"type": "commit", "sha": "abc"},
+            delivery="detached",
+        )
+    with pytest.raises(RuntimeError, match="review/start response missing turn"):
+        await facade.review_start(
+            "thr-1",
+            target={"type": "commit", "sha": "abc"},
+            delivery="detached",
+        )
+    with pytest.raises(RuntimeError, match="review/start response missing turn id"):
+        await facade.review_start(
+            "thr-1",
+            target={"type": "commit", "sha": "abc"},
+            delivery="detached",
+        )
+    with pytest.raises(RuntimeError, match="review/start response missing review thread id"):
+        await facade.review_start(
+            "thr-1",
+            target={"type": "commit", "sha": "abc"},
+            delivery="detached",
+        )
+
+
 def test_stream_bridge_normalization_helpers_cover_invalid_shapes() -> None:
     assert normalize_thread_status({"type": "running"}) == {"type": "running"}
     assert normalize_thread_status({"type": "   "}) is None
@@ -460,6 +593,8 @@ async def test_stream_bridge_queue_full_timeout_cleanup_and_error_events() -> No
         "message.part.updated",
         "message.part.updated",
         "message.finalized",
+        "turn.lifecycle.started",
+        "turn.lifecycle.completed",
         "codex.error",
     ]
     delta_tracker = bridge.turn_trackers[("thr-1", "turn-1")]

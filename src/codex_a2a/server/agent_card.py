@@ -19,19 +19,23 @@ from codex_a2a.contracts.extensions import (
     DISCOVERY_EXTENSION_URI,
     EXEC_CONTROL_EXTENSION_URI,
     INTERRUPT_CALLBACK_EXTENSION_URI,
+    REVIEW_CONTROL_EXTENSION_URI,
     SESSION_BINDING_EXTENSION_URI,
     SESSION_QUERY_EXTENSION_URI,
     STREAMING_EXTENSION_URI,
     THREAD_LIFECYCLE_EXTENSION_URI,
+    TURN_CONTROL_EXTENSION_URI,
     WIRE_CONTRACT_EXTENSION_URI,
     build_compatibility_profile_params,
     build_discovery_extension_params,
     build_exec_control_extension_params,
     build_interrupt_callback_extension_params,
+    build_review_control_extension_params,
     build_session_binding_extension_params,
     build_session_query_extension_params,
     build_streaming_extension_params,
     build_thread_lifecycle_extension_params,
+    build_turn_control_extension_params,
     build_wire_contract_extension_params,
 )
 from codex_a2a.media_modes import (
@@ -115,8 +119,9 @@ def _build_agent_card_description(
         "(message/send, message/stream), authenticated extended Agent Card "
         "(agent/getAuthenticatedExtendedCard), task APIs (tasks/get, tasks/cancel, "
         "tasks/resubscribe), shared session-binding and streaming contracts, "
-        "Codex session-query, thread lifecycle, discovery, and interactive exec "
-        "extensions, shared interrupt callback extensions, a machine-readable "
+        "Codex session-query, thread lifecycle, active-turn control, review control, "
+        "discovery, and interactive exec extensions, shared interrupt callback "
+        "extensions, a machine-readable "
         "compatibility profile, and a machine-readable wire contract."
     )
     parts: list[str] = [base, summary]
@@ -170,6 +175,12 @@ def _build_agent_extensions(
         runtime_profile=runtime_profile,
     )
     thread_lifecycle_extension_params = build_thread_lifecycle_extension_params(
+        runtime_profile=runtime_profile,
+    )
+    turn_control_extension_params = build_turn_control_extension_params(
+        runtime_profile=runtime_profile,
+    )
+    review_control_extension_params = build_review_control_extension_params(
         runtime_profile=runtime_profile,
     )
     exec_control_extension_params = build_exec_control_extension_params(
@@ -253,6 +264,25 @@ def _build_agent_extensions(
                 "signals."
             ),
             params=thread_lifecycle_extension_params if include_detailed_contracts else None,
+        ),
+        AgentExtension(
+            uri=TURN_CONTROL_EXTENSION_URI,
+            required=False,
+            description=(
+                "Expose provider-private active-turn steering through the custom "
+                "JSON-RPC method codex.turns.steer."
+            ),
+            params=turn_control_extension_params if include_detailed_contracts else None,
+        ),
+        AgentExtension(
+            uri=REVIEW_CONTROL_EXTENSION_URI,
+            required=False,
+            description=(
+                "Expose provider-private reviewer control plus a task-stream "
+                "watch bridge through the custom JSON-RPC methods "
+                "codex.review.start and codex.review.watch."
+            ),
+            params=review_control_extension_params if include_detailed_contracts else None,
         ),
         AgentExtension(
             uri=EXEC_CONTROL_EXTENSION_URI,
@@ -382,6 +412,39 @@ def _build_agent_skills(
                     "emit structured events through A2A task streams."
                 ),
                 tags=["codex", "threads", "watch", "provider-private"],
+                input_modes=list(JSON_RPC_INPUT_MEDIA_MODES),
+                output_modes=list(JSON_OUTPUT_MEDIA_MODES),
+            ),
+            AgentSkill(
+                id="codex.turns.control",
+                name="Codex Turn Control",
+                description=(
+                    "Append additional input to an active regular turn through the "
+                    "provider-private codex.turns.steer method."
+                ),
+                tags=["codex", "turns", "control", "provider-private"],
+                input_modes=list(JSON_RPC_INPUT_MEDIA_MODES),
+                output_modes=list(JSON_OUTPUT_MEDIA_MODES),
+            ),
+            AgentSkill(
+                id="codex.review.control",
+                name="Codex Review Control",
+                description=(
+                    "Start provider-private review turns against uncommitted changes, "
+                    "base branches, commits, or custom instructions."
+                ),
+                tags=["codex", "review", "control", "provider-private"],
+                input_modes=list(JSON_RPC_INPUT_MEDIA_MODES),
+                output_modes=list(JSON_OUTPUT_MEDIA_MODES),
+            ),
+            AgentSkill(
+                id="codex.review.watch",
+                name="Codex Review Watch",
+                description=(
+                    "Start provider-private review watch tasks that emit "
+                    "coarse-grained lifecycle events through A2A task streams."
+                ),
+                tags=["codex", "review", "watch", "provider-private"],
                 input_modes=list(JSON_RPC_INPUT_MEDIA_MODES),
                 output_modes=list(JSON_OUTPUT_MEDIA_MODES),
             ),
@@ -517,6 +580,49 @@ def _build_agent_skills(
             examples=[
                 "Start a lifecycle watch stream (method codex.threads.watch).",
                 "Resume a lifecycle watch task with tasks/resubscribe.",
+            ],
+            input_modes=list(JSON_RPC_INPUT_MEDIA_MODES),
+            output_modes=list(JSON_OUTPUT_MEDIA_MODES),
+        ),
+        AgentSkill(
+            id="codex.turns.control",
+            name="Codex Turn Control",
+            description=(
+                "Append additional user input to an active regular turn via codex.turns.steer."
+            ),
+            tags=["codex", "turns", "control", "active-turn"],
+            examples=[
+                "Append follow-up guidance to the active turn (method codex.turns.steer).",
+            ],
+            input_modes=list(JSON_RPC_INPUT_MEDIA_MODES),
+            output_modes=list(JSON_OUTPUT_MEDIA_MODES),
+        ),
+        AgentSkill(
+            id="codex.review.control",
+            name="Codex Review Control",
+            description=(
+                "Start review turns via codex.review.start for uncommitted changes, "
+                "base branches, commits, or custom reviewer instructions."
+            ),
+            tags=["codex", "review", "control"],
+            examples=[
+                "Start an inline commit review (method codex.review.start).",
+                "Start a detached review for current uncommitted changes.",
+            ],
+            input_modes=list(JSON_RPC_INPUT_MEDIA_MODES),
+            output_modes=list(JSON_OUTPUT_MEDIA_MODES),
+        ),
+        AgentSkill(
+            id="codex.review.watch",
+            name="Codex Review Watch",
+            description=(
+                "Start review watch tasks via codex.review.watch and consume "
+                "coarse-grained review lifecycle events through A2A task streams."
+            ),
+            tags=["codex", "review", "watch"],
+            examples=[
+                "Start a review watch stream after codex.review.start.",
+                "Resume a review watch task with tasks/resubscribe.",
             ],
             input_modes=list(JSON_RPC_INPUT_MEDIA_MODES),
             output_modes=list(JSON_OUTPUT_MEDIA_MODES),

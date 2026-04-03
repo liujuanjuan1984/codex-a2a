@@ -320,6 +320,8 @@ def test_openapi_rest_message_routes_include_schema_examples_and_extension_contr
     assert isinstance(root_contracts, dict)
     assert "discovery" in root_contracts
     assert "thread_lifecycle" in root_contracts
+    assert "turn_control" in root_contracts
+    assert "review_control" in root_contracts
     assert "wire_contract" in root_contracts
 
 
@@ -352,6 +354,9 @@ def test_openapi_jsonrpc_examples_include_core_and_extension_methods() -> None:
     assert "codex.threads.unarchive" in methods
     assert "codex.threads.metadata.update" in methods
     assert "codex.threads.watch" in methods
+    assert "codex.turns.steer" in methods
+    assert "codex.review.start" in methods
+    assert "codex.review.watch" in methods
     assert "a2a.interrupt.permission.reply" in methods
 
 
