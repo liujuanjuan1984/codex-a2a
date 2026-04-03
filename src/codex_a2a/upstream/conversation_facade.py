@@ -103,6 +103,9 @@ class CodexConversationFacade:
     async def thread_archive(self, thread_id: str) -> None:
         await self._rpc_request("thread/archive", {"threadId": thread_id})
 
+    async def thread_unsubscribe(self, thread_id: str) -> None:
+        await self._rpc_request("thread/unsubscribe", {"threadId": thread_id})
+
     async def thread_unarchive(self, thread_id: str) -> Any:
         result = await self._rpc_request("thread/unarchive", {"threadId": thread_id})
         if not isinstance(result, dict):

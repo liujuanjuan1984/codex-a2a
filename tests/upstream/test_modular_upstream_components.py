@@ -204,7 +204,9 @@ async def test_conversation_facade_handles_malformed_thread_responses() -> None:
         ]
     )
 
-    async def fake_rpc_request(_method: str, _params=None, **_kwargs):
+    async def fake_rpc_request(method: str, _params=None, **_kwargs):
+        if method == "thread/unsubscribe":
+            return {}
         return next(responses)
 
     facade, _turn_trackers, _tracker_factory = _make_conversation_facade(
@@ -222,6 +224,7 @@ async def test_conversation_facade_handles_malformed_thread_responses() -> None:
         await facade.thread_fork("thr-1")
     with pytest.raises(RuntimeError, match="thread/fork response missing thread"):
         await facade.thread_fork("thr-1")
+    await facade.thread_unsubscribe("thr-1")
     with pytest.raises(RuntimeError, match="thread/unarchive response missing result object"):
         await facade.thread_unarchive("thr-1")
     with pytest.raises(RuntimeError, match="thread/unarchive response missing thread"):

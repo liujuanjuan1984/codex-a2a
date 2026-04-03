@@ -457,12 +457,14 @@ def test_guide_mentions_declared_thread_lifecycle_contract() -> None:
     assert "codex.threads.unarchive" in guide_text
     assert "codex.threads.metadata.update" in guide_text
     assert "codex.threads.watch" in guide_text
+    assert "codex.threads.watch.release" in guide_text
     assert "thread_started" in guide_text
     assert "thread_status_changed" in guide_text
     assert "thread_archived" in guide_text
     assert "thread_unarchived" in guide_text
     assert "thread_closed" in guide_text
     assert "thread lifecycle watch-task bridge" in compatibility_text
+    assert "codex.threads.watch.release" in compatibility_text
 
     for fragment in lifecycle_contract["task_streaming"]["supported_events"]:
         assert fragment in guide_text

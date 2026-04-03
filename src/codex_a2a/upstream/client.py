@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+import uuid
 from collections.abc import AsyncIterator, Mapping
 from typing import TYPE_CHECKING, Any
 
@@ -72,6 +73,7 @@ class CodexClient:
         self._interrupt_request_tombstone_ttl_seconds = int(INTERRUPT_REQUEST_TOMBSTONE_TTL_SECONDS)
         self._log_payloads = settings.a2a_log_payloads
         self._interrupt_request_store = interrupt_request_store
+        self._connection_scope_id = f"codex-client:{uuid.uuid4().hex}"
 
         self._transport = CodexStdioJsonRpcTransport(
             listen=self._listen,
@@ -142,6 +144,10 @@ class CodexClient:
     @property
     def _event_subscribers(self) -> set[asyncio.Queue[dict[str, Any]]]:
         return self._stream_bridge.event_subscribers
+
+    @property
+    def connection_scope_id(self) -> str:
+        return self._connection_scope_id
 
     @property
     def _turn_trackers(self) -> dict[tuple[str, str], _TurnTracker]:
@@ -363,6 +369,9 @@ class CodexClient:
 
     async def thread_archive(self, thread_id: str) -> None:
         await self._conversation_facade.thread_archive(thread_id)
+
+    async def thread_unsubscribe(self, thread_id: str) -> None:
+        await self._conversation_facade.thread_unsubscribe(thread_id)
 
     async def thread_unarchive(self, thread_id: str) -> Any:
         return await self._conversation_facade.thread_unarchive(thread_id)

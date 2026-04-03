@@ -265,11 +265,20 @@ def _build_jsonrpc_extension_openapi_examples(*, session_shell_enabled: bool) ->
                 },
             },
         },
+        "thread_watch_release": {
+            "summary": "Release an owned thread lifecycle watch task",
+            "value": {
+                "jsonrpc": "2.0",
+                "id": 276,
+                "method": THREAD_LIFECYCLE_METHODS["watch_release"],
+                "params": {"task_id": "task-thread-watch-1"},
+            },
+        },
         "turn_steer": {
             "summary": "Append user input to the active regular turn",
             "value": {
                 "jsonrpc": "2.0",
-                "id": 276,
+                "id": 277,
                 "method": TURN_CONTROL_METHODS["steer"],
                 "params": {
                     "thread_id": "thr-1",
