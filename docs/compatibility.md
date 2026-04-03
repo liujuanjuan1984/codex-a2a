@@ -102,6 +102,30 @@ Execution-environment boundary fields are also published through the runtime pro
 - For core chat tasks, negotiated output modes are lifecycle-scoped. `message/send`, `message/stream`, `tasks/get`, `tasks/resubscribe`, and push notifications should not drift apart for the same task.
 - For core chat requests, explicit `acceptedOutputModes` are also a compatibility-sensitive fail-fast boundary: requests must remain compatible with declared chat output modes, and current chat turns require `text/plain`.
 
+## Extension Boundary Governance
+
+When evaluating or evolving `codex.*` methods, this repository uses the following boundary rules:
+
+- The adapter may document, validate, route, and normalize stable upstream-facing behavior, but it should not grow into a general replacement for upstream private runtime internals or host-level control planes.
+- New `codex.*` methods default to provider-private extension status. They should not be described as portable A2A baseline capabilities unless they align with shared protocol semantics.
+- Read-only discovery, compatibility-preserving projections, and low-risk control methods are preferred over stronger mutating or destructive provider controls.
+- A2A core object mappings should be used only for stable, low-ambiguity read projections. When the upstream payload is execution-control-specific or highly provider-shaped, the contract should stay as a provider-private result envelope or watch-task payload.
+- Active-turn steering, standalone interactive exec, reviewer control, subtask/subagent fan-out, task-tool internals, and similar runtime mechanisms should be treated as provider-private internals by default even when passthrough support exists.
+- Each new extension proposal should answer, in issue or design form:
+  - what client value exists beyond the current chat/session flow?
+  - is the upstream behavior stable enough to carry as a maintained contract?
+  - should the surface be provider-private, deployment-conditional, or excluded?
+  - are authorization, ownership, and destructive-side-effect boundaries enforceable?
+  - can the result shape avoid overfitting provider internals into fake A2A core semantics?
+
+Current repository judgment under those rules:
+
+- `codex.discovery.*` and the `codex.discovery.watch` bridge fit the preferred read-only and low-risk discovery pattern.
+- `codex.threads.*`, especially `codex.threads.watch` and `codex.threads.watch.release`, remain acceptable as provider-private lifecycle surfaces because they expose a bounded watch/control bridge rather than raw upstream subscription internals.
+- `codex.turns.steer` is boundary-sensitive and should remain narrowly scoped, provider-private, and resistant to scope creep into a general orchestration API.
+- `codex.review.*` is also boundary-sensitive and should stay framed as a provider-private reviewer surface rather than a generic A2A review standard.
+- `codex.sessions.shell` and `codex.exec.*` are the most likely to exceed the preferred adapter boundary because they expose standalone command execution semantics instead of a stable session/message projection. They remain supported today, but should be treated as deployment-conditional or tightly provider-private operational surfaces rather than exemplars for future extension growth.
+
 ## Extension Taxonomy
 
 This repository distinguishes between three layers:

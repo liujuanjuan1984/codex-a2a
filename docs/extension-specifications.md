@@ -11,6 +11,12 @@ This document is the stable specification index for the extension URIs published
 
 Use the public card for lightweight discovery. Fetch the authenticated extended card when you need full extension params, compatibility metadata, or provider-private routing details.
 
+Provider-private extension note:
+
+- `codex.*` methods in this repository are adapter-managed provider extensions, not portable A2A baseline capabilities.
+- Prefer discovery, stable projections, and low-risk watch/control bridges before exposing stronger runtime or host-execution controls.
+- When an upstream behavior is highly runtime-internal or host-shaped, the specification should keep it provider-private and should not force it into fake A2A core object semantics.
+
 ## Shared Session Binding v1
 
 URI: `urn:a2a:session-binding/v1`

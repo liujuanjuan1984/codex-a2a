@@ -134,6 +134,20 @@ Retention guidance:
 - Generic A2A clients should remain usable without the `codex.*` control plane. Opt into those methods only when you are intentionally integrating with Codex-specific workflows such as session continuation, discovery-backed mentions, or interactive exec.
 - Treat `execution_environment.*` as deployment-configured discovery metadata. It does not promise per-request snapshots of temporary approvals, escalations, or host-side runtime mutations.
 
+Extension boundary principles:
+
+- Expose provider-specific capabilities through A2A only when they still fit the adapter boundary. The adapter may document, validate, route, and normalize stable upstream-facing behavior, but it should not become a general replacement for upstream private runtime internals or host-level control planes.
+- Default new `codex.*` methods to provider-private status. Do not present them as portable A2A baseline capabilities unless they truly match shared protocol semantics.
+- Prefer read-only discovery, stable compatibility surfaces, and low-risk control methods before introducing stronger mutating or destructive operations.
+- Map results to A2A core objects only when the upstream payload is a stable, low-ambiguity read projection such as session-to-`Task`, turn-to-`Task`, or message-to-`Message`. Otherwise prefer provider-private summary envelopes or watch-task payloads.
+- Treat upstream internal execution mechanisms, including active-turn steering, standalone exec runtime controls, reviewer internals, subtask/subagent fan-out, and task-tool internals, as provider-private runtime behavior. The adapter may expose passthrough compatibility and observable output metadata, but should not promote those internals into a default A2A orchestration API.
+- Before implementing a new provider-private extension, answer all of the following explicitly:
+  - what client value is added beyond the existing chat/session flow?
+  - is the upstream behavior stable enough to document as a maintained contract?
+  - should the surface remain provider-private, deployment-conditional, or not be exposed at all?
+  - are authorization, workspace/session ownership, and destructive-side-effect boundaries clear enough to enforce?
+  - can the result shape be expressed without overfitting provider internals into fake A2A core semantics?
+
 Current implementation note:
 
 - The compatibility profile is declarative. It does not introduce a global runtime `core-only` switch.
