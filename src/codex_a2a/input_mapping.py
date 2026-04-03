@@ -3,7 +3,6 @@ from __future__ import annotations
 import mimetypes
 from collections.abc import Mapping
 from typing import Any
-from urllib.parse import urlparse
 
 from a2a.types import DataPart, FilePart, TextPart
 
@@ -262,11 +261,3 @@ def summarize_normalized_items(items: list[dict[str, Any]]) -> str:
 
 def is_text_only_normalized_input(items: list[dict[str, Any]], *, user_text: str) -> bool:
     return len(items) == 1 and items[0].get("type") == "text" and items[0].get("text") == user_text
-
-
-def guess_image_mime_type_from_url(url: str) -> str | None:
-    if url.startswith("data:image/"):
-        prefix = url.split(";", 1)[0]
-        return prefix.removeprefix("data:")
-    parsed = urlparse(url)
-    return _guess_mime_type(parsed.path)

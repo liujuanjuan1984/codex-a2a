@@ -9,7 +9,6 @@ from codex_a2a.input_mapping import (
     UnsupportedInputError,
     convert_request_parts_to_turn_input,
     extract_text_from_normalized_items,
-    guess_image_mime_type_from_url,
     is_text_only_normalized_input,
     map_a2a_message_parts_to_normalized_items,
     summarize_normalized_items,
@@ -152,7 +151,3 @@ def test_normalized_item_helpers_cover_summary_and_mime_guessing() -> None:
         summarize_normalized_items([{"type": "skill", "path": "/tmp/SKILL.md"}])
         == "Rich input request"
     )
-
-    assert guess_image_mime_type_from_url("data:image/png;base64,AAAA") == "image/png"
-    assert guess_image_mime_type_from_url("https://example.com/demo.jpeg") == "image/jpeg"
-    assert guess_image_mime_type_from_url("https://example.com/demo") is None
