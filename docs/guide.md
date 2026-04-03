@@ -162,6 +162,8 @@ Use the grouped sections below as the deployment-first reading order:
 - `A2A_DATABASE_URL`: SQLAlchemy async database URL. Defaults to SQLite under `${CODEX_WORKSPACE_ROOT}/.codex-a2a/codex-a2a.db`.
 - `A2A_DATABASE_URL` also owns the adapter-managed runtime-state schema lifecycle. On startup, `codex-a2a` auto-creates the runtime-state tables, records a schema version for the `runtime_state` scope, and applies in-place migrations for those tables only.
 - The adapter-managed runtime-state schema is limited to `a2a_session_bindings`, `a2a_session_owners`, `a2a_pending_session_claims`, `a2a_pending_interrupt_requests`, and `a2a_schema_version`. It does not own the A2A SDK task-store tables or any upstream Codex/provider-local state.
+- The default SQLite deployment profile assumes a local filesystem path. Keep the database on a stable local disk rather than a network filesystem or sync-managed folder with weaker locking semantics.
+- The built-in migration helper is intentionally lightweight. It is suitable for additive, low-risk schema evolution such as creating adapter-owned tables, adding nullable columns, and recording per-scope schema versions. It is not intended to be a general replacement for heavier workflows such as column renames, destructive drops, non-null backfills, or cross-table rewrites.
 - `A2A_LOG_LEVEL`: `DEBUG/INFO/WARNING/ERROR`, default `INFO`
 - `A2A_LOG_PAYLOADS`: log A2A/Codex payload bodies, default `false`
 - `A2A_LOG_BODY_LIMIT`: payload log body size limit, default `0` (no truncation)
@@ -346,6 +348,7 @@ Notes:
 
 - `CODEX_WORKSPACE_ROOT` should point at the workspace root you want Codex to operate in.
 - If `A2A_DATABASE_URL` is omitted, `codex-a2a` defaults to `${CODEX_WORKSPACE_ROOT}/.codex-a2a/codex-a2a.db` when a workspace root is configured.
+- For the default SQLite + WAL profile, prefer a local disk path over network-mounted or sync-managed directories.
 - `codex-a2a` launches the Codex app-server subprocess itself; no separate `codex serve` step is required.
 - Upgrade the installed CLI with `uv tool upgrade codex-a2a`.
 
