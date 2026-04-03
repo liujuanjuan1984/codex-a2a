@@ -161,6 +161,7 @@ Use the grouped sections below as the deployment-first reading order:
 - `A2A_PUBLIC_URL`: externally reachable A2A URL prefix, default `http://127.0.0.1:8000`
 - `A2A_DATABASE_URL`: SQLAlchemy async database URL. Defaults to SQLite under `${CODEX_WORKSPACE_ROOT}/.codex-a2a/codex-a2a.db`.
 - `A2A_DATABASE_URL` also owns the adapter-managed runtime-state schema lifecycle. On startup, `codex-a2a` auto-creates the runtime-state tables, records a schema version for the `runtime_state` scope, and applies in-place migrations for those tables only.
+- The adapter-managed runtime-state schema is limited to `a2a_session_bindings`, `a2a_session_owners`, `a2a_pending_session_claims`, `a2a_pending_interrupt_requests`, and `a2a_schema_version`. It does not own the A2A SDK task-store tables or any upstream Codex/provider-local state.
 - `A2A_LOG_LEVEL`: `DEBUG/INFO/WARNING/ERROR`, default `INFO`
 - `A2A_LOG_PAYLOADS`: log A2A/Codex payload bodies, default `false`
 - `A2A_LOG_BODY_LIMIT`: payload log body size limit, default `0` (no truncation)
