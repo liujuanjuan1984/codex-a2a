@@ -17,7 +17,8 @@ def mock_client():
     sessions = ["session-1", "session-2", "session-3"]
     current_idx = 0
 
-    async def side_effect(title=None, directory=None):
+    async def side_effect(title=None, directory=None, execution_options=None):
+        del execution_options
         nonlocal current_idx
         res = sessions[current_idx]
         current_idx += 1
@@ -144,7 +145,8 @@ async def test_concurrent_session_create_isolated_by_identity():
     client = AsyncMock(spec=CodexClient)
     created = 0
 
-    async def create_session(title=None, directory=None):
+    async def create_session(title=None, directory=None, execution_options=None):
+        del execution_options
         nonlocal created
         await asyncio.sleep(0.05)
         created += 1
@@ -155,9 +157,10 @@ async def test_concurrent_session_create_isolated_by_identity():
         _text,
         *,
         directory=None,
+        execution_options=None,
         timeout_override=None,
     ):
-        del directory, timeout_override
+        del directory, execution_options, timeout_override
         response = MagicMock()
         response.text = "Codex response"
         response.session_id = session_id
@@ -264,6 +267,7 @@ async def test_preferred_session_claim_is_released_on_upstream_failure():
         _text,
         *,
         directory=None,  # noqa: ARG001
+        execution_options=None,  # noqa: ARG001
         timeout_override=None,  # noqa: ARG001
     ):
         raise RuntimeError(f"upstream failed for {session_id}")
@@ -298,6 +302,7 @@ async def test_preferred_session_claim_is_released_on_upstream_cancellation():
         _text,
         *,
         directory=None,  # noqa: ARG001
+        execution_options=None,  # noqa: ARG001
         timeout_override=None,  # noqa: ARG001
     ):
         raise asyncio.CancelledError()

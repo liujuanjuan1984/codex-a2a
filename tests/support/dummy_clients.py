@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from codex_a2a.config import Settings
+from codex_a2a.execution.request_overrides import RequestExecutionOptions
 from codex_a2a.upstream.client import CodexMessage
 from codex_a2a.upstream.interrupts import InterruptRequestBinding
 from tests.support.settings import make_settings
@@ -33,8 +34,9 @@ class DummyChatCodexClient:
         title: str | None = None,
         *,
         directory: str | None = None,
+        execution_options: RequestExecutionOptions | None = None,
     ) -> str:
-        del title, directory
+        del title, directory, execution_options
         self.created_sessions += 1
         return f"ses-created-{self.created_sessions}"
 
@@ -45,6 +47,7 @@ class DummyChatCodexClient:
         *,
         input_items: list[dict[str, Any]] | None = None,
         directory: str | None = None,
+        execution_options: RequestExecutionOptions | None = None,
         timeout_override=None,  # noqa: ANN001
     ) -> CodexMessage:
         del directory, timeout_override
@@ -53,6 +56,7 @@ class DummyChatCodexClient:
             {
                 "text": text,
                 "input_items": input_items,
+                "execution_options": execution_options,
             }
         )
         return CodexMessage(
@@ -250,21 +254,35 @@ class DummySessionQueryCodexClient:
             },
         }
 
-    async def session_prompt_async(self, session_id: str, *, request=None, directory=None):
+    async def session_prompt_async(
+        self,
+        session_id: str,
+        *,
+        request=None,
+        directory=None,
+        execution_options: RequestExecutionOptions | None = None,
+    ):
         self.last_prompt_async = {
             "session_id": session_id,
             "request": request,
             "directory": directory,
+            "execution_options": execution_options,
         }
         return {"ok": True, "session_id": session_id, "turn_id": "turn-1"}
 
     async def session_command(
-        self, session_id: str, *, request=None, directory=None
+        self,
+        session_id: str,
+        *,
+        request=None,
+        directory=None,
+        execution_options: RequestExecutionOptions | None = None,
     ) -> CodexMessage:
         self.last_command = {
             "session_id": session_id,
             "request": request,
             "directory": directory,
+            "execution_options": execution_options,
         }
         return CodexMessage(
             text=f"command:{request['command']} {request.get('arguments', '')}".strip(),

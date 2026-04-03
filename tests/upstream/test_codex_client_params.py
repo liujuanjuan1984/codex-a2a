@@ -8,6 +8,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from codex_a2a.execution.request_overrides import RequestExecutionOptions
 from codex_a2a.logging_context import bind_correlation_id
 from codex_a2a.upstream.client import (
     CodexClient,
@@ -86,6 +87,46 @@ async def test_create_session_uses_model_id_override_not_startup_default() -> No
             {
                 "model": "gpt-5.2-codex",
                 "cwd": "/safe/project",
+            },
+        )
+    ]
+
+
+@pytest.mark.asyncio
+async def test_create_session_request_execution_options_override_default_model() -> None:
+    client = CodexClient(
+        make_settings(
+            a2a_bearer_token="t-1",
+            codex_workspace_root="/safe",
+            codex_timeout=1.0,
+            codex_model_id="gpt-default",
+        )
+    )
+
+    seen: list[tuple[str, dict | None]] = []
+
+    async def fake_rpc_request(method: str, params: dict | None = None):
+        seen.append((method, params))
+        return {"thread": {"id": "thr-override"}}
+
+    client._rpc_request = fake_rpc_request
+
+    session_id = await client.create_session(
+        directory="/safe/project",
+        execution_options=RequestExecutionOptions(
+            model="gpt-5.2-codex",
+            personality="pragmatic",
+        ),
+    )
+
+    assert session_id == "thr-override"
+    assert seen == [
+        (
+            "thread/start",
+            {
+                "cwd": "/safe/project",
+                "model": "gpt-5.2-codex",
+                "personality": "pragmatic",
             },
         )
     ]
@@ -1287,6 +1328,51 @@ async def test_send_message_uses_structured_input_items_when_provided() -> None:
                     {"type": "mention", "name": "Demo App", "path": "app://demo-app"},
                 ],
                 "cwd": "/safe",
+            },
+        )
+    ]
+
+
+@pytest.mark.asyncio
+async def test_send_message_request_execution_options_are_forwarded_to_turn_start() -> None:
+    client = CodexClient(
+        make_settings(a2a_bearer_token="t-1", codex_workspace_root="/safe", codex_timeout=1.0)
+    )
+
+    seen: list[tuple[str, dict | None]] = []
+
+    async def fake_rpc_request(method: str, params: dict | None = None):
+        seen.append((method, params))
+        return {"turn": {"id": "turn-1"}}
+
+    client._rpc_request = fake_rpc_request
+    tracker = client._get_or_create_tracker("thr-1", "turn-1")
+    tracker.text_chunks.append("done")
+    tracker.completed.set()
+
+    message = await client.send_message(
+        "thr-1",
+        "hello",
+        execution_options=RequestExecutionOptions(
+            model="gpt-5.2-codex",
+            effort="high",
+            summary="concise",
+            personality="pragmatic",
+        ),
+    )
+
+    assert message.text == "done"
+    assert seen == [
+        (
+            "turn/start",
+            {
+                "threadId": "thr-1",
+                "input": [{"type": "text", "text": "hello", "text_elements": []}],
+                "cwd": "/safe",
+                "model": "gpt-5.2-codex",
+                "effort": "high",
+                "summary": "concise",
+                "personality": "pragmatic",
             },
         )
     ]

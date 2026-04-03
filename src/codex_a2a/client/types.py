@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import uuid
-from typing import Any
 
 from a2a.types import (
     Message,
@@ -75,4 +74,3 @@ class A2ACancelTaskRequest(BaseModel):
 A2AClientEvent = (
     Task | Message | tuple[Task, TaskStatusUpdateEvent | TaskArtifactUpdateEvent | None]
 )
-A2AClientMetadata = dict[str, Any]

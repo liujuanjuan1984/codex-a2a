@@ -63,8 +63,9 @@ async def test_database_backend_persists_task_session_and_interrupt_state_across
             title: str | None = None,
             *,
             directory: str | None = None,
+            execution_options=None,  # noqa: ANN001
         ) -> str:
-            del title, directory
+            del title, directory, execution_options
             type(self).created_sessions += 1
             return f"ses-{type(self).created_sessions}"
 
@@ -74,9 +75,10 @@ async def test_database_backend_persists_task_session_and_interrupt_state_across
             text: str,
             *,
             directory: str | None = None,
+            execution_options=None,  # noqa: ANN001
             timeout_override=None,  # noqa: ANN001
         ):
-            del text, directory, timeout_override
+            del text, directory, execution_options, timeout_override
             from codex_a2a.upstream.models import CodexMessage
 
             return CodexMessage(

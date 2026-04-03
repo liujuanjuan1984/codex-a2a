@@ -48,7 +48,9 @@ async def test_agent_maps_rich_input_parts_to_structured_codex_input() -> None:
             title: str | None = None,
             *,
             directory: str | None = None,
+            execution_options=None,  # noqa: ANN001
         ) -> str:
+            del execution_options
             self.created_sessions += 1
             self.sent_inputs.append({"created_session_title": title, "directory": directory})
             return f"ses-created-{self.created_sessions}"
@@ -91,6 +93,60 @@ async def test_agent_maps_rich_input_parts_to_structured_codex_input() -> None:
         {"type": "image", "url": "https://example.com/screenshot.png"},
         {"type": "mention", "name": "Demo App", "path": "app://demo-app"},
     ]
+
+
+@pytest.mark.asyncio
+async def test_agent_forwards_request_execution_options_from_metadata() -> None:
+    client = DummyChatCodexClient()
+    executor = CodexAgentExecutor(client, streaming_enabled=False)
+    q = DummyEventQueue()
+
+    ctx = make_request_context(
+        task_id="t-exec",
+        context_id="c-exec",
+        text="hello",
+        metadata={
+            "codex": {
+                "execution": {
+                    "model": "gpt-5.2-codex",
+                    "effort": "high",
+                    "summary": "concise",
+                    "personality": "pragmatic",
+                }
+            }
+        },
+    )
+    await executor.execute(ctx, q)
+
+    execution_options = client.sent_inputs[0]["execution_options"]
+    assert execution_options is not None
+    assert execution_options.model == "gpt-5.2-codex"
+    assert execution_options.effort == "high"
+    assert execution_options.summary == "concise"
+    assert execution_options.personality == "pragmatic"
+
+
+@pytest.mark.asyncio
+async def test_agent_rejects_invalid_request_execution_options_metadata() -> None:
+    client = DummyChatCodexClient()
+    executor = CodexAgentExecutor(client, streaming_enabled=False)
+    q = DummyEventQueue()
+
+    ctx = make_request_context(
+        task_id="t-exec-invalid",
+        context_id="c-exec-invalid",
+        text="hello",
+        metadata={"codex": {"execution": {"effort": "turbo"}}},
+    )
+    await executor.execute(ctx, q)
+
+    task = next(event for event in q.events if isinstance(event, Task))
+    assert task.status.state == TaskState.failed
+    assert task.status.message is not None
+    assert (
+        task.status.message.parts[0].root.text
+        == "metadata.codex.execution.effort must be one of: high, low, medium, minimal, none, xhigh"
+    )
 
 
 @pytest.mark.asyncio
@@ -165,9 +221,14 @@ async def test_agent_dedupes_concurrent_session_creates_per_context() -> None:
             title: str | None = None,
             *,
             directory: str | None = None,
+            execution_options=None,  # noqa: ANN001
         ) -> str:
             await asyncio.sleep(0.05)
-            return await super().create_session(title=title, directory=directory)
+            return await super().create_session(
+                title=title,
+                directory=directory,
+                execution_options=execution_options,
+            )
 
     client = SlowCreateClient()
     executor = CodexAgentExecutor(
@@ -196,9 +257,10 @@ async def test_agent_uses_stable_fallback_message_id_when_upstream_missing_messa
             text: str,
             *,
             directory: str | None = None,
+            execution_options=None,  # noqa: ANN001
             timeout_override=None,  # noqa: ANN001
         ) -> CodexMessage:
-            del text, directory, timeout_override
+            del text, directory, execution_options, timeout_override
             self.sent_session_ids.append(session_id)
             return CodexMessage(
                 text="echo:hello",
@@ -232,9 +294,10 @@ async def test_agent_includes_usage_in_non_stream_task_metadata() -> None:
             text: str,
             *,
             directory: str | None = None,
+            execution_options=None,  # noqa: ANN001
             timeout_override=None,  # noqa: ANN001
         ) -> CodexMessage:
-            del text, directory, timeout_override
+            del text, directory, execution_options, timeout_override
             self.sent_session_ids.append(session_id)
             return CodexMessage(
                 text="echo:hello",

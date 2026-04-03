@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from codex_a2a.execution.request_overrides import RequestExecutionOptions
 from codex_a2a.upstream.conversation_facade import CodexConversationFacade
 from codex_a2a.upstream.models import CodexRPCError, _PendingRpcRequest, _TurnTracker
 from codex_a2a.upstream.startup import build_cli_config_args, optional_string, resolve_cli_bin
@@ -61,6 +62,61 @@ async def test_conversation_facade_overrides() -> None:
     await facade.send_message("thr-1", "hi", directory="/dir2", timeout_seconds=1.0)
     assert seen[-1][1]["cwd"] == "/dir2"
     assert seen[-1][1]["model"] == "gpt-default"
+
+
+@pytest.mark.asyncio
+async def test_conversation_facade_applies_request_execution_options() -> None:
+    seen: list[tuple[str, dict | None]] = []
+
+    async def fake_rpc_request(method: str, params: dict | None = None, **_kwargs):
+        seen.append((method, params))
+        if method == "thread/start":
+            return {"thread": {"id": "thr-1"}}
+        return {"turn": {"id": "turn-1"}}
+
+    facade, _turn_trackers, tracker_factory = _make_conversation_facade(
+        rpc_request=fake_rpc_request,
+        workspace_root="/root",
+        model_id="gpt-default",
+    )
+    options = RequestExecutionOptions(
+        model="gpt-5.2-codex",
+        effort="high",
+        summary="concise",
+        personality="pragmatic",
+    )
+
+    await facade.create_session(directory="/override", execution_options=options)
+    assert seen[-1] == (
+        "thread/start",
+        {
+            "cwd": "/override",
+            "model": "gpt-5.2-codex",
+            "personality": "pragmatic",
+        },
+    )
+
+    tracker = tracker_factory("thr-1", "turn-1")
+    tracker.completed.set()
+    await facade.send_message(
+        "thr-1",
+        "hi",
+        directory="/dir2",
+        execution_options=options,
+        timeout_seconds=1.0,
+    )
+    assert seen[-1] == (
+        "turn/start",
+        {
+            "threadId": "thr-1",
+            "input": [{"type": "text", "text": "hi", "text_elements": []}],
+            "cwd": "/dir2",
+            "model": "gpt-5.2-codex",
+            "effort": "high",
+            "summary": "concise",
+            "personality": "pragmatic",
+        },
+    )
 
 
 @pytest.mark.asyncio

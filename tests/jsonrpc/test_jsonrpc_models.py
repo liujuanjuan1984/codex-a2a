@@ -32,7 +32,17 @@ def test_parse_prompt_async_params_preserves_aliases() -> None:
                 "parts": [{"type": "text", "text": "hello"}],
                 "messageID": "msg-1",
             },
-            "metadata": {"codex": {"directory": "/workspace"}},
+            "metadata": {
+                "codex": {
+                    "directory": "/workspace",
+                    "execution": {
+                        "model": "gpt-5.2-codex",
+                        "effort": "medium",
+                        "summary": "concise",
+                        "personality": "pragmatic",
+                    },
+                }
+            },
         }
     )
 
@@ -44,6 +54,11 @@ def test_parse_prompt_async_params_preserves_aliases() -> None:
     assert payload.metadata is not None
     assert payload.metadata.codex is not None
     assert payload.metadata.codex.directory == "/workspace"
+    assert payload.metadata.codex.execution is not None
+    assert payload.metadata.codex.execution.model == "gpt-5.2-codex"
+    assert payload.metadata.codex.execution.effort == "medium"
+    assert payload.metadata.codex.execution.summary == "concise"
+    assert payload.metadata.codex.execution.personality == "pragmatic"
 
 
 def test_parse_prompt_async_params_accepts_rich_input_parts() -> None:
@@ -256,6 +271,44 @@ def test_parse_prompt_async_params_rejects_unknown_part_type() -> None:
         "type": "INVALID_FIELD",
         "field": "request.parts[0].type",
     }
+
+
+@pytest.mark.parametrize(
+    ("payload", "message", "field"),
+    [
+        (
+            {
+                "session_id": "s-1",
+                "request": {"parts": [{"type": "text", "text": "hello"}]},
+                "metadata": {"codex": {"execution": "fast"}},
+            },
+            "metadata.codex.execution must be an object",
+            "metadata.codex.execution",
+        ),
+        (
+            {
+                "session_id": "s-1",
+                "request": {"parts": [{"type": "text", "text": "hello"}]},
+                "metadata": {"codex": {"execution": {"effort": "turbo"}}},
+            },
+            (
+                "metadata.codex.execution.effort must be one of: "
+                "high, low, medium, minimal, none, xhigh"
+            ),
+            "metadata.codex.execution.effort",
+        ),
+    ],
+)
+def test_parse_prompt_async_params_rejects_invalid_execution_metadata(
+    payload: dict,
+    message: str,
+    field: str,
+) -> None:
+    with pytest.raises(JsonRpcParamsValidationError) as exc_info:
+        parse_prompt_async_params(payload)
+
+    assert str(exc_info.value) == message
+    assert exc_info.value.data == {"type": "INVALID_FIELD", "field": field}
 
 
 def test_parse_thread_lifecycle_params_preserve_aliases() -> None:

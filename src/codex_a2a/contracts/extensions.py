@@ -12,6 +12,7 @@ from codex_a2a.contracts.runtime_output import (
     build_status_stream_contract_params,
     build_usage_contract_params,
 )
+from codex_a2a.execution.request_overrides import request_execution_options_fields
 from codex_a2a.execution.tool_call_payloads import build_tool_call_payload_contract_params
 from codex_a2a.profile.runtime import RuntimeProfile
 
@@ -34,6 +35,28 @@ SHARED_STREAM_METADATA_FIELD = "metadata.shared.stream"
 SHARED_INTERRUPT_METADATA_FIELD = "metadata.shared.interrupt"
 SHARED_USAGE_METADATA_FIELD = "metadata.shared.usage"
 CODEX_DIRECTORY_METADATA_FIELD = "metadata.codex.directory"
+CODEX_EXECUTION_METADATA_FIELD = "metadata.codex.execution"
+
+_REQUEST_EXECUTION_PROVIDER_METADATA = ["codex.directory", "codex.execution"]
+
+
+def _build_request_execution_options_contract() -> dict[str, Any]:
+    return {
+        "metadata_field": CODEX_EXECUTION_METADATA_FIELD,
+        "fields": request_execution_options_fields(),
+        "persists_for_thread": True,
+        "notes": [
+            (
+                "execution.model, execution.effort, execution.summary, and "
+                "execution.personality map to upstream thread/start or turn/start "
+                "overrides when the selected method starts or continues a turn."
+            ),
+            (
+                "directory remains a separate metadata.codex.directory override so "
+                "existing clients do not need to migrate cwd handling."
+            ),
+        ],
+    }
 
 
 @dataclass(frozen=True)
@@ -132,6 +155,7 @@ SESSION_QUERY_METHOD_CONTRACTS: dict[str, SessionQueryMethodContract] = {
             "request.system",
             "request.variant",
             CODEX_DIRECTORY_METADATA_FIELD,
+            CODEX_EXECUTION_METADATA_FIELD,
         ),
         result_fields=("ok", "session_id", "turn_id"),
         notification_response_status=204,
@@ -157,6 +181,7 @@ SESSION_QUERY_METHOD_CONTRACTS: dict[str, SessionQueryMethodContract] = {
             "request.arguments",
             "request.messageID",
             CODEX_DIRECTORY_METADATA_FIELD,
+            CODEX_EXECUTION_METADATA_FIELD,
         ),
         result_fields=("item",),
         notification_response_status=204,
@@ -860,7 +885,7 @@ def build_compatibility_profile_params(
                 COMPATIBILITY_PROFILE_EXTENSION_URI,
                 WIRE_CONTRACT_EXTENSION_URI,
             ],
-            "provider_private_metadata": ["codex.directory"],
+            "provider_private_metadata": list(_REQUEST_EXECUTION_PROVIDER_METADATA),
         },
         "extension_retention": extension_retention,
         "method_retention": method_retention,
@@ -880,7 +905,8 @@ def build_compatibility_profile_params(
                 "as shared extensions rather than provider-private Codex capabilities."
             ),
             (
-                "Treat codex.* methods and codex.directory metadata as Codex-specific "
+                "Treat codex.* methods and codex.directory/codex.execution metadata as "
+                "Codex-specific "
                 "extensions or provider-private operational surfaces rather than portable "
                 "A2A baseline capabilities."
             ),
@@ -940,8 +966,10 @@ def build_session_binding_extension_params(
         "supported_metadata": [
             "shared.session.id",
             "codex.directory",
+            "codex.execution",
         ],
-        "provider_private_metadata": ["codex.directory"],
+        "provider_private_metadata": list(_REQUEST_EXECUTION_PROVIDER_METADATA),
+        "request_execution_options": _build_request_execution_options_contract(),
         "profile": runtime_profile.summary_dict(),
         "notes": [
             (
@@ -1068,8 +1096,9 @@ def build_session_query_extension_params(
         "methods": active_query_methods,
         "control_methods": active_control_methods,
         "profile": runtime_profile.summary_dict(),
-        "supported_metadata": ["codex.directory"],
-        "provider_private_metadata": ["codex.directory"],
+        "supported_metadata": list(_REQUEST_EXECUTION_PROVIDER_METADATA),
+        "provider_private_metadata": list(_REQUEST_EXECUTION_PROVIDER_METADATA),
+        "request_execution_options": _build_request_execution_options_contract(),
         "rich_input": {
             "prompt_async_part_types": ["text", "image", "mention", "skill"],
             "prompt_async_part_contracts": {

@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any
 
 from codex_a2a import __version__
 from codex_a2a.config import Settings
+from codex_a2a.execution.request_overrides import RequestExecutionOptions
 from codex_a2a.logging_context import (
     install_log_record_factory,
 )
@@ -330,9 +331,17 @@ class CodexClient:
             yield event
 
     async def create_session(
-        self, title: str | None = None, *, directory: str | None = None
+        self,
+        title: str | None = None,
+        *,
+        directory: str | None = None,
+        execution_options: RequestExecutionOptions | None = None,
     ) -> str:
-        return await self._conversation_facade.create_session(title=title, directory=directory)
+        return await self._conversation_facade.create_session(
+            title=title,
+            directory=directory,
+            execution_options=execution_options,
+        )
 
     async def list_skills(self, *, params: dict[str, Any] | None = None) -> Any:
         return await self._rpc_request("skills/list", self._merge_params(params))
@@ -382,6 +391,7 @@ class CodexClient:
         *,
         input_items: list[dict[str, Any]] | None = None,
         directory: str | None = None,
+        execution_options: RequestExecutionOptions | None = None,
         timeout_override: float | None | _UnsetType = _UNSET,
     ) -> CodexMessage:
         return await self._conversation_facade.send_message(
@@ -389,6 +399,7 @@ class CodexClient:
             text,
             input_items=input_items,
             directory=directory,
+            execution_options=execution_options,
             timeout_seconds=self._resolve_timeout_seconds(timeout_override=timeout_override),
         )
 
@@ -398,11 +409,13 @@ class CodexClient:
         request: dict[str, Any],
         *,
         directory: str | None = None,
+        execution_options: RequestExecutionOptions | None = None,
     ) -> dict[str, Any]:
         return await self._conversation_facade.session_prompt_async(
             session_id,
             request,
             directory=directory,
+            execution_options=execution_options,
         )
 
     async def session_command(
@@ -411,11 +424,13 @@ class CodexClient:
         request: dict[str, Any],
         *,
         directory: str | None = None,
+        execution_options: RequestExecutionOptions | None = None,
     ) -> CodexMessage:
         return await self._conversation_facade.session_command(
             session_id,
             request,
             directory=directory,
+            execution_options=execution_options,
             timeout_seconds=self._request_timeout,
         )
 
