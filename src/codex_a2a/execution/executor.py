@@ -30,8 +30,10 @@ from codex_a2a.execution.cancellation import (
 from codex_a2a.execution.directory_policy import resolve_and_validate_directory
 from codex_a2a.execution.request_metadata import (
     extract_codex_directory,
+    extract_codex_execution_options,
     extract_shared_session_id,
 )
+from codex_a2a.execution.request_overrides import RequestExecutionOptionsValidationError
 from codex_a2a.execution.response_emitter import (
     emit_non_stream_completion,
     emit_streaming_completion,
@@ -157,6 +159,17 @@ class CodexAgentExecutor(AgentExecutor):
             )
             return
         requested_dir = extract_codex_directory(context)
+        try:
+            execution_options = extract_codex_execution_options(context)
+        except RequestExecutionOptionsValidationError as exc:
+            await self._emit_error(
+                event_queue,
+                task_id=task_id,
+                context_id=context_id,
+                message=str(exc),
+                streaming_request=streaming_request,
+            )
+            return
 
         try:
             directory = self._resolve_and_validate_directory(requested_dir)
@@ -225,6 +238,7 @@ class CodexAgentExecutor(AgentExecutor):
                 create_session=lambda: self._client.create_session(
                     title=session_title,
                     directory=directory,
+                    execution_options=execution_options,
                 ),
             )
             session_lock = await self._session_runtime.get_session_lock(session_id)
@@ -252,6 +266,8 @@ class CodexAgentExecutor(AgentExecutor):
             )
             while True:
                 send_kwargs: dict[str, Any] = {"directory": directory}
+                if not execution_options.is_empty():
+                    send_kwargs["execution_options"] = execution_options
                 if next_turn_input_items is not None:
                     send_kwargs["input_items"] = next_turn_input_items
                 if streaming_request:

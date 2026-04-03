@@ -51,8 +51,9 @@ class DummyStreamingClient:
         title: str | None = None,
         *,
         directory: str | None = None,
+        execution_options=None,  # noqa: ANN001
     ) -> str:
-        del title, directory
+        del title, directory, execution_options
         return "ses-1"
 
     async def send_message(
@@ -61,9 +62,10 @@ class DummyStreamingClient:
         text: str,
         *,
         directory: str | None = None,
+        execution_options=None,  # noqa: ANN001
         timeout_override=None,  # noqa: ANN001
     ) -> CodexMessage:
-        del text, directory, timeout_override
+        del text, directory, execution_options, timeout_override
         self._in_flight_send += 1
         self.max_in_flight_send = max(self.max_in_flight_send, self._in_flight_send)
         await asyncio.sleep(self._send_delay)
@@ -1199,8 +1201,9 @@ async def test_streaming_replays_real_command_execution_fixture_end_to_end() -> 
         title: str | None = None,
         *,
         directory: str | None = None,
+        execution_options: object | None = None,
     ) -> str:
-        del title, directory
+        del title, directory, execution_options
         return fixture_session_id
 
     client.create_session = create_fixture_session
@@ -1269,8 +1272,9 @@ async def test_streaming_replays_real_file_change_fixture_end_to_end() -> None:
         title: str | None = None,
         *,
         directory: str | None = None,
+        execution_options: object | None = None,
     ) -> str:
-        del title, directory
+        del title, directory, execution_options
         return fixture_session_id
 
     client.create_session = create_fixture_session

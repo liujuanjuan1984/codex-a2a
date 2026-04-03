@@ -133,8 +133,8 @@ def test_public_agent_card_minimizes_provider_private_contracts() -> None:
     assert session_binding_params == {
         "metadata_field": "metadata.shared.session.id",
         "behavior": "prefer_metadata_binding_else_create_session",
-        "supported_metadata": ["shared.session.id", "codex.directory"],
-        "provider_private_metadata": ["codex.directory"],
+        "supported_metadata": ["shared.session.id", "codex.directory", "codex.execution"],
+        "provider_private_metadata": ["codex.directory", "codex.execution"],
     }
 
     streaming = ext_by_uri[STREAMING_EXTENSION_URI]
@@ -248,8 +248,25 @@ def test_authenticated_extended_agent_card_injects_profile_into_extensions() -> 
     assert binding_params["supported_metadata"] == [
         "shared.session.id",
         "codex.directory",
+        "codex.execution",
     ]
-    assert binding_params["provider_private_metadata"] == ["codex.directory"]
+    assert binding_params["provider_private_metadata"] == ["codex.directory", "codex.execution"]
+    assert binding_params["request_execution_options"] == {
+        "metadata_field": "metadata.codex.execution",
+        "fields": ["model", "effort", "summary", "personality"],
+        "persists_for_thread": True,
+        "notes": [
+            (
+                "execution.model, execution.effort, execution.summary, and "
+                "execution.personality map to upstream thread/start or turn/start "
+                "overrides when the selected method starts or continues a turn."
+            ),
+            (
+                "directory remains a separate metadata.codex.directory override so "
+                "existing clients do not need to migrate cwd handling."
+            ),
+        ],
+    }
 
     streaming = ext_by_uri[STREAMING_EXTENSION_URI]
     streaming_params = _require_params(streaming)
@@ -305,8 +322,15 @@ def test_authenticated_extended_agent_card_injects_profile_into_extensions() -> 
     session_query = ext_by_uri[SESSION_QUERY_EXTENSION_URI]
     session_query_params = _require_params(session_query)
     assert session_query_params["profile"] == profile
-    assert session_query_params["supported_metadata"] == ["codex.directory"]
-    assert session_query_params["provider_private_metadata"] == ["codex.directory"]
+    assert session_query_params["supported_metadata"] == ["codex.directory", "codex.execution"]
+    assert session_query_params["provider_private_metadata"] == [
+        "codex.directory",
+        "codex.execution",
+    ]
+    assert (
+        session_query_params["request_execution_options"]
+        == binding_params["request_execution_options"]
+    )
     assert session_query_params["pagination"]["mode"] == "limit"
     assert session_query_params["pagination"]["default_limit"] == SESSION_QUERY_DEFAULT_LIMIT
     assert session_query_params["pagination"]["max_limit"] == SESSION_QUERY_MAX_LIMIT
@@ -451,7 +475,8 @@ def test_authenticated_extended_agent_card_injects_profile_into_extensions() -> 
     assert compatibility_params["runtime_features"] == profile["runtime_features"]
     assert "agent/getAuthenticatedExtendedCard" in compatibility_params["core"]["jsonrpc_methods"]
     assert compatibility_params["extension_taxonomy"]["provider_private_metadata"] == [
-        "codex.directory"
+        "codex.directory",
+        "codex.execution",
     ]
     assert compatibility_params["method_retention"]["agent/getAuthenticatedExtendedCard"] == {
         "surface": "core",

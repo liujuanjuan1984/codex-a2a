@@ -57,6 +57,13 @@ async def handle_session_control_request(
 
     session_id = parsed_params.session_id
     request_payload = parsed_params.request.model_dump(by_alias=True, exclude_none=True)
+    execution_options = None
+    if (
+        parsed_params.metadata is not None
+        and parsed_params.metadata.codex is not None
+        and parsed_params.metadata.codex.execution is not None
+    ):
+        execution_options = parsed_params.metadata.codex.execution.to_execution_options()
     directory, metadata_error = extract_directory_from_metadata(
         app,
         request_id=base_request.id,
@@ -87,12 +94,14 @@ async def handle_session_control_request(
                 session_id,
                 request=request_payload,
                 directory=directory,
+                execution_options=execution_options,
             )
         elif base_request.method == app._method_command:
             command_result = await app._codex_client.session_command(
                 session_id,
                 request=request_payload,
                 directory=directory,
+                execution_options=execution_options,
             )
             item = as_a2a_message(session_id, message_to_item(command_result))
             if item is None:

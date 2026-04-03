@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import shlex
+from dataclasses import replace
 from typing import Any
 
+from codex_a2a.execution.request_overrides import RequestExecutionOptions
 from codex_a2a.input_mapping import (
     convert_request_parts_to_turn_input as _convert_request_parts_to_turn_input,
 )
@@ -10,6 +12,58 @@ from codex_a2a.input_mapping import (
 
 def convert_request_parts_to_turn_input(request: dict[str, Any]) -> list[dict[str, Any]]:
     return _convert_request_parts_to_turn_input(request)
+
+
+def coerce_request_execution_options(
+    execution_options: RequestExecutionOptions | None,
+) -> RequestExecutionOptions | None:
+    if execution_options is None or execution_options.is_empty():
+        return None
+    return replace(execution_options)
+
+
+def apply_thread_start_execution_options(
+    params: dict[str, Any],
+    *,
+    execution_options: RequestExecutionOptions | None,
+    default_model_id: str | None,
+) -> dict[str, Any]:
+    effective_model = (
+        execution_options.model
+        if execution_options is not None and execution_options.model is not None
+        else default_model_id
+    )
+    if effective_model:
+        params["model"] = effective_model
+    if execution_options is None:
+        return params
+    if execution_options.personality is not None:
+        params["personality"] = execution_options.personality
+    return params
+
+
+def apply_turn_start_execution_options(
+    params: dict[str, Any],
+    *,
+    execution_options: RequestExecutionOptions | None,
+    default_model_id: str | None,
+) -> dict[str, Any]:
+    effective_model = (
+        execution_options.model
+        if execution_options is not None and execution_options.model is not None
+        else default_model_id
+    )
+    if effective_model:
+        params["model"] = effective_model
+    if execution_options is None:
+        return params
+    if execution_options.effort is not None:
+        params["effort"] = execution_options.effort
+    if execution_options.summary is not None:
+        params["summary"] = execution_options.summary
+    if execution_options.personality is not None:
+        params["personality"] = execution_options.personality
+    return params
 
 
 def format_shell_response(result: dict[str, Any]) -> str:

@@ -68,7 +68,7 @@ Consumer guidance:
 - Fetch the authenticated extended card when you need the detailed method matrix, provider-private notes, or full extension params.
 - Treat `supported_methods` in `error.data` as the runtime truth for the current deployment, especially when a deployment-conditional method is disabled.
 - Treat the core A2A methods as the portable interoperability baseline.
-- Treat `codex.*` methods and `metadata.codex.directory` as a Codex-specific control plane for Codex-aware clients rather than generic A2A portability claims.
+- Treat `codex.*` methods plus `metadata.codex.directory` and `metadata.codex.execution` as a Codex-specific control plane for Codex-aware clients rather than generic A2A portability claims.
 - See [extension-specifications.md](./extension-specifications.md) for the stable URI/spec index, and [compatibility.md](./compatibility.md) for compatibility promises.
 
 ## Compatibility Profile
@@ -127,7 +127,7 @@ Retention guidance:
 - Treat shared session-binding and streaming metadata contracts as required for the current deployment model; they are not optional documentation-only hints.
 - Treat `urn:a2a:*` extension URIs in this repository as shared extension conventions used across this repo family, not as claims that they are part of the A2A core baseline.
 - Treat `a2a.interrupt.*` methods as shared extensions.
-- Treat `codex.*` methods and `metadata.codex.directory` as Codex-specific extensions or provider-private operational surfaces rather than portable A2A baseline capabilities.
+- Treat `codex.*` methods plus `metadata.codex.directory` and `metadata.codex.execution` as Codex-specific extensions or provider-private operational surfaces rather than portable A2A baseline capabilities.
 - Treat `codex.sessions.shell` as deployment-conditional. Discover it from the declared compatibility profile and extension contracts before calling it.
 - Treat `codex.sessions.shell` as a one-shot shell snapshot surface. It is not an interactive shell session and does not imply PTY lifecycle support.
 - Treat `codex.exec.*` as the standalone interactive exec surface. Use it for stdin write, PTY resize, and terminate flows instead of inferring those capabilities from `codex.sessions.shell`.
@@ -447,6 +447,9 @@ Examples:
 - For validation failures, missing context (`task_id`/`context_id`), or internal errors, the service attempts to return standard A2A failure events via `event_queue`.
 - Failure events include concrete error details with `failed` state.
 - Clients can pass `metadata.codex.directory`, but it must stay inside `${CODEX_WORKSPACE_ROOT}` (or service runtime root if not configured).
+- Clients can also pass `metadata.codex.execution` with `model`, `effort`, `summary`, and `personality`.
+- `metadata.codex.execution` is validated as a structured object. Invalid fields fail fast instead of being silently ignored.
+- `metadata.codex.execution` applies only to request flows that create or continue Codex turns. It does not widen the standalone shell or interactive exec contracts.
 - All paths are normalized with `realpath` to prevent `..` or symlink boundary bypass.
 - If `A2A_ALLOW_DIRECTORY_OVERRIDE=false`, only the default directory is accepted.
 ## Authentication Setup For Local Examples

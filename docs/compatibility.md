@@ -26,7 +26,7 @@ Open-source consumption guidance:
 
 - Treat the core A2A send / stream / task methods as the portable baseline.
 - Treat `urn:a2a:*` entries in this repository as shared repo-family conventions, not as claims that they are part of the A2A core baseline.
-- Treat `codex.*` methods and `metadata.codex.directory` as a Codex-specific control plane layered on top of the portable A2A surface.
+- Treat `codex.*` methods plus `metadata.codex.directory` and `metadata.codex.execution` as a Codex-specific control plane layered on top of the portable A2A surface.
 - Treat [extension-specifications.md](./extension-specifications.md) as the stable URI/spec index, not as the main usage guide.
 
 ## Normative Sources
@@ -107,7 +107,7 @@ This repository distinguishes between three layers:
 - shared extensions
   - repo-family conventions such as session binding, stream hints, and interrupt callbacks (`permission`, `question`, `permissions`, and `elicitation` reply surfaces)
 - Codex-specific extensions
-  - `codex.*` JSON-RPC methods and `metadata.codex.directory`
+  - `codex.*` JSON-RPC methods plus `metadata.codex.directory` and `metadata.codex.execution`
   - this now includes:
     - session query/control
     - discovery/query surfaces

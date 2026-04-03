@@ -622,6 +622,7 @@ async def test_session_control_prompt_async_returns_turn_handle(monkeypatch):
                 "messageID": "msg-21",
             },
             "directory": "/workspace",
+            "execution_options": None,
         }
 
 
@@ -695,7 +696,57 @@ async def test_session_control_prompt_async_accepts_rich_input(monkeypatch):
                 ],
             },
             "directory": None,
+            "execution_options": None,
         }
+
+
+@pytest.mark.asyncio
+async def test_session_control_prompt_async_forwards_execution_options(monkeypatch):
+    import codex_a2a.server.application as app_module
+
+    dummy = DummyCodexClient(
+        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+    )
+    monkeypatch.setattr(app_module, "CodexClient", lambda _settings, **kwargs: dummy)
+    app = app_module.create_app(
+        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+    )
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        headers = {"Authorization": "Bearer t-1"}
+        resp = await client.post(
+            "/",
+            headers=headers,
+            json={
+                "jsonrpc": "2.0",
+                "id": 212,
+                "method": "codex.sessions.prompt_async",
+                "params": {
+                    "session_id": "s-1",
+                    "request": {"parts": [{"type": "text", "text": "summarize this repo"}]},
+                    "metadata": {
+                        "codex": {
+                            "execution": {
+                                "model": "gpt-5.2-codex",
+                                "effort": "high",
+                                "summary": "concise",
+                                "personality": "pragmatic",
+                            }
+                        }
+                    },
+                },
+            },
+        )
+        payload = resp.json()
+        assert payload["result"] == {"ok": True, "session_id": "s-1", "turn_id": "turn-1"}
+        assert dummy.last_prompt_async is not None
+        execution_options = dummy.last_prompt_async["execution_options"]
+        assert execution_options is not None
+        assert execution_options.model == "gpt-5.2-codex"
+        assert execution_options.effort == "high"
+        assert execution_options.summary == "concise"
+        assert execution_options.personality == "pragmatic"
 
 
 @pytest.mark.asyncio
@@ -744,6 +795,7 @@ async def test_session_control_command_maps_response_to_a2a_message(monkeypatch)
                 "messageID": "cmd-msg-1",
             },
             "directory": "/workspace/app",
+            "execution_options": None,
         }
 
 
@@ -790,6 +842,7 @@ async def test_session_control_command_accepts_missing_arguments(monkeypatch):
                 "messageID": "cmd-msg-2",
             },
             "directory": None,
+            "execution_options": None,
         }
 
 

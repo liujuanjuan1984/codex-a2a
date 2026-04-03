@@ -138,7 +138,7 @@ Look elsewhere if:
 Portable vs Private Surface:
 
 - Treat the core A2A send / stream / task methods plus Agent Card discovery as the portable baseline.
-- Treat `codex.*` methods and `metadata.codex.directory` as the Codex-specific control plane for Codex-aware clients.
+- Treat `codex.*` methods plus `metadata.codex.directory` and `metadata.codex.execution` as the Codex-specific control plane for Codex-aware clients.
 - Treat one deployed instance as a single-tenant trust boundary, not a hardened multi-tenant runtime.
 
 The normative compatibility split and deployment model live in [Compatibility Guide](docs/compatibility.md) and [Security Policy](SECURITY.md).

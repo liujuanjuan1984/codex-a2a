@@ -5,10 +5,14 @@ import contextlib
 from collections.abc import Awaitable, Callable
 from typing import Any
 
+from codex_a2a.execution.request_overrides import RequestExecutionOptions
 from codex_a2a.input_mapping import build_turn_input_from_normalized_items
 from codex_a2a.upstream.models import CodexMessage, _TurnTracker
 from codex_a2a.upstream.request_mapping import (
+    apply_thread_start_execution_options,
+    apply_turn_start_execution_options,
     build_shell_exec_params,
+    coerce_request_execution_options,
     convert_request_parts_to_turn_input,
     format_shell_response,
     uuid_like_suffix,
@@ -35,18 +39,25 @@ class CodexConversationFacade:
         self._turn_trackers = turn_trackers
 
     async def create_session(
-        self, title: str | None = None, *, directory: str | None = None
+        self,
+        title: str | None = None,
+        *,
+        directory: str | None = None,
+        execution_options: RequestExecutionOptions | None = None,
     ) -> str:
         params: dict[str, Any] = {}
         normalized_title = title.strip() if title else ""
         if normalized_title:
             params["name"] = normalized_title
-        if self._model_id:
-            params["model"] = self._model_id
         if directory:
             params["cwd"] = directory
         elif self._workspace_root:
             params["cwd"] = self._workspace_root
+        apply_thread_start_execution_options(
+            params,
+            execution_options=coerce_request_execution_options(execution_options),
+            default_model_id=self._model_id,
+        )
         result = await self._rpc_request("thread/start", params)
         if not isinstance(result, dict):
             raise RuntimeError("codex thread/start response missing result object")
@@ -179,6 +190,7 @@ class CodexConversationFacade:
         *,
         input_items: list[dict[str, Any]] | None = None,
         directory: str | None = None,
+        execution_options: RequestExecutionOptions | None = None,
         timeout_seconds: float | None,
     ) -> CodexMessage:
         input_payload = (
@@ -195,9 +207,11 @@ class CodexConversationFacade:
             params["cwd"] = directory
         elif self._workspace_root:
             params["cwd"] = self._workspace_root
-
-        if self._model_id:
-            params["model"] = self._model_id
+        apply_turn_start_execution_options(
+            params,
+            execution_options=coerce_request_execution_options(execution_options),
+            default_model_id=self._model_id,
+        )
 
         result = await self._rpc_request("turn/start", params)
         if not isinstance(result, dict):
@@ -236,6 +250,7 @@ class CodexConversationFacade:
         request: dict[str, Any],
         *,
         directory: str | None = None,
+        execution_options: RequestExecutionOptions | None = None,
     ) -> dict[str, Any]:
         params: dict[str, Any] = {
             "threadId": session_id,
@@ -245,8 +260,11 @@ class CodexConversationFacade:
             params["cwd"] = directory
         elif self._workspace_root:
             params["cwd"] = self._workspace_root
-        if self._model_id:
-            params["model"] = self._model_id
+        apply_turn_start_execution_options(
+            params,
+            execution_options=coerce_request_execution_options(execution_options),
+            default_model_id=self._model_id,
+        )
         result = await self._rpc_request("turn/start", params)
         if not isinstance(result, dict):
             raise RuntimeError("codex turn/start response missing result object")
@@ -264,6 +282,7 @@ class CodexConversationFacade:
         request: dict[str, Any],
         *,
         directory: str | None = None,
+        execution_options: RequestExecutionOptions | None = None,
         timeout_seconds: float | None,
     ) -> CodexMessage:
         command = str(request["command"]).strip()
@@ -273,6 +292,7 @@ class CodexConversationFacade:
             session_id,
             prompt,
             directory=directory,
+            execution_options=execution_options,
             timeout_seconds=timeout_seconds,
         )
 

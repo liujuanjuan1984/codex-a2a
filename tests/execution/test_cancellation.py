@@ -22,6 +22,7 @@ async def test_cancel_interrupts_running_execute_and_keeps_queue_open():
         _text,
         *,
         directory=None,  # noqa: ARG001
+        execution_options=None,  # noqa: ARG001
         timeout_override=None,  # noqa: ARG001
     ):
         send_started.set()
@@ -106,6 +107,7 @@ async def test_cancel_logs_abort_timeout_when_cleanup_does_not_finish(
         _text,
         *,
         directory=None,  # noqa: ARG001
+        execution_options=None,  # noqa: ARG001
         timeout_override=None,  # noqa: ARG001
     ):
         send_started.set()

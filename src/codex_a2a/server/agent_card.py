@@ -194,9 +194,9 @@ def _build_agent_extensions(
             description=(
                 "Shared contract to bind A2A messages to an existing Codex session "
                 "when continuing a previous chat. Clients should pass "
-                "metadata.shared.session.id. The metadata.codex.directory field "
-                "remains available as a Codex-private override under "
-                "server-side directory boundary validation."
+                "metadata.shared.session.id. The metadata.codex.directory and "
+                "metadata.codex.execution fields remain available as Codex-private "
+                "request overrides under server-side validation."
             ),
             params=(
                 session_binding_extension_params

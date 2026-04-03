@@ -412,6 +412,22 @@ def _raise_control_validation_error(exc: ValidationError) -> None:
             message="metadata.codex.directory must be a string",
             data={"type": "INVALID_FIELD", "field": "metadata.codex.directory"},
         )
+    if loc == ("metadata", "codex", "execution"):
+        raise JsonRpcParamsValidationError(
+            message="metadata.codex.execution must be an object",
+            data={"type": "INVALID_FIELD", "field": "metadata.codex.execution"},
+        )
+    if loc in {
+        ("metadata", "codex", "execution", "model"),
+        ("metadata", "codex", "execution", "effort"),
+        ("metadata", "codex", "execution", "summary"),
+        ("metadata", "codex", "execution", "personality"),
+    }:
+        field = format_loc(loc)
+        raise JsonRpcParamsValidationError(
+            message=message_text,
+            data={"type": "INVALID_FIELD", "field": field},
+        )
     if loc in {
         ("request", "arguments"),
         ("request", "messageID"),

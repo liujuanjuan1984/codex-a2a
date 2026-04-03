@@ -10,6 +10,10 @@ from codex_a2a.contracts.extensions import (
     SESSION_QUERY_DEFAULT_LIMIT,
     SESSION_QUERY_MAX_LIMIT,
 )
+from codex_a2a.execution.request_overrides import (
+    RequestExecutionOptions,
+    build_request_execution_options,
+)
 
 
 class JsonRpcParamsValidationError(ValueError):
@@ -118,8 +122,34 @@ def map_extra_forbidden(errors: Sequence[Mapping[str, Any]]) -> JsonRpcParamsVal
     )
 
 
+class CodexExecutionMetadataParams(_StrictModel):
+    model: str | None = None
+    effort: str | None = None
+    summary: str | None = None
+    personality: str | None = None
+
+    @field_validator("model", "effort", "summary", "personality", mode="before")
+    @classmethod
+    def _validate_option_values(cls, value: Any, info: Any) -> str | None:
+        options = build_request_execution_options(
+            **{info.field_name: value},
+            field_prefix="metadata.codex.execution",
+        )
+        return getattr(options, info.field_name)
+
+    def to_execution_options(self) -> RequestExecutionOptions:
+        return build_request_execution_options(
+            model=self.model,
+            effort=self.effort,
+            summary=self.summary,
+            personality=self.personality,
+            field_prefix="metadata.codex.execution",
+        )
+
+
 class CodexMetadataParams(_PermissiveModel):
     directory: str | None = None
+    execution: CodexExecutionMetadataParams | None = None
 
     @field_validator("directory", mode="before")
     @classmethod
