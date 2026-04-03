@@ -593,6 +593,8 @@ async def test_stream_bridge_queue_full_timeout_cleanup_and_error_events() -> No
         "message.part.updated",
         "message.part.updated",
         "message.finalized",
+        "turn.lifecycle.started",
+        "turn.lifecycle.completed",
         "codex.error",
     ]
     delta_tracker = bridge.turn_trackers[("thr-1", "turn-1")]

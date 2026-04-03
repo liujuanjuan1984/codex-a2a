@@ -51,6 +51,7 @@ def _build_extension_app(
         "thread_watch": THREAD_LIFECYCLE_METHODS["watch"],
         "turn_steer": TURN_CONTROL_METHODS["steer"],
         "review_start": REVIEW_CONTROL_METHODS["start"],
+        "review_watch": REVIEW_CONTROL_METHODS["watch"],
         **EXEC_CONTROL_METHODS,
         **INTERRUPT_CALLBACK_METHODS,
     }
@@ -66,6 +67,7 @@ def _build_extension_app(
         codex_client=DummyCodexClient(settings),
         exec_runtime=MagicMock(),
         discovery_runtime=MagicMock(),
+        review_runtime=MagicMock(),
         thread_lifecycle_runtime=MagicMock(),
         methods=methods,
         protocol_version=settings.a2a_protocol_version,

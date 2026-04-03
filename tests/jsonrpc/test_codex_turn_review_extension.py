@@ -1,3 +1,5 @@
+from unittest.mock import AsyncMock
+
 import httpx
 import pytest
 
@@ -94,6 +96,59 @@ async def test_turn_and_review_control_methods_route_to_client(monkeypatch) -> N
 
 
 @pytest.mark.asyncio
+async def test_review_watch_routes_to_runtime(monkeypatch) -> None:
+    import codex_a2a.server.application as app_module
+
+    dummy = DummyCodexClient(
+        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+    )
+    monkeypatch.setattr(app_module, "CodexClient", lambda _settings, **kwargs: dummy)
+    app = app_module.create_app(
+        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+    )
+
+    app.state.codex_review_runtime.start = AsyncMock(
+        return_value={"ok": True, "task_id": "task-1", "context_id": "ctx-1"}
+    )
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post(
+            "/",
+            headers={"Authorization": "Bearer t-1"},
+            json={
+                "jsonrpc": "2.0",
+                "id": 503,
+                "method": "codex.review.watch",
+                "params": {
+                    "thread_id": "thr-1",
+                    "review_thread_id": "thr-1-review",
+                    "turn_id": "turn-review-1",
+                    "request": {
+                        "events": [
+                            "review.started",
+                            "review.completed",
+                        ]
+                    },
+                },
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.json()["result"] == {"ok": True, "task_id": "task-1", "context_id": "ctx-1"}
+    app.state.codex_review_runtime.start.assert_awaited_once()
+    kwargs = app.state.codex_review_runtime.start.await_args.kwargs
+    assert kwargs == {
+        "thread_id": "thr-1",
+        "review_thread_id": "thr-1-review",
+        "turn_id": "turn-review-1",
+        "request": {"events": ["review.started", "review.completed"]},
+        "context": kwargs["context"],
+    }
+    assert kwargs["context"] is not None
+
+
+@pytest.mark.asyncio
 async def test_turn_and_review_control_methods_reject_invalid_request_shapes(monkeypatch) -> None:
     import codex_a2a.server.application as app_module
 
@@ -135,8 +190,25 @@ async def test_turn_and_review_control_methods_reject_invalid_request_shapes(mon
                 },
             },
         )
+        review_watch_response = await client.post(
+            "/",
+            headers=headers,
+            json={
+                "jsonrpc": "2.0",
+                "id": 505,
+                "method": "codex.review.watch",
+                "params": {
+                    "thread_id": "thr-1",
+                    "review_thread_id": "thr-1-review",
+                    "turn_id": "turn-review-1",
+                    "request": {"events": ["review.delta"]},
+                },
+            },
+        )
 
     assert steer_response.json()["error"]["code"] == -32602
     assert steer_response.json()["error"]["data"]["field"] == "request.parts"
     assert review_response.json()["error"]["code"] == -32602
     assert review_response.json()["error"]["data"]["field"] == "target.branch"
+    assert review_watch_response.json()["error"]["code"] == -32602
+    assert review_watch_response.json()["error"]["data"]["field"] == "request.events"

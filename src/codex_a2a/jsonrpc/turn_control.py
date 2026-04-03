@@ -43,7 +43,9 @@ async def handle_turn_control_request(
         and identity
         and app._guard_hooks.session_owner_matcher is not None
     ):
-        owned = await app._guard_hooks.session_owner_matcher(identity=identity, session_id=thread_id)
+        owned = await app._guard_hooks.session_owner_matcher(
+            identity=identity, session_id=thread_id
+        )
         if owned is False:
             return app._generate_error_response(
                 base_request.id,

@@ -278,8 +278,9 @@ def _build_agent_extensions(
             uri=REVIEW_CONTROL_EXTENSION_URI,
             required=False,
             description=(
-                "Expose provider-private reviewer control through the custom "
-                "JSON-RPC method codex.review.start."
+                "Expose provider-private reviewer control plus a task-stream "
+                "watch bridge through the custom JSON-RPC methods "
+                "codex.review.start and codex.review.watch."
             ),
             params=review_control_extension_params if include_detailed_contracts else None,
         ),
@@ -433,6 +434,17 @@ def _build_agent_skills(
                     "base branches, commits, or custom instructions."
                 ),
                 tags=["codex", "review", "control", "provider-private"],
+                input_modes=list(JSON_RPC_INPUT_MEDIA_MODES),
+                output_modes=list(JSON_OUTPUT_MEDIA_MODES),
+            ),
+            AgentSkill(
+                id="codex.review.watch",
+                name="Codex Review Watch",
+                description=(
+                    "Start provider-private review watch tasks that emit "
+                    "coarse-grained lifecycle events through A2A task streams."
+                ),
+                tags=["codex", "review", "watch", "provider-private"],
                 input_modes=list(JSON_RPC_INPUT_MEDIA_MODES),
                 output_modes=list(JSON_OUTPUT_MEDIA_MODES),
             ),
@@ -596,6 +608,21 @@ def _build_agent_skills(
             examples=[
                 "Start an inline commit review (method codex.review.start).",
                 "Start a detached review for current uncommitted changes.",
+            ],
+            input_modes=list(JSON_RPC_INPUT_MEDIA_MODES),
+            output_modes=list(JSON_OUTPUT_MEDIA_MODES),
+        ),
+        AgentSkill(
+            id="codex.review.watch",
+            name="Codex Review Watch",
+            description=(
+                "Start review watch tasks via codex.review.watch and consume "
+                "coarse-grained review lifecycle events through A2A task streams."
+            ),
+            tags=["codex", "review", "watch"],
+            examples=[
+                "Start a review watch stream after codex.review.start.",
+                "Resume a review watch task with tasks/resubscribe.",
             ],
             input_modes=list(JSON_RPC_INPUT_MEDIA_MODES),
             output_modes=list(JSON_OUTPUT_MEDIA_MODES),

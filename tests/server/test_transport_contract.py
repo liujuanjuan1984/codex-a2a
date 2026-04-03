@@ -356,6 +356,7 @@ def test_openapi_jsonrpc_examples_include_core_and_extension_methods() -> None:
     assert "codex.threads.watch" in methods
     assert "codex.turns.steer" in methods
     assert "codex.review.start" in methods
+    assert "codex.review.watch" in methods
     assert "a2a.interrupt.permission.reply" in methods
 
 

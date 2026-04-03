@@ -847,13 +847,15 @@ The result returns a minimal control envelope with `ok`, `thread_id`, and `turn_
 This service exposes provider-private review-start control through JSON-RPC:
 
 - `codex.review.start`
+- `codex.review.watch`
 
 Review-control guidance:
 
 - use `codex.review.start` when you want the upstream reviewer surface rather than a slash command sent through `codex.sessions.command`
 - supported target types are `uncommittedChanges`, `baseBranch`, `commit`, and `custom`
 - `delivery` supports `inline` and `detached`
-- there is currently no dedicated review watch task bridge; clients should treat the response as a control handle rather than a review stream subscription
+- `codex.review.start` remains control-only and returns the review handle (`turn_id`, `review_thread_id`)
+- use `codex.review.watch` when you need a stable review watch task bridge over `tasks/resubscribe`
 
 ### Review Start (`codex.review.start`)
 
@@ -900,6 +902,49 @@ curl -sS http://127.0.0.1:8000/ \
 ```
 
 The result returns `ok`, `turn_id`, the spawned `turn`, and `review_thread_id`. When `delivery=detached`, `review_thread_id` identifies the detached review thread.
+
+### Review Watch (`codex.review.watch`)
+
+Use the handles returned by `codex.review.start` to start a review watch task:
+
+```bash
+curl -sS http://127.0.0.1:8000/ \
+  -H 'content-type: application/json' \
+  -H "Authorization: Bearer ${A2A_BEARER_TOKEN}" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 24,
+    "method": "codex.review.watch",
+    "params": {
+      "thread_id": "thr-1",
+      "review_thread_id": "thr-1-review",
+      "turn_id": "turn-review-1",
+      "request": {
+        "events": [
+          "review.started",
+          "review.status.changed",
+          "review.completed",
+          "review.failed"
+        ]
+      }
+    }
+  }'
+```
+
+`codex.review.watch` returns `ok`, `task_id`, and `context_id`. Consume the lifecycle stream through `tasks/resubscribe`.
+
+Supported review watch events:
+
+- `review.started`
+- `review.status.changed`
+- `review.completed`
+- `review.failed`
+
+The bridge is intentionally coarse-grained:
+
+- `review.started` is emitted locally when the watch task begins
+- `review.status.changed` projects upstream `thread/status/changed` updates for the watched review thread
+- `review.completed` and `review.failed` project the watched review turn terminal status
 
 ## Codex Interrupt Callback (A2A Extension)
 

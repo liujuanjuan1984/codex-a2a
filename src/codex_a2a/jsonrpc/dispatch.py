@@ -51,7 +51,12 @@ class ExtensionMethodRegistry:
             }
         )
         turn_control_methods = frozenset({methods["turn_steer"]})
-        review_control_methods = frozenset({methods["review_start"]})
+        review_control_methods = frozenset(
+            {
+                methods["review_start"],
+                methods["review_watch"],
+            }
+        )
         exec_control_methods = frozenset(
             {
                 methods["exec_start"],

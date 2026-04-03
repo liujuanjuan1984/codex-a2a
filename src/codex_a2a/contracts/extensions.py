@@ -528,6 +528,12 @@ TURN_CONTROL_INVALID_PARAMS_DATA_FIELDS: tuple[str, ...] = (
     "fields",
 )
 
+REVIEW_CONTROL_SUPPORTED_EVENTS: tuple[str, ...] = (
+    "review.started",
+    "review.status.changed",
+    "review.completed",
+    "review.failed",
+)
 REVIEW_CONTROL_METHOD_CONTRACTS: dict[str, ReviewControlMethodContract] = {
     "start": ReviewControlMethodContract(
         method="codex.review.start",
@@ -557,9 +563,34 @@ REVIEW_CONTROL_METHOD_CONTRACTS: dict[str, ReviewControlMethodContract] = {
                 "returns its review_thread_id."
             ),
             (
-                "This method starts a review turn but does not currently create a separate "
-                "A2A watch task. Consumers should treat the response as a control handle "
-                "rather than a full review-stream subscription."
+                "Use codex.review.watch when you need a stable task-stream bridge for "
+                "review lifecycle observation."
+            ),
+        ),
+    ),
+    "watch": ReviewControlMethodContract(
+        method="codex.review.watch",
+        required_params=("thread_id", "review_thread_id", "turn_id"),
+        optional_params=("request.events",),
+        unsupported_params=(
+            "metadata",
+            CODEX_DIRECTORY_METADATA_FIELD,
+            CODEX_EXECUTION_METADATA_FIELD,
+        ),
+        result_fields=("ok", "task_id", "context_id"),
+        notification_response_status=204,
+        notes=(
+            (
+                "review.started is emitted locally from the supplied watch handle because "
+                "review/watch is normally called after review/start already returned."
+            ),
+            (
+                "review.status.changed is a coarse-grained projection of upstream "
+                "thread/status/changed notifications for the watched review thread."
+            ),
+            (
+                "review.completed and review.failed are derived from the watched "
+                "turn/completed notification for the supplied turn_id."
             ),
         ),
     ),
@@ -1098,8 +1129,9 @@ def build_compatibility_profile_params(
                 "query/history methods."
             ),
             (
-                "Treat codex.review.* as reviewer control surfaces. review/start starts a "
-                "review turn but does not currently imply a standalone review watch task."
+                "Treat codex.review.* as reviewer control/watch surfaces. review/start "
+                "starts a review turn and codex.review.watch exposes the declared "
+                "task-stream bridge for coarse-grained lifecycle observation."
             ),
             (
                 "codex.sessions.shell is deployment-conditional: discover it from the "
@@ -1677,14 +1709,63 @@ def build_review_control_extension_params(
             "custom": {"required_fields": ["type", "instructions"]},
         },
         "delivery_values": ["inline", "detached"],
+        "notification_bridge": {
+            "upstream_notifications": [
+                "thread/status/changed",
+                "turn/completed",
+            ],
+            "current_delivery": "codex.review.watch task stream",
+            "notes": [
+                (
+                    "This service does not expose standalone server-push JSON-RPC "
+                    "review notifications. Use codex.review.watch plus tasks/resubscribe "
+                    "to consume review lifecycle events."
+                ),
+                (
+                    "review.started is emitted from the supplied watch handle; "
+                    "review.status.changed is best-effort and review.completed / "
+                    "review.failed are derived from turn/completed."
+                ),
+            ],
+        },
+        "task_streaming": {
+            "task_stream_method": TASKS_RESUBSCRIBE_METHOD,
+            "http_subscribe_endpoint": TASKS_SUBSCRIBE_HTTP_ENDPOINT,
+            "watch_method": REVIEW_CONTROL_METHODS["watch"],
+            "supported_events": list(REVIEW_CONTROL_SUPPORTED_EVENTS),
+            "data_part_payloads": {
+                "review.started": {
+                    "kind": "review_started",
+                    "source": "review/start",
+                    "required_fields": ["thread_id", "review_thread_id", "turn_id"],
+                },
+                "review.status.changed": {
+                    "kind": "review_status_changed",
+                    "source": "thread/status/changed",
+                    "status_field": "status",
+                },
+                "review.completed": {
+                    "kind": "review_completed",
+                    "source": "turn/completed",
+                    "review_field": "review",
+                    "status_field": "status",
+                },
+                "review.failed": {
+                    "kind": "review_failed",
+                    "source": "turn/completed",
+                    "review_field": "review",
+                    "status_field": "status",
+                },
+            },
+        },
         "consumer_guidance": [
             (
                 "Use review/start when you want the upstream reviewer surface, not when you "
                 "simply want to send a slash command through codex.sessions.command."
             ),
             (
-                "review/start returns the spawned review turn handle immediately. This "
-                "service does not currently publish a dedicated review watch task bridge."
+                "Use codex.review.watch when clients need a stable task-stream bridge "
+                "for coarse-grained review lifecycle observation."
             ),
         ],
         "errors": {

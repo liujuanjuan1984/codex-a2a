@@ -71,7 +71,11 @@ def _raise_turn_control_validation_error(exc: ValidationError) -> None:
             message="params.request must be an object",
             data={"type": "INVALID_FIELD", "field": "request"},
         )
-    if first.get("type") == "union_tag_invalid" and len(loc) == 3 and loc[:2] == ("request", "parts"):
+    if (
+        first.get("type") == "union_tag_invalid"
+        and len(loc) == 3
+        and loc[:2] == ("request", "parts")
+    ):
         item_index = loc[2]
         raise JsonRpcParamsValidationError(
             message="request.parts[].type must be one of: text, image, mention, skill",

@@ -25,6 +25,7 @@ from codex_a2a.contracts.extensions import (
 from codex_a2a.execution.discovery_runtime import CodexDiscoveryRuntime
 from codex_a2a.execution.exec_runtime import CodexExecRuntime
 from codex_a2a.execution.executor import CodexAgentExecutor, SessionGuardBindings
+from codex_a2a.execution.review_runtime import CodexReviewRuntime
 from codex_a2a.execution.thread_lifecycle_runtime import CodexThreadLifecycleRuntime
 from codex_a2a.jsonrpc.application import CodexSessionQueryJSONRPCApplication
 from codex_a2a.jsonrpc.hooks import SessionGuardHooks
@@ -96,6 +97,10 @@ def create_app(settings: Settings) -> FastAPI:
         client=client,
         request_handler=handler,
     )
+    review_runtime = CodexReviewRuntime(
+        client=client,
+        request_handler=handler,
+    )
     thread_lifecycle_runtime = CodexThreadLifecycleRuntime(
         client=client,
         request_handler=handler,
@@ -136,6 +141,7 @@ def create_app(settings: Settings) -> FastAPI:
         "thread_watch": THREAD_LIFECYCLE_METHODS["watch"],
         "turn_steer": TURN_CONTROL_METHODS["steer"],
         "review_start": REVIEW_CONTROL_METHODS["start"],
+        "review_watch": REVIEW_CONTROL_METHODS["watch"],
         **EXEC_CONTROL_METHODS,
         **INTERRUPT_CALLBACK_METHODS,
     }
@@ -152,6 +158,7 @@ def create_app(settings: Settings) -> FastAPI:
         codex_client=client,
         exec_runtime=exec_runtime,
         discovery_runtime=discovery_runtime,
+        review_runtime=review_runtime,
         thread_lifecycle_runtime=thread_lifecycle_runtime,
         methods=jsonrpc_methods,
         protocol_version=settings.a2a_protocol_version,
@@ -172,6 +179,7 @@ def create_app(settings: Settings) -> FastAPI:
     app.state.codex_executor = executor
     app.state.codex_exec_runtime = exec_runtime
     app.state.codex_discovery_runtime = discovery_runtime
+    app.state.codex_review_runtime = review_runtime
     app.state.codex_thread_lifecycle_runtime = thread_lifecycle_runtime
     app.state.a2a_client_manager = a2a_client_manager
     app.state.task_store = task_store

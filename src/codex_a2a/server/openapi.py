@@ -299,6 +299,22 @@ def _build_jsonrpc_extension_openapi_examples(*, session_shell_enabled: bool) ->
                 },
             },
         },
+        "review_watch": {
+            "summary": "Watch coarse-grained review lifecycle signals through a task stream",
+            "value": {
+                "jsonrpc": "2.0",
+                "id": 278,
+                "method": REVIEW_CONTROL_METHODS["watch"],
+                "params": {
+                    "thread_id": "thr-1",
+                    "review_thread_id": "thr-1-review",
+                    "turn_id": "turn-review-1",
+                    "request": {
+                        "events": ["review.started", "review.completed", "review.failed"],
+                    },
+                },
+            },
+        },
         "exec_start": {
             "summary": "Start standalone interactive command execution",
             "value": {

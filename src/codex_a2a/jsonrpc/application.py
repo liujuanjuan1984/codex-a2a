@@ -16,6 +16,7 @@ from starlette.responses import Response
 
 from codex_a2a.execution.discovery_runtime import CodexDiscoveryRuntime
 from codex_a2a.execution.exec_runtime import CodexExecRuntime
+from codex_a2a.execution.review_runtime import CodexReviewRuntime
 from codex_a2a.execution.thread_lifecycle_runtime import CodexThreadLifecycleRuntime
 from codex_a2a.jsonrpc.discovery_control import handle_discovery_control_request
 from codex_a2a.jsonrpc.discovery_query import handle_discovery_query_request
@@ -44,6 +45,7 @@ class CodexSessionQueryJSONRPCApplication(A2AFastAPIApplication):
         codex_client: CodexClient,
         exec_runtime: CodexExecRuntime,
         discovery_runtime: CodexDiscoveryRuntime,
+        review_runtime: CodexReviewRuntime,
         thread_lifecycle_runtime: CodexThreadLifecycleRuntime,
         methods: dict[str, str],
         protocol_version: str,
@@ -55,6 +57,7 @@ class CodexSessionQueryJSONRPCApplication(A2AFastAPIApplication):
         self._codex_client = codex_client
         self._exec_runtime = exec_runtime
         self._discovery_runtime = discovery_runtime
+        self._review_runtime = review_runtime
         self._thread_lifecycle_runtime = thread_lifecycle_runtime
         self._method_list_sessions = methods["list_sessions"]
         self._method_get_session_messages = methods["get_session_messages"]
@@ -71,6 +74,7 @@ class CodexSessionQueryJSONRPCApplication(A2AFastAPIApplication):
         self._method_thread_watch = methods["thread_watch"]
         self._method_turn_steer = methods["turn_steer"]
         self._method_review_start = methods["review_start"]
+        self._method_review_watch = methods["review_watch"]
         self._method_exec_start = methods["exec_start"]
         self._method_exec_write = methods["exec_write"]
         self._method_exec_resize = methods["exec_resize"]

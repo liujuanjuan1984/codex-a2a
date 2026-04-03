@@ -18,6 +18,7 @@ from codex_a2a.jsonrpc.params import (
     parse_permissions_reply_params,
     parse_prompt_async_params,
     parse_review_start_params,
+    parse_review_watch_params,
     parse_thread_archive_params,
     parse_thread_fork_params,
     parse_thread_metadata_update_params,
@@ -379,6 +380,14 @@ def test_parse_turn_and_review_control_params_preserve_aliases() -> None:
             },
         }
     )
+    review_watch = parse_review_watch_params(
+        {
+            "threadId": "thr-1",
+            "reviewThreadId": "thr-1-review",
+            "turnId": "turn-review-1",
+            "request": {"events": ["review.started", "review.completed", "review.started"]},
+        }
+    )
 
     assert steer.thread_id == "thr-1"
     assert steer.expected_turn_id == "turn-1"
@@ -394,6 +403,13 @@ def test_parse_turn_and_review_control_params_preserve_aliases() -> None:
         "type": "commit",
         "sha": "commit-demo-123",
         "title": "Polish tui colors",
+    }
+    assert review_watch.thread_id == "thr-1"
+    assert review_watch.review_thread_id == "thr-1-review"
+    assert review_watch.turn_id == "turn-review-1"
+    assert review_watch.request is not None
+    assert review_watch.request.model_dump(by_alias=True, exclude_none=True) == {
+        "events": ["review.started", "review.completed"]
     }
 
 
@@ -489,6 +505,31 @@ def test_parse_thread_lifecycle_params_reject_invalid_fields(
             {"thread_id": "thr-1", "target": {"type": "custom", "instructions": "   "}},
             "target.instructions must be a non-empty string",
             "target.instructions",
+        ),
+        (
+            parse_review_watch_params,
+            {
+                "thread_id": "thr-1",
+                "review_thread_id": "thr-1-review",
+                "turn_id": "turn-review-1",
+                "request": {"events": ["review.delta"]},
+            },
+            (
+                "request.events entries must be one of: review.started, "
+                "review.status.changed, review.completed, review.failed"
+            ),
+            "request.events",
+        ),
+        (
+            parse_review_watch_params,
+            {
+                "thread_id": "thr-1",
+                "review_thread_id": "thr-1-review",
+                "turn_id": "turn-review-1",
+                "request": {"events": []},
+            },
+            "request.events must be a non-empty array",
+            "request.events",
         ),
     ],
 )

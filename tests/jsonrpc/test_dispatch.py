@@ -24,6 +24,7 @@ def test_extension_method_registry_partitions_methods() -> None:
             "thread_watch": THREAD_LIFECYCLE_METHODS["watch"],
             "turn_steer": TURN_CONTROL_METHODS["steer"],
             "review_start": REVIEW_CONTROL_METHODS["start"],
+            "review_watch": REVIEW_CONTROL_METHODS["watch"],
             **EXEC_CONTROL_METHODS,
             **INTERRUPT_CALLBACK_METHODS,
         }
@@ -71,6 +72,7 @@ def test_extension_method_registry_omits_missing_shell_method() -> None:
             "thread_watch": THREAD_LIFECYCLE_METHODS["watch"],
             "turn_steer": TURN_CONTROL_METHODS["steer"],
             "review_start": REVIEW_CONTROL_METHODS["start"],
+            "review_watch": REVIEW_CONTROL_METHODS["watch"],
             **EXEC_CONTROL_METHODS,
             "reply_permission": INTERRUPT_CALLBACK_METHODS["reply_permission"],
             "reply_question": INTERRUPT_CALLBACK_METHODS["reply_question"],

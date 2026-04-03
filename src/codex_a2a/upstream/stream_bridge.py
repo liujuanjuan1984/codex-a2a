@@ -339,6 +339,19 @@ class CodexStreamEventBridge:
                 turn_id = str(turn.get("id", "")).strip()
                 if turn_id:
                     tracker_factory(thread_id, turn_id)
+                    await emit(
+                        {
+                            "type": "turn.lifecycle.started",
+                            "properties": {
+                                "thread_id": thread_id,
+                                "turn_id": turn_id,
+                                "turn": turn,
+                                "status": turn.get("status"),
+                                "source": "turn/started",
+                                "codex": {"raw": params},
+                            },
+                        }
+                    )
             return
 
         if method == "turn/completed":
@@ -361,6 +374,19 @@ class CodexStreamEventBridge:
                         else:
                             tracker.error = turn_status or "turn failed"
                     tracker.completed.set()
+                    await emit(
+                        {
+                            "type": "turn.lifecycle.completed",
+                            "properties": {
+                                "thread_id": thread_id,
+                                "turn_id": turn_id,
+                                "turn": turn,
+                                "status": turn.get("status"),
+                                "source": "turn/completed",
+                                "codex": {"raw": params},
+                            },
+                        }
+                    )
             return
 
         if method == "error":

@@ -117,6 +117,10 @@ def test_agent_card_declares_media_modes_that_match_runtime_contract() -> None:
     assert review_control_skill.input_modes == [APPLICATION_JSON_MEDIA_MODE]
     assert review_control_skill.output_modes == JSON_OUTPUT_MEDIA_MODES
 
+    review_watch_skill = skill_by_id["codex.review.watch"]
+    assert review_watch_skill.input_modes == [APPLICATION_JSON_MEDIA_MODE]
+    assert review_watch_skill.output_modes == JSON_OUTPUT_MEDIA_MODES
+
     interrupt_skill = skill_by_id["codex.interrupt.callback"]
     assert interrupt_skill.input_modes == [APPLICATION_JSON_MEDIA_MODE]
     assert interrupt_skill.output_modes == JSON_OUTPUT_MEDIA_MODES
@@ -463,6 +467,7 @@ def test_authenticated_extended_agent_card_injects_profile_into_extensions() -> 
     review_control_params = _require_params(review_control)
     assert review_control_params["profile"] == profile
     assert review_control_params["methods"]["start"] == "codex.review.start"
+    assert review_control_params["methods"]["watch"] == "codex.review.watch"
     assert review_control_params["supported_metadata"] == []
     assert review_control_params["provider_private_metadata"] == []
     assert review_control_params["target_contracts"]["uncommittedChanges"] == {
@@ -484,9 +489,23 @@ def test_authenticated_extended_agent_card_injects_profile_into_extensions() -> 
     assert "delivery" in review_contract["params"]["optional"]
     assert "metadata.codex.directory" in review_contract["params"]["unsupported"]
     assert review_contract["result"]["fields"] == ["ok", "turn_id", "turn", "review_thread_id"]
-    assert any(
-        "review watch task bridge" in note for note in review_control_params["consumer_guidance"]
-    )
+    watch_contract = review_control_params["method_contracts"]["codex.review.watch"]
+    assert watch_contract["params"]["required"] == [
+        "thread_id",
+        "review_thread_id",
+        "turn_id",
+    ]
+    assert watch_contract["params"]["optional"] == ["request.events"]
+    assert watch_contract["result"]["fields"] == ["ok", "task_id", "context_id"]
+    assert review_control_params["task_streaming"]["task_stream_method"] == "tasks/resubscribe"
+    assert review_control_params["task_streaming"]["watch_method"] == "codex.review.watch"
+    assert review_control_params["task_streaming"]["supported_events"] == [
+        "review.started",
+        "review.status.changed",
+        "review.completed",
+        "review.failed",
+    ]
+    assert any("codex.review.watch" in note for note in review_control_params["consumer_guidance"])
 
     interrupt = ext_by_uri[INTERRUPT_CALLBACK_EXTENSION_URI]
     interrupt_params = _require_params(interrupt)
@@ -585,6 +604,10 @@ def test_authenticated_extended_agent_card_injects_profile_into_extensions() -> 
     assert review_policy["availability"] == "always"
     assert review_policy["retention"] == "stable"
     assert review_policy["extension_uri"] == "urn:codex-a2a:codex-review/v1"
+    review_watch_policy = compatibility_params["method_retention"]["codex.review.watch"]
+    assert review_watch_policy["availability"] == "always"
+    assert review_watch_policy["retention"] == "stable"
+    assert review_watch_policy["extension_uri"] == "urn:codex-a2a:codex-review/v1"
 
 
 def test_authenticated_extended_agent_card_chat_examples_include_project_hint_when_configured() -> (
@@ -611,6 +634,7 @@ def test_public_agent_card_skills_are_minimal() -> None:
     review_control_skill = next(
         skill for skill in card.skills if skill.id == "codex.review.control"
     )
+    review_watch_skill = next(skill for skill in card.skills if skill.id == "codex.review.watch")
 
     assert session_skill.examples is None
     assert "provider-private" in session_skill.tags
@@ -624,6 +648,8 @@ def test_public_agent_card_skills_are_minimal() -> None:
     assert "provider-private" in turn_control_skill.tags
     assert review_control_skill.examples is None
     assert "provider-private" in review_control_skill.tags
+    assert review_watch_skill.examples is None
+    assert "provider-private" in review_watch_skill.tags
 
 
 def test_authenticated_extended_agent_card_omits_shell_method_when_disabled() -> None:

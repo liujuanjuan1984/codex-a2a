@@ -46,7 +46,9 @@ from codex_a2a.jsonrpc.query_params import (
 )
 from codex_a2a.jsonrpc.review_control_params import (
     ReviewStartControlParams,
+    ReviewWatchControlParams,
     parse_review_start_params,
+    parse_review_watch_params,
 )
 from codex_a2a.jsonrpc.thread_lifecycle_params import (
     ThreadArchiveControlParams,
@@ -85,6 +87,7 @@ __all__ = [
     "QuestionRejectParams",
     "QuestionReplyParams",
     "ReviewStartControlParams",
+    "ReviewWatchControlParams",
     "ShellControlParams",
     "ThreadArchiveControlParams",
     "ThreadForkControlParams",
@@ -111,6 +114,7 @@ __all__ = [
     "parse_question_reject_params",
     "parse_question_reply_params",
     "parse_review_start_params",
+    "parse_review_watch_params",
     "parse_shell_params",
     "parse_thread_archive_params",
     "parse_thread_fork_params",
