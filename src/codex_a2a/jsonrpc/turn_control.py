@@ -7,7 +7,15 @@ from a2a.types import A2AError, InternalError, JSONRPCError, JSONRPCRequest
 from starlette.requests import Request
 from starlette.responses import Response
 
-from codex_a2a.jsonrpc.errors import invalid_params_response
+from codex_a2a.auth import (
+    CAPABILITY_TURN_CONTROL,
+    OPERATOR_PRINCIPAL,
+    request_has_capability,
+)
+from codex_a2a.jsonrpc.errors import (
+    authorization_forbidden_response,
+    invalid_params_response,
+)
 from codex_a2a.jsonrpc.params import (
     JsonRpcParamsValidationError,
     TurnSteerControlParams,
@@ -38,6 +46,22 @@ async def handle_turn_control_request(
 
     thread_id = parsed_params.thread_id
     identity = getattr(request.state, "user_identity", None)
+    credential_id = getattr(request.state, "user_credential_id", None)
+    if not request_has_capability(request, CAPABILITY_TURN_CONTROL):
+        logger.warning(
+            "Turn control authorization denied identity=%s credential_id=%s thread_id=%s",
+            identity,
+            credential_id,
+            thread_id,
+        )
+        return authorization_forbidden_response(
+            app,
+            base_request.id,
+            method=base_request.method,
+            capability=CAPABILITY_TURN_CONTROL,
+            credential_id=credential_id if isinstance(credential_id, str) else None,
+            required_principal=OPERATOR_PRINCIPAL,
+        )
     if (
         isinstance(identity, str)
         and identity

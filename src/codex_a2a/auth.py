@@ -13,6 +13,7 @@ OPERATOR_PRINCIPAL = "operator"
 
 CAPABILITY_SESSION_SHELL = "session_shell"
 CAPABILITY_EXEC_CONTROL = "exec_control"
+CAPABILITY_TURN_CONTROL = "turn_control"
 
 
 @dataclass(frozen=True)
@@ -39,6 +40,7 @@ def default_capabilities_for_scheme(scheme: str) -> tuple[str, ...]:
         return (
             CAPABILITY_SESSION_SHELL,
             CAPABILITY_EXEC_CONTROL,
+            CAPABILITY_TURN_CONTROL,
         )
     return ()
 

@@ -29,6 +29,21 @@ class _InterruptExecutionContext:
     context_id: str | None
 
 
+_INTERNAL_INTERRUPT_METHOD_FIELD = "_codexMethod"
+_DEFAULT_INTERRUPT_METHODS_BY_TYPE = {
+    "permission": "item/commandExecution/requestApproval",
+    "question": "item/tool/requestUserInput",
+    "permissions": "item/permissions/requestApproval",
+    "elicitation": "mcpServer/elicitation/request",
+}
+_INTERRUPT_PROPERTIES_BUILDERS = {
+    "permission": build_codex_permission_interrupt_properties,
+    "question": build_codex_question_interrupt_properties,
+    "permissions": build_codex_permissions_interrupt_properties,
+    "elicitation": build_codex_elicitation_interrupt_properties,
+}
+
+
 class CodexInterruptBridge:
     """Own interrupt request state and upstream server-request semantics."""
 
@@ -242,6 +257,41 @@ class CodexInterruptBridge:
         if self._interrupt_request_store is not None:
             await self._interrupt_request_store.delete_interrupt_request(request_id=request_key)
 
+    async def list_interrupt_requests(
+        self,
+        *,
+        identity: str | None,
+        credential_id: str | None,
+        interrupt_type: str | None = None,
+    ) -> list[dict[str, Any]]:
+        normalized_identity = self._optional_string(identity)
+        normalized_credential_id = self._optional_string(credential_id)
+        if normalized_identity is None and normalized_credential_id is None:
+            return []
+
+        items: list[dict[str, Any]] = []
+        for request_id, pending in list(self._pending_server_requests.items()):
+            status = self.interrupt_request_status(pending.binding)
+            if status == "expired":
+                self._remember_interrupt_tombstone(request_id)
+                if self._interrupt_request_store is not None:
+                    await self._interrupt_request_store.expire_interrupt_request(
+                        request_id=request_id
+                    )
+                continue
+            if interrupt_type is not None and pending.binding.interrupt_type != interrupt_type:
+                continue
+            if not self._binding_visible_to_caller(
+                pending.binding,
+                identity=normalized_identity,
+                credential_id=normalized_credential_id,
+            ):
+                continue
+            items.append(self._build_interrupt_recovery_item(pending))
+
+        items.sort(key=lambda item: (item["created_at"], item["request_id"]))
+        return items
+
     async def permission_reply(
         self,
         request_id: str,
@@ -391,6 +441,68 @@ class CodexInterruptBridge:
         normalized = value.strip()
         return normalized or None
 
+    def _binding_visible_to_caller(
+        self,
+        binding: InterruptRequestBinding,
+        *,
+        identity: str | None,
+        credential_id: str | None,
+    ) -> bool:
+        binding_identity = self._optional_string(binding.identity)
+        binding_credential_id = self._optional_string(binding.credential_id)
+        if binding_identity is None and binding_credential_id is None:
+            return False
+        if binding_identity is not None and binding_identity != identity:
+            return False
+        if binding_credential_id is not None and binding_credential_id != credential_id:
+            return False
+        return True
+
+    def _strip_internal_interrupt_params(self, params: dict[str, Any]) -> dict[str, Any]:
+        if _INTERNAL_INTERRUPT_METHOD_FIELD not in params:
+            return dict(params)
+        sanitized = dict(params)
+        sanitized.pop(_INTERNAL_INTERRUPT_METHOD_FIELD, None)
+        return sanitized
+
+    def _build_interrupt_recovery_properties(
+        self,
+        pending: _PendingInterruptRequest,
+    ) -> dict[str, Any]:
+        builder = _INTERRUPT_PROPERTIES_BUILDERS.get(pending.binding.interrupt_type)
+        if builder is None:
+            return {
+                "id": pending.binding.request_id,
+                "sessionID": pending.binding.session_id,
+            }
+        params = self._strip_internal_interrupt_params(pending.params)
+        method = self._optional_string(pending.params.get(_INTERNAL_INTERRUPT_METHOD_FIELD)) or (
+            _DEFAULT_INTERRUPT_METHODS_BY_TYPE.get(pending.binding.interrupt_type)
+            or pending.binding.interrupt_type
+        )
+        return builder(
+            request_key=pending.binding.request_id,
+            session_id=pending.binding.session_id,
+            method=method,
+            params=params,
+        )
+
+    def _build_interrupt_recovery_item(
+        self,
+        pending: _PendingInterruptRequest,
+    ) -> dict[str, Any]:
+        binding = pending.binding
+        return {
+            "request_id": binding.request_id,
+            "interrupt_type": binding.interrupt_type,
+            "session_id": binding.session_id,
+            "task_id": binding.task_id,
+            "context_id": binding.context_id,
+            "created_at": binding.created_at,
+            "expires_at": binding.expires_at,
+            "properties": self._build_interrupt_recovery_properties(pending),
+        }
+
     def _resolve_interrupt_context(
         self,
         *,
@@ -491,6 +603,7 @@ class CodexInterruptBridge:
         interrupt_context = self._resolve_interrupt_context(session_id=session_id, params=params)
         rpc_request_id = request_id if isinstance(request_id, str | int) else request_key
         created_at = self._now()
+        stored_params = {_INTERNAL_INTERRUPT_METHOD_FIELD: method, **params}
         self._pending_server_requests[request_key] = _PendingInterruptRequest(
             binding=InterruptRequestBinding(
                 request_id=request_key,
@@ -504,7 +617,7 @@ class CodexInterruptBridge:
                 context_id=interrupt_context.context_id,
             ),
             rpc_request_id=rpc_request_id,
-            params=params,
+            params=stored_params,
         )
         self._expired_server_requests.pop(request_key, None)
         if self._interrupt_request_store is not None:
@@ -520,7 +633,7 @@ class CodexInterruptBridge:
                 created_at=binding.created_at,
                 expires_at=binding.expires_at or binding.created_at,
                 rpc_request_id=rpc_request_id,
-                params=params,
+                params=stored_params,
             )
         await enqueue_stream_event(
             {

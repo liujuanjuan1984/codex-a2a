@@ -9,6 +9,7 @@ from codex_a2a.contracts.extensions import (
     DISCOVERY_EXTENSION_URI,
     EXEC_CONTROL_EXTENSION_URI,
     INTERRUPT_CALLBACK_EXTENSION_URI,
+    INTERRUPT_RECOVERY_EXTENSION_URI,
     REVIEW_CONTROL_EXTENSION_URI,
     SESSION_BINDING_EXTENSION_URI,
     SESSION_QUERY_DEFAULT_LIMIT,
@@ -23,6 +24,7 @@ from codex_a2a.contracts.extensions import (
     build_discovery_extension_params,
     build_exec_control_extension_params,
     build_interrupt_callback_extension_params,
+    build_interrupt_recovery_extension_params,
     build_review_control_extension_params,
     build_session_binding_extension_params,
     build_session_query_extension_params,
@@ -159,6 +161,20 @@ def test_thread_lifecycle_extension_ssot_matches_agent_card_contract() -> None:
     )
 
 
+def test_interrupt_recovery_extension_ssot_matches_agent_card_contract() -> None:
+    settings = make_settings(a2a_bearer_token="test-token")
+    runtime_profile = build_runtime_profile(settings)
+    card = build_authenticated_extended_agent_card(settings)
+    ext_by_uri = {ext.uri: ext for ext in card.capabilities.extensions or []}
+
+    interrupt_recovery = ext_by_uri[INTERRUPT_RECOVERY_EXTENSION_URI]
+    expected = build_interrupt_recovery_extension_params(runtime_profile=runtime_profile)
+
+    assert interrupt_recovery.params == expected, (
+        "Interrupt recovery extension drifted from extension_contracts SSOT."
+    )
+
+
 def test_turn_control_extension_ssot_matches_agent_card_contract() -> None:
     settings = make_settings(a2a_bearer_token="test-token")
     runtime_profile = build_runtime_profile(settings)
@@ -285,6 +301,7 @@ def test_openapi_jsonrpc_contract_extension_matches_ssot() -> None:
     streaming = contract["streaming"]
     session_query = contract["session_query"]
     discovery = contract["discovery"]
+    interrupt_recovery = contract["interrupt_recovery"]
     interrupt_callback = contract["interrupt_callback"]
     exec_control = contract["exec_control"]
     thread_lifecycle = contract["thread_lifecycle"]
@@ -300,6 +317,9 @@ def test_openapi_jsonrpc_contract_extension_matches_ssot() -> None:
         runtime_profile=runtime_profile,
     )
     expected_discovery = build_discovery_extension_params(
+        runtime_profile=runtime_profile,
+    )
+    expected_interrupt_recovery = build_interrupt_recovery_extension_params(
         runtime_profile=runtime_profile,
     )
     expected_interrupt_callback = build_interrupt_callback_extension_params(
@@ -338,6 +358,9 @@ def test_openapi_jsonrpc_contract_extension_matches_ssot() -> None:
     assert discovery == expected_discovery, (
         "OpenAPI discovery contract drifted from extension_contracts SSOT."
     )
+    assert interrupt_recovery == expected_interrupt_recovery, (
+        "OpenAPI interrupt recovery contract drifted from extension_contracts SSOT."
+    )
     assert interrupt_callback == expected_interrupt_callback, (
         "OpenAPI interrupt callback contract drifted from extension_contracts SSOT."
     )
@@ -373,6 +396,9 @@ def test_openapi_and_agent_card_extension_contracts_match() -> None:
     assert post_contract["session_query"] == ext_by_uri[SESSION_QUERY_EXTENSION_URI].params
     assert post_contract["discovery"] == ext_by_uri[DISCOVERY_EXTENSION_URI].params
     assert post_contract["thread_lifecycle"] == ext_by_uri[THREAD_LIFECYCLE_EXTENSION_URI].params
+    assert (
+        post_contract["interrupt_recovery"] == ext_by_uri[INTERRUPT_RECOVERY_EXTENSION_URI].params
+    )
     assert post_contract["turn_control"] == ext_by_uri[TURN_CONTROL_EXTENSION_URI].params
     assert post_contract["review_control"] == ext_by_uri[REVIEW_CONTROL_EXTENSION_URI].params
     assert post_contract["exec_control"] == ext_by_uri[EXEC_CONTROL_EXTENSION_URI].params
@@ -537,6 +563,9 @@ def test_openapi_jsonrpc_examples_match_declared_extension_contracts() -> None:
     extension_contracts = post["x-a2a-extension-contracts"]
     session_method_contracts = extension_contracts["session_query"]["method_contracts"]
     discovery_method_contracts = extension_contracts["discovery"]["method_contracts"]
+    interrupt_recovery_method_contracts = extension_contracts["interrupt_recovery"][
+        "method_contracts"
+    ]
     turn_control_method_contracts = extension_contracts["turn_control"]["method_contracts"]
     review_control_method_contracts = extension_contracts["review_control"]["method_contracts"]
     exec_method_contracts = extension_contracts["exec_control"]["method_contracts"]
@@ -546,6 +575,7 @@ def test_openapi_jsonrpc_examples_match_declared_extension_contracts() -> None:
         set(session_method_contracts)
         | set(discovery_method_contracts)
         | set(thread_lifecycle_method_contracts)
+        | set(interrupt_recovery_method_contracts)
         | set(turn_control_method_contracts)
         | set(review_control_method_contracts)
         | set(exec_method_contracts)
@@ -572,6 +602,7 @@ def test_openapi_jsonrpc_examples_match_declared_extension_contracts() -> None:
             session_method_contracts.get(method)
             or discovery_method_contracts.get(method)
             or thread_lifecycle_method_contracts.get(method)
+            or interrupt_recovery_method_contracts.get(method)
             or turn_control_method_contracts.get(method)
             or review_control_method_contracts.get(method)
             or exec_method_contracts.get(method)

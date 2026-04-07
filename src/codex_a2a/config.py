@@ -322,7 +322,7 @@ class Settings(BaseSettings):
     a2a_protocol_version: str = Field(default="0.3.0", alias="A2A_PROTOCOL_VERSION")
     a2a_enable_health_endpoint: bool = Field(default=True, alias="A2A_ENABLE_HEALTH_ENDPOINT")
     a2a_enable_session_shell: bool = Field(default=False, alias="A2A_ENABLE_SESSION_SHELL")
-    a2a_enable_turn_control: bool = Field(default=False, alias="A2A_ENABLE_TURN_CONTROL")
+    a2a_enable_turn_control: bool = Field(default=True, alias="A2A_ENABLE_TURN_CONTROL")
     a2a_enable_review_control: bool = Field(default=False, alias="A2A_ENABLE_REVIEW_CONTROL")
     a2a_enable_exec_control: bool = Field(default=False, alias="A2A_ENABLE_EXEC_CONTROL")
     a2a_log_level: str = Field(default="INFO", alias="A2A_LOG_LEVEL")

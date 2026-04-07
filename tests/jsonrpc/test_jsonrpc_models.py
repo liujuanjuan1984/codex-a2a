@@ -13,6 +13,7 @@ from codex_a2a.jsonrpc.params import (
     parse_discovery_watch_params,
     parse_elicitation_reply_params,
     parse_get_session_messages_params,
+    parse_interrupt_recovery_list_params,
     parse_list_sessions_params,
     parse_permission_reply_params,
     parse_permissions_reply_params,
@@ -195,6 +196,22 @@ def test_parse_list_sessions_params_rejects_non_integer_limit() -> None:
     assert str(exc_info.value) == "limit must be an integer"
     assert exc_info.value.data == {"type": "INVALID_FIELD", "field": "limit"}
     assert "fields" not in exc_info.value.data
+
+
+def test_parse_interrupt_recovery_list_params_accepts_type_aliases() -> None:
+    payload = parse_interrupt_recovery_list_params({"interruptType": "permissions"})
+
+    assert payload.interrupt_type == "permissions"
+
+
+def test_parse_interrupt_recovery_list_params_rejects_invalid_type() -> None:
+    with pytest.raises(JsonRpcParamsValidationError) as exc_info:
+        parse_interrupt_recovery_list_params({"type": "unknown"})
+
+    assert str(exc_info.value) == (
+        "type must be one of: permission, question, permissions, elicitation"
+    )
+    assert exc_info.value.data == {"type": "INVALID_FIELD", "field": "type"}
 
 
 def test_parse_list_sessions_params_applies_default_limit() -> None:

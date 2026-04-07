@@ -10,6 +10,7 @@ from codex_a2a.contracts.extensions import (
     DISCOVERY_METHODS,
     EXEC_CONTROL_METHODS,
     INTERRUPT_CALLBACK_METHODS,
+    INTERRUPT_RECOVERY_METHODS,
     REVIEW_CONTROL_METHODS,
     SESSION_CONTROL_METHODS,
     SESSION_QUERY_DEFAULT_LIMIT,
@@ -20,6 +21,7 @@ from codex_a2a.contracts.extensions import (
     build_discovery_extension_params,
     build_exec_control_extension_params,
     build_interrupt_callback_extension_params,
+    build_interrupt_recovery_extension_params,
     build_review_control_extension_params,
     build_session_binding_extension_params,
     build_session_query_extension_params,
@@ -65,6 +67,7 @@ def _build_jsonrpc_extension_openapi_description(*, runtime_profile: RuntimeProf
         session_methods.append(SESSION_CONTROL_METHODS["shell"])
     discovery_methods = ", ".join(DISCOVERY_METHODS.values())
     thread_lifecycle_methods = ", ".join(THREAD_LIFECYCLE_METHODS.values())
+    interrupt_recovery_methods = ", ".join(INTERRUPT_RECOVERY_METHODS.values())
     turn_methods = (
         ", ".join(TURN_CONTROL_METHODS.values())
         if runtime_profile.turn_control_enabled
@@ -86,11 +89,13 @@ def _build_jsonrpc_extension_openapi_description(*, runtime_profile: RuntimeProf
         "(message/send, message/stream, tasks/get, tasks/cancel, "
         "tasks/pushNotificationConfig/*, tasks/resubscribe, "
         "agent/getAuthenticatedExtendedCard) plus Codex session extensions, "
-        "Codex thread lifecycle extensions, active-turn control extensions, review "
+        "Codex thread lifecycle extensions, interrupt recovery extensions, "
+        "active-turn control extensions, review "
         "control extensions, Codex discovery extensions, interactive exec "
         "extensions, and shared interrupt callback methods.\n\n"
         f"Codex session query/control methods: {', '.join(session_methods)}.\n"
         f"Codex thread lifecycle methods: {thread_lifecycle_methods}.\n"
+        f"Codex interrupt recovery methods: {interrupt_recovery_methods}.\n"
         f"Codex active-turn control methods: {turn_methods}.\n"
         f"Codex review control methods: {review_methods}.\n"
         f"Codex discovery methods: {discovery_methods}.\n"
@@ -311,6 +316,15 @@ def _build_jsonrpc_extension_openapi_examples(*, runtime_profile: RuntimeProfile
                 "params": {"task_id": "task-thread-watch-1"},
             },
         },
+        "interrupts_list": {
+            "summary": "List active pending interrupts for the current caller",
+            "value": {
+                "jsonrpc": "2.0",
+                "id": 277,
+                "method": INTERRUPT_RECOVERY_METHODS["list"],
+                "params": {"type": "permission"},
+            },
+        },
         "permission_reply": {
             "summary": "Reply to permission interrupt request",
             "value": {
@@ -527,6 +541,9 @@ def patch_openapi_contract(
     thread_lifecycle = build_thread_lifecycle_extension_params(
         runtime_profile=runtime_profile,
     )
+    interrupt_recovery = build_interrupt_recovery_extension_params(
+        runtime_profile=runtime_profile,
+    )
     turn_control = build_turn_control_extension_params(
         runtime_profile=runtime_profile,
     )
@@ -581,6 +598,7 @@ def patch_openapi_contract(
                         "session_query": session_query,
                         "discovery": discovery,
                         "thread_lifecycle": thread_lifecycle,
+                        "interrupt_recovery": interrupt_recovery,
                         "turn_control": turn_control,
                         "review_control": review_control,
                         "exec_control": exec_control,

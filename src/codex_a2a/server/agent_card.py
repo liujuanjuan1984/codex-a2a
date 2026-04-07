@@ -20,6 +20,7 @@ from codex_a2a.contracts.extensions import (
     DISCOVERY_EXTENSION_URI,
     EXEC_CONTROL_EXTENSION_URI,
     INTERRUPT_CALLBACK_EXTENSION_URI,
+    INTERRUPT_RECOVERY_EXTENSION_URI,
     REVIEW_CONTROL_EXTENSION_URI,
     SESSION_BINDING_EXTENSION_URI,
     SESSION_QUERY_EXTENSION_URI,
@@ -31,6 +32,7 @@ from codex_a2a.contracts.extensions import (
     build_discovery_extension_params,
     build_exec_control_extension_params,
     build_interrupt_callback_extension_params,
+    build_interrupt_recovery_extension_params,
     build_review_control_extension_params,
     build_session_binding_extension_params,
     build_session_query_extension_params,
@@ -119,6 +121,7 @@ def _build_agent_card_description(
         "Codex session-query",
         "thread lifecycle",
         "discovery",
+        "interrupt recovery",
     ]
     if runtime_profile.turn_control_enabled:
         codex_surfaces.append("active-turn control")
@@ -203,6 +206,9 @@ def _build_agent_extensions(
         runtime_profile=runtime_profile,
     )
     interrupt_callback_extension_params = build_interrupt_callback_extension_params(
+        runtime_profile=runtime_profile,
+    )
+    interrupt_recovery_extension_params = build_interrupt_recovery_extension_params(
         runtime_profile=runtime_profile,
     )
     wire_contract_extension_params = build_wire_contract_extension_params(
@@ -309,6 +315,22 @@ def _build_agent_extensions(
                 "codex.exec.terminate."
             ),
             params=exec_control_extension_params if include_detailed_contracts else None,
+        ),
+        AgentExtension(
+            uri=INTERRUPT_RECOVERY_EXTENSION_URI,
+            required=False,
+            description=(
+                "Expose adapter-local interrupt recovery so authenticated clients can "
+                "rediscover pending interrupt request_ids after reconnecting."
+            ),
+            params=(
+                interrupt_recovery_extension_params
+                if include_detailed_contracts
+                else _select_public_extension_params(
+                    interrupt_recovery_extension_params,
+                    keys=("methods", "supported_interrupt_types", "identity_scope"),
+                )
+            ),
         ),
         AgentExtension(
             uri=INTERRUPT_CALLBACK_EXTENSION_URI,
@@ -435,6 +457,17 @@ def _build_agent_skills(
                     "tasks that emit structured events through A2A task streams."
                 ),
                 tags=["codex", "threads", "watch", "provider-private"],
+                input_modes=list(JSON_RPC_INPUT_MEDIA_MODES),
+                output_modes=list(JSON_OUTPUT_MEDIA_MODES),
+            ),
+            AgentSkill(
+                id="codex.interrupt.recovery",
+                name="Codex Interrupt Recovery",
+                description=(
+                    "Rediscover pending interrupt request_ids for the current authenticated "
+                    "caller after reconnecting."
+                ),
+                tags=["codex", "interrupt", "recovery", "provider-private"],
                 input_modes=list(JSON_RPC_INPUT_MEDIA_MODES),
                 output_modes=list(JSON_OUTPUT_MEDIA_MODES),
             ),
@@ -630,6 +663,24 @@ def _build_agent_skills(
                 "Start a lifecycle watch stream (method codex.threads.watch).",
                 "Release a lifecycle watch stream (method codex.threads.watch.release).",
                 "Resume a lifecycle watch task with tasks/resubscribe.",
+            ],
+            input_modes=list(JSON_RPC_INPUT_MEDIA_MODES),
+            output_modes=list(JSON_OUTPUT_MEDIA_MODES),
+        ),
+        AgentSkill(
+            id="codex.interrupt.recovery",
+            name="Codex Interrupt Recovery",
+            description=(
+                "Rediscover pending interrupt request_ids for the current authenticated "
+                "caller via codex.interrupts.list."
+            ),
+            tags=["codex", "interrupt", "recovery"],
+            examples=[
+                (
+                    "List active pending interrupts for the current caller "
+                    "(method codex.interrupts.list)."
+                ),
+                "List only pending permission interrupts with type=permission.",
             ],
             input_modes=list(JSON_RPC_INPUT_MEDIA_MODES),
             output_modes=list(JSON_OUTPUT_MEDIA_MODES),
