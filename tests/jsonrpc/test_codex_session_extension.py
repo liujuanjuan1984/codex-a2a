@@ -1163,6 +1163,7 @@ async def test_interrupt_recovery_extension_lists_identity_scoped_pending_reques
             "properties": {
                 "id": "perm-1",
                 "sessionID": "ses-1",
+                "permission": "command_execution",
                 "metadata": {
                     "method": "item/commandExecution/requestApproval",
                     "raw": {"patterns": ["/tmp/config.yml"]},

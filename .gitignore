@@ -43,6 +43,8 @@ logs/
 run/
 .codex-a2a/
 *.db
+*.db-shm
+*.db-wal
 
 # Unit test / coverage reports
 htmlcov/

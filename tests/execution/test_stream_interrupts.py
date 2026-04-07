@@ -48,10 +48,11 @@ def test_extract_permission_interrupt_promotes_reason_and_parsed_paths() -> None
         "properties": {
             "id": "perm-2",
             "metadata": {
+                "method": "execCommandApproval",
                 "raw": {
                     "reason": "The command needs confirmation.",
                     "parsedCmd": [{"path": "/repo/.env"}],
-                }
+                },
             },
         },
     }
@@ -60,10 +61,38 @@ def test_extract_permission_interrupt_promotes_reason_and_parsed_paths() -> None
         "request_id": "perm-2",
         "interrupt_type": "permission",
         "details": {
-            "permission": None,
+            "permission": "command_execution",
             "patterns": ["/repo/.env"],
             "always": [],
             "display_message": "The command needs confirmation.",
+        },
+    }
+
+
+def test_extract_permission_interrupt_derives_semantic_from_method_when_needed() -> None:
+    event = {
+        "type": "permission.asked",
+        "properties": {
+            "id": "perm-3",
+            "metadata": {
+                "method": "item/fileChange/requestApproval",
+                "raw": {
+                    "request": {
+                        "description": "Agent wants to update the patch.",
+                    }
+                },
+            },
+        },
+    }
+
+    assert extract_interrupt_asked_event(event) == {
+        "request_id": "perm-3",
+        "interrupt_type": "permission",
+        "details": {
+            "permission": "file_change",
+            "patterns": [],
+            "always": [],
+            "display_message": "Agent wants to update the patch.",
         },
     }
 

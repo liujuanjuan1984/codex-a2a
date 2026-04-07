@@ -3,6 +3,8 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
+from codex_a2a.upstream.interrupts import resolve_permission_interrupt_semantic
+
 _INTERRUPT_ASKED_EVENT_TYPES = {
     "permission.asked",
     "question.asked",
@@ -189,12 +191,18 @@ def extract_interrupt_asked_event(event: Mapping[str, Any]) -> dict[str, Any] | 
     if not normalized_request_id:
         return None
     if event_type == "permission.asked":
-        details: dict[str, Any] = {
-            "permission": _first_nested_string(
+        permission = _first_nested_string(
+            props,
+            ("permission",),
+            ("metadata", "raw", "permission"),
+        ) or resolve_permission_interrupt_semantic(
+            _first_nested_string(
                 props,
-                ("permission",),
-                ("metadata", "raw", "permission"),
-            ),
+                ("metadata", "method"),
+            )
+        )
+        details: dict[str, Any] = {
+            "permission": permission,
             "patterns": extract_interrupt_patterns(props),
             "always": extract_string_list(_nested_value(props, "always"))
             or extract_string_list(_nested_value(props, "metadata", "raw", "always")),

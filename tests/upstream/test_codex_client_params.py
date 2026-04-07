@@ -1513,8 +1513,8 @@ async def test_permission_request_emits_shared_message_and_patterns() -> None:
     assert props["id"] == "301"
     assert props["sessionID"] == "thr-1"
     assert props["display_message"] == "The command needs confirmation before continuing."
+    assert props["permission"] == "command_execution"
     assert props["patterns"] == ["/repo/.env"]
-    assert "permission" not in props
     assert "always" not in props
     assert "reason" not in props
     assert props["metadata"]["raw"]["parsedCmd"] == [
@@ -1676,6 +1676,7 @@ async def test_permission_request_promotes_nested_request_message() -> None:
     assert len(events) == 1
     props = events[0]["properties"]
     assert props["display_message"] == "Agent wants to read the environment file."
+    assert props["permission"] == "command_execution"
     assert props["patterns"] == ["/repo/.env"]
     assert "request" not in props
     assert props["metadata"]["raw"]["request"] == {
