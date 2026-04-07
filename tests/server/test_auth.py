@@ -28,24 +28,8 @@ def _request_with_principal(principal: AuthenticatedPrincipal | None) -> Request
     return request
 
 
-def test_build_static_auth_credentials_supports_legacy_and_registry_modes() -> None:
-    legacy_settings = make_settings(
-        a2a_bearer_token="legacy-token",
-        a2a_basic_auth_username="operator",
-        a2a_basic_auth_password="op-pass",
-    )
-    legacy_credentials = build_static_auth_credentials(legacy_settings)
-
-    assert [credential.auth_scheme for credential in legacy_credentials] == ["bearer", "basic"]
-    assert legacy_credentials[0].principal == "automation"
-    assert legacy_credentials[1].principal == "operator"
-    assert legacy_credentials[1].capabilities == (
-        CAPABILITY_SESSION_SHELL,
-        CAPABILITY_EXEC_CONTROL,
-    )
-
+def test_build_static_auth_credentials_uses_registry_only() -> None:
     registry_settings = make_settings(
-        a2a_bearer_token=None,
         a2a_static_auth_credentials=(
             {
                 "id": "bot-alpha",
@@ -56,7 +40,7 @@ def test_build_static_auth_credentials_supports_legacy_and_registry_modes() -> N
             {
                 "scheme": "basic",
                 "username": "ops",
-                "password": "ops-pass",
+                "password": "ops-pass",  # pragma: allowlist secret
             },
         ),
     )
@@ -70,7 +54,6 @@ def test_build_static_auth_credentials_supports_legacy_and_registry_modes() -> N
 
 def test_authenticate_static_credential_supports_bearer_and_basic() -> None:
     settings = make_settings(
-        a2a_bearer_token=None,
         a2a_static_auth_credentials=(
             {
                 "id": "bot-alpha",
@@ -82,7 +65,7 @@ def test_authenticate_static_credential_supports_bearer_and_basic() -> None:
                 "id": "ops-basic",
                 "scheme": "basic",
                 "username": "ops",
-                "password": "ops-pass",
+                "password": "ops-pass",  # pragma: allowlist secret
                 "capabilities": ["session_shell"],
             },
         ),

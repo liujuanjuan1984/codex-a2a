@@ -79,17 +79,25 @@ async def handle_exec_control_request(
     if metadata_error is not None:
         return metadata_error
 
+    identity = getattr(request.state, "user_identity", None)
+    credential_id = getattr(request.state, "user_credential_id", None)
     if not request_has_capability(request, CAPABILITY_EXEC_CONTROL):
+        logger.warning(
+            "Exec authorization denied identity=%s credential_id=%s method=%s",
+            identity,
+            credential_id,
+            base_request.method,
+        )
         return authorization_forbidden_response(
             app,
             base_request.id,
             method=base_request.method,
             capability=CAPABILITY_EXEC_CONTROL,
+            credential_id=credential_id if isinstance(credential_id, str) else None,
             required_principal=OPERATOR_PRINCIPAL,
         )
 
     call_context = app._context_builder.build(request)
-    identity = getattr(request.state, "user_identity", None)
     owner_identity = identity if isinstance(identity, str) and identity else None
     request_payload = parsed_params.request.model_dump(by_alias=True, exclude_none=True)
 

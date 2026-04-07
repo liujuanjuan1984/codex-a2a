@@ -164,12 +164,13 @@ async def test_runtime_state_initialize_upgrades_legacy_interrupt_request_schema
 
     assert {
         "identity",
+        "credential_id",
         "task_id",
         "context_id",
         "expires_at",
         "tombstone_expires_at",
     }.issubset(interrupt_columns)
-    assert _sqlite_schema_version(database_path, "runtime_state") == 2
+    assert _sqlite_schema_version(database_path, "runtime_state") == 3
 
 
 @pytest.mark.asyncio
@@ -191,12 +192,13 @@ async def test_runtime_state_initialize_backfills_missing_schema_version_for_cur
 
     assert {
         "identity",
+        "credential_id",
         "task_id",
         "context_id",
         "expires_at",
         "tombstone_expires_at",
     }.issubset(interrupt_columns)
-    assert _sqlite_schema_version(database_path, "runtime_state") == 2
+    assert _sqlite_schema_version(database_path, "runtime_state") == 3
 
 
 @pytest.mark.asyncio
@@ -215,7 +217,7 @@ async def test_runtime_state_schema_version_write_is_idempotent_across_restarts(
     await runtime_state_2.startup()
     await runtime_state_2.shutdown()
 
-    assert _sqlite_schema_version(database_path, "runtime_state") == 2
+    assert _sqlite_schema_version(database_path, "runtime_state") == 3
     assert _sqlite_schema_version_row_count(database_path, "runtime_state") == 1
 
 

@@ -125,6 +125,8 @@ class CodexAgentExecutor(AgentExecutor):
 
         call_context = context.call_context
         identity = (call_context.state.get("identity") if call_context else None) or "anonymous"
+        credential_id = call_context.state.get("credential_id") if call_context else None
+        auth_scheme = call_context.state.get("auth_scheme") if call_context else None
 
         streaming_request = self._should_stream(context)
         message_parts = getattr(context.message, "parts", None) if context.message else None
@@ -196,10 +198,12 @@ class CodexAgentExecutor(AgentExecutor):
 
         logger.debug(
             (
-                "Received message identity=%s task_id=%s context_id=%s "
-                "streaming=%s text=%s part_count=%s"
+                "Received message identity=%s credential_id=%s auth_scheme=%s "
+                "task_id=%s context_id=%s streaming=%s text=%s part_count=%s"
             ),
             identity,
+            credential_id,
+            auth_scheme,
             task_id,
             context_id,
             streaming_request,
@@ -248,6 +252,7 @@ class CodexAgentExecutor(AgentExecutor):
                 bind_interrupt_context(
                     session_id=session_id,
                     identity=identity,
+                    credential_id=credential_id if isinstance(credential_id, str) else None,
                     task_id=task_id,
                     context_id=context_id,
                 )

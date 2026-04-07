@@ -1097,6 +1097,7 @@ async def test_session_control_shell_requires_session_shell_capability(monkeypat
     assert payload["error"]["data"]["type"] == "AUTHORIZATION_FORBIDDEN"
     assert payload["error"]["data"]["method"] == "codex.sessions.shell"
     assert payload["error"]["data"]["capability"] == "session_shell"
+    assert payload["error"]["data"]["credential_id"] == "test-bearer"
 
 
 @pytest.mark.asyncio

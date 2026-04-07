@@ -66,6 +66,7 @@ def authorization_forbidden_response(
     *,
     method: str,
     capability: str,
+    credential_id: str | None = None,
     required_principal: str | None = None,
     error_code: int = ERR_AUTHORIZATION_FORBIDDEN,
 ) -> Response:
@@ -74,6 +75,8 @@ def authorization_forbidden_response(
         "method": method,
         "capability": capability,
     }
+    if credential_id is not None:
+        data["credential_id"] = credential_id
     if required_principal is not None:
         data["required_principal"] = required_principal
     return app._generate_error_response(

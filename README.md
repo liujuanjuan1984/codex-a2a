@@ -67,7 +67,8 @@ Before starting the runtime:
 Self-start the released CLI against a workspace root:
 
 ```bash
-A2A_BEARER_TOKEN="$(python -c 'import secrets; print(secrets.token_hex(24))')" \
+DEMO_BEARER_TOKEN="$(python -c 'import secrets; print(secrets.token_hex(24))')"
+A2A_STATIC_AUTH_CREDENTIALS='[{"id":"local-bearer","scheme":"bearer","token":"'"${DEMO_BEARER_TOKEN}"'","principal":"automation"}]' \
 A2A_HOST=127.0.0.1 \
 A2A_PORT=8000 \
 A2A_PUBLIC_URL=http://127.0.0.1:8000 \

@@ -158,12 +158,14 @@ class CodexClient:
         *,
         session_id: str,
         identity: str | None,
+        credential_id: str | None,
         task_id: str | None,
         context_id: str | None,
     ) -> None:
         self._interrupt_bridge.bind_interrupt_context(
             session_id=session_id,
             identity=identity,
+            credential_id=credential_id,
             task_id=task_id,
             context_id=context_id,
         )

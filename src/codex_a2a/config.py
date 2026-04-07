@@ -188,14 +188,21 @@ class StaticAuthCredentialSettings(BaseModel):
             if self.username or self.password:
                 raise ValueError("Static bearer credential does not accept username/password.")
             if self.principal is None:
-                raise ValueError("Static bearer credential requires principal.")
+                raise ValueError(
+                    "Static bearer credential requires explicit principal; "
+                    "registry bearer principals must not default to automation."
+                )
         else:
             if not self.username or not self.password:
                 raise ValueError("Static basic credential requires username/password.")
             if self.token:
                 raise ValueError("Static basic credential does not accept token.")
-            if self.principal is None:
-                self.principal = self.username
+            if self.principal is not None:
+                raise ValueError(
+                    "Static basic credential does not accept principal; "
+                    "principal defaults to username."
+                )
+            self.principal = self.username
 
         return self
 
@@ -325,15 +332,6 @@ class Settings(BaseSettings):
     a2a_allow_directory_override: bool = Field(default=True, alias="A2A_ALLOW_DIRECTORY_OVERRIDE")
     a2a_host: str = Field(default="127.0.0.1", alias="A2A_HOST")
     a2a_port: int = Field(default=8000, alias="A2A_PORT")
-    a2a_bearer_token: str | None = Field(default=None, min_length=1, alias="A2A_BEARER_TOKEN")
-    a2a_basic_auth_username: str | None = Field(
-        default=None,
-        alias="A2A_BASIC_AUTH_USERNAME",
-    )
-    a2a_basic_auth_password: str | None = Field(
-        default=None,
-        alias="A2A_BASIC_AUTH_PASSWORD",
-    )
     a2a_static_auth_credentials: StaticAuthCredentialList = Field(
         default=(),
         alias="A2A_STATIC_AUTH_CREDENTIALS",
@@ -595,14 +593,6 @@ class Settings(BaseSettings):
         validate_basic_auth(value)
         return value
 
-    @field_validator("a2a_basic_auth_username", "a2a_basic_auth_password")
-    @classmethod
-    def strip_basic_auth_fields(cls, value: str | None) -> str | None:
-        if value is None:
-            return value
-        stripped = value.strip()
-        return stripped or None
-
     @model_validator(mode="after")
     def apply_dynamic_defaults(self) -> Settings:
         if self.a2a_static_auth_credentials:
@@ -611,21 +601,7 @@ class Settings(BaseSettings):
                     "A2A_STATIC_AUTH_CREDENTIALS must contain at least one enabled credential"
                 )
         else:
-            has_bearer = isinstance(self.a2a_bearer_token, str) and bool(
-                self.a2a_bearer_token.strip()
-            )
-            has_basic_username = self.a2a_basic_auth_username is not None
-            has_basic_password = self.a2a_basic_auth_password is not None
-            if has_basic_username != has_basic_password:
-                raise ValueError(
-                    "A2A_BASIC_AUTH_USERNAME and A2A_BASIC_AUTH_PASSWORD must be provided together"
-                )
-            if not has_bearer and not has_basic_username:
-                raise ValueError(
-                    "Configure at least one runtime authentication credential via "
-                    "A2A_BEARER_TOKEN, A2A_BASIC_AUTH_USERNAME/A2A_BASIC_AUTH_PASSWORD, "
-                    "or A2A_STATIC_AUTH_CREDENTIALS"
-                )
+            raise ValueError("Configure runtime authentication via A2A_STATIC_AUTH_CREDENTIALS")
         if "a2a_database_url" not in self.model_fields_set and self.a2a_database_url is None:
             self.a2a_database_url = _default_a2a_database_url(
                 workspace_root=self.codex_workspace_root

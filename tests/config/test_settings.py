@@ -9,16 +9,31 @@ from codex_a2a import __version__
 from codex_a2a.config import Settings
 
 
+def _registry_env(credentials: list[dict[str, object]] | None = None) -> dict[str, str]:
+    if credentials is None:
+        credentials = [
+            {
+                "id": "test-bearer",
+                "scheme": "bearer",
+                "token": "test-token",
+                "principal": "automation",
+            }
+        ]
+    return {"A2A_STATIC_AUTH_CREDENTIALS": json.dumps(credentials)}
+
+
 def test_settings_missing_required():
     with mock.patch.dict(os.environ, {}, clear=True):
         with pytest.raises(ValidationError) as excinfo:
             Settings()
-        assert "Configure at least one runtime authentication credential" in str(excinfo.value)
+        assert "Configure runtime authentication via A2A_STATIC_AUTH_CREDENTIALS" in str(
+            excinfo.value
+        )
 
 
 def test_settings_valid():
     env = {
-        "A2A_BEARER_TOKEN": "test-token",
+        **_registry_env(),
         "CODEX_TIMEOUT": "300",
         "CODEX_MODEL_REASONING_EFFORT": "high",
         "CODEX_MODEL_REASONING_SUMMARY": "concise",
@@ -36,7 +51,7 @@ def test_settings_valid():
     }
     with mock.patch.dict(os.environ, env, clear=True):
         settings = Settings.from_env()
-        assert settings.a2a_bearer_token == "test-token"
+        assert settings.a2a_static_auth_credentials[0].credential_id == "test-bearer"
         assert settings.codex_timeout == 300.0
         assert settings.codex_model_reasoning_effort == "high"
         assert settings.codex_model_reasoning_summary == "concise"
@@ -59,30 +74,6 @@ def test_settings_valid():
             == "sqlite+aiosqlite:////tmp/workspace/.codex-a2a/codex-a2a.db"
         )
         assert settings.a2a_version == __version__
-
-
-def test_settings_accept_legacy_basic_auth_pair_without_bearer() -> None:
-    env = {
-        "A2A_BASIC_AUTH_USERNAME": "operator",
-        "A2A_BASIC_AUTH_PASSWORD": "op-pass",  # pragma: allowlist secret
-    }
-    with mock.patch.dict(os.environ, env, clear=True):
-        settings = Settings.from_env()
-
-    assert settings.a2a_bearer_token is None
-    assert settings.a2a_basic_auth_username == "operator"
-    assert settings.a2a_basic_auth_password == "op-pass"  # pragma: allowlist secret
-
-
-def test_settings_require_complete_basic_auth_pair() -> None:
-    env = {
-        "A2A_BASIC_AUTH_USERNAME": "operator",
-    }
-    with mock.patch.dict(os.environ, env, clear=True):
-        with pytest.raises(ValidationError) as excinfo:
-            Settings.from_env()
-
-    assert "A2A_BASIC_AUTH_USERNAME and A2A_BASIC_AUTH_PASSWORD" in str(excinfo.value)
 
 
 def test_settings_accept_static_auth_registry_without_legacy_credentials() -> None:
@@ -113,8 +104,6 @@ def test_settings_accept_static_auth_registry_without_legacy_credentials() -> No
     with mock.patch.dict(os.environ, env, clear=True):
         settings = Settings.from_env()
 
-    assert settings.a2a_bearer_token is None
-    assert settings.a2a_basic_auth_username is None
     assert len(settings.a2a_static_auth_credentials) == 3
     assert settings.a2a_static_auth_credentials[0].credential_id == "bot-alpha"
     assert settings.a2a_static_auth_credentials[0].principal == "automation-alpha"
@@ -160,13 +149,31 @@ def test_settings_require_principal_for_registry_bearer() -> None:
         with pytest.raises(ValidationError) as excinfo:
             Settings.from_env()
 
-    assert "Static bearer credential requires principal." in str(excinfo.value)
+    assert "Static bearer credential requires explicit principal" in str(excinfo.value)
+
+
+def test_settings_reject_explicit_principal_for_registry_basic() -> None:
+    env = {
+        "A2A_STATIC_AUTH_CREDENTIALS": json.dumps(
+            [
+                {
+                    "scheme": "basic",
+                    "username": "ops",
+                    "password": "ops-pass",  # pragma: allowlist secret
+                    "principal": "operator",
+                }
+            ]
+        )
+    }
+    with mock.patch.dict(os.environ, env, clear=True):
+        with pytest.raises(ValidationError) as excinfo:
+            Settings.from_env()
+
+    assert "Static basic credential does not accept principal" in str(excinfo.value)
 
 
 def test_settings_default_database_url_falls_back_without_workspace_root() -> None:
-    env = {
-        "A2A_BEARER_TOKEN": "test-token",
-    }
+    env = _registry_env()
     with mock.patch.dict(os.environ, env, clear=True):
         settings = Settings.from_env()
 
@@ -176,7 +183,14 @@ def test_settings_default_database_url_falls_back_without_workspace_root() -> No
 def test_settings_explicit_none_database_url_is_not_replaced_by_dynamic_default() -> None:
     settings = Settings.model_validate(
         {
-            "a2a_bearer_token": "test-token",
+            "a2a_static_auth_credentials": [
+                {
+                    "id": "test-bearer",
+                    "scheme": "bearer",
+                    "token": "test-token",
+                    "principal": "automation",
+                }
+            ],
             "codex_workspace_root": "/tmp/workspace",
             "a2a_database_url": None,
         }
@@ -187,7 +201,7 @@ def test_settings_explicit_none_database_url_is_not_replaced_by_dynamic_default(
 
 def test_settings_parse_ops_flags_and_timeouts():
     env = {
-        "A2A_BEARER_TOKEN": "test",
+        **_registry_env(),
         "A2A_ENABLE_HEALTH_ENDPOINT": "false",
         "A2A_ENABLE_SESSION_SHELL": "false",
         "A2A_ENABLE_TURN_CONTROL": "false",
@@ -210,10 +224,7 @@ def test_settings_parse_ops_flags_and_timeouts():
 
 
 def test_settings_parse_task_store_configuration() -> None:
-    env = {
-        "A2A_BEARER_TOKEN": "test",
-        "A2A_DATABASE_URL": "sqlite+aiosqlite:////tmp/tasks.db",
-    }
+    env = {**_registry_env(), "A2A_DATABASE_URL": "sqlite+aiosqlite:////tmp/tasks.db"}
     with mock.patch.dict(os.environ, env, clear=True):
         settings = Settings.from_env()
 
@@ -222,7 +233,7 @@ def test_settings_parse_task_store_configuration() -> None:
 
 def test_settings_parse_execution_environment_flags() -> None:
     env = {
-        "A2A_BEARER_TOKEN": "test",
+        **_registry_env(),
         "A2A_EXECUTION_SANDBOX_MODE": "workspace-write",
         "A2A_EXECUTION_SANDBOX_WRITABLE_ROOTS": "/workspace,/tmp/cache",
         "A2A_EXECUTION_NETWORK_ACCESS": "restricted",
@@ -248,10 +259,7 @@ def test_settings_parse_execution_environment_flags() -> None:
 
 
 def test_settings_reject_invalid_cancel_abort_timeout():
-    env = {
-        "A2A_BEARER_TOKEN": "test",
-        "A2A_CANCEL_ABORT_TIMEOUT_SECONDS": "-0.1",
-    }
+    env = {**_registry_env(), "A2A_CANCEL_ABORT_TIMEOUT_SECONDS": "-0.1"}
     with mock.patch.dict(os.environ, env, clear=True):
         with pytest.raises(ValidationError) as excinfo:
             Settings()
@@ -259,10 +267,7 @@ def test_settings_reject_invalid_cancel_abort_timeout():
 
 
 def test_settings_reject_invalid_interrupt_request_ttl():
-    env = {
-        "A2A_BEARER_TOKEN": "test",
-        "A2A_INTERRUPT_REQUEST_TTL_SECONDS": "0",
-    }
+    env = {**_registry_env(), "A2A_INTERRUPT_REQUEST_TTL_SECONDS": "0"}
     with mock.patch.dict(os.environ, env, clear=True):
         with pytest.raises(ValidationError) as excinfo:
             Settings()
@@ -270,10 +275,7 @@ def test_settings_reject_invalid_interrupt_request_ttl():
 
 
 def test_settings_reject_invalid_stream_idle_diagnostic_seconds():
-    env = {
-        "A2A_BEARER_TOKEN": "test",
-        "A2A_STREAM_IDLE_DIAGNOSTIC_SECONDS": "-1",
-    }
+    env = {**_registry_env(), "A2A_STREAM_IDLE_DIAGNOSTIC_SECONDS": "-1"}
     with mock.patch.dict(os.environ, env, clear=True):
         with pytest.raises(ValidationError) as excinfo:
             Settings()
@@ -281,10 +283,7 @@ def test_settings_reject_invalid_stream_idle_diagnostic_seconds():
 
 
 def test_settings_reject_invalid_execution_sandbox_mode() -> None:
-    env = {
-        "A2A_BEARER_TOKEN": "test",
-        "A2A_EXECUTION_SANDBOX_MODE": "sandboxed",
-    }
+    env = {**_registry_env(), "A2A_EXECUTION_SANDBOX_MODE": "sandboxed"}
     with mock.patch.dict(os.environ, env, clear=True):
         with pytest.raises(ValidationError) as excinfo:
             Settings.from_env()
@@ -303,10 +302,7 @@ def test_settings_reject_invalid_execution_sandbox_mode() -> None:
     ],
 )
 def test_settings_reject_invalid_codex_runtime_overrides(env_name: str, env_value: str) -> None:
-    env = {
-        "A2A_BEARER_TOKEN": "test",
-        env_name: env_value,
-    }
+    env = {**_registry_env(), env_name: env_value}
     with mock.patch.dict(os.environ, env, clear=True):
         with pytest.raises(ValidationError) as excinfo:
             Settings.from_env()
@@ -315,7 +311,7 @@ def test_settings_reject_invalid_codex_runtime_overrides(env_name: str, env_valu
 
 def test_settings_parse_a2a_client_transport_and_timeouts() -> None:
     env = {
-        "A2A_BEARER_TOKEN": "test",
+        **_registry_env(),
         "A2A_CLIENT_TIMEOUT_SECONDS": "41",
         "A2A_CLIENT_CARD_FETCH_TIMEOUT_SECONDS": "7",
         "A2A_CLIENT_USE_CLIENT_PREFERENCE": "true",
@@ -335,10 +331,7 @@ def test_settings_parse_a2a_client_transport_and_timeouts() -> None:
 
 
 def test_settings_accept_pre_encoded_basic_auth() -> None:
-    env = {
-        "A2A_BEARER_TOKEN": "test",
-        "A2A_CLIENT_BASIC_AUTH": "dXNlcjpwYXNz",
-    }
+    env = {**_registry_env(), "A2A_CLIENT_BASIC_AUTH": "dXNlcjpwYXNz"}
     with mock.patch.dict(os.environ, env, clear=True):
         settings = Settings.from_env()
 
@@ -346,10 +339,7 @@ def test_settings_accept_pre_encoded_basic_auth() -> None:
 
 
 def test_settings_reject_invalid_basic_auth() -> None:
-    env = {
-        "A2A_BEARER_TOKEN": "test",
-        "A2A_CLIENT_BASIC_AUTH": "not-basic-auth",
-    }
+    env = {**_registry_env(), "A2A_CLIENT_BASIC_AUTH": "not-basic-auth"}
     with mock.patch.dict(os.environ, env, clear=True):
         with pytest.raises(ValidationError) as excinfo:
             Settings.from_env()

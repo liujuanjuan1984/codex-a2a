@@ -142,6 +142,10 @@ def _build_agent_card_description(
         "underlying Codex workspace/environment."
     )
     parts.append(
+        "Authenticated endpoints accept statically configured bearer/basic "
+        "credentials from the deployment auth registry."
+    )
+    parts.append(
         "Terminal tasks/resubscribe replay-once behavior is declared as a "
         "service-level contract for this deployment."
     )

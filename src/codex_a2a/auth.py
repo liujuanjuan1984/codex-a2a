@@ -44,46 +44,24 @@ def default_capabilities_for_scheme(scheme: str) -> tuple[str, ...]:
 
 
 def build_static_auth_credentials(settings: Settings) -> tuple[StaticAuthCredential, ...]:
-    if settings.a2a_static_auth_credentials:
-        registry_credentials: list[StaticAuthCredential] = []
-        for entry in settings.a2a_static_auth_credentials:
-            if not entry.enabled:
-                continue
-            capabilities = entry.capabilities or default_capabilities_for_scheme(entry.scheme)
-            registry_credentials.append(
-                StaticAuthCredential(
-                    auth_scheme=entry.scheme,
-                    principal=entry.principal
-                    or (OPERATOR_PRINCIPAL if entry.scheme == "basic" else AUTOMATION_PRINCIPAL),
-                    capabilities=tuple(capabilities),
-                    token=entry.token,
-                    username=entry.username,
-                    password=entry.password,
-                    credential_id=entry.credential_id,
-                )
-            )
-        return tuple(registry_credentials)
-
     credentials: list[StaticAuthCredential] = []
-    if settings.a2a_bearer_token:
+    for entry in settings.a2a_static_auth_credentials:
+        if not entry.enabled:
+            continue
+        capabilities = entry.capabilities or default_capabilities_for_scheme(entry.scheme)
+        if entry.scheme == "basic":
+            principal = entry.username or OPERATOR_PRINCIPAL
+        else:
+            principal = entry.principal or AUTOMATION_PRINCIPAL
         credentials.append(
             StaticAuthCredential(
-                auth_scheme="bearer",
-                principal=AUTOMATION_PRINCIPAL,
-                capabilities=(),
-                token=settings.a2a_bearer_token,
-                credential_id="legacy-bearer",
-            )
-        )
-    if settings.a2a_basic_auth_username and settings.a2a_basic_auth_password:
-        credentials.append(
-            StaticAuthCredential(
-                auth_scheme="basic",
-                principal=OPERATOR_PRINCIPAL,
-                capabilities=default_capabilities_for_scheme("basic"),
-                username=settings.a2a_basic_auth_username,
-                password=settings.a2a_basic_auth_password,
-                credential_id="legacy-basic",
+                auth_scheme=entry.scheme,
+                principal=principal,
+                capabilities=tuple(capabilities),
+                token=entry.token,
+                username=entry.username,
+                password=entry.password,
+                credential_id=entry.credential_id,
             )
         )
     return tuple(credentials)

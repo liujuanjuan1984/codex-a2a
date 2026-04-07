@@ -8,7 +8,7 @@ The current deployment model is a single-tenant trust boundary by design.
 
 ## Security Boundary
 
-- `A2A_BEARER_TOKEN` protects access to the A2A surface, but it is not a tenant-isolation boundary inside one deployed instance.
+- Statically configured inbound bearer/basic credentials protect access to the A2A surface, but they are not a tenant-isolation boundary inside one deployed instance.
 - Within one `codex-a2a` instance, consumers share the same underlying Codex workspace/environment by default.
 - LLM provider keys are consumed by the `codex` process. Prompt injection or indirect exfiltration attempts may still expose sensitive values.
 - Payload logging is opt-in. When `A2A_LOG_PAYLOADS=true`, this service only logs JSON payload previews, applies size guards, and suppresses full payload logging for `codex.*` JSON-RPC extension calls.
@@ -20,7 +20,7 @@ This project is currently best suited for trusted or internal environments. Impo
 - Single-tenant trust boundary only; not a secure multi-tenant deployment profile
 - No per-tenant workspace isolation inside one instance
 - No hard guarantee that upstream provider keys are inaccessible to agent logic
-- Bearer-token auth only by default; stronger identity propagation is still an incremental hardening area
+- Inbound auth is deployment-scoped and static; this repository does not expose OAuth2, OIDC, or dynamic token introspection
 - Operators remain responsible for host hardening, secret rotation, and process access controls
 
 ## Reporting a Vulnerability

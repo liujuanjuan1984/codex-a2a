@@ -122,7 +122,7 @@ PY
 
 bearer_token="smoke-test-token"
 
-A2A_BEARER_TOKEN="${bearer_token}" \
+A2A_STATIC_AUTH_CREDENTIALS='[{"id":"smoke-bearer","scheme":"bearer","token":"'"${bearer_token}"'","principal":"automation"}]' \
 A2A_DATABASE_URL="sqlite+aiosqlite:///${database_path}" \
 A2A_PORT="${port}" \
 A2A_HOST="127.0.0.1" \

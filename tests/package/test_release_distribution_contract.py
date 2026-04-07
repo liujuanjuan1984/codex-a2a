@@ -31,10 +31,11 @@ def test_readme_documents_released_cli_installation_via_uv_tool() -> None:
         "A2A_DATABASE_URL=sqlite+aiosqlite:////abs/path/to/workspace/.codex-a2a/codex-a2a.db"
         in README_TEXT
     )
-    assert (
-        "A2A_BEARER_TOKEN=\"$(python -c 'import secrets; print(secrets.token_hex(24))')\" \\"
-        in README_TEXT
+    static_auth_example = (
+        'A2A_STATIC_AUTH_CREDENTIALS=\'[{"id":"local-bearer","scheme":"bearer",'
+        '"token":"\'"${DEMO_BEARER_TOKEN}"\'","principal":"automation"}]\' \\'
     )
+    assert static_auth_example in README_TEXT
     assert "CODEX_WORKSPACE_ROOT=/abs/path/to/workspace \\\ncodex-a2a" in README_TEXT
     assert "export A2A_HOST=127.0.0.1" not in README_TEXT
     assert "A2A_CLIENT_BASIC_AUTH" in README_TEXT

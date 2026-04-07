@@ -24,6 +24,7 @@ if TYPE_CHECKING:
 @dataclass(frozen=True)
 class _InterruptExecutionContext:
     identity: str | None
+    credential_id: str | None
     task_id: str | None
     context_id: str | None
 
@@ -76,6 +77,7 @@ class CodexInterruptBridge:
         *,
         session_id: str,
         identity: str | None,
+        credential_id: str | None,
         task_id: str | None,
         context_id: str | None,
     ) -> None:
@@ -84,6 +86,7 @@ class CodexInterruptBridge:
             return
         self._active_interrupt_contexts[normalized_session_id] = _InterruptExecutionContext(
             identity=self._optional_string(identity),
+            credential_id=self._optional_string(credential_id),
             task_id=self._optional_string(task_id),
             context_id=self._optional_string(context_id),
         )
@@ -401,6 +404,11 @@ class CodexInterruptBridge:
                 or self._optional_string(params.get("userIdentity"))
                 or (active_context.identity if active_context is not None else None)
             ),
+            credential_id=(
+                self._optional_string(params.get("credential_id"))
+                or self._optional_string(params.get("credentialId"))
+                or (active_context.credential_id if active_context is not None else None)
+            ),
             task_id=(
                 self._optional_string(params.get("task_id"))
                 or self._optional_string(params.get("taskId"))
@@ -491,6 +499,7 @@ class CodexInterruptBridge:
                 created_at=created_at,
                 expires_at=created_at + float(self._interrupt_request_ttl_seconds),
                 identity=interrupt_context.identity,
+                credential_id=interrupt_context.credential_id,
                 task_id=interrupt_context.task_id,
                 context_id=interrupt_context.context_id,
             ),
@@ -505,6 +514,7 @@ class CodexInterruptBridge:
                 interrupt_type=binding.interrupt_type,
                 session_id=binding.session_id,
                 identity=binding.identity,
+                credential_id=binding.credential_id,
                 task_id=binding.task_id,
                 context_id=binding.context_id,
                 created_at=binding.created_at,

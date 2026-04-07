@@ -372,3 +372,4 @@ async def test_exec_control_requires_exec_capability(monkeypatch) -> None:
     assert payload["error"]["data"]["type"] == "AUTHORIZATION_FORBIDDEN"
     assert payload["error"]["data"]["method"] == "codex.exec.start"
     assert payload["error"]["data"]["capability"] == "exec_control"
+    assert payload["error"]["data"]["credential_id"] == "test-bearer"
