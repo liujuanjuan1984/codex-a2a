@@ -24,6 +24,10 @@ class CodexRPCError(RuntimeError):
         self.data = data
 
 
+def is_thread_not_found_error(exc: BaseException) -> bool:
+    return isinstance(exc, CodexRPCError) and "thread not found" in str(exc).strip().lower()
+
+
 @dataclass
 class _PendingRpcRequest:
     request_id: str

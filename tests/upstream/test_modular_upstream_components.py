@@ -267,6 +267,7 @@ async def test_conversation_facade_handles_message_listing_and_prompt_errors() -
         workspace_root=None,
         model_id=None,
     )
+    facade._loaded_thread_ids.add("thr-1")
 
     assert await facade.list_sessions(query={"limit": "oops"}) == []
     assert await facade.list_messages("thr-1", query={"limit": "bad"}) == [
@@ -298,6 +299,7 @@ async def test_conversation_facade_send_message_cleans_up_after_error_and_timeou
     facade, turn_trackers, tracker_factory = _make_conversation_facade(
         rpc_request=fake_rpc_request,
     )
+    facade._loaded_thread_ids.add("thr-1")
     tracker = tracker_factory("thr-1", "turn-1")
     tracker.error = "permission denied"
     tracker.completed.set()
@@ -324,6 +326,7 @@ async def test_conversation_facade_session_command_and_shell_errors() -> None:
     facade, _turn_trackers, tracker_factory = _make_conversation_facade(
         rpc_request=fake_rpc_request,
     )
+    facade._loaded_thread_ids.add("thr-1")
     tracker = tracker_factory("thr-1", "turn-1")
     tracker.text_chunks.append("ok")
     tracker.completed.set()

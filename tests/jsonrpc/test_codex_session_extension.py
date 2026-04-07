@@ -25,6 +25,7 @@ from codex_a2a.jsonrpc.application import CodexSessionQueryJSONRPCApplication
 from codex_a2a.jsonrpc.hooks import SessionGuardHooks
 from codex_a2a.profile.runtime import build_runtime_profile
 from codex_a2a.server.agent_card import build_agent_card
+from codex_a2a.upstream.models import CodexRPCError
 from tests.support.dummy_clients import DummySessionQueryCodexClient as DummyCodexClient
 from tests.support.settings import make_settings
 
@@ -566,6 +567,39 @@ async def test_session_query_extension_maps_404_to_session_not_found(monkeypatch
 
 
 @pytest.mark.asyncio
+async def test_session_query_extension_maps_thread_not_found_to_session_not_found(monkeypatch):
+    import codex_a2a.server.application as app_module
+
+    class NotFoundCodexClient(DummyCodexClient):
+        async def list_messages(self, session_id: str, *, params=None):
+            raise CodexRPCError(code=-32000, message=f"thread not found: {session_id}")
+
+    monkeypatch.setattr(app_module, "CodexClient", NotFoundCodexClient)
+    app = app_module.create_app(
+        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+    )
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        headers = {"Authorization": "Bearer t-1"}
+        resp = await client.post(
+            "/",
+            headers=headers,
+            json={
+                "jsonrpc": "2.0",
+                "id": 3,
+                "method": "codex.sessions.messages.list",
+                "params": {"session_id": "s-rpc-404"},
+            },
+        )
+        payload = resp.json()
+        assert payload["jsonrpc"] == "2.0"
+        assert payload["id"] == 3
+        assert payload["error"]["code"] == -32001
+        assert payload["error"]["data"]["type"] == "SESSION_NOT_FOUND"
+
+
+@pytest.mark.asyncio
 async def test_session_query_extension_does_not_log_response_bodies(monkeypatch, caplog):
     import codex_a2a.server.application as app_module
 
@@ -639,6 +673,48 @@ async def test_session_control_prompt_async_returns_turn_handle(monkeypatch):
             "directory": "/workspace",
             "execution_options": None,
         }
+
+
+@pytest.mark.asyncio
+async def test_session_control_prompt_async_maps_thread_not_found_to_session_not_found(monkeypatch):
+    import codex_a2a.server.application as app_module
+
+    class NotFoundCodexClient(DummyCodexClient):
+        async def session_prompt_async(
+            self,
+            session_id: str,
+            request: dict[str, Any],
+            *,
+            directory: str | None = None,
+            execution_options=None,
+        ):
+            del request, directory, execution_options
+            raise CodexRPCError(code=-32000, message=f"thread not found: {session_id}")
+
+    monkeypatch.setattr(app_module, "CodexClient", NotFoundCodexClient)
+    app = app_module.create_app(
+        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+    )
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        headers = {"Authorization": "Bearer t-1"}
+        resp = await client.post(
+            "/",
+            headers=headers,
+            json={
+                "jsonrpc": "2.0",
+                "id": 22,
+                "method": "codex.sessions.prompt_async",
+                "params": {
+                    "session_id": "s-rpc-404",
+                    "request": {"parts": [{"type": "text", "text": "resume"}]},
+                },
+            },
+        )
+        payload = resp.json()
+        assert payload["error"]["code"] == -32001
+        assert payload["error"]["data"]["type"] == "SESSION_NOT_FOUND"
 
 
 @pytest.mark.asyncio

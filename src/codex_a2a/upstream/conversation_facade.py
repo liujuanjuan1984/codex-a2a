@@ -7,7 +7,12 @@ from typing import Any
 
 from codex_a2a.execution.request_overrides import RequestExecutionOptions
 from codex_a2a.input_mapping import build_turn_input_from_normalized_items
-from codex_a2a.upstream.models import CodexMessage, _TurnTracker
+from codex_a2a.upstream.models import (
+    CodexMessage,
+    CodexRPCError,
+    _TurnTracker,
+    is_thread_not_found_error,
+)
 from codex_a2a.upstream.request_mapping import (
     apply_thread_start_execution_options,
     apply_turn_start_execution_options,
@@ -37,6 +42,8 @@ class CodexConversationFacade:
         self._rpc_request = rpc_request
         self._get_or_create_tracker = get_or_create_tracker
         self._turn_trackers = turn_trackers
+        self._loaded_thread_ids: set[str] = set()
+        self._thread_resume_locks: dict[str, asyncio.Lock] = {}
 
     async def create_session(
         self,
@@ -67,7 +74,9 @@ class CodexConversationFacade:
         session_id = thread.get("id")
         if not isinstance(session_id, str) or not session_id.strip():
             raise RuntimeError("codex thread/start response missing thread id")
-        return session_id.strip()
+        session_id = session_id.strip()
+        self._loaded_thread_ids.add(session_id)
+        return session_id
 
     async def list_sessions(self, *, query: dict[str, Any]) -> list[dict[str, Any]]:
         rpc_params: dict[str, Any] = {}
@@ -98,6 +107,7 @@ class CodexConversationFacade:
         thread = normalize_thread_summary(result.get("thread"))
         if thread is None:
             raise RuntimeError("codex thread/fork response missing thread")
+        self._loaded_thread_ids.add(thread["id"])
         return thread
 
     async def thread_archive(self, thread_id: str) -> None:
@@ -113,6 +123,7 @@ class CodexConversationFacade:
         thread = normalize_thread_summary(result.get("thread"))
         if thread is None:
             raise RuntimeError("codex thread/unarchive response missing thread")
+        self._loaded_thread_ids.add(thread["id"])
         return thread
 
     async def thread_metadata_update(
@@ -216,7 +227,12 @@ class CodexConversationFacade:
             default_model_id=self._model_id,
         )
 
-        result = await self._rpc_request("turn/start", params)
+        result = await self._start_turn(
+            session_id,
+            params,
+            directory=directory,
+            execution_options=execution_options,
+        )
         if not isinstance(result, dict):
             raise RuntimeError("codex turn/start response missing result object")
         turn = result.get("turn")
@@ -268,7 +284,12 @@ class CodexConversationFacade:
             execution_options=coerce_request_execution_options(execution_options),
             default_model_id=self._model_id,
         )
-        result = await self._rpc_request("turn/start", params)
+        result = await self._start_turn(
+            session_id,
+            params,
+            directory=directory,
+            execution_options=execution_options,
+        )
         if not isinstance(result, dict):
             raise RuntimeError("codex turn/start response missing result object")
         turn = result.get("turn")
@@ -278,6 +299,96 @@ class CodexConversationFacade:
         if not isinstance(turn_id, str) or not turn_id.strip():
             raise RuntimeError("codex turn/start response missing turn id")
         return {"ok": True, "session_id": session_id, "turn_id": turn_id.strip()}
+
+    async def _start_turn(
+        self,
+        session_id: str,
+        params: dict[str, Any],
+        *,
+        directory: str | None,
+        execution_options: RequestExecutionOptions | None,
+    ) -> Any:
+        await self._ensure_thread_loaded(
+            session_id,
+            directory=directory,
+            execution_options=execution_options,
+        )
+        try:
+            result = await self._rpc_request("turn/start", params)
+        except CodexRPCError as exc:
+            if not is_thread_not_found_error(exc):
+                raise
+            self._loaded_thread_ids.discard(session_id)
+            await self._ensure_thread_loaded(
+                session_id,
+                directory=directory,
+                execution_options=execution_options,
+                force_resume=True,
+            )
+            result = await self._rpc_request("turn/start", params)
+        self._loaded_thread_ids.add(session_id)
+        return result
+
+    async def _ensure_thread_loaded(
+        self,
+        session_id: str,
+        *,
+        directory: str | None,
+        execution_options: RequestExecutionOptions | None,
+        force_resume: bool = False,
+    ) -> None:
+        if not force_resume and session_id in self._loaded_thread_ids:
+            return
+
+        lock = self._thread_resume_locks.setdefault(session_id, asyncio.Lock())
+        async with lock:
+            if not force_resume and session_id in self._loaded_thread_ids:
+                return
+
+            if not force_resume:
+                loaded_threads = await self._list_loaded_thread_ids()
+                self._loaded_thread_ids.update(loaded_threads)
+                if session_id in self._loaded_thread_ids:
+                    return
+
+            await self._resume_thread(
+                session_id,
+                directory=directory,
+                execution_options=execution_options,
+            )
+            self._loaded_thread_ids.add(session_id)
+
+    async def _list_loaded_thread_ids(self) -> set[str]:
+        result = await self._rpc_request("thread/loaded/list", {})
+        if not isinstance(result, dict):
+            return set()
+        data = result.get("data")
+        if not isinstance(data, list):
+            return set()
+        loaded: set[str] = set()
+        for item in data:
+            if isinstance(item, str) and item.strip():
+                loaded.add(item.strip())
+        return loaded
+
+    async def _resume_thread(
+        self,
+        session_id: str,
+        *,
+        directory: str | None,
+        execution_options: RequestExecutionOptions | None,
+    ) -> Any:
+        params: dict[str, Any] = {"threadId": session_id}
+        if directory:
+            params["cwd"] = directory
+        elif self._workspace_root:
+            params["cwd"] = self._workspace_root
+        apply_thread_start_execution_options(
+            params,
+            execution_options=coerce_request_execution_options(execution_options),
+            default_model_id=self._model_id,
+        )
+        return await self._rpc_request("thread/resume", params)
 
     async def turn_steer(
         self,
