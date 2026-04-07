@@ -49,6 +49,7 @@ def _build_extension_app(
         "thread_unarchive": THREAD_LIFECYCLE_METHODS["unarchive"],
         "thread_metadata_update": THREAD_LIFECYCLE_METHODS["metadata_update"],
         "thread_watch": THREAD_LIFECYCLE_METHODS["watch"],
+        "thread_watch_release": THREAD_LIFECYCLE_METHODS["watch_release"],
         "turn_steer": TURN_CONTROL_METHODS["steer"],
         "review_start": REVIEW_CONTROL_METHODS["start"],
         "review_watch": REVIEW_CONTROL_METHODS["watch"],

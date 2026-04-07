@@ -145,6 +145,51 @@ async def test_thread_lifecycle_watch_routes_to_runtime(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
+async def test_thread_lifecycle_watch_release_routes_to_runtime(monkeypatch) -> None:
+    import codex_a2a.server.application as app_module
+
+    dummy = DummyCodexClient(
+        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+    )
+    monkeypatch.setattr(app_module, "CodexClient", lambda _settings, **kwargs: dummy)
+    app = app_module.create_app(
+        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+    )
+
+    app.state.codex_thread_lifecycle_runtime.release = AsyncMock(
+        return_value={
+            "ok": True,
+            "task_id": "task-1",
+            "owner_status": "released",
+            "release_reason": "task_cancel",
+            "subscription_key": "sub-1",
+            "remaining_owner_count": 0,
+            "subscription_released": True,
+        }
+    )
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post(
+            "/",
+            headers={"Authorization": "Bearer t-1"},
+            json={
+                "jsonrpc": "2.0",
+                "id": 406,
+                "method": "codex.threads.watch.release",
+                "params": {"task_id": "task-1"},
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.json()["result"]["task_id"] == "task-1"
+    app.state.codex_thread_lifecycle_runtime.release.assert_awaited_once()
+    kwargs = app.state.codex_thread_lifecycle_runtime.release.await_args.kwargs
+    assert kwargs["task_id"] == "task-1"
+    assert kwargs["context"] is not None
+
+
+@pytest.mark.asyncio
 async def test_thread_lifecycle_extension_rejects_invalid_request_shapes(monkeypatch) -> None:
     import codex_a2a.server.application as app_module
 
@@ -189,6 +234,16 @@ async def test_thread_lifecycle_extension_rejects_invalid_request_shapes(monkeyp
                 "params": {"request": {"events": ["thread.deleted"]}},
             },
         )
+        watch_release_response = await client.post(
+            "/",
+            headers=headers,
+            json={
+                "jsonrpc": "2.0",
+                "id": 409,
+                "method": "codex.threads.watch.release",
+                "params": {"task_id": "   "},
+            },
+        )
 
     assert fork_response.json()["error"]["code"] == -32602
     assert fork_response.json()["error"]["data"]["field"] == "request.ephemeral"
@@ -196,3 +251,59 @@ async def test_thread_lifecycle_extension_rejects_invalid_request_shapes(monkeyp
     assert metadata_response.json()["error"]["data"]["field"] == "request.git_info"
     assert watch_response.json()["error"]["code"] == -32602
     assert watch_response.json()["error"]["data"]["field"] == "request.events"
+    assert watch_release_response.json()["error"]["code"] == -32602
+    assert watch_release_response.json()["error"]["data"]["field"] == "task_id"
+
+
+@pytest.mark.asyncio
+async def test_thread_lifecycle_watch_release_maps_not_found_and_forbidden(monkeypatch) -> None:
+    import codex_a2a.server.application as app_module
+
+    dummy = DummyCodexClient(
+        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+    )
+    monkeypatch.setattr(app_module, "CodexClient", lambda _settings, **kwargs: dummy)
+    app = app_module.create_app(
+        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+    )
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        app.state.codex_thread_lifecycle_runtime.release = AsyncMock(
+            side_effect=LookupError("task-404")
+        )
+        not_found_response = await client.post(
+            "/",
+            headers={"Authorization": "Bearer t-1"},
+            json={
+                "jsonrpc": "2.0",
+                "id": 410,
+                "method": "codex.threads.watch.release",
+                "params": {"task_id": "task-404"},
+            },
+        )
+
+        app.state.codex_thread_lifecycle_runtime.release = AsyncMock(
+            side_effect=PermissionError("task-403")
+        )
+        forbidden_response = await client.post(
+            "/",
+            headers={"Authorization": "Bearer t-1"},
+            json={
+                "jsonrpc": "2.0",
+                "id": 411,
+                "method": "codex.threads.watch.release",
+                "params": {"task_id": "task-403"},
+            },
+        )
+
+    assert not_found_response.json()["error"]["code"] == -32014
+    assert not_found_response.json()["error"]["data"] == {
+        "type": "WATCH_NOT_FOUND",
+        "task_id": "task-404",
+    }
+    assert forbidden_response.json()["error"]["code"] == -32015
+    assert forbidden_response.json()["error"]["data"] == {
+        "type": "WATCH_FORBIDDEN",
+        "task_id": "task-403",
+    }

@@ -354,6 +354,7 @@ def test_openapi_jsonrpc_examples_include_core_and_extension_methods() -> None:
     assert "codex.threads.unarchive" in methods
     assert "codex.threads.metadata.update" in methods
     assert "codex.threads.watch" in methods
+    assert "codex.threads.watch.release" in methods
     assert "codex.turns.steer" in methods
     assert "codex.review.start" in methods
     assert "codex.review.watch" in methods

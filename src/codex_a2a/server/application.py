@@ -104,6 +104,7 @@ def create_app(settings: Settings) -> FastAPI:
     thread_lifecycle_runtime = CodexThreadLifecycleRuntime(
         client=client,
         request_handler=handler,
+        state_store=runtime_state_runtime.state_store,
     )
 
     @asynccontextmanager
@@ -113,6 +114,7 @@ def create_app(settings: Settings) -> FastAPI:
         try:
             await client.restore_persisted_interrupt_requests()
             await client.startup_preflight()
+            await thread_lifecycle_runtime.reconcile_persisted_watches()
             yield
         finally:
             await a2a_client_manager.close_all()
@@ -139,6 +141,7 @@ def create_app(settings: Settings) -> FastAPI:
         "thread_unarchive": THREAD_LIFECYCLE_METHODS["unarchive"],
         "thread_metadata_update": THREAD_LIFECYCLE_METHODS["metadata_update"],
         "thread_watch": THREAD_LIFECYCLE_METHODS["watch"],
+        "thread_watch_release": THREAD_LIFECYCLE_METHODS["watch_release"],
         **INTERRUPT_CALLBACK_METHODS,
     }
     if "shell" not in capability_snapshot.session_query_method_keys:

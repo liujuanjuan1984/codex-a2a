@@ -439,6 +439,7 @@ def test_authenticated_extended_agent_card_injects_profile_into_extensions() -> 
     assert thread_lifecycle_params["methods"]["unarchive"] == "codex.threads.unarchive"
     assert thread_lifecycle_params["methods"]["metadata_update"] == "codex.threads.metadata.update"
     assert thread_lifecycle_params["methods"]["watch"] == "codex.threads.watch"
+    assert thread_lifecycle_params["methods"]["watch_release"] == "codex.threads.watch.release"
     assert thread_lifecycle_params["notification_bridge"]["current_delivery"] == (
         "codex.threads.watch task stream"
     )
@@ -455,6 +456,12 @@ def test_authenticated_extended_agent_card_injects_profile_into_extensions() -> 
     )
     assert (
         thread_lifecycle_params["method_contracts"]["codex.threads.watch"][
+            "notification_response_status"
+        ]
+        == 204
+    )
+    assert (
+        thread_lifecycle_params["method_contracts"]["codex.threads.watch.release"][
             "notification_response_status"
         ]
         == 204

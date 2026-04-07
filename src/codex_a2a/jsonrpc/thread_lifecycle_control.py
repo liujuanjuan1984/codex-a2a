@@ -20,11 +20,13 @@ from codex_a2a.jsonrpc.params import (
     ThreadMetadataUpdateControlParams,
     ThreadUnarchiveControlParams,
     ThreadWatchControlParams,
+    ThreadWatchReleaseControlParams,
     parse_thread_archive_params,
     parse_thread_fork_params,
     parse_thread_metadata_update_params,
     parse_thread_unarchive_params,
     parse_thread_watch_params,
+    parse_thread_watch_release_params,
 )
 
 if TYPE_CHECKING:
@@ -34,6 +36,8 @@ logger = logging.getLogger(__name__)
 
 ERR_THREAD_NOT_FOUND = -32010
 ERR_THREAD_FORBIDDEN = -32011
+ERR_WATCH_NOT_FOUND = -32014
+ERR_WATCH_FORBIDDEN = -32015
 
 
 async def _validate_thread_owner(
@@ -79,6 +83,22 @@ def _thread_not_found_response(
     )
 
 
+def _watch_not_found_response(
+    app: CodexSessionQueryJSONRPCApplication,
+    request_id: str | int | None,
+    *,
+    task_id: str,
+) -> Response:
+    return app._generate_error_response(
+        request_id,
+        JSONRPCError(
+            code=ERR_WATCH_NOT_FOUND,
+            message="Watch not found",
+            data={"type": "WATCH_NOT_FOUND", "task_id": task_id},
+        ),
+    )
+
+
 async def handle_thread_lifecycle_control_request(
     app: CodexSessionQueryJSONRPCApplication,
     base_request: JSONRPCRequest,
@@ -92,8 +112,10 @@ async def handle_thread_lifecycle_control_request(
         | ThreadUnarchiveControlParams
         | ThreadMetadataUpdateControlParams
         | ThreadWatchControlParams
+        | ThreadWatchReleaseControlParams
     )
     thread_id: str | None = None
+    task_id: str | None = None
 
     try:
         if base_request.method == app._method_thread_fork:
@@ -108,6 +130,9 @@ async def handle_thread_lifecycle_control_request(
         elif base_request.method == app._method_thread_metadata_update:
             parsed_params = parse_thread_metadata_update_params(params)
             thread_id = parsed_params.thread_id
+        elif base_request.method == app._method_thread_watch_release:
+            parsed_params = parse_thread_watch_release_params(params)
+            task_id = parsed_params.task_id
         else:
             parsed_params = parse_thread_watch_params(params)
     except JsonRpcParamsValidationError as exc:
@@ -135,6 +160,18 @@ async def handle_thread_lifecycle_control_request(
                     if watch_params is None or watch_params.request is None
                     else watch_params.request.model_dump(by_alias=True, exclude_none=True)
                 ),
+                context=call_context,
+            )
+        elif base_request.method == app._method_thread_watch_release:
+            call_context = app._context_builder.build(request)
+            watch_release_params = (
+                parsed_params
+                if isinstance(parsed_params, ThreadWatchReleaseControlParams)
+                else None
+            )
+            assert watch_release_params is not None
+            result = await app._thread_lifecycle_runtime.release(
+                task_id=watch_release_params.task_id,
                 context=call_context,
             )
         elif base_request.method == app._method_thread_fork:
@@ -211,7 +248,19 @@ async def handle_thread_lifecycle_control_request(
                 },
             ),
         )
+    except LookupError:
+        assert task_id is not None
+        return _watch_not_found_response(app, base_request.id, task_id=task_id)
     except PermissionError:
+        if task_id is not None:
+            return app._generate_error_response(
+                base_request.id,
+                JSONRPCError(
+                    code=ERR_WATCH_FORBIDDEN,
+                    message="Watch forbidden",
+                    data={"type": "WATCH_FORBIDDEN", "task_id": task_id},
+                ),
+            )
         return app._generate_error_response(
             base_request.id,
             JSONRPCError(

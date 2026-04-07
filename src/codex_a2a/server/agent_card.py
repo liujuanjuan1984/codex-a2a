@@ -416,7 +416,7 @@ def _build_agent_skills(
                 name="Codex Thread Control",
                 description=(
                     "Manage provider-private thread fork, archive, unarchive, "
-                    "and metadata-update actions."
+                    "metadata-update, and watch-release actions."
                 ),
                 tags=["codex", "threads", "control", "provider-private"],
                 input_modes=list(JSON_RPC_INPUT_MEDIA_MODES),
@@ -426,8 +426,8 @@ def _build_agent_skills(
                 id="codex.threads.watch",
                 name="Codex Thread Watch",
                 description=(
-                    "Start provider-private thread lifecycle watch tasks that "
-                    "emit structured events through A2A task streams."
+                    "Start and release provider-private thread lifecycle watch "
+                    "tasks that emit structured events through A2A task streams."
                 ),
                 tags=["codex", "threads", "watch", "provider-private"],
                 input_modes=list(JSON_RPC_INPUT_MEDIA_MODES),
@@ -601,7 +601,7 @@ def _build_agent_skills(
             id="codex.threads.control",
             name="Codex Thread Control",
             description=(
-                "Manage thread fork/archive/unarchive/metadata-update flows via "
+                "Manage thread fork/archive/unarchive/metadata-update/watch-release flows via "
                 "codex.threads.* control methods."
             ),
             tags=["codex", "threads", "control", "lifecycle"],
@@ -616,12 +616,14 @@ def _build_agent_skills(
             id="codex.threads.watch",
             name="Codex Thread Watch",
             description=(
-                "Start thread lifecycle watch tasks via codex.threads.watch and "
-                "consume structured lifecycle events through A2A task streams."
+                "Start and release thread lifecycle watch tasks via codex.threads.watch "
+                "and codex.threads.watch.release, then consume structured lifecycle "
+                "events through A2A task streams."
             ),
             tags=["codex", "threads", "watch", "lifecycle"],
             examples=[
                 "Start a lifecycle watch stream (method codex.threads.watch).",
+                "Release a lifecycle watch stream (method codex.threads.watch.release).",
                 "Resume a lifecycle watch task with tasks/resubscribe.",
             ],
             input_modes=list(JSON_RPC_INPUT_MEDIA_MODES),

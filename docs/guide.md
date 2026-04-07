@@ -717,11 +717,13 @@ This service exposes provider-private thread lifecycle methods through JSON-RPC:
 - `codex.threads.unarchive`
 - `codex.threads.metadata.update`
 - `codex.threads.watch`
+- `codex.threads.watch.release`
 
 Lifecycle control guidance:
 
 - treat `codex.threads.*` as a lifecycle management surface separate from `codex.sessions.*` query/control methods
 - control methods return a stable minimum thread summary: `id`, `title`, optional `status`, and `codex.raw`
+- release watch ownership with `codex.threads.watch.release` using the `task_id` returned by `codex.threads.watch`
 - `thread/unsubscribe` is intentionally not part of this first-stage stable contract because upstream unsubscribe is connection-scoped
 
 ### Thread Fork (`codex.threads.fork`)
@@ -835,6 +837,22 @@ The JSON-RPC result returns `task_id` and `context_id`. Then use the standard ta
 ```bash
 curl -sS http://127.0.0.1:8000/v1/tasks/<task_id>:subscribe \
   -H "Authorization: Bearer ${A2A_BEARER_TOKEN}"
+```
+
+Watch release example:
+
+```bash
+curl -sS http://127.0.0.1:8000/ \
+  -H 'content-type: application/json' \
+  -H "Authorization: Bearer ${A2A_BEARER_TOKEN}" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 21,
+    "method": "codex.threads.watch.release",
+    "params": {
+      "task_id": "<task_id>"
+    }
+  }'
 ```
 
 ## Codex Turn Control (A2A Extension)

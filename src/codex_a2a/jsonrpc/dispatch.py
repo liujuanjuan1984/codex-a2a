@@ -55,6 +55,7 @@ class ExtensionMethodRegistry:
                 methods["thread_unarchive"],
                 methods["thread_metadata_update"],
                 methods["thread_watch"],
+                methods["thread_watch_release"],
             }
         )
         turn_control_methods = frozenset(method for method in (turn_method,) if method is not None)

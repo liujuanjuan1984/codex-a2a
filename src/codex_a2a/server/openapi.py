@@ -277,6 +277,15 @@ def _build_jsonrpc_extension_openapi_examples(*, runtime_profile: RuntimeProfile
                 },
             },
         },
+        "thread_watch_release": {
+            "summary": "Release an owned thread lifecycle watch task",
+            "value": {
+                "jsonrpc": "2.0",
+                "id": 276,
+                "method": THREAD_LIFECYCLE_METHODS["watch_release"],
+                "params": {"task_id": "task-thread-watch-1"},
+            },
+        },
         "permission_reply": {
             "summary": "Reply to permission interrupt request",
             "value": {
