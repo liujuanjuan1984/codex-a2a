@@ -124,8 +124,8 @@ Current repository judgment under those rules:
 - `codex.threads.*`, especially `codex.threads.watch` and `codex.threads.watch.release`, remain acceptable as provider-private lifecycle surfaces because they expose a bounded watch/control bridge rather than raw upstream subscription internals.
 - `codex.turns.steer` is boundary-sensitive and should remain narrowly scoped, provider-private, and resistant to scope creep into a general orchestration API.
 - `codex.review.*` is also boundary-sensitive and should stay framed as a provider-private reviewer surface rather than a generic A2A review standard.
-- `codex.sessions.shell` and `codex.exec.*` are the most likely to exceed the preferred adapter boundary because they expose standalone command execution semantics instead of a stable session/message projection. They remain supported today, but should be treated as deployment-conditional or tightly provider-private operational surfaces rather than exemplars for future extension growth.
-- Current default posture is conservative: `codex.sessions.shell`, `codex.turns.steer`, `codex.review.*`, and `codex.exec.*` are disabled by default and must be explicitly enabled per deployment.
+- `codex.sessions.shell` and `codex.exec.*` sit closest to the adapter boundary because they expose standalone command execution semantics instead of a stable session/message projection. They remain supported for internal or tightly controlled deployments, but should stay deployment-conditional and provider-private rather than being treated as generic extension templates.
+- Current default posture is conservative: `codex.sessions.shell`, `codex.turns.steer`, `codex.review.*`, and `codex.exec.*` are disabled by default and only enabled when a deployment intentionally opts into them.
 
 ## Extension Taxonomy
 

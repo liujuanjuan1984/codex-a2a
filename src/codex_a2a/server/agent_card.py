@@ -355,7 +355,7 @@ def _build_agent_skills(
     if runtime_profile.session_shell_enabled:
         session_control_description = (
             "Start async Codex session turns and issue provider-private "
-            "session command or shell control methods."
+            "session command or shell helper methods for internal workflows."
         )
     if not include_detailed_contracts:
         skills = [
@@ -523,7 +523,7 @@ def _build_agent_skills(
     if runtime_profile.session_shell_enabled:
         detailed_session_control_description = (
             "Start async session turns and issue session-scoped command or "
-            "one-shot shell control methods via provider-private JSON-RPC."
+            "one-shot shell helper methods via provider-private JSON-RPC."
         )
         session_control_examples.append(
             "Run a one-shot shell snapshot for a session (method codex.sessions.shell)."
@@ -711,7 +711,7 @@ def _build_agent_skills(
                     name="Codex Exec Control",
                     description=(
                         "Start and control standalone interactive command execution via "
-                        "codex.exec.start/write/resize/terminate."
+                        "codex.exec.start/write/resize/terminate for internal workflows."
                     ),
                     tags=["codex", "exec", "terminal", "control"],
                     examples=[

@@ -137,11 +137,11 @@ Retention guidance:
 - Treat `urn:a2a:*` extension URIs in this repository as shared extension conventions used across this repo family, not as claims that they are part of the A2A core baseline.
 - Treat `a2a.interrupt.*` methods as shared extensions.
 - Treat `codex.*` methods plus `metadata.codex.directory` and `metadata.codex.execution` as Codex-specific extensions or provider-private operational surfaces rather than portable A2A baseline capabilities.
-- Treat `codex.sessions.shell` as deployment-conditional. Discover it from the declared compatibility profile and extension contracts before calling it.
-- Treat `codex.sessions.shell` as a one-shot shell snapshot surface. It is not an interactive shell session and does not imply PTY lifecycle support.
+- Treat `codex.sessions.shell` as a deployment-conditional, provider-private shell snapshot helper. Discover it from the declared compatibility profile and extension contracts before calling it.
+- Treat `codex.sessions.shell` as a one-shot shell snapshot surface. It is useful for tightly controlled internal workflows, but it is not an interactive shell session and does not imply PTY lifecycle support.
 - Treat `codex.turns.steer`, `codex.review.*`, and `codex.exec.*` as deployment-conditional provider-private controls. Discover them from the authenticated extended card or OpenAPI before calling them.
-- Treat `codex.exec.*` as the standalone interactive exec surface. Use it for stdin write, PTY resize, and terminate flows instead of inferring those capabilities from `codex.sessions.shell`.
-- Default deployment posture is conservative: `codex.sessions.shell`, `codex.turns.steer`, `codex.review.*`, and `codex.exec.*` are disabled by default and must be explicitly enabled per deployment.
+- Treat `codex.exec.*` as the standalone interactive exec surface for internal or tightly controlled deployments. Use it for stdin write, PTY resize, and terminate flows instead of inferring those semantics from `codex.sessions.shell`.
+- Default deployment posture is conservative: `codex.sessions.shell`, `codex.turns.steer`, `codex.review.*`, and `codex.exec.*` stay disabled by default and are enabled only when a deployment intentionally opts into them.
 - Generic A2A clients should remain usable without the `codex.*` control plane. Opt into those methods only when you are intentionally integrating with Codex-specific workflows such as session continuation, discovery-backed mentions, or interactive exec.
 - Treat `execution_environment.*` as deployment-configured discovery metadata. It does not promise per-request snapshots of temporary approvals, escalations, or host-side runtime mutations.
 
@@ -406,9 +406,9 @@ This path is for contributors. End users should prefer the released CLI path des
 
 - The service forwards A2A `message:send` to Codex session/message calls.
 - Streaming is always enabled for this service surface. `/v1/message:stream` and JSON-RPC `message/stream` are compatibility-sensitive core capabilities rather than deployment-time toggles.
-- `codex.sessions.shell` is a session-scoped shell control method for ownership, attribution, and traceability. It keeps `session_id` in the A2A contract, but the underlying execution still uses Codex `command/exec` rather than resuming or creating an upstream Codex thread.
-- `codex.sessions.shell` returns a one-shot shell snapshot only. It does not expose PTY lifecycle methods such as stdin write, resize, or terminate, and it should not be treated as an interactive shell session.
-- `codex.exec.start`, `codex.exec.write`, `codex.exec.resize`, and `codex.exec.terminate` expose a standalone interactive `command/exec` runtime when `A2A_ENABLE_EXEC_CONTROL=true`. `codex.exec.start` returns process/task handles immediately, while stdout/stderr deltas and the final result flow through normal A2A task streaming and `tasks/resubscribe`.
+- `codex.sessions.shell` is a session-scoped shell helper for ownership, attribution, and traceability in internal deployments. It keeps `session_id` in the A2A contract, but the underlying execution still uses Codex `command/exec` rather than resuming or creating an upstream Codex thread.
+- `codex.sessions.shell` returns a one-shot shell snapshot only. It does not expose PTY lifecycle methods such as stdin write, resize, or terminate, and should be treated as a bounded helper rather than a general session shell.
+- `codex.exec.start`, `codex.exec.write`, `codex.exec.resize`, and `codex.exec.terminate` expose a standalone interactive `command/exec` runtime when `A2A_ENABLE_EXEC_CONTROL=true`. This surface is intended for internal or tightly controlled deployments where interactive terminal control is an explicit part of the adapter contract. `codex.exec.start` returns process/task handles immediately, while stdout/stderr deltas and the final result flow through normal A2A task streaming and `tasks/resubscribe`.
 - Rich input is supported on two surfaces:
   - `codex.sessions.prompt_async.request.parts[]` accepts `text`, `image`, `mention`, and `skill`
   - core A2A `message/send` and `message/stream` keep standard A2A parts and map `TextPart`, image `FilePart`, and `DataPart(data={"type":"mention"|"skill", ...})` into Codex turn input

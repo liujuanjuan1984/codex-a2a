@@ -1170,12 +1170,14 @@ def build_compatibility_profile_params(
             ),
             (
                 "codex.sessions.shell is deployment-conditional: discover it from the "
-                "declared profile and current extension contracts before calling it."
+                "declared profile and current extension contracts before calling it, and "
+                "treat it as a bounded shell snapshot helper for internal workflows."
             ),
             (
-                "Treat codex.exec.* as the interactive standalone command runtime. Use "
-                "it for write/resize/terminate flows instead of inferring those semantics "
-                "from codex.sessions.shell."
+                "Treat codex.exec.* as the interactive standalone command runtime for "
+                "internal or tightly controlled deployments. Use it for write/resize/"
+                "terminate flows instead of inferring those semantics from "
+                "codex.sessions.shell."
             ),
             (
                 "Treat execution_environment fields as deployment-configured discovery "
