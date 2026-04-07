@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import sqlite3
 import time
 from pathlib import Path
@@ -123,6 +122,7 @@ async def test_database_backend_persists_task_session_and_interrupt_state_across
                 interrupt_type=interrupt_type,
                 session_id=session_id,
                 identity=identity,
+                credential_id=None,
                 task_id=task_id,
                 context_id=context_id,
                 created_at=binding.created_at,
@@ -179,9 +179,7 @@ async def test_database_backend_persists_task_session_and_interrupt_state_across
         a2a_bearer_token="test-token",
         a2a_database_url=database_url,
     )
-    request_identity = (
-        f"bearer:{hashlib.sha256(settings.a2a_bearer_token.encode()).hexdigest()[:12]}"
-    )
+    request_identity = "automation"
     database_path = (tmp_path / "app-state.db").resolve()
 
     app1 = app_module.create_app(settings)
@@ -209,7 +207,7 @@ async def test_database_backend_persists_task_session_and_interrupt_state_across
             context_id="ctx-1",
         )
 
-    assert _sqlite_schema_version(database_path, "runtime_state") == 2
+    assert _sqlite_schema_version(database_path, "runtime_state") == 3
 
     app2 = app_module.create_app(settings)
     async with app2.router.lifespan_context(app2):

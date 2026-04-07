@@ -37,7 +37,7 @@ from .migrations import SchemaMigration, add_missing_columns, apply_schema_migra
 
 _STATE_METADATA = MetaData()
 _RUNTIME_STATE_SCHEMA_SCOPE = "runtime_state"
-CURRENT_RUNTIME_STATE_SCHEMA_VERSION = 2
+CURRENT_RUNTIME_STATE_SCHEMA_VERSION = 3
 
 _SESSION_BINDINGS = Table(
     "a2a_session_bindings",
@@ -69,6 +69,7 @@ _PENDING_INTERRUPT_REQUESTS = Table(
     Column("interrupt_type", String, nullable=False),
     Column("session_id", String, nullable=False),
     Column("identity", String, nullable=True),
+    Column("credential_id", String, nullable=True),
     Column("task_id", String, nullable=True),
     Column("context_id", String, nullable=True),
     Column("created_at", Float, nullable=False),
@@ -129,6 +130,14 @@ def _upgrade_runtime_state_schema_to_v1(sync_conn: Any) -> None:
     )
 
 
+def _upgrade_runtime_state_schema_to_v3(sync_conn: Any) -> None:
+    add_missing_columns(
+        sync_conn,
+        table=_PENDING_INTERRUPT_REQUESTS,
+        column_names=("credential_id",),
+    )
+
+
 _RUNTIME_STATE_MIGRATIONS = {
     1: SchemaMigration(
         version=1,
@@ -139,6 +148,11 @@ _RUNTIME_STATE_MIGRATIONS = {
         version=2,
         description="Add persisted thread watch owner and shared subscription state tables.",
         upgrade=lambda _conn: None,
+    ),
+    3: SchemaMigration(
+        version=3,
+        description="Add persisted interrupt credential identifiers.",
+        upgrade=_upgrade_runtime_state_schema_to_v3,
     ),
 }
 
@@ -238,6 +252,7 @@ class InterruptRequestRepository(Protocol):
         interrupt_type: str,
         session_id: str,
         identity: str | None,
+        credential_id: str | None,
         task_id: str | None,
         context_id: str | None,
         created_at: float,
@@ -425,6 +440,7 @@ class RuntimeStateStore:
                 created_at=row["created_at"],
                 expires_at=expires_at,
                 identity=row.get("identity"),
+                credential_id=row.get("credential_id"),
                 task_id=row.get("task_id"),
                 context_id=row.get("context_id"),
             ),
@@ -594,6 +610,7 @@ class RuntimeStateStore:
         interrupt_type: str,
         session_id: str,
         identity: str | None,
+        credential_id: str | None,
         task_id: str | None,
         context_id: str | None,
         created_at: float,
@@ -611,6 +628,7 @@ class RuntimeStateStore:
                     "interrupt_type": interrupt_type,
                     "session_id": session_id,
                     "identity": identity,
+                    "credential_id": credential_id,
                     "task_id": task_id,
                     "context_id": context_id,
                     "created_at": created_at,

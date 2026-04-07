@@ -1,3 +1,4 @@
+from base64 import b64encode
 from unittest.mock import ANY, AsyncMock
 
 import httpx
@@ -12,16 +13,33 @@ _BASE_SETTINGS = {
 }
 
 
+def _basic_auth_header(username: str, password: str) -> dict[str, str]:
+    token = b64encode(f"{username}:{password}".encode()).decode("ascii")
+    return {"Authorization": f"Basic {token}"}
+
+
 @pytest.mark.asyncio
 async def test_exec_start_routes_to_exec_runtime(monkeypatch) -> None:
     import codex_a2a.server.application as app_module
 
     dummy = DummyCodexClient(
-        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+        make_settings(
+            a2a_bearer_token="t-1",
+            a2a_basic_auth_username="operator",
+            a2a_basic_auth_password="op-pass",  # pragma: allowlist secret
+            a2a_log_payloads=False,
+            **_BASE_SETTINGS,
+        )
     )
     monkeypatch.setattr(app_module, "CodexClient", lambda _settings, **kwargs: dummy)
     app = app_module.create_app(
-        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+        make_settings(
+            a2a_bearer_token="t-1",
+            a2a_basic_auth_username="operator",
+            a2a_basic_auth_password="op-pass",  # pragma: allowlist secret
+            a2a_log_payloads=False,
+            **_BASE_SETTINGS,
+        )
     )
 
     app.state.codex_exec_runtime.start = AsyncMock(
@@ -37,7 +55,7 @@ async def test_exec_start_routes_to_exec_runtime(monkeypatch) -> None:
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.post(
             "/",
-            headers={"Authorization": "Bearer t-1"},
+            headers=_basic_auth_header("operator", "op-pass"),
             json={
                 "jsonrpc": "2.0",
                 "id": 201,
@@ -84,11 +102,23 @@ async def test_exec_write_resize_and_terminate_route_to_exec_runtime(monkeypatch
     import codex_a2a.server.application as app_module
 
     dummy = DummyCodexClient(
-        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+        make_settings(
+            a2a_bearer_token="t-1",
+            a2a_basic_auth_username="operator",
+            a2a_basic_auth_password="op-pass",  # pragma: allowlist secret
+            a2a_log_payloads=False,
+            **_BASE_SETTINGS,
+        )
     )
     monkeypatch.setattr(app_module, "CodexClient", lambda _settings, **kwargs: dummy)
     app = app_module.create_app(
-        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+        make_settings(
+            a2a_bearer_token="t-1",
+            a2a_basic_auth_username="operator",
+            a2a_basic_auth_password="op-pass",  # pragma: allowlist secret
+            a2a_log_payloads=False,
+            **_BASE_SETTINGS,
+        )
     )
 
     app.state.codex_exec_runtime.write = AsyncMock(
@@ -103,7 +133,7 @@ async def test_exec_write_resize_and_terminate_route_to_exec_runtime(monkeypatch
 
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-        headers = {"Authorization": "Bearer t-1"}
+        headers = _basic_auth_header("operator", "op-pass")
         write_response = await client.post(
             "/",
             headers=headers,
@@ -161,16 +191,28 @@ async def test_exec_control_rejects_invalid_request_shapes(monkeypatch) -> None:
     import codex_a2a.server.application as app_module
 
     dummy = DummyCodexClient(
-        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+        make_settings(
+            a2a_bearer_token="t-1",
+            a2a_basic_auth_username="operator",
+            a2a_basic_auth_password="op-pass",  # pragma: allowlist secret
+            a2a_log_payloads=False,
+            **_BASE_SETTINGS,
+        )
     )
     monkeypatch.setattr(app_module, "CodexClient", lambda _settings, **kwargs: dummy)
     app = app_module.create_app(
-        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+        make_settings(
+            a2a_bearer_token="t-1",
+            a2a_basic_auth_username="operator",
+            a2a_basic_auth_password="op-pass",  # pragma: allowlist secret
+            a2a_log_payloads=False,
+            **_BASE_SETTINGS,
+        )
     )
 
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-        headers = {"Authorization": "Bearer t-1"}
+        headers = _basic_auth_header("operator", "op-pass")
         start_response = await client.post(
             "/",
             headers=headers,
@@ -215,11 +257,23 @@ async def test_exec_control_maps_missing_session_lookup_to_business_error(monkey
     import codex_a2a.server.application as app_module
 
     dummy = DummyCodexClient(
-        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+        make_settings(
+            a2a_bearer_token="t-1",
+            a2a_basic_auth_username="operator",
+            a2a_basic_auth_password="op-pass",  # pragma: allowlist secret
+            a2a_log_payloads=False,
+            **_BASE_SETTINGS,
+        )
     )
     monkeypatch.setattr(app_module, "CodexClient", lambda _settings, **kwargs: dummy)
     app = app_module.create_app(
-        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+        make_settings(
+            a2a_bearer_token="t-1",
+            a2a_basic_auth_username="operator",
+            a2a_basic_auth_password="op-pass",  # pragma: allowlist secret
+            a2a_log_payloads=False,
+            **_BASE_SETTINGS,
+        )
     )
 
     app.state.codex_exec_runtime.write = AsyncMock(side_effect=LookupError("Unknown exec session"))
@@ -228,7 +282,7 @@ async def test_exec_control_maps_missing_session_lookup_to_business_error(monkey
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.post(
             "/",
-            headers={"Authorization": "Bearer t-1"},
+            headers=_basic_auth_header("operator", "op-pass"),
             json={
                 "jsonrpc": "2.0",
                 "id": 208,
@@ -248,11 +302,23 @@ async def test_exec_control_maps_forbidden_session_access_to_business_error(monk
     import codex_a2a.server.application as app_module
 
     dummy = DummyCodexClient(
-        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+        make_settings(
+            a2a_bearer_token="t-1",
+            a2a_basic_auth_username="operator",
+            a2a_basic_auth_password="op-pass",  # pragma: allowlist secret
+            a2a_log_payloads=False,
+            **_BASE_SETTINGS,
+        )
     )
     monkeypatch.setattr(app_module, "CodexClient", lambda _settings, **kwargs: dummy)
     app = app_module.create_app(
-        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+        make_settings(
+            a2a_bearer_token="t-1",
+            a2a_basic_auth_username="operator",
+            a2a_basic_auth_password="op-pass",  # pragma: allowlist secret
+            a2a_log_payloads=False,
+            **_BASE_SETTINGS,
+        )
     )
 
     app.state.codex_exec_runtime.write = AsyncMock(side_effect=PermissionError("forbidden"))
@@ -261,7 +327,7 @@ async def test_exec_control_maps_forbidden_session_access_to_business_error(monk
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.post(
             "/",
-            headers={"Authorization": "Bearer t-1"},
+            headers=_basic_auth_header("operator", "op-pass"),
             json={
                 "jsonrpc": "2.0",
                 "id": 209,
@@ -274,3 +340,36 @@ async def test_exec_control_maps_forbidden_session_access_to_business_error(monk
     assert payload["error"]["code"] == -32018
     assert payload["error"]["data"]["type"] == "EXEC_FORBIDDEN"
     assert payload["error"]["data"]["process_id"] == "exec-1"
+
+
+@pytest.mark.asyncio
+async def test_exec_control_requires_exec_capability(monkeypatch) -> None:
+    import codex_a2a.server.application as app_module
+
+    dummy = DummyCodexClient(
+        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+    )
+    monkeypatch.setattr(app_module, "CodexClient", lambda _settings, **kwargs: dummy)
+    app = app_module.create_app(
+        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+    )
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post(
+            "/",
+            headers={"Authorization": "Bearer t-1"},
+            json={
+                "jsonrpc": "2.0",
+                "id": 210,
+                "method": "codex.exec.start",
+                "params": {"request": {"command": "pwd"}},
+            },
+        )
+
+    payload = response.json()
+    assert payload["error"]["code"] == -32007
+    assert payload["error"]["data"]["type"] == "AUTHORIZATION_FORBIDDEN"
+    assert payload["error"]["data"]["method"] == "codex.exec.start"
+    assert payload["error"]["data"]["capability"] == "exec_control"
+    assert payload["error"]["data"]["credential_id"] == "test-bearer"

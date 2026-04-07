@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
-from typing import Annotated, Any, cast
+from typing import Annotated, Any, Literal, cast
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 from codex_a2a import __version__
@@ -121,6 +122,25 @@ def _normalize_client_transports(value: Any) -> Any:
     return parsed or ["JSONRPC", "HTTP+JSON"]
 
 
+def _parse_auth_credentials(value: Any) -> tuple[Any, ...]:
+    if value is None:
+        return ()
+    if isinstance(value, str):
+        raw = value.strip()
+        if not raw:
+            return ()
+        try:
+            parsed = json.loads(raw)
+        except json.JSONDecodeError as exc:
+            raise TypeError("Expected a JSON array for static auth credentials.") from exc
+        if not isinstance(parsed, list):
+            raise TypeError("Expected a JSON array for static auth credentials.")
+        return tuple(parsed)
+    if isinstance(value, (list, tuple)):
+        return tuple(value)
+    raise TypeError("Expected a JSON array or sequence for static auth credentials.")
+
+
 def _validate_choice(value: str, *, allowed: set[str], env_name: str) -> str:
     if value not in allowed:
         allowed_values = ", ".join(sorted(allowed))
@@ -134,6 +154,64 @@ def _default_a2a_database_url(*, workspace_root: str | None) -> str:
         database_path = resolved_workspace_root / ".codex-a2a" / "codex-a2a.db"
         return f"sqlite+aiosqlite:///{database_path.as_posix()}"
     return "sqlite+aiosqlite:///./codex-a2a.db"
+
+
+StaticAuthScheme = Literal["bearer", "basic"]
+
+
+class StaticAuthCredentialSettings(BaseModel):
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    credential_id: str | None = Field(default=None, alias="id")
+    scheme: StaticAuthScheme
+    principal: str | None = None
+    token: str | None = None
+    username: str | None = None
+    password: str | None = None
+    capabilities: tuple[str, ...] = ()
+    enabled: bool = True
+
+    @model_validator(mode="after")
+    def validate_shape(self) -> StaticAuthCredentialSettings:
+        self.credential_id = self.credential_id.strip() if self.credential_id else None
+        self.principal = self.principal.strip() if self.principal else None
+        self.token = self.token.strip() if self.token else None
+        self.username = self.username.strip() if self.username else None
+        self.password = self.password.strip() if self.password else None
+        self.capabilities = tuple(
+            item.strip() for item in self.capabilities if isinstance(item, str) and item.strip()
+        )
+
+        if self.scheme == "bearer":
+            if not self.token:
+                raise ValueError("Static bearer credential requires token.")
+            if self.username or self.password:
+                raise ValueError("Static bearer credential does not accept username/password.")
+            if self.principal is None:
+                raise ValueError(
+                    "Static bearer credential requires explicit principal; "
+                    "registry bearer principals must not default to automation."
+                )
+        else:
+            if not self.username or not self.password:
+                raise ValueError("Static basic credential requires username/password.")
+            if self.token:
+                raise ValueError("Static basic credential does not accept token.")
+            if self.principal is not None:
+                raise ValueError(
+                    "Static basic credential does not accept principal; "
+                    "principal defaults to username."
+                )
+            self.principal = self.username
+
+        return self
+
+
+StaticAuthCredentialList = Annotated[
+    tuple[StaticAuthCredentialSettings, ...],
+    NoDecode,
+    BeforeValidator(_parse_auth_credentials),
+]
 
 
 class Settings(BaseSettings):
@@ -254,7 +332,10 @@ class Settings(BaseSettings):
     a2a_allow_directory_override: bool = Field(default=True, alias="A2A_ALLOW_DIRECTORY_OVERRIDE")
     a2a_host: str = Field(default="127.0.0.1", alias="A2A_HOST")
     a2a_port: int = Field(default=8000, alias="A2A_PORT")
-    a2a_bearer_token: str = Field(..., min_length=1, alias="A2A_BEARER_TOKEN")
+    a2a_static_auth_credentials: StaticAuthCredentialList = Field(
+        default=(),
+        alias="A2A_STATIC_AUTH_CREDENTIALS",
+    )
     a2a_database_url: str | None = Field(
         default=None,
         alias="A2A_DATABASE_URL",
@@ -514,6 +595,13 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def apply_dynamic_defaults(self) -> Settings:
+        if self.a2a_static_auth_credentials:
+            if not any(credential.enabled for credential in self.a2a_static_auth_credentials):
+                raise ValueError(
+                    "A2A_STATIC_AUTH_CREDENTIALS must contain at least one enabled credential"
+                )
+        else:
+            raise ValueError("Configure runtime authentication via A2A_STATIC_AUTH_CREDENTIALS")
         if "a2a_database_url" not in self.model_fields_set and self.a2a_database_url is None:
             self.a2a_database_url = _default_a2a_database_url(
                 workspace_root=self.codex_workspace_root

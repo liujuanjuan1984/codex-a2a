@@ -8,10 +8,16 @@ from a2a.types import A2AError, InternalError, JSONRPCError, JSONRPCRequest
 from starlette.requests import Request
 from starlette.responses import Response
 
+from codex_a2a.auth import (
+    CAPABILITY_SESSION_SHELL,
+    OPERATOR_PRINCIPAL,
+    request_has_capability,
+)
 from codex_a2a.jsonrpc.errors import (
     ERR_SESSION_NOT_FOUND,
     ERR_UPSTREAM_HTTP_ERROR,
     ERR_UPSTREAM_UNREACHABLE,
+    authorization_forbidden_response,
     extract_directory_from_metadata,
     invalid_params_response,
     session_forbidden_response,
@@ -77,9 +83,27 @@ async def handle_session_control_request(
         return metadata_error
 
     identity = getattr(request.state, "user_identity", None)
+    credential_id = getattr(request.state, "user_credential_id", None)
     pending_claim = False
     claim_finalized = False
     guard_hooks = app._guard_hooks
+    if base_request.method == app._method_shell and not request_has_capability(
+        request, CAPABILITY_SESSION_SHELL
+    ):
+        logger.warning(
+            "Session shell authorization denied identity=%s credential_id=%s session_id=%s",
+            identity,
+            credential_id,
+            session_id,
+        )
+        return authorization_forbidden_response(
+            app,
+            base_request.id,
+            method=base_request.method,
+            capability=CAPABILITY_SESSION_SHELL,
+            credential_id=credential_id if isinstance(credential_id, str) else None,
+            required_principal=OPERATOR_PRINCIPAL,
+        )
     if isinstance(identity, str) and identity and guard_hooks.session_claim is not None:
         try:
             pending_claim = await guard_hooks.session_claim(

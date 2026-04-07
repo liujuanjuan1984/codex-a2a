@@ -126,6 +126,8 @@ Current repository judgment under those rules:
 - `codex.review.*` is also boundary-sensitive and should stay framed as a provider-private reviewer surface rather than a generic A2A review standard.
 - `codex.sessions.shell` and `codex.exec.*` sit closest to the adapter boundary because they expose standalone command execution semantics instead of a stable session/message projection. They remain supported for internal or tightly controlled deployments, but should stay deployment-conditional and provider-private rather than being treated as generic extension templates.
 - Current default posture is conservative: `codex.sessions.shell`, `codex.turns.steer`, `codex.review.*`, and `codex.exec.*` are disabled by default and only enabled when a deployment intentionally opts into them.
+- Inbound auth is intentionally static and deployment-scoped. The current contract requires a static multi-credential registry with stable principals; it does not claim OAuth2, OIDC, or dynamic token introspection.
+- Stable principal mapping is part of the runtime compatibility surface because session ownership, thread watch ownership, and exec ownership all key off the authenticated principal rather than a rotating token hash.
 
 ## Extension Taxonomy
 

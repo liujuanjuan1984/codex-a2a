@@ -1,3 +1,4 @@
+from base64 import b64encode
 from pathlib import Path
 
 import httpx
@@ -48,6 +49,11 @@ def _extract_heading_section(markdown: str, heading: str) -> str:
     if end < 0:
         end = len(markdown)
     return markdown[start:end]
+
+
+def _basic_auth_header(username: str, password: str) -> dict[str, str]:
+    token = b64encode(f"{username}:{password}".encode()).decode("ascii")
+    return {"Authorization": f"Basic {token}"}
 
 
 def _example_params_include_field(payload: object, dotted_field: str) -> bool:
@@ -217,7 +223,13 @@ async def test_session_query_runtime_result_envelope_matches_declared_contract(
 ) -> None:
     import codex_a2a.server.application as app_module
 
-    settings = make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, codex_timeout=1.0)
+    settings = make_settings(
+        a2a_bearer_token="t-1",
+        a2a_basic_auth_username="operator",
+        a2a_basic_auth_password="op-pass",  # pragma: allowlist secret
+        a2a_log_payloads=False,
+        codex_timeout=1.0,
+    )
     card = build_authenticated_extended_agent_card(settings)
     ext_by_uri = {ext.uri: ext for ext in card.capabilities.extensions or []}
     method_contracts = ext_by_uri[SESSION_QUERY_EXTENSION_URI].params["method_contracts"]
@@ -231,7 +243,11 @@ async def test_session_query_runtime_result_envelope_matches_declared_contract(
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.post(
             "/",
-            headers={"Authorization": "Bearer t-1"},
+            headers=(
+                _basic_auth_header("operator", "op-pass")
+                if method == "codex.sessions.shell"
+                else {"Authorization": "Bearer t-1"}
+            ),
             json={"jsonrpc": "2.0", "id": 1, "method": method, "params": params},
         )
 

@@ -177,7 +177,8 @@ Use the grouped sections below as the deployment-first reading order:
 
 ### Required Configuration
 
-- `A2A_BEARER_TOKEN`: required; service fails fast if unset. Used for inbound A2A request authentication.
+- Configure inbound auth through `A2A_STATIC_AUTH_CREDENTIALS`.
+- The service fails fast if the static auth registry is missing or contains no enabled credentials.
 
 ### Common Runtime Configuration (A2A)
 
@@ -197,6 +198,7 @@ Use the grouped sections below as the deployment-first reading order:
 - `A2A_PROJECT`: optional project label injected into examples and discovery metadata
 - `A2A_PROTOCOL_VERSION`: advertised A2A protocol version, default `0.3.0`
 - `A2A_DOCUMENTATION_URL`: optional external documentation URL exposed on Agent Card
+- `A2A_STATIC_AUTH_CREDENTIALS`: JSON array of static inbound credentials. Supports multiple `bearer` and `basic` entries, each with a stable `principal`; `bearer` entries must declare `principal`, while `basic` entries derive `principal` from `username`.
 
 ### Outbound A2A Client Defaults
 
@@ -261,7 +263,7 @@ These variables are forwarded to the local `codex app-server` subprocess.
 
 | Variable | Description |
 | :--- | :--- |
-| `A2A_BEARER_TOKEN` | Inbound auth token |
+| `A2A_STATIC_AUTH_CREDENTIALS` | Static inbound auth registry |
 | `A2A_HOST` | Bind host |
 | `A2A_PORT` | Bind port |
 | `A2A_PUBLIC_URL` | Public URL prefix |
@@ -359,7 +361,8 @@ Apply the same Codex prerequisites from [README.md](../README.md) before startin
 Run against a workspace root:
 
 ```bash
-A2A_BEARER_TOKEN="$(python -c 'import secrets; print(secrets.token_hex(24))')" \
+DEMO_BEARER_TOKEN="$(python -c 'import secrets; print(secrets.token_hex(24))')"
+A2A_STATIC_AUTH_CREDENTIALS='[{"id":"local-bearer","scheme":"bearer","token":"'"${DEMO_BEARER_TOKEN}"'","principal":"automation"}]' \
 A2A_HOST=127.0.0.1 \
 A2A_PORT=8000 \
 A2A_PUBLIC_URL=http://127.0.0.1:8000 \
@@ -388,7 +391,8 @@ Use the source tree directly only for development, debugging, or validation of u
 
 ```bash
 uv sync --all-extras
-export A2A_BEARER_TOKEN="$(python -c 'import secrets; print(secrets.token_hex(24))')"
+export DEMO_BEARER_TOKEN="$(python -c 'import secrets; print(secrets.token_hex(24))')"
+export A2A_STATIC_AUTH_CREDENTIALS='[{"id":"local-bearer","scheme":"bearer","token":"'"${DEMO_BEARER_TOKEN}"'","principal":"automation"}]'
 CODEX_WORKSPACE_ROOT=/abs/path/to/workspace uv run codex-a2a
 ```
 
@@ -398,8 +402,15 @@ This path is for contributors. End users should prefer the released CLI path des
 
 ### Health, Auth, and Deployment Boundary
 
-- `GET /health` is a lightweight authenticated status probe. It requires the same `Authorization: Bearer <token>` header as other protected endpoints and returns service status plus a structured `profile` summary; it does not call upstream Codex.
-- Requests require `Authorization: Bearer <token>`; otherwise `401` is returned. The public Agent Card endpoints are public; authenticated extended card routes still require bearer auth.
+- `GET /health` is a lightweight authenticated status probe. It requires the same configured inbound auth as other protected endpoints and returns service status plus a structured `profile` summary; it does not call upstream Codex.
+- Protected routes accept configured inbound `Authorization: Bearer <token>` and/or `Authorization: Basic <base64(username:password)>` credentials. The public Agent Card endpoints are public; authenticated extended card routes still require inbound auth.
+- Static credential registry mode is the only supported inbound auth shape. It lets deployments define multiple bearer tokens and/or multiple Basic credentials with stable `principal` values.
+- Stable `principal` values back runtime ownership checks. This avoids tying session, watch, or exec ownership to a bearer token hash that changes during token rotation.
+- Capability gating stays intentionally small:
+  - `codex.sessions.shell` requires `session_shell`
+  - `codex.exec.*` requires `exec_control`
+  - Basic credentials grant both capabilities by default unless the registry entry overrides capabilities
+  - bearer credentials do not gain those capabilities unless the static credential entry explicitly grants them
 - Within one `codex-a2a` instance, all consumers share the same underlying Codex workspace/environment. This deployment model is not tenant-isolated by default.
 
 ### Session and Task Behavior
@@ -489,16 +500,17 @@ Examples:
 - If `A2A_ALLOW_DIRECTORY_OVERRIDE=false`, only the default directory is accepted.
 ## Authentication Setup For Local Examples
 
-For local development examples, prefer generating a temporary token once and reusing the exported environment variable in the following commands:
+For local development examples, prefer generating a temporary token once and reusing it in the static auth registry plus the following request examples:
 
 ```bash
-export A2A_BEARER_TOKEN="$(python -c 'import secrets; print(secrets.token_hex(24))')"
+export DEMO_BEARER_TOKEN="$(python -c 'import secrets; print(secrets.token_hex(24))')"
+export A2A_STATIC_AUTH_CREDENTIALS='[{"id":"local-bearer","scheme":"bearer","token":"'"${DEMO_BEARER_TOKEN}"'","principal":"automation"}]'
 ```
 
 Then reference the token in request examples as:
 
 ```bash
--H "Authorization: Bearer ${A2A_BEARER_TOKEN}"
+-H "Authorization: Bearer ${DEMO_BEARER_TOKEN}"
 ```
 
 ## Session Continuation Contract
@@ -517,7 +529,7 @@ Minimal example:
 ```bash
 curl -sS http://127.0.0.1:8000/v1/message:send \
   -H 'content-type: application/json' \
-  -H "Authorization: Bearer ${A2A_BEARER_TOKEN}" \
+  -H "Authorization: Bearer ${DEMO_BEARER_TOKEN}" \
   -d '{
     "message": {
       "messageId": "msg-continue-1",
@@ -558,7 +570,7 @@ This service exposes Codex session list and message-history queries via A2A JSON
 ```bash
 curl -sS http://127.0.0.1:8000/ \
   -H 'content-type: application/json' \
-  -H "Authorization: Bearer ${A2A_BEARER_TOKEN}" \
+  -H "Authorization: Bearer ${DEMO_BEARER_TOKEN}" \
   -d '{
     "jsonrpc": "2.0",
     "id": 1,
@@ -572,7 +584,7 @@ curl -sS http://127.0.0.1:8000/ \
 ```bash
 curl -sS http://127.0.0.1:8000/ \
   -H 'content-type: application/json' \
-  -H "Authorization: Bearer ${A2A_BEARER_TOKEN}" \
+  -H "Authorization: Bearer ${DEMO_BEARER_TOKEN}" \
   -d '{
     "jsonrpc": "2.0",
     "id": 2,
@@ -610,7 +622,7 @@ Result-shape guidance:
 ```bash
 curl -sS http://127.0.0.1:8000/ \
   -H 'content-type: application/json' \
-  -H "Authorization: Bearer ${A2A_BEARER_TOKEN}" \
+  -H "Authorization: Bearer ${DEMO_BEARER_TOKEN}" \
   -d '{
     "jsonrpc": "2.0",
     "id": 11,
@@ -627,7 +639,7 @@ curl -sS http://127.0.0.1:8000/ \
 ```bash
 curl -sS http://127.0.0.1:8000/ \
   -H 'content-type: application/json' \
-  -H "Authorization: Bearer ${A2A_BEARER_TOKEN}" \
+  -H "Authorization: Bearer ${DEMO_BEARER_TOKEN}" \
   -d '{
     "jsonrpc": "2.0",
     "id": 12,
@@ -644,7 +656,7 @@ curl -sS http://127.0.0.1:8000/ \
 ```bash
 curl -sS http://127.0.0.1:8000/ \
   -H 'content-type: application/json' \
-  -H "Authorization: Bearer ${A2A_BEARER_TOKEN}" \
+  -H "Authorization: Bearer ${DEMO_BEARER_TOKEN}" \
   -d '{
     "jsonrpc": "2.0",
     "id": 13,
@@ -661,7 +673,7 @@ curl -sS http://127.0.0.1:8000/ \
 ```bash
 curl -sS http://127.0.0.1:8000/ \
   -H 'content-type: application/json' \
-  -H "Authorization: Bearer ${A2A_BEARER_TOKEN}" \
+  -H "Authorization: Bearer ${DEMO_BEARER_TOKEN}" \
   -d '{
     "jsonrpc": "2.0",
     "id": 14,
@@ -688,7 +700,7 @@ Watch start example:
 ```bash
 curl -sS http://127.0.0.1:8000/ \
   -H 'content-type: application/json' \
-  -H "Authorization: Bearer ${A2A_BEARER_TOKEN}" \
+  -H "Authorization: Bearer ${DEMO_BEARER_TOKEN}" \
   -d '{
     "jsonrpc": "2.0",
     "id": 15,
@@ -705,7 +717,7 @@ The JSON-RPC result returns `task_id` and `context_id`. Then use the standard ta
 
 ```bash
 curl -sS http://127.0.0.1:8000/v1/tasks/<task_id>:subscribe \
-  -H "Authorization: Bearer ${A2A_BEARER_TOKEN}"
+  -H "Authorization: Bearer ${DEMO_BEARER_TOKEN}"
 ```
 
 ## Codex Thread Lifecycle (A2A Extension)
@@ -731,7 +743,7 @@ Lifecycle control guidance:
 ```bash
 curl -sS http://127.0.0.1:8000/ \
   -H 'content-type: application/json' \
-  -H "Authorization: Bearer ${A2A_BEARER_TOKEN}" \
+  -H "Authorization: Bearer ${DEMO_BEARER_TOKEN}" \
   -d '{
     "jsonrpc": "2.0",
     "id": 16,
@@ -750,7 +762,7 @@ curl -sS http://127.0.0.1:8000/ \
 ```bash
 curl -sS http://127.0.0.1:8000/ \
   -H 'content-type: application/json' \
-  -H "Authorization: Bearer ${A2A_BEARER_TOKEN}" \
+  -H "Authorization: Bearer ${DEMO_BEARER_TOKEN}" \
   -d '{
     "jsonrpc": "2.0",
     "id": 17,
@@ -766,7 +778,7 @@ curl -sS http://127.0.0.1:8000/ \
 ```bash
 curl -sS http://127.0.0.1:8000/ \
   -H 'content-type: application/json' \
-  -H "Authorization: Bearer ${A2A_BEARER_TOKEN}" \
+  -H "Authorization: Bearer ${DEMO_BEARER_TOKEN}" \
   -d '{
     "jsonrpc": "2.0",
     "id": 18,
@@ -782,7 +794,7 @@ curl -sS http://127.0.0.1:8000/ \
 ```bash
 curl -sS http://127.0.0.1:8000/ \
   -H 'content-type: application/json' \
-  -H "Authorization: Bearer ${A2A_BEARER_TOKEN}" \
+  -H "Authorization: Bearer ${DEMO_BEARER_TOKEN}" \
   -d '{
     "jsonrpc": "2.0",
     "id": 19,
@@ -818,7 +830,7 @@ Watch start example:
 ```bash
 curl -sS http://127.0.0.1:8000/ \
   -H 'content-type: application/json' \
-  -H "Authorization: Bearer ${A2A_BEARER_TOKEN}" \
+  -H "Authorization: Bearer ${DEMO_BEARER_TOKEN}" \
   -d '{
     "jsonrpc": "2.0",
     "id": 20,
@@ -836,7 +848,7 @@ The JSON-RPC result returns `task_id` and `context_id`. Then use the standard ta
 
 ```bash
 curl -sS http://127.0.0.1:8000/v1/tasks/<task_id>:subscribe \
-  -H "Authorization: Bearer ${A2A_BEARER_TOKEN}"
+  -H "Authorization: Bearer ${DEMO_BEARER_TOKEN}"
 ```
 
 Watch release example:
@@ -844,7 +856,7 @@ Watch release example:
 ```bash
 curl -sS http://127.0.0.1:8000/ \
   -H 'content-type: application/json' \
-  -H "Authorization: Bearer ${A2A_BEARER_TOKEN}" \
+  -H "Authorization: Bearer ${DEMO_BEARER_TOKEN}" \
   -d '{
     "jsonrpc": "2.0",
     "id": 21,
@@ -873,7 +885,7 @@ Turn-control guidance:
 ```bash
 curl -sS http://127.0.0.1:8000/ \
   -H 'content-type: application/json' \
-  -H "Authorization: Bearer ${A2A_BEARER_TOKEN}" \
+  -H "Authorization: Bearer ${DEMO_BEARER_TOKEN}" \
   -d '{
     "jsonrpc": "2.0",
     "id": 21,
@@ -914,7 +926,7 @@ Inline commit review example:
 ```bash
 curl -sS http://127.0.0.1:8000/ \
   -H 'content-type: application/json' \
-  -H "Authorization: Bearer ${A2A_BEARER_TOKEN}" \
+  -H "Authorization: Bearer ${DEMO_BEARER_TOKEN}" \
   -d '{
     "jsonrpc": "2.0",
     "id": 22,
@@ -936,7 +948,7 @@ Detached review for current uncommitted changes:
 ```bash
 curl -sS http://127.0.0.1:8000/ \
   -H 'content-type: application/json' \
-  -H "Authorization: Bearer ${A2A_BEARER_TOKEN}" \
+  -H "Authorization: Bearer ${DEMO_BEARER_TOKEN}" \
   -d '{
     "jsonrpc": "2.0",
     "id": 23,
@@ -960,7 +972,7 @@ Use the handles returned by `codex.review.start` to start a review watch task:
 ```bash
 curl -sS http://127.0.0.1:8000/ \
   -H 'content-type: application/json' \
-  -H "Authorization: Bearer ${A2A_BEARER_TOKEN}" \
+  -H "Authorization: Bearer ${DEMO_BEARER_TOKEN}" \
   -d '{
     "jsonrpc": "2.0",
     "id": 24,
@@ -1027,7 +1039,7 @@ Permission reply example:
 ```bash
 curl -sS http://127.0.0.1:8000/ \
   -H 'content-type: application/json' \
-  -H "Authorization: Bearer ${A2A_BEARER_TOKEN}" \
+  -H "Authorization: Bearer ${DEMO_BEARER_TOKEN}" \
   -d '{
     "jsonrpc": "2.0",
     "id": 3,
@@ -1044,7 +1056,7 @@ Permissions reply example:
 ```bash
 curl -sS http://127.0.0.1:8000/ \
   -H 'content-type: application/json' \
-  -H "Authorization: Bearer ${A2A_BEARER_TOKEN}" \
+  -H "Authorization: Bearer ${DEMO_BEARER_TOKEN}" \
   -d '{
     "jsonrpc": "2.0",
     "id": 4,
@@ -1066,7 +1078,7 @@ Elicitation reply example:
 ```bash
 curl -sS http://127.0.0.1:8000/ \
   -H 'content-type: application/json' \
-  -H "Authorization: Bearer ${A2A_BEARER_TOKEN}" \
+  -H "Authorization: Bearer ${DEMO_BEARER_TOKEN}" \
   -d '{
     "jsonrpc": "2.0",
     "id": 5,
@@ -1086,7 +1098,7 @@ curl -sS http://127.0.0.1:8000/ \
 ```bash
 curl -sS http://127.0.0.1:8000/v1/message:send \
   -H 'content-type: application/json' \
-  -H "Authorization: Bearer ${A2A_BEARER_TOKEN}" \
+  -H "Authorization: Bearer ${DEMO_BEARER_TOKEN}" \
   -d '{
     "message": {
       "messageId": "msg-1",
@@ -1101,7 +1113,7 @@ curl -sS http://127.0.0.1:8000/v1/message:send \
 ```bash
 curl -sS http://127.0.0.1:8000/ \
   -H 'content-type: application/json' \
-  -H "Authorization: Bearer ${A2A_BEARER_TOKEN}" \
+  -H "Authorization: Bearer ${DEMO_BEARER_TOKEN}" \
   -d '{
     "jsonrpc": "2.0",
     "id": 101,

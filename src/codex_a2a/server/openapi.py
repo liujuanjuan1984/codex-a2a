@@ -4,6 +4,8 @@ from typing import Any, cast
 
 from fastapi import FastAPI
 
+from codex_a2a.auth import has_configured_auth_scheme
+from codex_a2a.config import Settings
 from codex_a2a.contracts.extensions import (
     DISCOVERY_METHODS,
     EXEC_CONTROL_METHODS,
@@ -27,6 +29,29 @@ from codex_a2a.contracts.extensions import (
     build_wire_contract_extension_params,
 )
 from codex_a2a.profile.runtime import RuntimeProfile
+
+
+def _build_openapi_security(
+    settings: Settings,
+) -> tuple[dict[str, Any], list[dict[str, list[str]]]]:
+    schemes: dict[str, Any] = {}
+    security: list[dict[str, list[str]]] = []
+    if has_configured_auth_scheme(settings, "bearer"):
+        schemes["bearerAuth"] = {
+            "type": "http",
+            "scheme": "bearer",
+            "bearerFormat": "opaque",
+            "description": "Bearer token authentication",
+        }
+        security.append({"bearerAuth": []})
+    if has_configured_auth_scheme(settings, "basic"):
+        schemes["basicAuth"] = {
+            "type": "http",
+            "scheme": "basic",
+            "description": "Basic authentication",
+        }
+        security.append({"basicAuth": []})
+    return schemes, security
 
 
 def _build_jsonrpc_extension_openapi_description(*, runtime_profile: RuntimeProfile) -> str:
@@ -485,6 +510,7 @@ def _build_rest_message_openapi_examples() -> dict[str, Any]:
 def patch_openapi_contract(
     app: FastAPI,
     *,
+    settings: Settings,
     protocol_version: str,
     runtime_profile: RuntimeProfile,
 ) -> None:
@@ -528,12 +554,23 @@ def patch_openapi_contract(
             return app.openapi_schema
 
         schema = original_openapi()
+        components = schema.setdefault("components", {})
+        if isinstance(components, dict):
+            security_schemes, security = _build_openapi_security(settings)
+            if security_schemes:
+                components["securitySchemes"] = security_schemes
+            if security:
+                schema["security"] = security
         paths = schema.get("paths")
         if isinstance(paths, dict):
             root_path = paths.get("/")
             if isinstance(root_path, dict):
                 post = root_path.get("post")
                 if isinstance(post, dict):
+                    if "security" in schema:
+                        post["security"] = list(
+                            cast(list[dict[str, list[str]]], schema["security"])
+                        )
                     post["summary"] = "Handle A2A JSON-RPC Requests"
                     post["description"] = _build_jsonrpc_extension_openapi_description(
                         runtime_profile=runtime_profile
@@ -595,6 +632,10 @@ def patch_openapi_contract(
                 if not isinstance(rest_post, dict):
                     continue
 
+                if "security" in schema:
+                    rest_post["security"] = list(
+                        cast(list[dict[str, list[str]]], schema["security"])
+                    )
                 rest_post["summary"] = contract["summary"]
                 rest_post["description"] = contract["description"]
                 rest_post["x-a2a-extension-contracts"] = contract["contracts"]

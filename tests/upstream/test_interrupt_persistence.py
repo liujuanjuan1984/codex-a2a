@@ -24,6 +24,7 @@ async def test_interrupt_requests_restore_after_client_rebuild(tmp_path) -> None
         client_1.bind_interrupt_context(
             session_id="thr-1",
             identity="user-1",
+            credential_id="cred-1",
             task_id="task-1",
             context_id="ctx-1",
         )
@@ -54,6 +55,7 @@ async def test_interrupt_requests_restore_after_client_rebuild(tmp_path) -> None
     assert binding is not None
     assert binding.session_id == "thr-1"
     assert binding.identity == "user-1"
+    assert binding.credential_id == "cred-1"
     assert binding.task_id == "task-1"
     assert binding.context_id == "ctx-1"
     assert missing_status == "missing"
@@ -128,6 +130,7 @@ async def test_legacy_interrupt_request_rows_restore_after_schema_upgrade(tmp_pa
     assert binding is not None
     assert binding.session_id == "thr-legacy"
     assert binding.identity is None
+    assert binding.credential_id is None
     assert binding.task_id is None
     assert binding.context_id is None
 

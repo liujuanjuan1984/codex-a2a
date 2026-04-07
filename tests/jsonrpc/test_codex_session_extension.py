@@ -1,4 +1,5 @@
 import logging
+from base64 import b64encode
 from typing import Any
 from unittest.mock import MagicMock
 
@@ -30,6 +31,11 @@ _BASE_SETTINGS = {
     "codex_timeout": 1.0,
     "a2a_log_level": "DEBUG",
 }
+
+
+def _basic_auth_header(username: str, password: str) -> dict[str, str]:
+    token = b64encode(f"{username}:{password}".encode()).decode("ascii")
+    return {"Authorization": f"Basic {token}"}
 
 
 def _build_extension_app(
@@ -858,16 +864,28 @@ async def test_session_control_shell_maps_response_to_a2a_message(monkeypatch):
     import codex_a2a.server.application as app_module
 
     dummy = DummyCodexClient(
-        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+        make_settings(
+            a2a_bearer_token="t-1",
+            a2a_basic_auth_username="operator",
+            a2a_basic_auth_password="op-pass",  # pragma: allowlist secret
+            a2a_log_payloads=False,
+            **_BASE_SETTINGS,
+        )
     )
     monkeypatch.setattr(app_module, "CodexClient", lambda _settings, **kwargs: dummy)
     app = app_module.create_app(
-        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+        make_settings(
+            a2a_bearer_token="t-1",
+            a2a_basic_auth_username="operator",
+            a2a_basic_auth_password="op-pass",  # pragma: allowlist secret
+            a2a_log_payloads=False,
+            **_BASE_SETTINGS,
+        )
     )
 
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-        headers = {"Authorization": "Bearer t-1"}
+        headers = _basic_auth_header("operator", "op-pass")
         resp = await client.post(
             "/",
             headers=headers,
@@ -898,16 +916,28 @@ async def test_session_control_rejects_invalid_request_shape(monkeypatch):
     import codex_a2a.server.application as app_module
 
     dummy = DummyCodexClient(
-        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+        make_settings(
+            a2a_bearer_token="t-1",
+            a2a_basic_auth_username="operator",
+            a2a_basic_auth_password="op-pass",  # pragma: allowlist secret
+            a2a_log_payloads=False,
+            **_BASE_SETTINGS,
+        )
     )
     monkeypatch.setattr(app_module, "CodexClient", lambda _settings, **kwargs: dummy)
     app = app_module.create_app(
-        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+        make_settings(
+            a2a_bearer_token="t-1",
+            a2a_basic_auth_username="operator",
+            a2a_basic_auth_password="op-pass",  # pragma: allowlist secret
+            a2a_log_payloads=False,
+            **_BASE_SETTINGS,
+        )
     )
 
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-        headers = {"Authorization": "Bearer t-1"}
+        headers = _basic_auth_header("operator", "op-pass")
 
         prompt_resp = await client.post(
             "/",
@@ -1032,6 +1062,42 @@ async def test_session_control_rejects_invalid_metadata_directory(monkeypatch):
         payload = resp.json()
         assert payload["error"]["code"] == -32602
         assert payload["error"]["data"]["field"] == "metadata.codex.directory"
+
+
+@pytest.mark.asyncio
+async def test_session_control_shell_requires_session_shell_capability(monkeypatch):
+    import codex_a2a.server.application as app_module
+
+    dummy = DummyCodexClient(
+        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+    )
+    monkeypatch.setattr(app_module, "CodexClient", lambda _settings, **kwargs: dummy)
+    app = app_module.create_app(
+        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+    )
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.post(
+            "/",
+            headers={"Authorization": "Bearer t-1"},
+            json={
+                "jsonrpc": "2.0",
+                "id": 27,
+                "method": "codex.sessions.shell",
+                "params": {
+                    "session_id": "s-1",
+                    "request": {"command": "pwd"},
+                },
+            },
+        )
+
+    payload = resp.json()
+    assert payload["error"]["code"] == -32007
+    assert payload["error"]["data"]["type"] == "AUTHORIZATION_FORBIDDEN"
+    assert payload["error"]["data"]["method"] == "codex.sessions.shell"
+    assert payload["error"]["data"]["capability"] == "session_shell"
+    assert payload["error"]["data"]["credential_id"] == "test-bearer"
 
 
 @pytest.mark.asyncio

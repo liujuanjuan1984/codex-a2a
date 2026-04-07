@@ -74,6 +74,55 @@ def test_agent_card_declares_bearer_only_security() -> None:
     assert card.security == [{"bearerAuth": []}]
 
 
+def test_agent_card_declares_bearer_and_basic_security_when_configured() -> None:
+    card = build_agent_card(
+        make_settings(
+            a2a_bearer_token="test-token",
+            a2a_basic_auth_username="operator",
+            a2a_basic_auth_password="op-pass",  # pragma: allowlist secret
+        )
+    )
+
+    assert set((card.security_schemes or {}).keys()) == {"bearerAuth", "basicAuth"}
+    assert card.security == [{"bearerAuth": []}, {"basicAuth": []}]
+
+
+def test_agent_card_declares_basic_only_security_when_configured_without_bearer() -> None:
+    card = build_agent_card(
+        make_settings(
+            a2a_bearer_token=None,
+            a2a_basic_auth_username="operator",
+            a2a_basic_auth_password="op-pass",  # pragma: allowlist secret
+        )
+    )
+
+    assert set((card.security_schemes or {}).keys()) == {"basicAuth"}
+    assert card.security == [{"basicAuth": []}]
+
+
+def test_agent_card_declares_registry_auth_schemes() -> None:
+    card = build_agent_card(
+        make_settings(
+            a2a_bearer_token=None,
+            a2a_static_auth_credentials=(
+                {
+                    "scheme": "bearer",
+                    "token": "token-alpha",
+                    "principal": "automation-alpha",
+                },
+                {
+                    "scheme": "basic",
+                    "username": "ops",
+                    "password": "ops-pass",  # pragma: allowlist secret
+                },
+            ),
+        )
+    )
+
+    assert set((card.security_schemes or {}).keys()) == {"bearerAuth", "basicAuth"}
+    assert card.security == [{"bearerAuth": []}, {"basicAuth": []}]
+
+
 def test_agent_card_declares_media_modes_that_match_runtime_contract() -> None:
     card = build_agent_card(make_settings(a2a_bearer_token="test-token"))
     skill_by_id = {skill.id: skill for skill in card.skills or []}

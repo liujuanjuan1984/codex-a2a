@@ -13,6 +13,7 @@ if TYPE_CHECKING:
 
 ERR_SESSION_NOT_FOUND = -32001
 ERR_SESSION_FORBIDDEN = -32006
+ERR_AUTHORIZATION_FORBIDDEN = -32007
 ERR_UPSTREAM_UNREACHABLE = -32002
 ERR_UPSTREAM_HTTP_ERROR = -32003
 ERR_INTERRUPT_NOT_FOUND = -32004
@@ -55,6 +56,35 @@ def session_forbidden_response(
             code=ERR_SESSION_FORBIDDEN,
             message="Session forbidden",
             data={"type": "SESSION_FORBIDDEN", "session_id": session_id},
+        ),
+    )
+
+
+def authorization_forbidden_response(
+    app: CodexSessionQueryJSONRPCApplication,
+    request_id: str | int | None,
+    *,
+    method: str,
+    capability: str,
+    credential_id: str | None = None,
+    required_principal: str | None = None,
+    error_code: int = ERR_AUTHORIZATION_FORBIDDEN,
+) -> Response:
+    data: dict[str, Any] = {
+        "type": "AUTHORIZATION_FORBIDDEN",
+        "method": method,
+        "capability": capability,
+    }
+    if credential_id is not None:
+        data["credential_id"] = credential_id
+    if required_principal is not None:
+        data["required_principal"] = required_principal
+    return app._generate_error_response(
+        request_id,
+        JSONRPCError(
+            code=error_code,
+            message="Authorization forbidden",
+            data=data,
         ),
     )
 

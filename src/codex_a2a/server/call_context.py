@@ -32,6 +32,12 @@ class IdentityAwareCallContextBuilder(DefaultCallContextBuilder):
         identity = getattr(request.state, "user_identity", None)
         if identity:
             context.state["identity"] = identity
+        credential_id = getattr(request.state, "user_credential_id", None)
+        if isinstance(credential_id, str) and credential_id:
+            context.state["credential_id"] = credential_id
+        auth_scheme = getattr(request.state, "user_auth_scheme", None)
+        if isinstance(auth_scheme, str) and auth_scheme:
+            context.state["auth_scheme"] = auth_scheme
         correlation_id = getattr(request.state, "correlation_id", None)
         if isinstance(correlation_id, str) and correlation_id:
             context.state["correlation_id"] = correlation_id

@@ -1,7 +1,7 @@
 import asyncio
-import hashlib
 import logging
 import uuid
+from base64 import b64encode
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
@@ -27,6 +27,11 @@ from tests.support.settings import make_settings
 async def _empty_async_stream():
     if asyncio.current_task() is None:
         yield {}
+
+
+def _basic_auth_header(username: str, password: str) -> dict[str, str]:
+    token = b64encode(f"{username}:{password}".encode()).decode("ascii")
+    return {"Authorization": f"Basic {token}"}
 
 
 def test_agent_card_declares_dual_stack_with_http_json_preferred() -> None:
@@ -479,10 +484,14 @@ async def test_targeted_gzip_applies_to_card_and_openapi_routes(monkeypatch) -> 
 
 
 @pytest.mark.asyncio
-async def test_health_endpoint_requires_bearer_token(monkeypatch) -> None:
+async def test_health_endpoint_requires_authentication(monkeypatch) -> None:
     import codex_a2a.server.application as app_module
 
-    settings = make_settings(a2a_bearer_token="test-token")
+    settings = make_settings(
+        a2a_bearer_token="test-token",
+        a2a_basic_auth_username="operator",
+        a2a_basic_auth_password="op-pass",  # pragma: allowlist secret
+    )
     monkeypatch.setattr(app_module, "CodexClient", DummyChatCodexClient)
     app = app_module.create_app(settings)
     transport = httpx.ASGITransport(app=app)
@@ -492,6 +501,27 @@ async def test_health_endpoint_requires_bearer_token(monkeypatch) -> None:
 
     assert resp.status_code == 401
     assert resp.json() == {"error": "Unauthorized"}
+    assert resp.headers["WWW-Authenticate"] == 'Bearer, Basic realm="codex-a2a"'
+
+
+@pytest.mark.asyncio
+async def test_health_endpoint_accepts_basic_auth(monkeypatch) -> None:
+    import codex_a2a.server.application as app_module
+
+    settings = make_settings(
+        a2a_bearer_token="test-token",
+        a2a_basic_auth_username="operator",
+        a2a_basic_auth_password="op-pass",  # pragma: allowlist secret
+    )
+    monkeypatch.setattr(app_module, "CodexClient", DummyChatCodexClient)
+    app = app_module.create_app(settings)
+    transport = httpx.ASGITransport(app=app)
+
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.get("/health", headers=_basic_auth_header("operator", "op-pass"))
+
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "ok"
 
 
 @pytest.mark.asyncio
@@ -583,6 +613,29 @@ async def test_health_endpoint_with_bearer_token_reports_profile(monkeypatch) ->
     }
 
 
+@pytest.mark.asyncio
+async def test_authenticated_extended_card_accepts_basic_auth(monkeypatch) -> None:
+    import codex_a2a.server.application as app_module
+
+    settings = make_settings(
+        a2a_bearer_token="test-token",
+        a2a_basic_auth_username="operator",
+        a2a_basic_auth_password="op-pass",  # pragma: allowlist secret
+    )
+    monkeypatch.setattr(app_module, "CodexClient", DummyChatCodexClient)
+    app = app_module.create_app(settings)
+    transport = httpx.ASGITransport(app=app)
+
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get(
+            "/agent/authenticatedExtendedCard",
+            headers=_basic_auth_header("operator", "op-pass"),
+        )
+
+    assert response.status_code == 200
+    assert response.json()["supportsAuthenticatedExtendedCard"] is True
+
+
 def test_openapi_jsonrpc_examples_hide_boundary_sensitive_methods_when_disabled() -> None:
     app = create_app(
         make_settings(
@@ -608,6 +661,22 @@ def test_openapi_jsonrpc_examples_hide_boundary_sensitive_methods_when_disabled(
     assert "codex.review.start" not in methods
     assert "codex.review.watch" not in methods
     assert "codex.exec.start" not in methods
+
+
+def test_openapi_declares_configured_http_auth_schemes() -> None:
+    app = create_app(
+        make_settings(
+            a2a_bearer_token="test-token",
+            a2a_basic_auth_username="operator",
+            a2a_basic_auth_password="op-pass",  # pragma: allowlist secret
+        )
+    )
+    openapi = app.openapi()
+    security_schemes = openapi["components"]["securitySchemes"]
+
+    assert set(security_schemes.keys()) == {"bearerAuth", "basicAuth"}
+    assert openapi["security"] == [{"bearerAuth": []}, {"basicAuth": []}]
+    assert openapi["paths"]["/"]["post"]["security"] == [{"bearerAuth": []}, {"basicAuth": []}]
 
 
 @pytest.mark.asyncio
@@ -1056,7 +1125,7 @@ async def test_log_payloads_omits_oversized_request_body(monkeypatch, caplog) ->
 async def test_request_logs_reuse_supplied_correlation_id(monkeypatch, caplog) -> None:
     import codex_a2a.server.application as app_module
 
-    expected_identity = f"bearer:{hashlib.sha256(b'test-token').hexdigest()[:12]}"
+    expected_identity = "automation"
     monkeypatch.setattr(app_module, "CodexClient", DummyChatCodexClient)
     app = app_module.create_app(make_settings(a2a_bearer_token="test-token"))
     transport = httpx.ASGITransport(app=app)
@@ -1105,7 +1174,7 @@ async def test_request_logs_generate_correlation_id_for_stream_requests(
 ) -> None:
     import codex_a2a.server.application as app_module
 
-    expected_identity = f"bearer:{hashlib.sha256(b'test-token').hexdigest()[:12]}"
+    expected_identity = "automation"
     monkeypatch.setattr(app_module, "CodexClient", DummyChatCodexClient)
     app = app_module.create_app(make_settings(a2a_bearer_token="test-token"))
     transport = httpx.ASGITransport(app=app)

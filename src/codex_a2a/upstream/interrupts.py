@@ -114,6 +114,7 @@ class InterruptRequestBinding:
     created_at: float
     expires_at: float | None = None
     identity: str | None = None
+    credential_id: str | None = None
     task_id: str | None = None
     context_id: str | None = None
 
