@@ -354,6 +354,7 @@ def test_openapi_jsonrpc_examples_include_core_and_extension_methods() -> None:
     assert "codex.threads.unarchive" in methods
     assert "codex.threads.metadata.update" in methods
     assert "codex.threads.watch" in methods
+    assert "codex.threads.watch.release" in methods
     assert "codex.turns.steer" in methods
     assert "codex.review.start" in methods
     assert "codex.review.watch" in methods
@@ -533,6 +534,21 @@ async def test_health_endpoint_with_bearer_token_reports_profile(monkeypatch) ->
                     "availability": "disabled",
                     "toggle": "A2A_ENABLE_SESSION_SHELL",
                 },
+                "turn_control": {
+                    "enabled": True,
+                    "availability": "enabled",
+                    "toggle": "A2A_ENABLE_TURN_CONTROL",
+                },
+                "review_control": {
+                    "enabled": True,
+                    "availability": "enabled",
+                    "toggle": "A2A_ENABLE_REVIEW_CONTROL",
+                },
+                "exec_control": {
+                    "enabled": True,
+                    "availability": "enabled",
+                    "toggle": "A2A_ENABLE_EXEC_CONTROL",
+                },
                 "interrupts": {
                     "request_ttl_seconds": 90,
                 },
@@ -565,6 +581,33 @@ async def test_health_endpoint_with_bearer_token_reports_profile(monkeypatch) ->
             },
         },
     }
+
+
+def test_openapi_jsonrpc_examples_hide_boundary_sensitive_methods_when_disabled() -> None:
+    app = create_app(
+        make_settings(
+            a2a_bearer_token="test-token",
+            a2a_enable_session_shell=False,
+            a2a_enable_turn_control=False,
+            a2a_enable_review_control=False,
+            a2a_enable_exec_control=False,
+        )
+    )
+    post = app.openapi()["paths"]["/"]["post"]
+    example_values = (
+        post.get("requestBody", {})
+        .get("content", {})
+        .get("application/json", {})
+        .get("examples", {})
+        .values()
+    )
+    methods = {value.get("value", {}).get("method") for value in example_values}
+
+    assert "codex.sessions.shell" not in methods
+    assert "codex.turns.steer" not in methods
+    assert "codex.review.start" not in methods
+    assert "codex.review.watch" not in methods
+    assert "codex.exec.start" not in methods
 
 
 @pytest.mark.asyncio

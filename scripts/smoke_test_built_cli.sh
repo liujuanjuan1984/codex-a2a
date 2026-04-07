@@ -52,6 +52,7 @@ tool_dir="${tmpdir}/tools"
 tool_bin_dir="${tmpdir}/bin"
 fake_codex_bin="${tmpdir}/codex"
 server_log="${tmpdir}/server.log"
+database_path="${tmpdir}/codex-a2a-smoke.db"
 
 cleanup() {
   local exit_code="$1"
@@ -122,6 +123,7 @@ PY
 bearer_token="smoke-test-token"
 
 A2A_BEARER_TOKEN="${bearer_token}" \
+A2A_DATABASE_URL="sqlite+aiosqlite:///${database_path}" \
 A2A_PORT="${port}" \
 A2A_HOST="127.0.0.1" \
 CODEX_CLI_BIN="${fake_codex_bin}" \

@@ -56,11 +56,13 @@ from codex_a2a.jsonrpc.thread_lifecycle_params import (
     ThreadMetadataUpdateControlParams,
     ThreadUnarchiveControlParams,
     ThreadWatchControlParams,
+    ThreadWatchReleaseControlParams,
     parse_thread_archive_params,
     parse_thread_fork_params,
     parse_thread_metadata_update_params,
     parse_thread_unarchive_params,
     parse_thread_watch_params,
+    parse_thread_watch_release_params,
 )
 from codex_a2a.jsonrpc.turn_control_params import (
     TurnSteerControlParams,
@@ -94,6 +96,7 @@ __all__ = [
     "ThreadMetadataUpdateControlParams",
     "ThreadUnarchiveControlParams",
     "ThreadWatchControlParams",
+    "ThreadWatchReleaseControlParams",
     "TurnSteerControlParams",
     "parse_command_params",
     "parse_discovery_apps_list_params",
@@ -121,5 +124,6 @@ __all__ = [
     "parse_thread_metadata_update_params",
     "parse_thread_unarchive_params",
     "parse_thread_watch_params",
+    "parse_thread_watch_release_params",
     "parse_turn_steer_params",
 ]

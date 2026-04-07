@@ -1,4 +1,4 @@
-from unittest.mock import AsyncMock
+from unittest.mock import ANY, AsyncMock
 
 import httpx
 import pytest
@@ -76,6 +76,7 @@ async def test_exec_start_routes_to_exec_runtime(monkeypatch) -> None:
     }
     assert kwargs["directory"] == "/workspace"
     assert kwargs["context"] is not None
+    assert kwargs["owner_identity"] == ANY
 
 
 @pytest.mark.asyncio
@@ -141,13 +142,18 @@ async def test_exec_write_resize_and_terminate_route_to_exec_runtime(monkeypatch
         process_id="exec-1",
         delta_base64="cHdkCg==",
         close_stdin=None,
+        owner_identity=ANY,
     )
     app.state.codex_exec_runtime.resize.assert_awaited_once_with(
         process_id="exec-1",
         rows=40,
         cols=120,
+        owner_identity=ANY,
     )
-    app.state.codex_exec_runtime.terminate.assert_awaited_once_with(process_id="exec-1")
+    app.state.codex_exec_runtime.terminate.assert_awaited_once_with(
+        process_id="exec-1",
+        owner_identity=ANY,
+    )
 
 
 @pytest.mark.asyncio
@@ -235,3 +241,36 @@ async def test_exec_control_maps_missing_session_lookup_to_business_error(monkey
     assert payload["error"]["code"] == -32009
     assert payload["error"]["data"]["type"] == "EXEC_SESSION_NOT_FOUND"
     assert payload["error"]["data"]["process_id"] == "exec-missing"
+
+
+@pytest.mark.asyncio
+async def test_exec_control_maps_forbidden_session_access_to_business_error(monkeypatch) -> None:
+    import codex_a2a.server.application as app_module
+
+    dummy = DummyCodexClient(
+        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+    )
+    monkeypatch.setattr(app_module, "CodexClient", lambda _settings, **kwargs: dummy)
+    app = app_module.create_app(
+        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+    )
+
+    app.state.codex_exec_runtime.write = AsyncMock(side_effect=PermissionError("forbidden"))
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post(
+            "/",
+            headers={"Authorization": "Bearer t-1"},
+            json={
+                "jsonrpc": "2.0",
+                "id": 209,
+                "method": "codex.exec.write",
+                "params": {"request": {"processId": "exec-1", "closeStdin": True}},
+            },
+        )
+
+    payload = response.json()
+    assert payload["error"]["code"] == -32018
+    assert payload["error"]["data"]["type"] == "EXEC_FORBIDDEN"
+    assert payload["error"]["data"]["process_id"] == "exec-1"

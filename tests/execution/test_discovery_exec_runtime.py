@@ -203,6 +203,7 @@ async def test_exec_runtime_start_rejects_duplicate_process_ids() -> None:
         request={"command": "bash", "arguments": "-lc 'printf hello'", "processId": "exec-1"},
         directory="/workspace",
         context={"identity": "demo"},
+        owner_identity="owner-1",
     )
 
     assert first["process_id"] == "exec-1"
@@ -222,6 +223,7 @@ async def test_exec_runtime_start_rejects_duplicate_process_ids() -> None:
             request={"command": "bash", "processId": "exec-1"},
             directory="/workspace",
             context=None,
+            owner_identity="owner-1",
         )
 
     await request_handler.close()
@@ -315,15 +317,25 @@ async def test_exec_runtime_write_resize_terminate_and_failure_status() -> None:
     )
     runtime._sessions["exec-1"] = handle  # noqa: SLF001
 
-    assert await runtime.write(process_id="exec-1", delta_base64="aGVsbG8=", close_stdin=False) == {
+    assert await runtime.write(
+        process_id="exec-1",
+        delta_base64="aGVsbG8=",
+        close_stdin=False,
+        owner_identity=None,
+    ) == {
         "ok": True,
         "process_id": "exec-1",
     }
-    assert await runtime.resize(process_id="exec-1", rows=24, cols=80) == {
+    assert await runtime.resize(
+        process_id="exec-1",
+        rows=24,
+        cols=80,
+        owner_identity=None,
+    ) == {
         "ok": True,
         "process_id": "exec-1",
     }
-    assert await runtime.terminate(process_id="exec-1") == {
+    assert await runtime.terminate(process_id="exec-1", owner_identity=None) == {
         "ok": True,
         "process_id": "exec-1",
     }
@@ -361,3 +373,27 @@ async def test_exec_runtime_write_resize_terminate_and_failure_status() -> None:
             }
         }
     }
+
+
+@pytest.mark.asyncio
+async def test_exec_runtime_rejects_owner_mismatch_for_existing_session() -> None:
+    runtime = CodexExecRuntime(
+        client=ExecClientStub(stream_events=[]),
+        request_handler=RecordingRequestHandler(),
+    )
+    runtime._sessions["exec-1"] = ExecSessionHandle(  # noqa: SLF001
+        process_id="exec-1",
+        task_id="task-1",
+        context_id="ctx-1",
+        stop_event=asyncio.Event(),
+        command_text="bash",
+        owner_identity="owner-a",
+    )
+
+    with pytest.raises(PermissionError, match="Exec session forbidden"):
+        await runtime.write(
+            process_id="exec-1",
+            delta_base64="aGVsbG8=",
+            close_stdin=False,
+            owner_identity="owner-b",
+        )

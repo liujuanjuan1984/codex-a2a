@@ -19,6 +19,13 @@ class ExtensionMethodRegistry:
     @classmethod
     def from_methods(cls, methods: dict[str, str]) -> ExtensionMethodRegistry:
         shell_method = methods.get("shell")
+        turn_method = methods.get("turn_steer")
+        review_start_method = methods.get("review_start")
+        review_watch_method = methods.get("review_watch")
+        exec_start_method = methods.get("exec_start")
+        exec_write_method = methods.get("exec_write")
+        exec_resize_method = methods.get("exec_resize")
+        exec_terminate_method = methods.get("exec_terminate")
         session_query_methods = frozenset(
             {
                 methods["list_sessions"],
@@ -48,22 +55,22 @@ class ExtensionMethodRegistry:
                 methods["thread_unarchive"],
                 methods["thread_metadata_update"],
                 methods["thread_watch"],
+                methods["thread_watch_release"],
             }
         )
-        turn_control_methods = frozenset({methods["turn_steer"]})
+        turn_control_methods = frozenset(method for method in (turn_method,) if method is not None)
         review_control_methods = frozenset(
-            {
-                methods["review_start"],
-                methods["review_watch"],
-            }
+            method for method in (review_start_method, review_watch_method) if method is not None
         )
         exec_control_methods = frozenset(
-            {
-                methods["exec_start"],
-                methods["exec_write"],
-                methods["exec_resize"],
-                methods["exec_terminate"],
-            }
+            method
+            for method in (
+                exec_start_method,
+                exec_write_method,
+                exec_resize_method,
+                exec_terminate_method,
+            )
+            if method is not None
         )
         interrupt_callback_methods = frozenset(
             {

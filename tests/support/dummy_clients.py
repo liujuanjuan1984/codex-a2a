@@ -286,12 +286,6 @@ class DummySessionQueryCodexClient:
         return {
             "ok": True,
             "turn_id": "turn-review-1",
-            "turn": {
-                "id": "turn-review-1",
-                "status": "inProgress",
-                "items": [],
-                "error": None,
-            },
             "review_thread_id": review_thread_id,
         }
 

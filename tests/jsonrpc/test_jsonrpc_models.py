@@ -23,6 +23,7 @@ from codex_a2a.jsonrpc.params import (
     parse_thread_fork_params,
     parse_thread_metadata_update_params,
     parse_thread_watch_params,
+    parse_thread_watch_release_params,
     parse_turn_steer_params,
 )
 
@@ -336,6 +337,7 @@ def test_parse_thread_lifecycle_params_preserve_aliases() -> None:
             }
         }
     )
+    watch_release = parse_thread_watch_release_params({"taskId": "task-watch-1"})
 
     assert fork.thread_id == "thr-1"
     assert fork.request is not None
@@ -354,6 +356,7 @@ def test_parse_thread_lifecycle_params_preserve_aliases() -> None:
         "events": ["thread.started", "thread.status.changed"],
         "threadIds": ["thr-1", "thr-2"],
     }
+    assert watch_release.task_id == "task-watch-1"
 
 
 def test_parse_turn_and_review_control_params_preserve_aliases() -> None:
@@ -448,6 +451,12 @@ def test_parse_turn_and_review_control_params_preserve_aliases() -> None:
             {"request": {"threadIds": ["thr-1", "  "]}},
             "request.thread_ids[] must be a non-empty string",
             "request.thread_ids",
+        ),
+        (
+            parse_thread_watch_release_params,
+            {"task_id": "   "},
+            "Missing required params.task_id",
+            "task_id",
         ),
     ],
 )

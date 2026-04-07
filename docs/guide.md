@@ -51,6 +51,9 @@ Current behavior:
   - `/v1/tasks/{id}:subscribe`
 - extension JSON-RPC methods are declared separately from the core baseline
 - `codex.sessions.shell` becomes deployment-conditional when `A2A_ENABLE_SESSION_SHELL=false`
+- `codex.turns.steer` becomes deployment-conditional when `A2A_ENABLE_TURN_CONTROL=false`
+- `codex.review.start` and `codex.review.watch` become deployment-conditional when `A2A_ENABLE_REVIEW_CONTROL=false`
+- `codex.exec.*` becomes deployment-conditional when `A2A_ENABLE_EXEC_CONTROL=false`
 
 Unsupported method contract:
 
@@ -94,6 +97,12 @@ Current profile shape:
   - `directory_binding.scope=workspace_root_or_descendant|workspace_root_only`
   - `session_shell.enabled=true|false`
   - `session_shell.availability=enabled|disabled`
+  - `turn_control.enabled=true|false`
+  - `turn_control.availability=enabled|disabled`
+  - `review_control.enabled=true|false`
+  - `review_control.availability=enabled|disabled`
+  - `exec_control.enabled=true|false`
+  - `exec_control.availability=enabled|disabled`
   - `interrupts.request_ttl_seconds=<int>`
   - `service_features.streaming.enabled=true`
   - `service_features.health_endpoint.enabled=true|false`
@@ -128,11 +137,27 @@ Retention guidance:
 - Treat `urn:a2a:*` extension URIs in this repository as shared extension conventions used across this repo family, not as claims that they are part of the A2A core baseline.
 - Treat `a2a.interrupt.*` methods as shared extensions.
 - Treat `codex.*` methods plus `metadata.codex.directory` and `metadata.codex.execution` as Codex-specific extensions or provider-private operational surfaces rather than portable A2A baseline capabilities.
-- Treat `codex.sessions.shell` as deployment-conditional. Discover it from the declared compatibility profile and extension contracts before calling it.
-- Treat `codex.sessions.shell` as a one-shot shell snapshot surface. It is not an interactive shell session and does not imply PTY lifecycle support.
-- Treat `codex.exec.*` as the standalone interactive exec surface. Use it for stdin write, PTY resize, and terminate flows instead of inferring those capabilities from `codex.sessions.shell`.
+- Treat `codex.sessions.shell` as a deployment-conditional, provider-private shell snapshot helper. Discover it from the declared compatibility profile and extension contracts before calling it.
+- Treat `codex.sessions.shell` as a one-shot shell snapshot surface. It is useful for tightly controlled internal workflows, but it is not an interactive shell session and does not imply PTY lifecycle support.
+- Treat `codex.turns.steer`, `codex.review.*`, and `codex.exec.*` as deployment-conditional provider-private controls. Discover them from the authenticated extended card or OpenAPI before calling them.
+- Treat `codex.exec.*` as the standalone interactive exec surface for internal or tightly controlled deployments. Use it for stdin write, PTY resize, and terminate flows instead of inferring those semantics from `codex.sessions.shell`.
+- Default deployment posture is conservative: `codex.sessions.shell`, `codex.turns.steer`, `codex.review.*`, and `codex.exec.*` stay disabled by default and are enabled only when a deployment intentionally opts into them.
 - Generic A2A clients should remain usable without the `codex.*` control plane. Opt into those methods only when you are intentionally integrating with Codex-specific workflows such as session continuation, discovery-backed mentions, or interactive exec.
 - Treat `execution_environment.*` as deployment-configured discovery metadata. It does not promise per-request snapshots of temporary approvals, escalations, or host-side runtime mutations.
+
+Extension boundary principles:
+
+- Expose provider-specific capabilities through A2A only when they still fit the adapter boundary. The adapter may document, validate, route, and normalize stable upstream-facing behavior, but it should not become a general replacement for upstream private runtime internals or host-level control planes.
+- Default new `codex.*` methods to provider-private status. Do not present them as portable A2A baseline capabilities unless they truly match shared protocol semantics.
+- Prefer read-only discovery, stable compatibility surfaces, and low-risk control methods before introducing stronger mutating or destructive operations.
+- Map results to A2A core objects only when the upstream payload is a stable, low-ambiguity read projection such as session-to-`Task`, turn-to-`Task`, or message-to-`Message`. Otherwise prefer provider-private summary envelopes or watch-task payloads.
+- Treat upstream internal execution mechanisms, including active-turn steering, standalone exec runtime controls, reviewer internals, subtask/subagent fan-out, and task-tool internals, as provider-private runtime behavior. The adapter may expose passthrough compatibility and observable output metadata, but should not promote those internals into a default A2A orchestration API.
+- Before implementing a new provider-private extension, answer all of the following explicitly:
+  - what client value is added beyond the existing chat/session flow?
+  - is the upstream behavior stable enough to document as a maintained contract?
+  - should the surface remain provider-private, deployment-conditional, or not be exposed at all?
+  - are authorization, workspace/session ownership, and destructive-side-effect boundaries clear enough to enforce?
+  - can the result shape be expressed without overfitting provider internals into fake A2A core semantics?
 
 Current implementation note:
 
@@ -199,7 +224,10 @@ These variables are forwarded to the local `codex app-server` subprocess.
 ### Advanced Runtime Settings
 
 - `A2A_ENABLE_HEALTH_ENDPOINT`: enable the authenticated lightweight `/health` probe, default `true`
-- `A2A_ENABLE_SESSION_SHELL`: expose `codex.sessions.shell` on JSON-RPC extensions, default `true`
+- `A2A_ENABLE_SESSION_SHELL`: expose `codex.sessions.shell` on JSON-RPC extensions, default `false`
+- `A2A_ENABLE_TURN_CONTROL`: expose `codex.turns.steer` on JSON-RPC extensions, default `false`
+- `A2A_ENABLE_REVIEW_CONTROL`: expose `codex.review.start` and `codex.review.watch` on JSON-RPC extensions, default `false`
+- `A2A_ENABLE_EXEC_CONTROL`: expose `codex.exec.*` on JSON-RPC extensions, default `false`
 - `A2A_ALLOW_DIRECTORY_OVERRIDE`: allow `metadata.codex.directory` overrides within the configured workspace boundary, default `true`
 - `A2A_SESSION_CACHE_TTL_SECONDS`: in-memory TTL for session mapping, default `3600`
 - `A2A_SESSION_CACHE_MAXSIZE`: max local process session-cache entries, default `10000`
@@ -249,6 +277,9 @@ These variables are forwarded to the local `codex app-server` subprocess.
 | `A2A_DOCUMENTATION_URL` | Documentation URL |
 | `A2A_ENABLE_HEALTH_ENDPOINT` | Enable /health |
 | `A2A_ENABLE_SESSION_SHELL` | Enable session shell |
+| `A2A_ENABLE_TURN_CONTROL` | Enable turn control |
+| `A2A_ENABLE_REVIEW_CONTROL` | Enable review control |
+| `A2A_ENABLE_EXEC_CONTROL` | Enable interactive exec |
 | `A2A_ALLOW_DIRECTORY_OVERRIDE` | Allow cwd override |
 | `A2A_SESSION_CACHE_TTL_SECONDS` | Session cache TTL |
 | `A2A_SESSION_CACHE_MAXSIZE` | Session cache max size |
@@ -375,14 +406,15 @@ This path is for contributors. End users should prefer the released CLI path des
 
 - The service forwards A2A `message:send` to Codex session/message calls.
 - Streaming is always enabled for this service surface. `/v1/message:stream` and JSON-RPC `message/stream` are compatibility-sensitive core capabilities rather than deployment-time toggles.
-- `codex.sessions.shell` is a session-scoped shell control method for ownership, attribution, and traceability. It keeps `session_id` in the A2A contract, but the underlying execution still uses Codex `command/exec` rather than resuming or creating an upstream Codex thread.
-- `codex.sessions.shell` returns a one-shot shell snapshot only. It does not expose PTY lifecycle methods such as stdin write, resize, or terminate, and it should not be treated as an interactive shell session.
-- `codex.exec.start`, `codex.exec.write`, `codex.exec.resize`, and `codex.exec.terminate` expose a standalone interactive `command/exec` runtime. `codex.exec.start` returns process/task handles immediately, while stdout/stderr deltas and the final result flow through normal A2A task streaming and `tasks/resubscribe`.
+- `codex.sessions.shell` is a session-scoped shell helper for ownership, attribution, and traceability in internal deployments. It keeps `session_id` in the A2A contract, but the underlying execution still uses Codex `command/exec` rather than resuming or creating an upstream Codex thread.
+- `codex.sessions.shell` returns a one-shot shell snapshot only. It does not expose PTY lifecycle methods such as stdin write, resize, or terminate, and should be treated as a bounded helper rather than a general session shell.
+- `codex.exec.start`, `codex.exec.write`, `codex.exec.resize`, and `codex.exec.terminate` expose a standalone interactive `command/exec` runtime when `A2A_ENABLE_EXEC_CONTROL=true`. This surface is intended for internal or tightly controlled deployments where interactive terminal control is an explicit part of the adapter contract. `codex.exec.start` returns process/task handles immediately, while stdout/stderr deltas and the final result flow through normal A2A task streaming and `tasks/resubscribe`.
 - Rich input is supported on two surfaces:
   - `codex.sessions.prompt_async.request.parts[]` accepts `text`, `image`, `mention`, and `skill`
   - core A2A `message/send` and `message/stream` keep standard A2A parts and map `TextPart`, image `FilePart`, and `DataPart(data={"type":"mention"|"skill", ...})` into Codex turn input
 - Agent Card media modes reflect that stable core message surface: default input modes are `text/plain`, `image/*`, and `application/json`; default output modes are `text/plain` and `application/json`.
 - The authenticated extended Agent Card also decomposes provider-private JSON-RPC surfaces into narrower skills: `codex.sessions.query`, `codex.sessions.control`, `codex.discovery.query`, `codex.discovery.watch`, `codex.threads.control`, `codex.threads.watch`, `codex.turns.control`, `codex.review.control`, `codex.exec.control`, `codex.exec.stream`, and `codex.interrupt.callback`.
+- `codex.sessions.shell`, `codex.turns.control`, `codex.review.*`, and `codex.exec.*` only appear in the authenticated extended card when their deployment toggles are enabled.
 - Those provider-private skills use narrower `output_modes` where practical: query/control/watch handle surfaces declare `application/json` when their primary contract is a structured JSON-RPC result or `DataPart` watch payload, while `codex.exec.stream` declares `text/plain` because stdout/stderr deltas and terminal summaries are emitted as `TextPart`.
 - `codex.sessions.control` intentionally remains mixed: `codex.sessions.prompt_async` returns a structured handle, while `codex.sessions.command` and `codex.sessions.shell` return A2A message items that contain `TextPart`.
 - On the core chat surface, the `application/json` input mode is intentionally narrower than arbitrary JSON: only `DataPart(type=mention|skill)` is part of the declared stable contract.
@@ -685,11 +717,13 @@ This service exposes provider-private thread lifecycle methods through JSON-RPC:
 - `codex.threads.unarchive`
 - `codex.threads.metadata.update`
 - `codex.threads.watch`
+- `codex.threads.watch.release`
 
 Lifecycle control guidance:
 
 - treat `codex.threads.*` as a lifecycle management surface separate from `codex.sessions.*` query/control methods
 - control methods return a stable minimum thread summary: `id`, `title`, optional `status`, and `codex.raw`
+- release watch ownership with `codex.threads.watch.release` using the `task_id` returned by `codex.threads.watch`
 - `thread/unsubscribe` is intentionally not part of this first-stage stable contract because upstream unsubscribe is connection-scoped
 
 ### Thread Fork (`codex.threads.fork`)
@@ -805,6 +839,22 @@ curl -sS http://127.0.0.1:8000/v1/tasks/<task_id>:subscribe \
   -H "Authorization: Bearer ${A2A_BEARER_TOKEN}"
 ```
 
+Watch release example:
+
+```bash
+curl -sS http://127.0.0.1:8000/ \
+  -H 'content-type: application/json' \
+  -H "Authorization: Bearer ${A2A_BEARER_TOKEN}" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 21,
+    "method": "codex.threads.watch.release",
+    "params": {
+      "task_id": "<task_id>"
+    }
+  }'
+```
+
 ## Codex Turn Control (A2A Extension)
 
 This service exposes provider-private active-turn steering through JSON-RPC:
@@ -901,7 +951,7 @@ curl -sS http://127.0.0.1:8000/ \
   }'
 ```
 
-The result returns `ok`, `turn_id`, the spawned `turn`, and `review_thread_id`. When `delivery=detached`, `review_thread_id` identifies the detached review thread.
+The result returns `ok`, `turn_id`, and `review_thread_id`. When `delivery=detached`, `review_thread_id` identifies the detached review thread.
 
 ### Review Watch (`codex.review.watch`)
 

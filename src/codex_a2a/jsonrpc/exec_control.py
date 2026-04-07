@@ -33,6 +33,7 @@ logger = logging.getLogger(__name__)
 
 
 ERR_EXEC_SESSION_NOT_FOUND = -32009
+ERR_EXEC_FORBIDDEN = -32018
 
 
 async def handle_exec_control_request(
@@ -73,6 +74,8 @@ async def handle_exec_control_request(
         return metadata_error
 
     call_context = app._context_builder.build(request)
+    identity = getattr(request.state, "user_identity", None)
+    owner_identity = identity if isinstance(identity, str) and identity else None
     request_payload = parsed_params.request.model_dump(by_alias=True, exclude_none=True)
 
     try:
@@ -81,22 +84,26 @@ async def handle_exec_control_request(
                 request=request_payload,
                 directory=directory,
                 context=call_context,
+                owner_identity=owner_identity,
             )
         elif base_request.method == app._method_exec_write:
             result = await app._exec_runtime.write(
                 process_id=str(request_payload["processId"]).strip(),
                 delta_base64=request_payload.get("deltaBase64"),
                 close_stdin=request_payload.get("closeStdin"),
+                owner_identity=owner_identity,
             )
         elif base_request.method == app._method_exec_resize:
             result = await app._exec_runtime.resize(
                 process_id=str(request_payload["processId"]).strip(),
                 rows=int(request_payload["rows"]),
                 cols=int(request_payload["cols"]),
+                owner_identity=owner_identity,
             )
         else:
             result = await app._exec_runtime.terminate(
-                process_id=str(request_payload["processId"]).strip()
+                process_id=str(request_payload["processId"]).strip(),
+                owner_identity=owner_identity,
             )
     except LookupError as exc:
         return app._generate_error_response(
@@ -108,6 +115,18 @@ async def handle_exec_control_request(
                     "type": "EXEC_SESSION_NOT_FOUND",
                     "process_id": str(request_payload.get("processId", "")).strip(),
                     "detail": str(exc),
+                },
+            ),
+        )
+    except PermissionError:
+        return app._generate_error_response(
+            base_request.id,
+            JSONRPCError(
+                code=ERR_EXEC_FORBIDDEN,
+                message="Exec session forbidden",
+                data={
+                    "type": "EXEC_FORBIDDEN",
+                    "process_id": str(request_payload.get("processId", "")).strip(),
                 },
             ),
         )

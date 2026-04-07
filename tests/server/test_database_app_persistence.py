@@ -209,7 +209,7 @@ async def test_database_backend_persists_task_session_and_interrupt_state_across
             context_id="ctx-1",
         )
 
-    assert _sqlite_schema_version(database_path, "runtime_state") == 1
+    assert _sqlite_schema_version(database_path, "runtime_state") == 2
 
     app2 = app_module.create_app(settings)
     async with app2.router.lifespan_context(app2):

@@ -114,15 +114,26 @@ def _build_agent_card_description(
             public_parts.append(f"Deployment project: {project}.")
         return " ".join(public_parts)
 
+    codex_surfaces = [
+        "Codex session-query",
+        "thread lifecycle",
+        "discovery",
+    ]
+    if runtime_profile.turn_control_enabled:
+        codex_surfaces.append("active-turn control")
+    if runtime_profile.review_control_enabled:
+        codex_surfaces.append("review control")
+    if runtime_profile.exec_control_enabled:
+        codex_surfaces.append("interactive exec")
+    codex_surface_summary = ", ".join(codex_surfaces)
     summary = (
         "Supports HTTP+JSON and JSON-RPC transports, standard A2A messaging "
         "(message/send, message/stream), authenticated extended Agent Card "
         "(agent/getAuthenticatedExtendedCard), task APIs (tasks/get, tasks/cancel, "
         "tasks/resubscribe), shared session-binding and streaming contracts, "
-        "Codex session-query, thread lifecycle, active-turn control, review control, "
-        "discovery, and interactive exec extensions, shared interrupt callback "
-        "extensions, a machine-readable "
-        "compatibility profile, and a machine-readable wire contract."
+        f"{codex_surface_summary} extensions, shared interrupt callback "
+        "extensions, a machine-readable compatibility profile, and a "
+        "machine-readable wire contract."
     )
     parts: list[str] = [base, summary]
     parts.append(
@@ -334,10 +345,20 @@ def _build_agent_extensions(
 def _build_agent_skills(
     *,
     settings: Settings,
+    runtime_profile: RuntimeProfile,
     include_detailed_contracts: bool,
 ) -> list[AgentSkill]:
+    session_control_description = (
+        "Start async Codex session turns and issue provider-private "
+        "session command control methods."
+    )
+    if runtime_profile.session_shell_enabled:
+        session_control_description = (
+            "Start async Codex session turns and issue provider-private "
+            "session command or shell helper methods for internal workflows."
+        )
     if not include_detailed_contracts:
-        return [
+        skills = [
             AgentSkill(
                 id="codex.chat",
                 name="Codex Chat",
@@ -363,10 +384,7 @@ def _build_agent_skills(
             AgentSkill(
                 id="codex.sessions.control",
                 name="Codex Sessions Control",
-                description=(
-                    "Start async Codex session turns and issue provider-private "
-                    "session command or shell control methods."
-                ),
+                description=session_control_description,
                 tags=["codex", "sessions", "control", "provider-private"],
                 input_modes=list(JSON_RPC_INPUT_MEDIA_MODES),
                 output_modes=list(DEFAULT_OUTPUT_MEDIA_MODES),
@@ -398,7 +416,7 @@ def _build_agent_skills(
                 name="Codex Thread Control",
                 description=(
                     "Manage provider-private thread fork, archive, unarchive, "
-                    "and metadata-update actions."
+                    "metadata-update, and watch-release actions."
                 ),
                 tags=["codex", "threads", "control", "provider-private"],
                 input_modes=list(JSON_RPC_INPUT_MEDIA_MODES),
@@ -408,43 +426,10 @@ def _build_agent_skills(
                 id="codex.threads.watch",
                 name="Codex Thread Watch",
                 description=(
-                    "Start provider-private thread lifecycle watch tasks that "
-                    "emit structured events through A2A task streams."
+                    "Start and release provider-private thread lifecycle watch "
+                    "tasks that emit structured events through A2A task streams."
                 ),
                 tags=["codex", "threads", "watch", "provider-private"],
-                input_modes=list(JSON_RPC_INPUT_MEDIA_MODES),
-                output_modes=list(JSON_OUTPUT_MEDIA_MODES),
-            ),
-            AgentSkill(
-                id="codex.turns.control",
-                name="Codex Turn Control",
-                description=(
-                    "Append additional input to an active regular turn through the "
-                    "provider-private codex.turns.steer method."
-                ),
-                tags=["codex", "turns", "control", "provider-private"],
-                input_modes=list(JSON_RPC_INPUT_MEDIA_MODES),
-                output_modes=list(JSON_OUTPUT_MEDIA_MODES),
-            ),
-            AgentSkill(
-                id="codex.review.control",
-                name="Codex Review Control",
-                description=(
-                    "Start provider-private review turns against uncommitted changes, "
-                    "base branches, commits, or custom instructions."
-                ),
-                tags=["codex", "review", "control", "provider-private"],
-                input_modes=list(JSON_RPC_INPUT_MEDIA_MODES),
-                output_modes=list(JSON_OUTPUT_MEDIA_MODES),
-            ),
-            AgentSkill(
-                id="codex.review.watch",
-                name="Codex Review Watch",
-                description=(
-                    "Start provider-private review watch tasks that emit "
-                    "coarse-grained lifecycle events through A2A task streams."
-                ),
-                tags=["codex", "review", "watch", "provider-private"],
                 input_modes=list(JSON_RPC_INPUT_MEDIA_MODES),
                 output_modes=list(JSON_OUTPUT_MEDIA_MODES),
             ),
@@ -456,29 +441,93 @@ def _build_agent_skills(
                 input_modes=list(JSON_RPC_INPUT_MEDIA_MODES),
                 output_modes=list(JSON_OUTPUT_MEDIA_MODES),
             ),
-            AgentSkill(
-                id="codex.exec.control",
-                name="Codex Exec Control",
-                description=(
-                    "Start and control standalone interactive command execution "
-                    "through provider-private JSON-RPC extensions."
-                ),
-                tags=["codex", "exec", "control", "provider-private"],
-                input_modes=list(JSON_RPC_INPUT_MEDIA_MODES),
-                output_modes=list(JSON_OUTPUT_MEDIA_MODES),
-            ),
-            AgentSkill(
-                id="codex.exec.stream",
-                name="Codex Exec Stream",
-                description=(
-                    "Consume interactive exec stdout/stderr and terminal summaries "
-                    "through A2A task streams after codex.exec.start."
-                ),
-                tags=["codex", "exec", "stream", "provider-private"],
-                input_modes=list(JSON_RPC_INPUT_MEDIA_MODES),
-                output_modes=list(TEXT_OUTPUT_MEDIA_MODES),
-            ),
         ]
+        if runtime_profile.turn_control_enabled:
+            skills.append(
+                AgentSkill(
+                    id="codex.turns.control",
+                    name="Codex Turn Control",
+                    description=(
+                        "Append additional input to an active regular turn through the "
+                        "provider-private codex.turns.steer method."
+                    ),
+                    tags=["codex", "turns", "control", "provider-private"],
+                    input_modes=list(JSON_RPC_INPUT_MEDIA_MODES),
+                    output_modes=list(JSON_OUTPUT_MEDIA_MODES),
+                )
+            )
+        if runtime_profile.review_control_enabled:
+            skills.extend(
+                [
+                    AgentSkill(
+                        id="codex.review.control",
+                        name="Codex Review Control",
+                        description=(
+                            "Start provider-private review turns against uncommitted changes, "
+                            "base branches, commits, or custom instructions."
+                        ),
+                        tags=["codex", "review", "control", "provider-private"],
+                        input_modes=list(JSON_RPC_INPUT_MEDIA_MODES),
+                        output_modes=list(JSON_OUTPUT_MEDIA_MODES),
+                    ),
+                    AgentSkill(
+                        id="codex.review.watch",
+                        name="Codex Review Watch",
+                        description=(
+                            "Start provider-private review watch tasks that emit "
+                            "coarse-grained lifecycle events through A2A task streams."
+                        ),
+                        tags=["codex", "review", "watch", "provider-private"],
+                        input_modes=list(JSON_RPC_INPUT_MEDIA_MODES),
+                        output_modes=list(JSON_OUTPUT_MEDIA_MODES),
+                    ),
+                ]
+            )
+        if runtime_profile.exec_control_enabled:
+            skills.extend(
+                [
+                    AgentSkill(
+                        id="codex.exec.control",
+                        name="Codex Exec Control",
+                        description=(
+                            "Start and control standalone interactive command execution "
+                            "through provider-private JSON-RPC extensions."
+                        ),
+                        tags=["codex", "exec", "control", "provider-private"],
+                        input_modes=list(JSON_RPC_INPUT_MEDIA_MODES),
+                        output_modes=list(JSON_OUTPUT_MEDIA_MODES),
+                    ),
+                    AgentSkill(
+                        id="codex.exec.stream",
+                        name="Codex Exec Stream",
+                        description=(
+                            "Consume interactive exec stdout/stderr and terminal summaries "
+                            "through A2A task streams after codex.exec.start."
+                        ),
+                        tags=["codex", "exec", "stream", "provider-private"],
+                        input_modes=list(JSON_RPC_INPUT_MEDIA_MODES),
+                        output_modes=list(TEXT_OUTPUT_MEDIA_MODES),
+                    ),
+                ]
+            )
+        return skills
+
+    session_control_examples = [
+        "Start an async session turn (method codex.sessions.prompt_async).",
+        "Run a session command (method codex.sessions.command).",
+    ]
+    detailed_session_control_description = (
+        "Start async session turns and issue session-scoped command methods "
+        "via provider-private JSON-RPC."
+    )
+    if runtime_profile.session_shell_enabled:
+        detailed_session_control_description = (
+            "Start async session turns and issue session-scoped command or "
+            "one-shot shell helper methods via provider-private JSON-RPC."
+        )
+        session_control_examples.append(
+            "Run a one-shot shell snapshot for a session (method codex.sessions.shell)."
+        )
 
     skills = [
         AgentSkill(
@@ -512,15 +561,9 @@ def _build_agent_skills(
         AgentSkill(
             id="codex.sessions.control",
             name="Codex Sessions Control",
-            description=(
-                "Start async session turns and issue session-scoped command or "
-                "one-shot shell control methods via provider-private JSON-RPC."
-            ),
+            description=detailed_session_control_description,
             tags=["codex", "sessions", "control", "commands"],
-            examples=[
-                "Start an async session turn (method codex.sessions.prompt_async).",
-                "Run a one-shot shell snapshot for a session (method codex.sessions.shell).",
-            ],
+            examples=session_control_examples,
             input_modes=list(JSON_RPC_INPUT_MEDIA_MODES),
             output_modes=list(DEFAULT_OUTPUT_MEDIA_MODES),
         ),
@@ -558,7 +601,7 @@ def _build_agent_skills(
             id="codex.threads.control",
             name="Codex Thread Control",
             description=(
-                "Manage thread fork/archive/unarchive/metadata-update flows via "
+                "Manage thread fork/archive/unarchive/metadata-update/watch-release flows via "
                 "codex.threads.* control methods."
             ),
             tags=["codex", "threads", "control", "lifecycle"],
@@ -573,56 +616,15 @@ def _build_agent_skills(
             id="codex.threads.watch",
             name="Codex Thread Watch",
             description=(
-                "Start thread lifecycle watch tasks via codex.threads.watch and "
-                "consume structured lifecycle events through A2A task streams."
+                "Start and release thread lifecycle watch tasks via codex.threads.watch "
+                "and codex.threads.watch.release, then consume structured lifecycle "
+                "events through A2A task streams."
             ),
             tags=["codex", "threads", "watch", "lifecycle"],
             examples=[
                 "Start a lifecycle watch stream (method codex.threads.watch).",
+                "Release a lifecycle watch stream (method codex.threads.watch.release).",
                 "Resume a lifecycle watch task with tasks/resubscribe.",
-            ],
-            input_modes=list(JSON_RPC_INPUT_MEDIA_MODES),
-            output_modes=list(JSON_OUTPUT_MEDIA_MODES),
-        ),
-        AgentSkill(
-            id="codex.turns.control",
-            name="Codex Turn Control",
-            description=(
-                "Append additional user input to an active regular turn via codex.turns.steer."
-            ),
-            tags=["codex", "turns", "control", "active-turn"],
-            examples=[
-                "Append follow-up guidance to the active turn (method codex.turns.steer).",
-            ],
-            input_modes=list(JSON_RPC_INPUT_MEDIA_MODES),
-            output_modes=list(JSON_OUTPUT_MEDIA_MODES),
-        ),
-        AgentSkill(
-            id="codex.review.control",
-            name="Codex Review Control",
-            description=(
-                "Start review turns via codex.review.start for uncommitted changes, "
-                "base branches, commits, or custom reviewer instructions."
-            ),
-            tags=["codex", "review", "control"],
-            examples=[
-                "Start an inline commit review (method codex.review.start).",
-                "Start a detached review for current uncommitted changes.",
-            ],
-            input_modes=list(JSON_RPC_INPUT_MEDIA_MODES),
-            output_modes=list(JSON_OUTPUT_MEDIA_MODES),
-        ),
-        AgentSkill(
-            id="codex.review.watch",
-            name="Codex Review Watch",
-            description=(
-                "Start review watch tasks via codex.review.watch and consume "
-                "coarse-grained review lifecycle events through A2A task streams."
-            ),
-            tags=["codex", "review", "watch"],
-            examples=[
-                "Start a review watch stream after codex.review.start.",
-                "Resume a review watch task with tasks/resubscribe.",
             ],
             input_modes=list(JSON_RPC_INPUT_MEDIA_MODES),
             output_modes=list(JSON_OUTPUT_MEDIA_MODES),
@@ -651,37 +653,96 @@ def _build_agent_skills(
             input_modes=list(JSON_RPC_INPUT_MEDIA_MODES),
             output_modes=list(JSON_OUTPUT_MEDIA_MODES),
         ),
-        AgentSkill(
-            id="codex.exec.control",
-            name="Codex Exec Control",
-            description=(
-                "Start and control standalone interactive command execution via "
-                "codex.exec.start/write/resize/terminate."
-            ),
-            tags=["codex", "exec", "terminal", "control"],
-            examples=[
-                "Start an interactive exec session (method codex.exec.start).",
-                "Write stdin bytes or resize the exec PTY by process_id.",
-            ],
-            input_modes=list(JSON_RPC_INPUT_MEDIA_MODES),
-            output_modes=list(JSON_OUTPUT_MEDIA_MODES),
-        ),
-        AgentSkill(
-            id="codex.exec.stream",
-            name="Codex Exec Stream",
-            description=(
-                "Consume interactive exec stdout/stderr deltas and terminal result "
-                "summaries through A2A task streams after codex.exec.start."
-            ),
-            tags=["codex", "exec", "terminal", "stream"],
-            examples=[
-                "Resume an exec task stream with tasks/resubscribe after codex.exec.start.",
-                "Read final exec result text from the completed task artifact or status message.",
-            ],
-            input_modes=list(JSON_RPC_INPUT_MEDIA_MODES),
-            output_modes=list(TEXT_OUTPUT_MEDIA_MODES),
-        ),
     ]
+    if runtime_profile.turn_control_enabled:
+        skills.append(
+            AgentSkill(
+                id="codex.turns.control",
+                name="Codex Turn Control",
+                description=(
+                    "Append additional user input to an active regular turn via codex.turns.steer."
+                ),
+                tags=["codex", "turns", "control", "active-turn"],
+                examples=[
+                    "Append follow-up guidance to the active turn (method codex.turns.steer).",
+                ],
+                input_modes=list(JSON_RPC_INPUT_MEDIA_MODES),
+                output_modes=list(JSON_OUTPUT_MEDIA_MODES),
+            )
+        )
+    if runtime_profile.review_control_enabled:
+        skills.extend(
+            [
+                AgentSkill(
+                    id="codex.review.control",
+                    name="Codex Review Control",
+                    description=(
+                        "Start review turns via codex.review.start for uncommitted changes, "
+                        "base branches, commits, or custom reviewer instructions."
+                    ),
+                    tags=["codex", "review", "control"],
+                    examples=[
+                        "Start an inline commit review (method codex.review.start).",
+                        "Start a detached review for current uncommitted changes.",
+                    ],
+                    input_modes=list(JSON_RPC_INPUT_MEDIA_MODES),
+                    output_modes=list(JSON_OUTPUT_MEDIA_MODES),
+                ),
+                AgentSkill(
+                    id="codex.review.watch",
+                    name="Codex Review Watch",
+                    description=(
+                        "Start review watch tasks via codex.review.watch and consume "
+                        "coarse-grained review lifecycle events through A2A task streams."
+                    ),
+                    tags=["codex", "review", "watch"],
+                    examples=[
+                        "Start a review watch stream after codex.review.start.",
+                        "Resume a review watch task with tasks/resubscribe.",
+                    ],
+                    input_modes=list(JSON_RPC_INPUT_MEDIA_MODES),
+                    output_modes=list(JSON_OUTPUT_MEDIA_MODES),
+                ),
+            ]
+        )
+    if runtime_profile.exec_control_enabled:
+        skills.extend(
+            [
+                AgentSkill(
+                    id="codex.exec.control",
+                    name="Codex Exec Control",
+                    description=(
+                        "Start and control standalone interactive command execution via "
+                        "codex.exec.start/write/resize/terminate for internal workflows."
+                    ),
+                    tags=["codex", "exec", "terminal", "control"],
+                    examples=[
+                        "Start an interactive exec session (method codex.exec.start).",
+                        "Write stdin bytes or resize the exec PTY by process_id.",
+                    ],
+                    input_modes=list(JSON_RPC_INPUT_MEDIA_MODES),
+                    output_modes=list(JSON_OUTPUT_MEDIA_MODES),
+                ),
+                AgentSkill(
+                    id="codex.exec.stream",
+                    name="Codex Exec Stream",
+                    description=(
+                        "Consume interactive exec stdout/stderr deltas and terminal result "
+                        "summaries through A2A task streams after codex.exec.start."
+                    ),
+                    tags=["codex", "exec", "terminal", "stream"],
+                    examples=[
+                        "Resume an exec task stream with tasks/resubscribe after codex.exec.start.",
+                        (
+                            "Read final exec result text from the completed task artifact "
+                            "or status message."
+                        ),
+                    ],
+                    input_modes=list(JSON_RPC_INPUT_MEDIA_MODES),
+                    output_modes=list(TEXT_OUTPUT_MEDIA_MODES),
+                ),
+            ]
+        )
     return skills
 
 
@@ -728,6 +789,7 @@ def _build_agent_card(
         ),
         skills=_build_agent_skills(
             settings=settings,
+            runtime_profile=runtime_profile,
             include_detailed_contracts=include_detailed_contracts,
         ),
         supports_authenticated_extended_card=True,

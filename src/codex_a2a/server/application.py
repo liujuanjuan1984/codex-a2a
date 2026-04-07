@@ -104,6 +104,7 @@ def create_app(settings: Settings) -> FastAPI:
     thread_lifecycle_runtime = CodexThreadLifecycleRuntime(
         client=client,
         request_handler=handler,
+        state_store=runtime_state_runtime.state_store,
     )
 
     @asynccontextmanager
@@ -113,6 +114,7 @@ def create_app(settings: Settings) -> FastAPI:
         try:
             await client.restore_persisted_interrupt_requests()
             await client.startup_preflight()
+            await thread_lifecycle_runtime.reconcile_persisted_watches()
             yield
         finally:
             await a2a_client_manager.close_all()
@@ -139,14 +141,18 @@ def create_app(settings: Settings) -> FastAPI:
         "thread_unarchive": THREAD_LIFECYCLE_METHODS["unarchive"],
         "thread_metadata_update": THREAD_LIFECYCLE_METHODS["metadata_update"],
         "thread_watch": THREAD_LIFECYCLE_METHODS["watch"],
-        "turn_steer": TURN_CONTROL_METHODS["steer"],
-        "review_start": REVIEW_CONTROL_METHODS["start"],
-        "review_watch": REVIEW_CONTROL_METHODS["watch"],
-        **EXEC_CONTROL_METHODS,
+        "thread_watch_release": THREAD_LIFECYCLE_METHODS["watch_release"],
         **INTERRUPT_CALLBACK_METHODS,
     }
     if "shell" not in capability_snapshot.session_query_method_keys:
         jsonrpc_methods.pop("shell", None)
+    if capability_snapshot.turn_control_methods:
+        jsonrpc_methods["turn_steer"] = TURN_CONTROL_METHODS["steer"]
+    if capability_snapshot.review_control_methods:
+        jsonrpc_methods["review_start"] = REVIEW_CONTROL_METHODS["start"]
+        jsonrpc_methods["review_watch"] = REVIEW_CONTROL_METHODS["watch"]
+    if capability_snapshot.exec_control_methods:
+        jsonrpc_methods.update(EXEC_CONTROL_METHODS)
     session_guard_hooks = _build_session_guard_hooks(executor.session_guard_bindings)
 
     # Compose the shared FastAPI app from the SDK JSON-RPC and REST application wrappers.

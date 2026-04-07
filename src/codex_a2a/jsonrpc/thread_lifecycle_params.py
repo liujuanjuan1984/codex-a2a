@@ -150,6 +150,16 @@ class ThreadWatchControlParams(_StrictModel):
     metadata: MetadataParams | None = None
 
 
+class ThreadWatchReleaseControlParams(_StrictModel):
+    task_id: str = Field(validation_alias=AliasChoices("task_id", "taskId"))
+    metadata: MetadataParams | None = None
+
+    @field_validator("task_id", mode="before")
+    @classmethod
+    def _validate_task_id(cls, value: Any) -> str:
+        return normalize_non_empty_string(value, message="Missing required params.task_id")
+
+
 def _raise_thread_lifecycle_validation_error(exc: ValidationError) -> None:
     errors = exc.errors(include_url=False)
     if errors and all(err.get("type") == "extra_forbidden" for err in errors):
@@ -163,6 +173,11 @@ def _raise_thread_lifecycle_validation_error(exc: ValidationError) -> None:
         raise JsonRpcParamsValidationError(
             message="Missing required params.thread_id",
             data={"type": "MISSING_FIELD", "field": "thread_id"},
+        )
+    if loc in {("task_id",), ("taskId",)}:
+        raise JsonRpcParamsValidationError(
+            message="Missing required params.task_id",
+            data={"type": "MISSING_FIELD", "field": "task_id"},
         )
     if loc == ("request",):
         raise JsonRpcParamsValidationError(
@@ -282,6 +297,14 @@ def parse_thread_metadata_update_params(
 def parse_thread_watch_params(params: dict[str, Any]) -> ThreadWatchControlParams:
     try:
         return ThreadWatchControlParams.model_validate(params)
+    except ValidationError as exc:
+        _raise_thread_lifecycle_validation_error(exc)
+        raise AssertionError("unreachable") from exc
+
+
+def parse_thread_watch_release_params(params: dict[str, Any]) -> ThreadWatchReleaseControlParams:
+    try:
+        return ThreadWatchReleaseControlParams.model_validate(params)
     except ValidationError as exc:
         _raise_thread_lifecycle_validation_error(exc)
         raise AssertionError("unreachable") from exc

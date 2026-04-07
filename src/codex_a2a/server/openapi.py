@@ -29,20 +29,32 @@ from codex_a2a.contracts.extensions import (
 from codex_a2a.profile.runtime import RuntimeProfile
 
 
-def _build_jsonrpc_extension_openapi_description(*, session_shell_enabled: bool) -> str:
+def _build_jsonrpc_extension_openapi_description(*, runtime_profile: RuntimeProfile) -> str:
     session_methods: list[str] = [
         SESSION_QUERY_METHODS["list_sessions"],
         SESSION_QUERY_METHODS["get_session_messages"],
         SESSION_CONTROL_METHODS["prompt_async"],
         SESSION_CONTROL_METHODS["command"],
     ]
-    if session_shell_enabled:
+    if runtime_profile.session_shell_enabled:
         session_methods.append(SESSION_CONTROL_METHODS["shell"])
     discovery_methods = ", ".join(DISCOVERY_METHODS.values())
     thread_lifecycle_methods = ", ".join(THREAD_LIFECYCLE_METHODS.values())
-    turn_methods = ", ".join(TURN_CONTROL_METHODS.values())
-    review_methods = ", ".join(REVIEW_CONTROL_METHODS.values())
-    exec_methods = ", ".join(EXEC_CONTROL_METHODS.values())
+    turn_methods = (
+        ", ".join(TURN_CONTROL_METHODS.values())
+        if runtime_profile.turn_control_enabled
+        else "(disabled)"
+    )
+    review_methods = (
+        ", ".join(REVIEW_CONTROL_METHODS.values())
+        if runtime_profile.review_control_enabled
+        else "(disabled)"
+    )
+    exec_methods = (
+        ", ".join(EXEC_CONTROL_METHODS.values())
+        if runtime_profile.exec_control_enabled
+        else "(disabled)"
+    )
     interrupt_methods = ", ".join(sorted(INTERRUPT_CALLBACK_METHODS.values()))
     return (
         "A2A JSON-RPC entrypoint. Supports core A2A methods "
@@ -65,7 +77,7 @@ def _build_jsonrpc_extension_openapi_description(*, session_shell_enabled: bool)
     )
 
 
-def _build_jsonrpc_extension_openapi_examples(*, session_shell_enabled: bool) -> dict[str, Any]:
+def _build_jsonrpc_extension_openapi_examples(*, runtime_profile: RuntimeProfile) -> dict[str, Any]:
     examples: dict[str, Any] = {
         "message_send": {
             "summary": "Send message via JSON-RPC core method",
@@ -265,110 +277,13 @@ def _build_jsonrpc_extension_openapi_examples(*, session_shell_enabled: bool) ->
                 },
             },
         },
-        "turn_steer": {
-            "summary": "Append user input to the active regular turn",
+        "thread_watch_release": {
+            "summary": "Release an owned thread lifecycle watch task",
             "value": {
                 "jsonrpc": "2.0",
                 "id": 276,
-                "method": TURN_CONTROL_METHODS["steer"],
-                "params": {
-                    "thread_id": "thr-1",
-                    "expected_turn_id": "turn-9",
-                    "request": {
-                        "parts": [
-                            {"type": "text", "text": "Focus on the failing tests first."},
-                        ]
-                    },
-                },
-            },
-        },
-        "review_start": {
-            "summary": "Start a provider-private review turn",
-            "value": {
-                "jsonrpc": "2.0",
-                "id": 277,
-                "method": REVIEW_CONTROL_METHODS["start"],
-                "params": {
-                    "thread_id": "thr-1",
-                    "delivery": "inline",
-                    "target": {
-                        "type": "commit",
-                        "sha": "commit-demo-123",
-                        "title": "Polish tui colors",
-                    },
-                },
-            },
-        },
-        "review_watch": {
-            "summary": "Watch coarse-grained review lifecycle signals through a task stream",
-            "value": {
-                "jsonrpc": "2.0",
-                "id": 278,
-                "method": REVIEW_CONTROL_METHODS["watch"],
-                "params": {
-                    "thread_id": "thr-1",
-                    "review_thread_id": "thr-1-review",
-                    "turn_id": "turn-review-1",
-                    "request": {
-                        "events": ["review.started", "review.completed", "review.failed"],
-                    },
-                },
-            },
-        },
-        "exec_start": {
-            "summary": "Start standalone interactive command execution",
-            "value": {
-                "jsonrpc": "2.0",
-                "id": 28,
-                "method": EXEC_CONTROL_METHODS["exec_start"],
-                "params": {
-                    "request": {
-                        "command": "bash",
-                        "arguments": "-lc 'printf hello && sleep 1'",
-                        "process_id": "exec-1",
-                        "tty": True,
-                        "rows": 24,
-                        "cols": 80,
-                    }
-                },
-            },
-        },
-        "exec_write": {
-            "summary": "Write stdin bytes to an interactive exec session",
-            "value": {
-                "jsonrpc": "2.0",
-                "id": 29,
-                "method": EXEC_CONTROL_METHODS["exec_write"],
-                "params": {
-                    "request": {
-                        "process_id": "exec-1",
-                        "delta_base64": "cHdkCg==",
-                    }
-                },
-            },
-        },
-        "exec_resize": {
-            "summary": "Resize the interactive exec PTY",
-            "value": {
-                "jsonrpc": "2.0",
-                "id": 30,
-                "method": EXEC_CONTROL_METHODS["exec_resize"],
-                "params": {
-                    "request": {
-                        "process_id": "exec-1",
-                        "rows": 40,
-                        "cols": 120,
-                    }
-                },
-            },
-        },
-        "exec_terminate": {
-            "summary": "Terminate an interactive exec session",
-            "value": {
-                "jsonrpc": "2.0",
-                "id": 31,
-                "method": EXEC_CONTROL_METHODS["exec_terminate"],
-                "params": {"request": {"process_id": "exec-1"}},
+                "method": THREAD_LIFECYCLE_METHODS["watch_release"],
+                "params": {"task_id": "task-thread-watch-1"},
             },
         },
         "permission_reply": {
@@ -427,7 +342,101 @@ def _build_jsonrpc_extension_openapi_examples(*, session_shell_enabled: bool) ->
             },
         },
     }
-    if session_shell_enabled:
+    if runtime_profile.turn_control_enabled:
+        examples["turn_steer"] = {
+            "summary": "Append user input to the active regular turn",
+            "value": {
+                "jsonrpc": "2.0",
+                "id": 276,
+                "method": TURN_CONTROL_METHODS["steer"],
+                "params": {
+                    "thread_id": "thr-1",
+                    "expected_turn_id": "turn-9",
+                    "request": {
+                        "parts": [{"type": "text", "text": "Focus on the failing tests first."}]
+                    },
+                },
+            },
+        }
+    if runtime_profile.review_control_enabled:
+        examples["review_start"] = {
+            "summary": "Start a provider-private review turn",
+            "value": {
+                "jsonrpc": "2.0",
+                "id": 277,
+                "method": REVIEW_CONTROL_METHODS["start"],
+                "params": {
+                    "thread_id": "thr-1",
+                    "delivery": "inline",
+                    "target": {
+                        "type": "commit",
+                        "sha": "commit-demo-123",
+                        "title": "Polish tui colors",
+                    },
+                },
+            },
+        }
+        examples["review_watch"] = {
+            "summary": "Watch coarse-grained review lifecycle signals through a task stream",
+            "value": {
+                "jsonrpc": "2.0",
+                "id": 278,
+                "method": REVIEW_CONTROL_METHODS["watch"],
+                "params": {
+                    "thread_id": "thr-1",
+                    "review_thread_id": "thr-1-review",
+                    "turn_id": "turn-review-1",
+                    "request": {"events": ["review.started", "review.completed", "review.failed"]},
+                },
+            },
+        }
+    if runtime_profile.exec_control_enabled:
+        examples["exec_start"] = {
+            "summary": "Start standalone interactive command execution",
+            "value": {
+                "jsonrpc": "2.0",
+                "id": 28,
+                "method": EXEC_CONTROL_METHODS["exec_start"],
+                "params": {
+                    "request": {
+                        "command": "bash",
+                        "arguments": "-lc 'printf hello && sleep 1'",
+                        "process_id": "exec-1",
+                        "tty": True,
+                        "rows": 24,
+                        "cols": 80,
+                    }
+                },
+            },
+        }
+        examples["exec_write"] = {
+            "summary": "Write stdin bytes to an interactive exec session",
+            "value": {
+                "jsonrpc": "2.0",
+                "id": 29,
+                "method": EXEC_CONTROL_METHODS["exec_write"],
+                "params": {"request": {"process_id": "exec-1", "delta_base64": "cHdkCg=="}},
+            },
+        }
+        examples["exec_resize"] = {
+            "summary": "Resize the interactive exec PTY",
+            "value": {
+                "jsonrpc": "2.0",
+                "id": 30,
+                "method": EXEC_CONTROL_METHODS["exec_resize"],
+                "params": {"request": {"process_id": "exec-1", "rows": 40, "cols": 120}},
+            },
+        }
+        examples["exec_terminate"] = {
+            "summary": "Terminate an interactive exec session",
+            "value": {
+                "jsonrpc": "2.0",
+                "id": 31,
+                "method": EXEC_CONTROL_METHODS["exec_terminate"],
+                "params": {"request": {"process_id": "exec-1"}},
+            },
+        }
+    if runtime_profile.session_shell_enabled:
         examples["session_shell"] = {
             "summary": "Run a one-shot shell command attributed to an existing session",
             "value": {
@@ -527,7 +536,7 @@ def patch_openapi_contract(
                 if isinstance(post, dict):
                     post["summary"] = "Handle A2A JSON-RPC Requests"
                     post["description"] = _build_jsonrpc_extension_openapi_description(
-                        session_shell_enabled=runtime_profile.session_shell_enabled
+                        runtime_profile=runtime_profile
                     )
                     post["x-a2a-extension-contracts"] = {
                         "session_binding": session_binding,
@@ -550,7 +559,7 @@ def patch_openapi_contract(
                             app_json = content.setdefault("application/json", {})
                             if isinstance(app_json, dict):
                                 app_json["examples"] = _build_jsonrpc_extension_openapi_examples(
-                                    session_shell_enabled=runtime_profile.session_shell_enabled
+                                    runtime_profile=runtime_profile
                                 )
 
             rest_post_contracts: dict[str, dict[str, Any]] = {
