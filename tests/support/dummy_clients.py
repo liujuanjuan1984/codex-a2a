@@ -5,7 +5,13 @@ from typing import Any
 from codex_a2a.config import Settings
 from codex_a2a.execution.request_overrides import RequestExecutionOptions
 from codex_a2a.upstream.client import CodexMessage
-from codex_a2a.upstream.interrupts import InterruptRequestBinding
+from codex_a2a.upstream.interrupts import (
+    InterruptRequestBinding,
+    build_codex_elicitation_interrupt_properties,
+    build_codex_permission_interrupt_properties,
+    build_codex_permissions_interrupt_properties,
+    build_codex_question_interrupt_properties,
+)
 from tests.support.settings import make_settings
 
 
@@ -172,6 +178,7 @@ class DummySessionQueryCodexClient:
         self.permissions_reply_calls: list[dict[str, Any]] = []
         self.elicitation_reply_calls: list[dict[str, Any]] = []
         self._interrupt_requests: dict[str, InterruptRequestBinding] = {}
+        self._interrupt_request_params: dict[str, dict[str, Any]] = {}
         self._expired_interrupt_requests: set[str] = set()
 
     async def close(self) -> None:
@@ -468,6 +475,7 @@ class DummySessionQueryCodexClient:
 
     async def discard_interrupt_request(self, request_id: str) -> None:
         self._interrupt_requests.pop(request_id, None)
+        self._interrupt_request_params.pop(request_id, None)
         self._expired_interrupt_requests.discard(request_id)
 
     def prime_interrupt_request(
@@ -478,8 +486,10 @@ class DummySessionQueryCodexClient:
         session_id: str = "ses-1",
         created_at: float = 0.0,
         identity: str | None = None,
+        credential_id: str | None = None,
         task_id: str | None = None,
         context_id: str | None = None,
+        params: dict[str, Any] | None = None,
     ) -> None:
         self._interrupt_requests[request_id] = InterruptRequestBinding(
             request_id=request_id,
@@ -487,9 +497,11 @@ class DummySessionQueryCodexClient:
             session_id=session_id,
             created_at=created_at,
             identity=identity,
+            credential_id=credential_id,
             task_id=task_id,
             context_id=context_id,
         )
+        self._interrupt_request_params[request_id] = dict(params or {})
         self._expired_interrupt_requests.discard(request_id)
 
     async def resolve_interrupt_request(
@@ -506,3 +518,63 @@ class DummySessionQueryCodexClient:
         self._interrupt_requests.pop(request_id, None)
         self._expired_interrupt_requests.add(request_id)
         return "expired", None
+
+    async def list_interrupt_requests(
+        self,
+        *,
+        identity: str | None,
+        credential_id: str | None,
+        interrupt_type: str | None = None,
+    ) -> list[dict[str, Any]]:
+        if identity is None and credential_id is None:
+            return []
+
+        builder_by_type = {
+            "permission": build_codex_permission_interrupt_properties,
+            "question": build_codex_question_interrupt_properties,
+            "permissions": build_codex_permissions_interrupt_properties,
+            "elicitation": build_codex_elicitation_interrupt_properties,
+        }
+        default_method = {
+            "permission": "item/commandExecution/requestApproval",
+            "question": "item/tool/requestUserInput",
+            "permissions": "item/permissions/requestApproval",
+            "elicitation": "mcpServer/elicitation/request",
+        }
+
+        items: list[dict[str, Any]] = []
+        for request_id, binding in self._interrupt_requests.items():
+            if request_id in self._expired_interrupt_requests:
+                continue
+            if interrupt_type is not None and binding.interrupt_type != interrupt_type:
+                continue
+            if binding.identity is not None and binding.identity != identity:
+                continue
+            if binding.credential_id is not None and binding.credential_id != credential_id:
+                continue
+            if binding.identity is None and binding.credential_id is None:
+                continue
+            builder = builder_by_type.get(binding.interrupt_type)
+            if builder is None:
+                properties = {"id": request_id, "sessionID": binding.session_id}
+            else:
+                properties = builder(
+                    request_key=request_id,
+                    session_id=binding.session_id,
+                    method=default_method[binding.interrupt_type],
+                    params=dict(self._interrupt_request_params.get(request_id, {})),
+                )
+            items.append(
+                {
+                    "request_id": request_id,
+                    "interrupt_type": binding.interrupt_type,
+                    "session_id": binding.session_id,
+                    "task_id": binding.task_id,
+                    "context_id": binding.context_id,
+                    "created_at": binding.created_at,
+                    "expires_at": binding.expires_at,
+                    "properties": properties,
+                }
+            )
+        items.sort(key=lambda item: (item["created_at"], item["request_id"]))
+        return items

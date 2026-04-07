@@ -11,6 +11,7 @@ from codex_a2a.contracts.extensions import (
     DISCOVERY_METHODS,
     EXEC_CONTROL_METHODS,
     INTERRUPT_CALLBACK_METHODS,
+    INTERRUPT_RECOVERY_METHODS,
     REVIEW_CONTROL_METHODS,
     SESSION_CONTROL_METHODS,
     SESSION_QUERY_DEFAULT_LIMIT,
@@ -56,6 +57,7 @@ def _build_extension_app(
         "thread_metadata_update": THREAD_LIFECYCLE_METHODS["metadata_update"],
         "thread_watch": THREAD_LIFECYCLE_METHODS["watch"],
         "thread_watch_release": THREAD_LIFECYCLE_METHODS["watch_release"],
+        "interrupts_list": INTERRUPT_RECOVERY_METHODS["list"],
         "turn_steer": TURN_CONTROL_METHODS["steer"],
         "review_start": REVIEW_CONTROL_METHODS["start"],
         "review_watch": REVIEW_CONTROL_METHODS["watch"],
@@ -1098,6 +1100,107 @@ async def test_session_control_shell_requires_session_shell_capability(monkeypat
     assert payload["error"]["data"]["method"] == "codex.sessions.shell"
     assert payload["error"]["data"]["capability"] == "session_shell"
     assert payload["error"]["data"]["credential_id"] == "test-bearer"
+
+
+@pytest.mark.asyncio
+async def test_interrupt_recovery_extension_lists_identity_scoped_pending_requests(monkeypatch):
+    import codex_a2a.server.application as app_module
+
+    dummy = DummyCodexClient(
+        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+    )
+    dummy.prime_interrupt_request(
+        "perm-1",
+        interrupt_type="permission",
+        identity="automation",
+        credential_id="test-bearer",
+        params={"patterns": ["/tmp/config.yml"]},
+    )
+    dummy.prime_interrupt_request(
+        "q-1",
+        interrupt_type="question",
+        identity="automation",
+        credential_id="test-bearer",
+        params={"questions": [{"id": "q1", "question": "Proceed?"}]},
+    )
+    dummy.prime_interrupt_request(
+        "perm-other",
+        interrupt_type="permission",
+        identity="someone-else",
+        credential_id="other-cred",
+        params={"patterns": ["/tmp/other.yml"]},
+    )
+    monkeypatch.setattr(app_module, "CodexClient", lambda _settings, **kwargs: dummy)
+    app = app_module.create_app(
+        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+    )
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        headers = {"Authorization": "Bearer t-1"}
+        resp = await client.post(
+            "/",
+            headers=headers,
+            json={
+                "jsonrpc": "2.0",
+                "id": 28,
+                "method": "codex.interrupts.list",
+                "params": {"type": "permission"},
+            },
+        )
+
+    payload = resp.json()
+    assert payload.get("error") is None
+    assert payload["result"]["items"] == [
+        {
+            "request_id": "perm-1",
+            "interrupt_type": "permission",
+            "session_id": "ses-1",
+            "task_id": None,
+            "context_id": None,
+            "created_at": 0.0,
+            "expires_at": None,
+            "properties": {
+                "id": "perm-1",
+                "sessionID": "ses-1",
+                "metadata": {
+                    "method": "item/commandExecution/requestApproval",
+                    "raw": {"patterns": ["/tmp/config.yml"]},
+                },
+                "patterns": ["/tmp/config.yml"],
+            },
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_interrupt_recovery_extension_rejects_invalid_fields(monkeypatch):
+    import codex_a2a.server.application as app_module
+
+    dummy = DummyCodexClient(
+        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+    )
+    monkeypatch.setattr(app_module, "CodexClient", lambda _settings, **kwargs: dummy)
+    app = app_module.create_app(
+        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+    )
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.post(
+            "/",
+            headers={"Authorization": "Bearer t-1"},
+            json={
+                "jsonrpc": "2.0",
+                "id": 29,
+                "method": "codex.interrupts.list",
+                "params": {"session_id": "ses-1"},
+            },
+        )
+
+    payload = resp.json()
+    assert payload["error"]["code"] == -32602
+    assert payload["error"]["data"]["fields"] == ["session_id"]
 
 
 @pytest.mark.asyncio

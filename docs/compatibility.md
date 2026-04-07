@@ -122,10 +122,11 @@ Current repository judgment under those rules:
 
 - `codex.discovery.*` and the `codex.discovery.watch` bridge fit the preferred read-only and low-risk discovery pattern.
 - `codex.threads.*`, especially `codex.threads.watch` and `codex.threads.watch.release`, remain acceptable as provider-private lifecycle surfaces because they expose a bounded watch/control bridge rather than raw upstream subscription internals.
+- `codex.interrupts.list` is acceptable as an adapter-local recovery surface because it only exposes active pending interrupt handles already known to this adapter and does not mutate upstream state.
 - `codex.turns.steer` is boundary-sensitive and should remain narrowly scoped, provider-private, and resistant to scope creep into a general orchestration API.
 - `codex.review.*` is also boundary-sensitive and should stay framed as a provider-private reviewer surface rather than a generic A2A review standard.
 - `codex.sessions.shell` and `codex.exec.*` sit closest to the adapter boundary because they expose standalone command execution semantics instead of a stable session/message projection. They remain supported for internal or tightly controlled deployments, but should stay deployment-conditional and provider-private rather than being treated as generic extension templates.
-- Current default posture is conservative: `codex.sessions.shell`, `codex.turns.steer`, `codex.review.*`, and `codex.exec.*` are disabled by default and only enabled when a deployment intentionally opts into them.
+- Current default posture keeps `codex.sessions.shell`, `codex.review.*`, and `codex.exec.*` disabled unless a deployment intentionally opts into them. `codex.turns.steer` is enabled by default but remains narrowly scoped, provider-private, and deployment-configurable.
 - Inbound auth is intentionally static and deployment-scoped. The current contract requires a static multi-credential registry with stable principals; it does not claim OAuth2, OIDC, or dynamic token introspection.
 - Stable principal mapping is part of the runtime compatibility surface because session ownership, thread watch ownership, and exec ownership all key off the authenticated principal rather than a rotating token hash.
 
@@ -154,11 +155,12 @@ Discovery note:
 - `codex.discovery.watch` is the declared bridge for upstream `skills/changed` and `app/list/updated` notifications.
 - `codex.threads.watch` is the declared thread lifecycle watch-task bridge for upstream `thread/started`, `thread/status/changed`, `thread/archived`, `thread/unarchived`, and `thread/closed` notifications.
 - `codex.threads.watch.release` is the declared ownership-scoped control method for releasing a watch task created by `codex.threads.watch`.
+- `codex.interrupts.list` is the declared adapter-local recovery method for rediscovering still-active pending interrupt request IDs after reconnecting.
 - `codex.turns.steer` is the declared active-turn control method for appending additional input to an already-running regular turn.
 - `codex.review.start` is the declared review-start control method for `uncommittedChanges`, `baseBranch`, `commit`, and `custom` review targets.
 - `codex.review.watch` is the declared review lifecycle watch-task bridge for `review.started`, `review.status.changed`, `review.completed`, and `review.failed`.
 - `codex.review.start` remains a control-handle surface; clients should use `codex.review.watch` plus `tasks/resubscribe` for review lifecycle observation.
-- `codex.sessions.shell`, `codex.turns.steer`, `codex.review.*`, and `codex.exec.*` are deployment-conditional rather than always-on surfaces and should be discovered from machine-readable contracts before use.
+- `codex.interrupts.list` is always-on but adapter-local and identity-scoped. `codex.sessions.shell`, `codex.turns.steer`, `codex.review.*`, and `codex.exec.*` remain deployment-conditional surfaces and should be discovered from machine-readable contracts before use.
 - `thread/unsubscribe` is intentionally excluded from the stable public contract until this service exposes connection-safe subscription ownership.
 - This repository does not claim a generic standalone server-push JSON-RPC transport for those notifications; the compatibility contract is the watch-task bridge published through Agent Card and OpenAPI.
 

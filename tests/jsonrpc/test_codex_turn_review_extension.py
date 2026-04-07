@@ -17,11 +17,35 @@ async def test_turn_and_review_control_methods_route_to_client(monkeypatch) -> N
     import codex_a2a.server.application as app_module
 
     dummy = DummyCodexClient(
-        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+        make_settings(
+            a2a_static_auth_credentials=(
+                {
+                    "id": "bot-turn-control",
+                    "scheme": "bearer",
+                    "token": "t-1",
+                    "principal": "automation",
+                    "capabilities": ["turn_control"],
+                },
+            ),
+            a2a_log_payloads=False,
+            **_BASE_SETTINGS,
+        )
     )
     monkeypatch.setattr(app_module, "CodexClient", lambda _settings, **kwargs: dummy)
     app = app_module.create_app(
-        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+        make_settings(
+            a2a_static_auth_credentials=(
+                {
+                    "id": "bot-turn-control",
+                    "scheme": "bearer",
+                    "token": "t-1",
+                    "principal": "automation",
+                    "capabilities": ["turn_control"],
+                },
+            ),
+            a2a_log_payloads=False,
+            **_BASE_SETTINGS,
+        )
     )
 
     transport = httpx.ASGITransport(app=app)
@@ -100,11 +124,35 @@ async def test_review_watch_routes_to_runtime(monkeypatch) -> None:
     import codex_a2a.server.application as app_module
 
     dummy = DummyCodexClient(
-        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+        make_settings(
+            a2a_static_auth_credentials=(
+                {
+                    "id": "bot-turn-control",
+                    "scheme": "bearer",
+                    "token": "t-1",
+                    "principal": "automation",
+                    "capabilities": ["turn_control"],
+                },
+            ),
+            a2a_log_payloads=False,
+            **_BASE_SETTINGS,
+        )
     )
     monkeypatch.setattr(app_module, "CodexClient", lambda _settings, **kwargs: dummy)
     app = app_module.create_app(
-        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+        make_settings(
+            a2a_static_auth_credentials=(
+                {
+                    "id": "bot-turn-control",
+                    "scheme": "bearer",
+                    "token": "t-1",
+                    "principal": "automation",
+                    "capabilities": ["turn_control"],
+                },
+            ),
+            a2a_log_payloads=False,
+            **_BASE_SETTINGS,
+        )
     )
 
     app.state.codex_review_runtime.start = AsyncMock(
@@ -212,3 +260,44 @@ async def test_turn_and_review_control_methods_reject_invalid_request_shapes(mon
     assert review_response.json()["error"]["data"]["field"] == "target.branch"
     assert review_watch_response.json()["error"]["code"] == -32602
     assert review_watch_response.json()["error"]["data"]["field"] == "request.events"
+
+
+@pytest.mark.asyncio
+async def test_turn_control_requires_turn_control_capability(monkeypatch) -> None:
+    import codex_a2a.server.application as app_module
+
+    dummy = DummyCodexClient(
+        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+    )
+    monkeypatch.setattr(app_module, "CodexClient", lambda _settings, **kwargs: dummy)
+    app = app_module.create_app(
+        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+    )
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.post(
+            "/",
+            headers={"Authorization": "Bearer t-1"},
+            json={
+                "jsonrpc": "2.0",
+                "id": 506,
+                "method": "codex.turns.steer",
+                "params": {
+                    "thread_id": "thr-1",
+                    "expected_turn_id": "turn-9",
+                    "request": {
+                        "parts": [
+                            {"type": "text", "text": "Focus on the failing tests first."},
+                        ]
+                    },
+                },
+            },
+        )
+
+    payload = resp.json()
+    assert payload["error"]["code"] == -32007
+    assert payload["error"]["data"]["type"] == "AUTHORIZATION_FORBIDDEN"
+    assert payload["error"]["data"]["method"] == "codex.turns.steer"
+    assert payload["error"]["data"]["capability"] == "turn_control"
+    assert payload["error"]["data"]["credential_id"] == "test-bearer"

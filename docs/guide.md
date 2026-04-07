@@ -50,6 +50,7 @@ Current behavior:
   - `/v1/message:stream`
   - `/v1/tasks/{id}:subscribe`
 - extension JSON-RPC methods are declared separately from the core baseline
+- `codex.interrupts.list` is an always-on adapter-local recovery surface for pending interrupt request IDs
 - `codex.sessions.shell` becomes deployment-conditional when `A2A_ENABLE_SESSION_SHELL=false`
 - `codex.turns.steer` becomes deployment-conditional when `A2A_ENABLE_TURN_CONTROL=false`
 - `codex.review.start` and `codex.review.watch` become deployment-conditional when `A2A_ENABLE_REVIEW_CONTROL=false`
@@ -139,9 +140,10 @@ Retention guidance:
 - Treat `codex.*` methods plus `metadata.codex.directory` and `metadata.codex.execution` as Codex-specific extensions or provider-private operational surfaces rather than portable A2A baseline capabilities.
 - Treat `codex.sessions.shell` as a deployment-conditional, provider-private shell snapshot helper. Discover it from the declared compatibility profile and extension contracts before calling it.
 - Treat `codex.sessions.shell` as a one-shot shell snapshot surface. It is useful for tightly controlled internal workflows, but it is not an interactive shell session and does not imply PTY lifecycle support.
-- Treat `codex.turns.steer`, `codex.review.*`, and `codex.exec.*` as deployment-conditional provider-private controls. Discover them from the authenticated extended card or OpenAPI before calling them.
+- Treat `codex.interrupts.list` as an adapter-local recovery surface for rediscovering active pending interrupt request IDs after reconnecting.
+- Treat `codex.turns.steer`, `codex.review.*`, and `codex.exec.*` as deployment-aware provider-private controls. Discover them from the authenticated extended card or OpenAPI before calling them.
 - Treat `codex.exec.*` as the standalone interactive exec surface for internal or tightly controlled deployments. Use it for stdin write, PTY resize, and terminate flows instead of inferring those semantics from `codex.sessions.shell`.
-- Default deployment posture is conservative: `codex.sessions.shell`, `codex.turns.steer`, `codex.review.*`, and `codex.exec.*` stay disabled by default and are enabled only when a deployment intentionally opts into them.
+- Default deployment posture keeps `codex.sessions.shell`, `codex.review.*`, and `codex.exec.*` disabled unless a deployment intentionally opts into them. `codex.turns.steer` is enabled by default but remains provider-private and can still be disabled with `A2A_ENABLE_TURN_CONTROL=false`.
 - Generic A2A clients should remain usable without the `codex.*` control plane. Opt into those methods only when you are intentionally integrating with Codex-specific workflows such as session continuation, discovery-backed mentions, or interactive exec.
 - Treat `execution_environment.*` as deployment-configured discovery metadata. It does not promise per-request snapshots of temporary approvals, escalations, or host-side runtime mutations.
 
@@ -227,7 +229,7 @@ These variables are forwarded to the local `codex app-server` subprocess.
 
 - `A2A_ENABLE_HEALTH_ENDPOINT`: enable the authenticated lightweight `/health` probe, default `true`
 - `A2A_ENABLE_SESSION_SHELL`: expose `codex.sessions.shell` on JSON-RPC extensions, default `false`
-- `A2A_ENABLE_TURN_CONTROL`: expose `codex.turns.steer` on JSON-RPC extensions, default `false`
+- `A2A_ENABLE_TURN_CONTROL`: expose `codex.turns.steer` on JSON-RPC extensions, default `true`
 - `A2A_ENABLE_REVIEW_CONTROL`: expose `codex.review.start` and `codex.review.watch` on JSON-RPC extensions, default `false`
 - `A2A_ENABLE_EXEC_CONTROL`: expose `codex.exec.*` on JSON-RPC extensions, default `false`
 - `A2A_ALLOW_DIRECTORY_OVERRIDE`: allow `metadata.codex.directory` overrides within the configured workspace boundary, default `true`
@@ -408,8 +410,9 @@ This path is for contributors. End users should prefer the released CLI path des
 - Stable `principal` values back runtime ownership checks. This avoids tying session, watch, or exec ownership to a bearer token hash that changes during token rotation.
 - Capability gating stays intentionally small:
   - `codex.sessions.shell` requires `session_shell`
+  - `codex.turns.steer` requires `turn_control`
   - `codex.exec.*` requires `exec_control`
-  - Basic credentials grant both capabilities by default unless the registry entry overrides capabilities
+  - Basic credentials grant all three capabilities by default unless the registry entry overrides capabilities
   - bearer credentials do not gain those capabilities unless the static credential entry explicitly grants them
 - Within one `codex-a2a` instance, all consumers share the same underlying Codex workspace/environment. This deployment model is not tenant-isolated by default.
 
@@ -866,6 +869,36 @@ curl -sS http://127.0.0.1:8000/ \
     }
   }'
 ```
+
+## Codex Interrupt Recovery (A2A Extension)
+
+This service also exposes adapter-local interrupt recovery through JSON-RPC:
+
+- `codex.interrupts.list`
+
+Interrupt-recovery guidance:
+
+- use `codex.interrupts.list` to rediscover active pending interrupt request IDs for the current authenticated caller after reconnecting
+- optionally pass `type=permission|question|permissions|elicitation` to narrow results
+- recovery results are read-only handles; resolve the interrupt itself through the shared `a2a.interrupt.*` callback methods
+
+### Interrupt Recovery (`codex.interrupts.list`)
+
+```bash
+curl -sS http://127.0.0.1:8000/ \
+  -H 'content-type: application/json' \
+  -H "Authorization: Bearer ${DEMO_BEARER_TOKEN}" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 20,
+    "method": "codex.interrupts.list",
+    "params": {
+      "type": "permission"
+    }
+  }'
+```
+
+The result returns `items`, where each item includes `request_id`, `interrupt_type`, session/task context, expiry timestamps, and adapter-built interrupt `properties`.
 
 ## Codex Turn Control (A2A Extension)
 

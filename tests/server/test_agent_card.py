@@ -7,6 +7,7 @@ from codex_a2a.contracts.extensions import (
     DISCOVERY_EXTENSION_URI,
     EXEC_CONTROL_EXTENSION_URI,
     INTERRUPT_CALLBACK_EXTENSION_URI,
+    INTERRUPT_RECOVERY_EXTENSION_URI,
     REVIEW_CONTROL_EXTENSION_URI,
     SESSION_BINDING_EXTENSION_URI,
     SESSION_QUERY_DEFAULT_LIMIT,
@@ -170,6 +171,10 @@ def test_agent_card_declares_media_modes_that_match_runtime_contract() -> None:
     assert review_watch_skill.input_modes == [APPLICATION_JSON_MEDIA_MODE]
     assert review_watch_skill.output_modes == JSON_OUTPUT_MEDIA_MODES
 
+    interrupt_recovery_skill = skill_by_id["codex.interrupt.recovery"]
+    assert interrupt_recovery_skill.input_modes == [APPLICATION_JSON_MEDIA_MODE]
+    assert interrupt_recovery_skill.output_modes == JSON_OUTPUT_MEDIA_MODES
+
     interrupt_skill = skill_by_id["codex.interrupt.callback"]
     assert interrupt_skill.input_modes == [APPLICATION_JSON_MEDIA_MODE]
     assert interrupt_skill.output_modes == JSON_OUTPUT_MEDIA_MODES
@@ -222,6 +227,19 @@ def test_public_agent_card_minimizes_provider_private_contracts() -> None:
     assert ext_by_uri[EXEC_CONTROL_EXTENSION_URI].params is None
     assert ext_by_uri[COMPATIBILITY_PROFILE_EXTENSION_URI].params is None
     assert ext_by_uri[WIRE_CONTRACT_EXTENSION_URI].params is None
+
+    interrupt_recovery = ext_by_uri[INTERRUPT_RECOVERY_EXTENSION_URI]
+    interrupt_recovery_params = _require_params(interrupt_recovery)
+    assert interrupt_recovery_params == {
+        "methods": {"list": "codex.interrupts.list"},
+        "supported_interrupt_types": [
+            "permission",
+            "question",
+            "permissions",
+            "elicitation",
+        ],
+        "identity_scope": "authenticated_caller",
+    }
 
     interrupt = ext_by_uri[INTERRUPT_CALLBACK_EXTENSION_URI]
     interrupt_params = _require_params(interrupt)
@@ -516,10 +534,33 @@ def test_authenticated_extended_agent_card_injects_profile_into_extensions() -> 
         == 204
     )
 
+    interrupt_recovery = ext_by_uri[INTERRUPT_RECOVERY_EXTENSION_URI]
+    interrupt_recovery_params = _require_params(interrupt_recovery)
+    assert interrupt_recovery_params["profile"] == profile
+    assert interrupt_recovery_params["methods"]["list"] == "codex.interrupts.list"
+    assert interrupt_recovery_params["supported_interrupt_types"] == [
+        "permission",
+        "question",
+        "permissions",
+        "elicitation",
+    ]
+    assert interrupt_recovery_params["identity_scope"] == "authenticated_caller"
+    assert interrupt_recovery_params["result_item_fields"] == [
+        "request_id",
+        "interrupt_type",
+        "session_id",
+        "task_id",
+        "context_id",
+        "created_at",
+        "expires_at",
+        "properties",
+    ]
+
     turn_control = ext_by_uri[TURN_CONTROL_EXTENSION_URI]
     turn_control_params = _require_params(turn_control)
     assert turn_control_params["profile"] == profile
     assert turn_control_params["methods"]["steer"] == "codex.turns.steer"
+    assert turn_control_params["authorization"]["required_capabilities"] == ["turn_control"]
     assert turn_control_params["supported_metadata"] == []
     assert turn_control_params["provider_private_metadata"] == []
     steer_contract = turn_control_params["method_contracts"]["codex.turns.steer"]
@@ -652,10 +693,17 @@ def test_authenticated_extended_agent_card_injects_profile_into_extensions() -> 
         "terminal tasks/resubscribe replay-once behavior" in note
         for note in compatibility_params["consumer_guidance"]
     )
+    assert any(
+        "codex.interrupts.list" in note for note in compatibility_params["consumer_guidance"]
+    )
     assert any("codex.threads.*" in note for note in compatibility_params["consumer_guidance"])
     assert any("codex.turns.*" in note for note in compatibility_params["consumer_guidance"])
     assert any("codex.review.*" in note for note in compatibility_params["consumer_guidance"])
     assert any("codex.exec.*" in note for note in compatibility_params["consumer_guidance"])
+    interrupt_recovery_policy = compatibility_params["method_retention"]["codex.interrupts.list"]
+    assert interrupt_recovery_policy["availability"] == "always"
+    assert interrupt_recovery_policy["retention"] == "stable"
+    assert interrupt_recovery_policy["extension_uri"] == "urn:codex-a2a:codex-interrupt-recovery/v1"
     shell_policy = compatibility_params["method_retention"]["codex.sessions.shell"]
     assert shell_policy["availability"] == "enabled"
     assert shell_policy["retention"] == "deployment-conditional"
@@ -706,6 +754,9 @@ def test_public_agent_card_skills_are_minimal() -> None:
         skill for skill in card.skills if skill.id == "codex.threads.control"
     )
     thread_watch_skill = next(skill for skill in card.skills if skill.id == "codex.threads.watch")
+    interrupt_recovery_skill = next(
+        skill for skill in card.skills if skill.id == "codex.interrupt.recovery"
+    )
     turn_control_skill = next(skill for skill in card.skills if skill.id == "codex.turns.control")
     review_control_skill = next(
         skill for skill in card.skills if skill.id == "codex.review.control"
@@ -720,6 +771,8 @@ def test_public_agent_card_skills_are_minimal() -> None:
     assert "provider-private" in thread_control_skill.tags
     assert thread_watch_skill.examples is None
     assert "provider-private" in thread_watch_skill.tags
+    assert interrupt_recovery_skill.examples is None
+    assert "provider-private" in interrupt_recovery_skill.tags
     assert turn_control_skill.examples is None
     assert "provider-private" in turn_control_skill.tags
     assert review_control_skill.examples is None

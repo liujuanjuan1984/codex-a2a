@@ -180,6 +180,14 @@ def test_settings_default_database_url_falls_back_without_workspace_root() -> No
     assert settings.a2a_database_url == "sqlite+aiosqlite:///./codex-a2a.db"
 
 
+def test_settings_enable_turn_control_by_default() -> None:
+    env = _registry_env()
+    with mock.patch.dict(os.environ, env, clear=True):
+        settings = Settings.from_env()
+
+    assert settings.a2a_enable_turn_control is True
+
+
 def test_settings_explicit_none_database_url_is_not_replaced_by_dynamic_default() -> None:
     settings = Settings.model_validate(
         {

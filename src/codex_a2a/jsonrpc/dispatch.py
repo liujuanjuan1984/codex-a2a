@@ -10,6 +10,7 @@ class ExtensionMethodRegistry:
     discovery_query_methods: frozenset[str]
     discovery_control_methods: frozenset[str]
     thread_lifecycle_control_methods: frozenset[str]
+    interrupt_recovery_methods: frozenset[str]
     turn_control_methods: frozenset[str]
     review_control_methods: frozenset[str]
     exec_control_methods: frozenset[str]
@@ -26,6 +27,7 @@ class ExtensionMethodRegistry:
         exec_write_method = methods.get("exec_write")
         exec_resize_method = methods.get("exec_resize")
         exec_terminate_method = methods.get("exec_terminate")
+        interrupt_list_method = methods.get("interrupts_list")
         session_query_methods = frozenset(
             {
                 methods["list_sessions"],
@@ -58,6 +60,9 @@ class ExtensionMethodRegistry:
                 methods["thread_watch_release"],
             }
         )
+        interrupt_recovery_methods = frozenset(
+            method for method in (interrupt_list_method,) if method is not None
+        )
         turn_control_methods = frozenset(method for method in (turn_method,) if method is not None)
         review_control_methods = frozenset(
             method for method in (review_start_method, review_watch_method) if method is not None
@@ -87,6 +92,7 @@ class ExtensionMethodRegistry:
             | discovery_query_methods
             | discovery_control_methods
             | thread_lifecycle_control_methods
+            | interrupt_recovery_methods
             | turn_control_methods
             | review_control_methods
             | exec_control_methods
@@ -98,6 +104,7 @@ class ExtensionMethodRegistry:
             discovery_query_methods=discovery_query_methods,
             discovery_control_methods=discovery_control_methods,
             thread_lifecycle_control_methods=thread_lifecycle_control_methods,
+            interrupt_recovery_methods=interrupt_recovery_methods,
             turn_control_methods=turn_control_methods,
             review_control_methods=review_control_methods,
             exec_control_methods=exec_control_methods,

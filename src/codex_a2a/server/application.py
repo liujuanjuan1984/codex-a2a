@@ -15,6 +15,7 @@ from codex_a2a.contracts.extensions import (
     DISCOVERY_METHODS,
     EXEC_CONTROL_METHODS,
     INTERRUPT_CALLBACK_METHODS,
+    INTERRUPT_RECOVERY_METHODS,
     REVIEW_CONTROL_METHODS,
     SESSION_CONTROL_METHODS,
     SESSION_QUERY_METHODS,
@@ -142,6 +143,7 @@ def create_app(settings: Settings) -> FastAPI:
         "thread_metadata_update": THREAD_LIFECYCLE_METHODS["metadata_update"],
         "thread_watch": THREAD_LIFECYCLE_METHODS["watch"],
         "thread_watch_release": THREAD_LIFECYCLE_METHODS["watch_release"],
+        "interrupts_list": INTERRUPT_RECOVERY_METHODS["list"],
         **INTERRUPT_CALLBACK_METHODS,
     }
     if "shell" not in capability_snapshot.session_query_method_keys:

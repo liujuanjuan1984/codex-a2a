@@ -39,6 +39,10 @@ from codex_a2a.jsonrpc.interrupt_params import (
     parse_question_reject_params,
     parse_question_reply_params,
 )
+from codex_a2a.jsonrpc.interrupt_recovery_params import (
+    InterruptRecoveryListParams,
+    parse_interrupt_recovery_list_params,
+)
 from codex_a2a.jsonrpc.params_common import JsonRpcParamsValidationError
 from codex_a2a.jsonrpc.query_params import (
     parse_get_session_messages_params,
@@ -81,6 +85,7 @@ __all__ = [
     "ExecTerminateControlParams",
     "ExecWriteControlParams",
     "ElicitationReplyParams",
+    "InterruptRecoveryListParams",
     "JsonRpcParamsValidationError",
     "MetadataParams",
     "PermissionReplyParams",
@@ -110,6 +115,7 @@ __all__ = [
     "parse_exec_write_params",
     "parse_elicitation_reply_params",
     "parse_get_session_messages_params",
+    "parse_interrupt_recovery_list_params",
     "parse_list_sessions_params",
     "parse_permission_reply_params",
     "parse_permissions_reply_params",

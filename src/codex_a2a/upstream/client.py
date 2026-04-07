@@ -538,6 +538,19 @@ class CodexClient:
     async def discard_interrupt_request(self, request_id: str) -> None:
         await self._interrupt_bridge.discard_interrupt_request(request_id)
 
+    async def list_interrupt_requests(
+        self,
+        *,
+        identity: str | None,
+        credential_id: str | None,
+        interrupt_type: str | None = None,
+    ) -> list[dict[str, Any]]:
+        return await self._interrupt_bridge.list_interrupt_requests(
+            identity=identity,
+            credential_id=credential_id,
+            interrupt_type=interrupt_type,
+        )
+
     async def permission_reply(
         self,
         request_id: str,

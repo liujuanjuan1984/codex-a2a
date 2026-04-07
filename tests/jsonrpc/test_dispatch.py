@@ -2,6 +2,7 @@ from codex_a2a.contracts.extensions import (
     DISCOVERY_METHODS,
     EXEC_CONTROL_METHODS,
     INTERRUPT_CALLBACK_METHODS,
+    INTERRUPT_RECOVERY_METHODS,
     REVIEW_CONTROL_METHODS,
     SESSION_CONTROL_METHODS,
     SESSION_QUERY_METHODS,
@@ -23,6 +24,7 @@ def test_extension_method_registry_partitions_methods() -> None:
             "thread_metadata_update": THREAD_LIFECYCLE_METHODS["metadata_update"],
             "thread_watch": THREAD_LIFECYCLE_METHODS["watch"],
             "thread_watch_release": THREAD_LIFECYCLE_METHODS["watch_release"],
+            "interrupts_list": INTERRUPT_RECOVERY_METHODS["list"],
             "turn_steer": TURN_CONTROL_METHODS["steer"],
             "review_start": REVIEW_CONTROL_METHODS["start"],
             "review_watch": REVIEW_CONTROL_METHODS["watch"],
@@ -48,6 +50,7 @@ def test_extension_method_registry_partitions_methods() -> None:
     )
     assert registry.discovery_control_methods == frozenset({DISCOVERY_METHODS["watch"]})
     assert registry.thread_lifecycle_control_methods == frozenset(THREAD_LIFECYCLE_METHODS.values())
+    assert registry.interrupt_recovery_methods == frozenset(INTERRUPT_RECOVERY_METHODS.values())
     assert registry.turn_control_methods == frozenset(TURN_CONTROL_METHODS.values())
     assert registry.review_control_methods == frozenset(REVIEW_CONTROL_METHODS.values())
     assert registry.exec_control_methods == frozenset(EXEC_CONTROL_METHODS.values())
@@ -72,6 +75,7 @@ def test_extension_method_registry_omits_missing_shell_method() -> None:
             "thread_metadata_update": THREAD_LIFECYCLE_METHODS["metadata_update"],
             "thread_watch": THREAD_LIFECYCLE_METHODS["watch"],
             "thread_watch_release": THREAD_LIFECYCLE_METHODS["watch_release"],
+            "interrupts_list": INTERRUPT_RECOVERY_METHODS["list"],
             "turn_steer": TURN_CONTROL_METHODS["steer"],
             "review_start": REVIEW_CONTROL_METHODS["start"],
             "review_watch": REVIEW_CONTROL_METHODS["watch"],
@@ -100,6 +104,7 @@ def test_extension_method_registry_omits_missing_shell_method() -> None:
     )
     assert registry.discovery_control_methods == frozenset({DISCOVERY_METHODS["watch"]})
     assert registry.thread_lifecycle_control_methods == frozenset(THREAD_LIFECYCLE_METHODS.values())
+    assert registry.interrupt_recovery_methods == frozenset(INTERRUPT_RECOVERY_METHODS.values())
     assert registry.turn_control_methods == frozenset(TURN_CONTROL_METHODS.values())
     assert registry.review_control_methods == frozenset(REVIEW_CONTROL_METHODS.values())
     assert registry.exec_control_methods == frozenset(EXEC_CONTROL_METHODS.values())

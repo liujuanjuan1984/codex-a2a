@@ -23,6 +23,7 @@ STREAMING_EXTENSION_URI = "urn:a2a:stream-hints/v1"
 SESSION_QUERY_EXTENSION_URI = "urn:codex-a2a:codex-session-query/v1"
 DISCOVERY_EXTENSION_URI = "urn:codex-a2a:codex-discovery/v1"
 THREAD_LIFECYCLE_EXTENSION_URI = "urn:codex-a2a:codex-thread-lifecycle/v1"
+INTERRUPT_RECOVERY_EXTENSION_URI = "urn:codex-a2a:codex-interrupt-recovery/v1"
 TURN_CONTROL_EXTENSION_URI = "urn:codex-a2a:codex-turn-control/v1"
 REVIEW_CONTROL_EXTENSION_URI = "urn:codex-a2a:codex-review/v1"
 EXEC_CONTROL_EXTENSION_URI = "urn:codex-a2a:codex-exec/v1"
@@ -84,6 +85,18 @@ class InterruptMethodContract:
     required_params: tuple[str, ...] = ()
     optional_params: tuple[str, ...] = ()
     notification_response_status: int | None = None
+
+
+@dataclass(frozen=True)
+class InterruptRecoveryMethodContract:
+    method: str
+    required_params: tuple[str, ...] = ()
+    optional_params: tuple[str, ...] = ()
+    result_fields: tuple[str, ...] = ()
+    items_type: str | None = None
+    items_field: str | None = None
+    notification_response_status: int | None = None
+    notes: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -508,6 +521,55 @@ THREAD_LIFECYCLE_INVALID_PARAMS_DATA_FIELDS: tuple[str, ...] = (
     "fields",
 )
 
+INTERRUPT_RECOVERY_METHOD_CONTRACTS: dict[str, InterruptRecoveryMethodContract] = {
+    "list": InterruptRecoveryMethodContract(
+        method="codex.interrupts.list",
+        optional_params=("type",),
+        result_fields=("items",),
+        items_type="InterruptRecoveryItem[]",
+        items_field="items",
+        notification_response_status=204,
+        notes=(
+            (
+                "This method lists adapter-local active interrupt requests that are still "
+                "pending for the current authenticated caller."
+            ),
+            (
+                "Results are filtered to the current authenticated identity and credential "
+                "binding when that information is available."
+            ),
+            (
+                "Use interrupt recovery only to rediscover pending request_ids. Resolve the "
+                "interrupt itself through a2a.interrupt.* callback methods."
+            ),
+        ),
+    ),
+}
+INTERRUPT_RECOVERY_METHODS: dict[str, str] = {
+    key: contract.method for key, contract in INTERRUPT_RECOVERY_METHOD_CONTRACTS.items()
+}
+INTERRUPT_RECOVERY_RESULT_ITEM_FIELDS: tuple[str, ...] = (
+    "request_id",
+    "interrupt_type",
+    "session_id",
+    "task_id",
+    "context_id",
+    "created_at",
+    "expires_at",
+    "properties",
+)
+INTERRUPT_RECOVERY_INTERRUPT_TYPES: tuple[str, ...] = (
+    "permission",
+    "question",
+    "permissions",
+    "elicitation",
+)
+INTERRUPT_RECOVERY_INVALID_PARAMS_DATA_FIELDS: tuple[str, ...] = (
+    "type",
+    "field",
+    "fields",
+)
+
 TURN_CONTROL_METHOD_CONTRACTS: dict[str, TurnControlMethodContract] = {
     "steer": TurnControlMethodContract(
         method="codex.turns.steer",
@@ -544,11 +606,16 @@ TURN_CONTROL_METHODS: dict[str, str] = {
     key: contract.method for key, contract in TURN_CONTROL_METHOD_CONTRACTS.items()
 }
 TURN_CONTROL_ERROR_BUSINESS_CODES: dict[str, int] = {
+    "AUTHORIZATION_FORBIDDEN": -32007,
     "TURN_NOT_STEERABLE": -32012,
     "TURN_FORBIDDEN": -32013,
 }
 TURN_CONTROL_ERROR_DATA_FIELDS: tuple[str, ...] = (
     "type",
+    "method",
+    "capability",
+    "credential_id",
+    "required_principal",
     "thread_id",
     "expected_turn_id",
     "upstream_code",
@@ -829,6 +896,7 @@ class CapabilitySnapshot:
     session_query_methods: tuple[str, ...]
     discovery_methods: tuple[str, ...]
     thread_lifecycle_methods: tuple[str, ...]
+    interrupt_recovery_methods: tuple[str, ...]
     turn_control_methods: tuple[str, ...]
     review_control_methods: tuple[str, ...]
     exec_control_methods: tuple[str, ...]
@@ -853,6 +921,7 @@ def build_capability_snapshot(*, runtime_profile: RuntimeProfile) -> CapabilityS
     session_query_methods = tuple(SESSION_QUERY_METHODS[key] for key in session_query_method_keys)
     discovery_methods = tuple(DISCOVERY_METHODS.values())
     thread_lifecycle_methods = tuple(THREAD_LIFECYCLE_METHODS.values())
+    interrupt_recovery_methods = tuple(INTERRUPT_RECOVERY_METHODS.values())
     if runtime_profile.turn_control_enabled:
         turn_control_methods = tuple(TURN_CONTROL_METHODS.values())
     else:
@@ -884,6 +953,7 @@ def build_capability_snapshot(*, runtime_profile: RuntimeProfile) -> CapabilityS
         *session_query_methods,
         *discovery_methods,
         *thread_lifecycle_methods,
+        *interrupt_recovery_methods,
         *turn_control_methods,
         *review_control_methods,
         *exec_control_methods,
@@ -899,6 +969,7 @@ def build_capability_snapshot(*, runtime_profile: RuntimeProfile) -> CapabilityS
         session_query_methods=session_query_methods,
         discovery_methods=discovery_methods,
         thread_lifecycle_methods=thread_lifecycle_methods,
+        interrupt_recovery_methods=interrupt_recovery_methods,
         turn_control_methods=turn_control_methods,
         review_control_methods=review_control_methods,
         exec_control_methods=exec_control_methods,
@@ -946,6 +1017,7 @@ def build_wire_contract_extension_params(
                 SESSION_QUERY_EXTENSION_URI,
                 DISCOVERY_EXTENSION_URI,
                 THREAD_LIFECYCLE_EXTENSION_URI,
+                INTERRUPT_RECOVERY_EXTENSION_URI,
                 TURN_CONTROL_EXTENSION_URI,
                 REVIEW_CONTROL_EXTENSION_URI,
                 EXEC_CONTROL_EXTENSION_URI,
@@ -1016,6 +1088,17 @@ def build_compatibility_profile_params(
                 "extension_uri": THREAD_LIFECYCLE_EXTENSION_URI,
             }
             for method in snapshot.thread_lifecycle_methods
+        }
+    )
+    method_retention.update(
+        {
+            method: {
+                "surface": "extension",
+                "availability": "always",
+                "retention": "stable",
+                "extension_uri": INTERRUPT_RECOVERY_EXTENSION_URI,
+            }
+            for method in snapshot.interrupt_recovery_methods
         }
     )
     method_retention.update(
@@ -1110,6 +1193,11 @@ def build_compatibility_profile_params(
             "availability": "always",
             "retention": "stable",
         },
+        INTERRUPT_RECOVERY_EXTENSION_URI: {
+            "surface": "jsonrpc-extension",
+            "availability": "always",
+            "retention": "stable",
+        },
         TURN_CONTROL_EXTENSION_URI: {
             "surface": "jsonrpc-extension",
             "availability": runtime_profile.turn_control.availability,
@@ -1157,6 +1245,7 @@ def build_compatibility_profile_params(
                 SESSION_QUERY_EXTENSION_URI,
                 DISCOVERY_EXTENSION_URI,
                 THREAD_LIFECYCLE_EXTENSION_URI,
+                INTERRUPT_RECOVERY_EXTENSION_URI,
                 TURN_CONTROL_EXTENSION_URI,
                 REVIEW_CONTROL_EXTENSION_URI,
                 EXEC_CONTROL_EXTENSION_URI,
@@ -1195,6 +1284,10 @@ def build_compatibility_profile_params(
             (
                 "Treat codex.threads.* as provider-private lifecycle management surfaces "
                 "separate from codex.sessions.* query/control methods."
+            ),
+            (
+                "Treat codex.interrupts.list as an adapter-local, authenticated recovery "
+                "surface for rediscovering pending interrupt request_ids after reconnecting."
             ),
             (
                 "Treat codex.turns.* as active-turn control surfaces rather than session "
@@ -1705,6 +1798,57 @@ def build_thread_lifecycle_extension_params(
     }
 
 
+def build_interrupt_recovery_extension_params(
+    *,
+    runtime_profile: RuntimeProfile,
+) -> dict[str, Any]:
+    method_contracts: dict[str, Any] = {}
+    for contract in INTERRUPT_RECOVERY_METHOD_CONTRACTS.values():
+        method_contract_doc: dict[str, Any] = {
+            "params": _build_method_contract_params(
+                required=contract.required_params,
+                optional=contract.optional_params,
+                unsupported=(),
+            ),
+            "result": {"fields": list(contract.result_fields)},
+        }
+        if contract.items_type is not None:
+            method_contract_doc["result"]["items_type"] = contract.items_type
+        if contract.items_field is not None:
+            method_contract_doc["result"]["items_field"] = contract.items_field
+        if contract.notification_response_status is not None:
+            method_contract_doc["notification_response_status"] = (
+                contract.notification_response_status
+            )
+        if contract.notes:
+            method_contract_doc["notes"] = list(contract.notes)
+        method_contracts[contract.method] = method_contract_doc
+
+    return {
+        "methods": dict(INTERRUPT_RECOVERY_METHODS),
+        "method_contracts": method_contracts,
+        "supported_interrupt_types": list(INTERRUPT_RECOVERY_INTERRUPT_TYPES),
+        "result_item_fields": list(INTERRUPT_RECOVERY_RESULT_ITEM_FIELDS),
+        "identity_scope": "authenticated_caller",
+        "supported_metadata": [],
+        "provider_private_metadata": [],
+        "consumer_guidance": [
+            (
+                "Use codex.interrupts.list to rediscover still-active pending interrupts "
+                "for the current authenticated caller after reconnecting."
+            ),
+            (
+                "Use the returned request_id with a2a.interrupt.* methods to resolve the "
+                "interrupt. codex.interrupts.list does not resolve or mutate requests."
+            ),
+        ],
+        "errors": {
+            "invalid_params_data_fields": list(INTERRUPT_RECOVERY_INVALID_PARAMS_DATA_FIELDS),
+        },
+        "profile": runtime_profile.summary_dict(),
+    }
+
+
 def build_turn_control_extension_params(
     *,
     runtime_profile: RuntimeProfile,
@@ -1736,6 +1880,10 @@ def build_turn_control_extension_params(
         "profile": runtime_profile.summary_dict(),
         "availability": runtime_profile.turn_control.availability,
         "toggle": runtime_profile.turn_control.toggle,
+        "authorization": {
+            "required_capabilities": ["turn_control"],
+            "default_basic_capabilities": ["turn_control"],
+        },
         "supported_metadata": [],
         "provider_private_metadata": [],
         "consumer_guidance": [

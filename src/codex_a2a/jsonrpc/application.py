@@ -23,6 +23,7 @@ from codex_a2a.jsonrpc.discovery_query import handle_discovery_query_request
 from codex_a2a.jsonrpc.dispatch import ExtensionMethodRegistry
 from codex_a2a.jsonrpc.exec_control import handle_exec_control_request
 from codex_a2a.jsonrpc.hooks import SessionGuardHooks
+from codex_a2a.jsonrpc.interrupt_recovery import handle_interrupt_recovery_request
 from codex_a2a.jsonrpc.interrupts import handle_interrupt_callback_request
 from codex_a2a.jsonrpc.review_control import handle_review_control_request
 from codex_a2a.jsonrpc.session_control import handle_session_control_request
@@ -73,6 +74,7 @@ class CodexSessionQueryJSONRPCApplication(A2AFastAPIApplication):
         self._method_thread_metadata_update = methods["thread_metadata_update"]
         self._method_thread_watch = methods["thread_watch"]
         self._method_thread_watch_release = methods["thread_watch_release"]
+        self._method_interrupts_list = methods.get("interrupts_list")
         self._method_turn_steer = methods.get("turn_steer")
         self._method_review_start = methods.get("review_start")
         self._method_review_watch = methods.get("review_watch")
@@ -172,6 +174,13 @@ class CodexSessionQueryJSONRPCApplication(A2AFastAPIApplication):
             )
         if base_request.method in self._method_registry.thread_lifecycle_control_methods:
             return await handle_thread_lifecycle_control_request(
+                self,
+                base_request,
+                params,
+                request=request,
+            )
+        if base_request.method in self._method_registry.interrupt_recovery_methods:
+            return await handle_interrupt_recovery_request(
                 self,
                 base_request,
                 params,
