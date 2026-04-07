@@ -177,7 +177,11 @@ Use the grouped sections below as the deployment-first reading order:
 
 ### Required Configuration
 
-- `A2A_BEARER_TOKEN`: required; service fails fast if unset. Used for inbound A2A request authentication.
+- Configure at least one inbound auth credential source:
+  - `A2A_BEARER_TOKEN` for the legacy single bearer path
+  - `A2A_BASIC_AUTH_USERNAME` plus `A2A_BASIC_AUTH_PASSWORD` for the legacy single Basic path
+  - `A2A_STATIC_AUTH_CREDENTIALS` for the preferred static multi-credential registry
+- The service fails fast if none of those inbound auth sources are configured.
 
 ### Common Runtime Configuration (A2A)
 
@@ -197,6 +201,10 @@ Use the grouped sections below as the deployment-first reading order:
 - `A2A_PROJECT`: optional project label injected into examples and discovery metadata
 - `A2A_PROTOCOL_VERSION`: advertised A2A protocol version, default `0.3.0`
 - `A2A_DOCUMENTATION_URL`: optional external documentation URL exposed on Agent Card
+- `A2A_BEARER_TOKEN`: legacy single inbound bearer token; optional when Basic auth or static credentials are configured
+- `A2A_BASIC_AUTH_USERNAME`: legacy single inbound Basic auth username; must be paired with `A2A_BASIC_AUTH_PASSWORD`
+- `A2A_BASIC_AUTH_PASSWORD`: legacy single inbound Basic auth password; must be paired with `A2A_BASIC_AUTH_USERNAME`
+- `A2A_STATIC_AUTH_CREDENTIALS`: JSON array of static inbound credentials. Supports multiple `bearer` and `basic` entries, each with a stable `principal`; Basic entries may omit `principal` and default to `username`.
 
 ### Outbound A2A Client Defaults
 
@@ -261,7 +269,10 @@ These variables are forwarded to the local `codex app-server` subprocess.
 
 | Variable | Description |
 | :--- | :--- |
-| `A2A_BEARER_TOKEN` | Inbound auth token |
+| `A2A_BEARER_TOKEN` | Legacy inbound bearer token |
+| `A2A_BASIC_AUTH_USERNAME` | Legacy inbound Basic username |
+| `A2A_BASIC_AUTH_PASSWORD` | Legacy inbound Basic password |
+| `A2A_STATIC_AUTH_CREDENTIALS` | Static inbound auth registry |
 | `A2A_HOST` | Bind host |
 | `A2A_PORT` | Bind port |
 | `A2A_PUBLIC_URL` | Public URL prefix |
@@ -398,8 +409,18 @@ This path is for contributors. End users should prefer the released CLI path des
 
 ### Health, Auth, and Deployment Boundary
 
-- `GET /health` is a lightweight authenticated status probe. It requires the same `Authorization: Bearer <token>` header as other protected endpoints and returns service status plus a structured `profile` summary; it does not call upstream Codex.
-- Requests require `Authorization: Bearer <token>`; otherwise `401` is returned. The public Agent Card endpoints are public; authenticated extended card routes still require bearer auth.
+- `GET /health` is a lightweight authenticated status probe. It requires the same configured inbound auth as other protected endpoints and returns service status plus a structured `profile` summary; it does not call upstream Codex.
+- Protected routes accept configured inbound `Authorization: Bearer <token>` and/or `Authorization: Basic <base64(username:password)>` credentials. The public Agent Card endpoints are public; authenticated extended card routes still require inbound auth.
+- Static credential registry mode is the preferred deployment shape when more than one inbound credential is needed. It lets deployments define multiple bearer tokens and/or multiple Basic credentials with stable `principal` values.
+- Stable `principal` values back runtime ownership checks. This avoids tying session, watch, or exec ownership to a bearer token hash that changes during token rotation.
+- Legacy single-token mode remains available:
+  - legacy bearer maps to principal `automation`
+  - legacy Basic auth maps to principal `operator`
+- Capability gating stays intentionally small:
+  - `codex.sessions.shell` requires `session_shell`
+  - `codex.exec.*` requires `exec_control`
+  - legacy Basic auth grants both capabilities by default
+  - bearer credentials do not gain those capabilities unless the static credential entry explicitly grants them
 - Within one `codex-a2a` instance, all consumers share the same underlying Codex workspace/environment. This deployment model is not tenant-isolated by default.
 
 ### Session and Task Behavior

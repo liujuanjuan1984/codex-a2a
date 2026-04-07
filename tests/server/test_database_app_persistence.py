@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import sqlite3
 import time
 from pathlib import Path
@@ -179,9 +178,7 @@ async def test_database_backend_persists_task_session_and_interrupt_state_across
         a2a_bearer_token="test-token",
         a2a_database_url=database_url,
     )
-    request_identity = (
-        f"bearer:{hashlib.sha256(settings.a2a_bearer_token.encode()).hexdigest()[:12]}"
-    )
+    request_identity = "automation"
     database_path = (tmp_path / "app-state.db").resolve()
 
     app1 = app_module.create_app(settings)

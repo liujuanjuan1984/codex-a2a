@@ -218,6 +218,7 @@ def create_app(settings: Settings) -> FastAPI:
 
     patch_openapi_contract(
         app,
+        settings=settings,
         protocol_version=settings.a2a_protocol_version,
         runtime_profile=runtime_profile,
     )

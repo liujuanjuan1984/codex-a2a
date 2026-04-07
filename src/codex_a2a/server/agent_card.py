@@ -13,6 +13,7 @@ from a2a.types import (
     TransportProtocol,
 )
 
+from codex_a2a.auth import has_configured_auth_scheme
 from codex_a2a.config import Settings
 from codex_a2a.contracts.extensions import (
     COMPATIBILITY_PROFILE_EXTENSION_URI,
@@ -754,16 +755,25 @@ def _build_agent_card(
 ) -> AgentCard:
     public_url = settings.a2a_public_url.rstrip("/")
     runtime_profile = runtime_profile or build_runtime_profile(settings)
-    security_schemes: dict[str, SecurityScheme] = {
-        "bearerAuth": SecurityScheme(
+    security_schemes: dict[str, SecurityScheme] = {}
+    security: list[dict[str, list[str]]] = []
+    if has_configured_auth_scheme(settings, "bearer"):
+        security_schemes["bearerAuth"] = SecurityScheme(
             root=HTTPAuthSecurityScheme(
                 description="Bearer token authentication",
                 scheme="bearer",
                 bearer_format="opaque",
             )
         )
-    }
-    security: list[dict[str, list[str]]] = [{"bearerAuth": []}]
+        security.append({"bearerAuth": []})
+    if has_configured_auth_scheme(settings, "basic"):
+        security_schemes["basicAuth"] = SecurityScheme(
+            root=HTTPAuthSecurityScheme(
+                description="Basic authentication",
+                scheme="basic",
+            )
+        )
+        security.append({"basicAuth": []})
 
     return AgentCard(
         name=settings.a2a_title,

@@ -1,3 +1,4 @@
+import json
 import os
 from unittest import mock
 
@@ -12,10 +13,7 @@ def test_settings_missing_required():
     with mock.patch.dict(os.environ, {}, clear=True):
         with pytest.raises(ValidationError) as excinfo:
             Settings()
-        # Should mention missing required fields
-        errors = excinfo.value.errors()
-        field_names = [e["loc"][0] for e in errors]
-        assert "A2A_BEARER_TOKEN" in field_names
+        assert "Configure at least one runtime authentication credential" in str(excinfo.value)
 
 
 def test_settings_valid():
@@ -61,6 +59,108 @@ def test_settings_valid():
             == "sqlite+aiosqlite:////tmp/workspace/.codex-a2a/codex-a2a.db"
         )
         assert settings.a2a_version == __version__
+
+
+def test_settings_accept_legacy_basic_auth_pair_without_bearer() -> None:
+    env = {
+        "A2A_BASIC_AUTH_USERNAME": "operator",
+        "A2A_BASIC_AUTH_PASSWORD": "op-pass",  # pragma: allowlist secret
+    }
+    with mock.patch.dict(os.environ, env, clear=True):
+        settings = Settings.from_env()
+
+    assert settings.a2a_bearer_token is None
+    assert settings.a2a_basic_auth_username == "operator"
+    assert settings.a2a_basic_auth_password == "op-pass"  # pragma: allowlist secret
+
+
+def test_settings_require_complete_basic_auth_pair() -> None:
+    env = {
+        "A2A_BASIC_AUTH_USERNAME": "operator",
+    }
+    with mock.patch.dict(os.environ, env, clear=True):
+        with pytest.raises(ValidationError) as excinfo:
+            Settings.from_env()
+
+    assert "A2A_BASIC_AUTH_USERNAME and A2A_BASIC_AUTH_PASSWORD" in str(excinfo.value)
+
+
+def test_settings_accept_static_auth_registry_without_legacy_credentials() -> None:
+    env = {
+        "A2A_STATIC_AUTH_CREDENTIALS": json.dumps(
+            [
+                {
+                    "id": "bot-alpha",
+                    "scheme": "bearer",
+                    "token": "token-alpha",
+                    "principal": "automation-alpha",
+                },
+                {
+                    "scheme": "basic",
+                    "username": "ops",
+                    "password": "ops-pass",  # pragma: allowlist secret
+                    "capabilities": ["session_shell"],
+                },
+                {
+                    "scheme": "bearer",
+                    "token": "token-disabled",
+                    "principal": "disabled",
+                    "enabled": False,
+                },
+            ]
+        )
+    }
+    with mock.patch.dict(os.environ, env, clear=True):
+        settings = Settings.from_env()
+
+    assert settings.a2a_bearer_token is None
+    assert settings.a2a_basic_auth_username is None
+    assert len(settings.a2a_static_auth_credentials) == 3
+    assert settings.a2a_static_auth_credentials[0].credential_id == "bot-alpha"
+    assert settings.a2a_static_auth_credentials[0].principal == "automation-alpha"
+    assert settings.a2a_static_auth_credentials[1].principal == "ops"
+    assert settings.a2a_static_auth_credentials[1].capabilities == ("session_shell",)
+    assert settings.a2a_static_auth_credentials[2].enabled is False
+
+
+def test_settings_reject_registry_without_enabled_credentials() -> None:
+    env = {
+        "A2A_STATIC_AUTH_CREDENTIALS": json.dumps(
+            [
+                {
+                    "scheme": "bearer",
+                    "token": "token-disabled",
+                    "principal": "disabled",
+                    "enabled": False,
+                }
+            ]
+        )
+    }
+    with mock.patch.dict(os.environ, env, clear=True):
+        with pytest.raises(ValidationError) as excinfo:
+            Settings.from_env()
+
+    assert "A2A_STATIC_AUTH_CREDENTIALS must contain at least one enabled credential" in str(
+        excinfo.value
+    )
+
+
+def test_settings_require_principal_for_registry_bearer() -> None:
+    env = {
+        "A2A_STATIC_AUTH_CREDENTIALS": json.dumps(
+            [
+                {
+                    "scheme": "bearer",
+                    "token": "token-alpha",
+                }
+            ]
+        )
+    }
+    with mock.patch.dict(os.environ, env, clear=True):
+        with pytest.raises(ValidationError) as excinfo:
+            Settings.from_env()
+
+    assert "Static bearer credential requires principal." in str(excinfo.value)
 
 
 def test_settings_default_database_url_falls_back_without_workspace_root() -> None:

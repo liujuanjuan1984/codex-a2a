@@ -248,6 +248,7 @@ SESSION_CONTROL_METHODS: dict[str, str] = {
 SESSION_QUERY_ERROR_BUSINESS_CODES: dict[str, int] = {
     "SESSION_NOT_FOUND": -32001,
     "SESSION_FORBIDDEN": -32006,
+    "AUTHORIZATION_FORBIDDEN": -32007,
     "UPSTREAM_UNREACHABLE": -32002,
     "UPSTREAM_HTTP_ERROR": -32003,
     "UPSTREAM_PAYLOAD_ERROR": -32005,
@@ -255,6 +256,8 @@ SESSION_QUERY_ERROR_BUSINESS_CODES: dict[str, int] = {
 SESSION_QUERY_ERROR_DATA_FIELDS: tuple[str, ...] = (
     "type",
     "method",
+    "capability",
+    "required_principal",
     "session_id",
     "upstream_status",
     "detail",
@@ -746,6 +749,7 @@ EXEC_CONTROL_METHODS: dict[str, str] = {
 }
 
 EXEC_CONTROL_ERROR_BUSINESS_CODES: dict[str, int] = {
+    "AUTHORIZATION_FORBIDDEN": -32007,
     "EXEC_SESSION_NOT_FOUND": -32009,
     "EXEC_FORBIDDEN": -32018,
     "UPSTREAM_UNREACHABLE": -32002,
@@ -753,6 +757,9 @@ EXEC_CONTROL_ERROR_BUSINESS_CODES: dict[str, int] = {
 }
 EXEC_CONTROL_ERROR_DATA_FIELDS: tuple[str, ...] = (
     "type",
+    "method",
+    "capability",
+    "required_principal",
     "process_id",
     "upstream_status",
     "detail",

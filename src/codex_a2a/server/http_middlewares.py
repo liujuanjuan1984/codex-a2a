@@ -3,7 +3,6 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-import secrets
 import time
 from urllib.parse import unquote
 
@@ -15,6 +14,7 @@ from starlette.middleware.gzip import GZipResponder
 from starlette.responses import Response, StreamingResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
 
+from codex_a2a.auth import authenticate_static_credential, build_static_auth_credentials
 from codex_a2a.config import Settings
 from codex_a2a.logging_context import (
     CORRELATION_ID_HEADER,
@@ -214,12 +214,19 @@ def install_http_middlewares(
 ) -> None:
     public_card_etag = _build_agent_card_etag(agent_card)
     extended_card_etag = _build_agent_card_etag(extended_agent_card)
+    configured_credentials = build_static_auth_credentials(settings)
+    advertised_schemes = {credential.auth_scheme for credential in configured_credentials}
 
     def _unauthorized_response() -> JSONResponse:
+        challenges: list[str] = []
+        if "bearer" in advertised_schemes:
+            challenges.append("Bearer")
+        if "basic" in advertised_schemes:
+            challenges.append('Basic realm="codex-a2a"')
         return JSONResponse(
             {"error": "Unauthorized"},
             status_code=401,
-            headers={"WWW-Authenticate": "Bearer"},
+            headers={"WWW-Authenticate": ", ".join(challenges)},
         )
 
     @app.middleware("http")
@@ -417,12 +424,22 @@ def install_http_middlewares(
             return await call_next(request)
 
         auth_header = request.headers.get("authorization", "")
-        if not auth_header.lower().startswith("bearer "):
+        try:
+            auth_scheme, auth_value = auth_header.split(" ", 1)
+        except ValueError:
             return _unauthorized_response()
-        provided = auth_header.split(" ", 1)[1].strip()
-        if not secrets.compare_digest(provided, settings.a2a_bearer_token):
+        principal = authenticate_static_credential(
+            credentials=configured_credentials,
+            auth_scheme=auth_scheme,
+            auth_value=auth_value.strip(),
+        )
+        if principal is None:
             return _unauthorized_response()
-        request.state.user_identity = f"bearer:{hashlib.sha256(provided.encode()).hexdigest()[:12]}"
+        request.state.authenticated_principal = principal
+        request.state.user_identity = principal.identity
+        request.state.user_auth_scheme = principal.auth_scheme
+        if principal.credential_id:
+            request.state.user_credential_id = principal.credential_id
 
         return await call_next(request)
 
