@@ -503,7 +503,7 @@ def test_authenticated_extended_agent_card_injects_profile_into_extensions() -> 
     assert review_contract["params"]["required"] == ["thread_id", "target.type"]
     assert "delivery" in review_contract["params"]["optional"]
     assert "metadata.codex.directory" in review_contract["params"]["unsupported"]
-    assert review_contract["result"]["fields"] == ["ok", "turn_id", "turn", "review_thread_id"]
+    assert review_contract["result"]["fields"] == ["ok", "turn_id", "review_thread_id"]
     watch_contract = review_control_params["method_contracts"]["codex.review.watch"]
     assert watch_contract["params"]["required"] == [
         "thread_id",
@@ -549,6 +549,7 @@ def test_authenticated_extended_agent_card_injects_profile_into_extensions() -> 
     assert exec_control_params["supported_metadata"] == ["codex.directory"]
     assert exec_control_params["provider_private_metadata"] == ["codex.directory"]
     assert exec_control_params["task_streaming"]["task_stream_method"] == "tasks/resubscribe"
+    assert exec_control_params["errors"]["business_codes"]["EXEC_FORBIDDEN"] == -32018
     start_contract = exec_control_params["method_contracts"]["codex.exec.start"]
     assert start_contract["execution_binding"] == "standalone_interactive_command_exec"
     assert start_contract["result"]["fields"] == ["ok", "task_id", "context_id", "process_id"]

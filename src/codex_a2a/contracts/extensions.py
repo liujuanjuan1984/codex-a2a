@@ -550,7 +550,7 @@ REVIEW_CONTROL_METHOD_CONTRACTS: dict[str, ReviewControlMethodContract] = {
             CODEX_DIRECTORY_METADATA_FIELD,
             CODEX_EXECUTION_METADATA_FIELD,
         ),
-        result_fields=("ok", "turn_id", "turn", "review_thread_id"),
+        result_fields=("ok", "turn_id", "review_thread_id"),
         notification_response_status=204,
         notes=(
             (
@@ -565,6 +565,10 @@ REVIEW_CONTROL_METHOD_CONTRACTS: dict[str, ReviewControlMethodContract] = {
             (
                 "Use codex.review.watch when you need a stable task-stream bridge for "
                 "review lifecycle observation."
+            ),
+            (
+                "review/start is a control-handle surface. It returns turn_id and "
+                "review_thread_id, not the spawned review turn payload."
             ),
         ),
     ),
@@ -715,6 +719,7 @@ EXEC_CONTROL_METHODS: dict[str, str] = {
 
 EXEC_CONTROL_ERROR_BUSINESS_CODES: dict[str, int] = {
     "EXEC_SESSION_NOT_FOUND": -32009,
+    "EXEC_FORBIDDEN": -32018,
     "UPSTREAM_UNREACHABLE": -32002,
     "UPSTREAM_HTTP_ERROR": -32003,
 }

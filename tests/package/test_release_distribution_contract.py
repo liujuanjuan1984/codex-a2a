@@ -126,6 +126,7 @@ def test_repository_wrappers_only_keep_remaining_user_or_maintainer_entrypoints(
     )
     assert "uv run pytest --no-cov" in RUNTIME_MATRIX_SCRIPT_TEXT
     assert 'CODEX_CLI_BIN="${fake_codex_bin}"' in SMOKE_TEST_SCRIPT_TEXT
+    assert 'A2A_DATABASE_URL="sqlite+aiosqlite:///${database_path}"' in SMOKE_TEST_SCRIPT_TEXT
     assert 'cat >"${fake_codex_bin}"' in SMOKE_TEST_SCRIPT_TEXT
     assert ">/dev/null 2>&1" in SMOKE_TEST_SCRIPT_TEXT
     assert "git clone --depth 1 https://github.com/openai/codex.git" in SYNC_CODEX_DOCS_TEXT

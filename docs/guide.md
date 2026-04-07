@@ -933,7 +933,7 @@ curl -sS http://127.0.0.1:8000/ \
   }'
 ```
 
-The result returns `ok`, `turn_id`, the spawned `turn`, and `review_thread_id`. When `delivery=detached`, `review_thread_id` identifies the detached review thread.
+The result returns `ok`, `turn_id`, and `review_thread_id`. When `delivery=detached`, `review_thread_id` identifies the detached review thread.
 
 ### Review Watch (`codex.review.watch`)
 

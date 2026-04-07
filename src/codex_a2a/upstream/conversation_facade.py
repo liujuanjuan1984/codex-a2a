@@ -327,7 +327,6 @@ class CodexConversationFacade:
         return {
             "ok": True,
             "turn_id": turn_id.strip(),
-            "turn": turn,
             "review_thread_id": review_thread_id.strip(),
         }
 
