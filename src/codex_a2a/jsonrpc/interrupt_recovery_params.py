@@ -29,9 +29,7 @@ class InterruptRecoveryListParams(_StrictModel):
         if normalized is None:
             return None
         if normalized not in {"permission", "question", "permissions", "elicitation"}:
-            raise ValueError(
-                "type must be one of: permission, question, permissions, elicitation"
-            )
+            raise ValueError("type must be one of: permission, question, permissions, elicitation")
         return normalized
 
 
