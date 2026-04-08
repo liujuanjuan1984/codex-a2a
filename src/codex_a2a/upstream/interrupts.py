@@ -5,6 +5,13 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
+_PERMISSION_INTERRUPT_METHOD_MAP = {
+    "item/commandExecution/requestApproval": "command_execution",
+    "execCommandApproval": "command_execution",
+    "item/fileChange/requestApproval": "file_change",
+    "applyPatchApproval": "apply_patch",
+}
+
 
 def _normalized_string(value: Any) -> str | None:
     if not isinstance(value, str):
@@ -87,6 +94,13 @@ def _extract_mapping(params: dict[str, Any], key: str) -> dict[str, Any] | None:
     return dict(value)
 
 
+def resolve_permission_interrupt_semantic(method: str | None) -> str | None:
+    normalized_method = _normalized_string(method)
+    if normalized_method is None:
+        return None
+    return _PERMISSION_INTERRUPT_METHOD_MAP.get(normalized_method)
+
+
 class InterruptRequestError(RuntimeError):
     def __init__(
         self,
@@ -149,6 +163,9 @@ def build_codex_permission_interrupt_properties(
     )
     if display_message is not None:
         properties["display_message"] = display_message
+    permission = resolve_permission_interrupt_semantic(method)
+    if permission is not None:
+        properties["permission"] = permission
     patterns = _extract_permission_patterns(params)
     if patterns:
         properties["patterns"] = patterns

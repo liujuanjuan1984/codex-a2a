@@ -24,6 +24,7 @@ from codex_a2a.jsonrpc.payload_mapping import (
     as_a2a_session_task,
     extract_raw_items,
 )
+from codex_a2a.upstream.models import CodexRPCError, is_thread_not_found_error
 
 if TYPE_CHECKING:
     from codex_a2a.jsonrpc.application import CodexSessionQueryJSONRPCApplication
@@ -80,6 +81,21 @@ async def handle_session_query_request(
                 message="Upstream Codex unreachable",
                 data={"type": "UPSTREAM_UNREACHABLE"},
             ),
+        )
+    except CodexRPCError as exc:
+        if is_thread_not_found_error(exc) and session_id is not None:
+            return app._generate_error_response(
+                base_request.id,
+                JSONRPCError(
+                    code=ERR_SESSION_NOT_FOUND,
+                    message="Session not found",
+                    data={"type": "SESSION_NOT_FOUND", "session_id": session_id},
+                ),
+            )
+        logger.exception("Codex session query JSON-RPC method failed")
+        return app._generate_error_response(
+            base_request.id,
+            A2AError(root=InternalError(message=str(exc))),
         )
     except Exception as exc:
         logger.exception("Codex session query JSON-RPC method failed")

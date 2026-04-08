@@ -17,6 +17,7 @@ from codex_a2a.upstream.client import (
     _PendingInterruptRequest,
     _PendingRpcRequest,
 )
+from codex_a2a.upstream.models import CodexRPCError
 from tests.support.fixtures import (
     replay_codex_jsonrpc_line_fixture,
     replay_codex_notification_fixture,
@@ -262,6 +263,7 @@ async def test_session_prompt_async_maps_rich_input_parts_to_turn_start() -> Non
         return {"turn": {"id": "turn-42"}}
 
     client._rpc_request = fake_rpc_request
+    client._conversation_facade._loaded_thread_ids.add("thr-1")
 
     result = await client.session_prompt_async(
         "thr-1",
@@ -301,6 +303,105 @@ async def test_session_prompt_async_maps_rich_input_parts_to_turn_start() -> Non
                 "cwd": "/safe",
             },
         )
+    ]
+
+
+@pytest.mark.asyncio
+async def test_session_prompt_async_resumes_unloaded_thread_before_turn_start() -> None:
+    client = CodexClient(
+        make_settings(
+            a2a_bearer_token="t-1",
+            codex_workspace_root="/safe",
+            codex_timeout=1.0,
+            codex_model_id="gpt-5.2-codex",
+        )
+    )
+
+    seen: list[tuple[str, dict | None]] = []
+
+    async def fake_rpc_request(method: str, params: dict | None = None):
+        seen.append((method, params))
+        if method == "thread/loaded/list":
+            return {"data": [], "nextCursor": None}
+        if method == "thread/resume":
+            return {"thread": {"id": "thr-1"}}
+        return {"turn": {"id": "turn-42"}}
+
+    client._rpc_request = fake_rpc_request
+
+    result = await client.session_prompt_async(
+        "thr-1",
+        {"parts": [{"type": "text", "text": "Use the app."}]},
+    )
+
+    assert result == {"ok": True, "session_id": "thr-1", "turn_id": "turn-42"}
+    assert seen == [
+        ("thread/loaded/list", {}),
+        ("thread/resume", {"threadId": "thr-1", "cwd": "/safe", "model": "gpt-5.2-codex"}),
+        (
+            "turn/start",
+            {
+                "threadId": "thr-1",
+                "input": [{"type": "text", "text": "Use the app.", "text_elements": []}],
+                "cwd": "/safe",
+                "model": "gpt-5.2-codex",
+            },
+        ),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_session_prompt_async_retries_turn_start_after_thread_not_found() -> None:
+    client = CodexClient(
+        make_settings(
+            a2a_bearer_token="t-1",
+            codex_workspace_root="/safe",
+            codex_timeout=1.0,
+        )
+    )
+
+    seen: list[tuple[str, dict | None]] = []
+    turn_attempts = 0
+
+    async def fake_rpc_request(method: str, params: dict | None = None):
+        nonlocal turn_attempts
+        seen.append((method, params))
+        if method == "turn/start":
+            turn_attempts += 1
+            if turn_attempts == 1:
+                raise CodexRPCError(code=-32000, message="thread not found: thr-1")
+            return {"turn": {"id": "turn-43"}}
+        if method == "thread/resume":
+            return {"thread": {"id": "thr-1"}}
+        return {}
+
+    client._rpc_request = fake_rpc_request
+    client._conversation_facade._loaded_thread_ids.add("thr-1")
+
+    result = await client.session_prompt_async(
+        "thr-1",
+        {"parts": [{"type": "text", "text": "Retry after resume."}]},
+    )
+
+    assert result == {"ok": True, "session_id": "thr-1", "turn_id": "turn-43"}
+    assert seen == [
+        (
+            "turn/start",
+            {
+                "threadId": "thr-1",
+                "input": [{"type": "text", "text": "Retry after resume.", "text_elements": []}],
+                "cwd": "/safe",
+            },
+        ),
+        ("thread/resume", {"threadId": "thr-1", "cwd": "/safe"}),
+        (
+            "turn/start",
+            {
+                "threadId": "thr-1",
+                "input": [{"type": "text", "text": "Retry after resume.", "text_elements": []}],
+                "cwd": "/safe",
+            },
+        ),
     ]
 
 
@@ -1375,6 +1476,7 @@ async def test_send_message_uses_structured_input_items_when_provided() -> None:
         return {"turn": {"id": "turn-1"}}
 
     client._rpc_request = fake_rpc_request
+    client._conversation_facade._loaded_thread_ids.add("thr-1")
     tracker = client._get_or_create_tracker("thr-1", "turn-1")
     tracker.text_chunks.append("done")
     tracker.completed.set()
@@ -1426,6 +1528,7 @@ async def test_send_message_request_execution_options_are_forwarded_to_turn_star
         return {"turn": {"id": "turn-1"}}
 
     client._rpc_request = fake_rpc_request
+    client._conversation_facade._loaded_thread_ids.add("thr-1")
     tracker = client._get_or_create_tracker("thr-1", "turn-1")
     tracker.text_chunks.append("done")
     tracker.completed.set()
@@ -1513,8 +1616,8 @@ async def test_permission_request_emits_shared_message_and_patterns() -> None:
     assert props["id"] == "301"
     assert props["sessionID"] == "thr-1"
     assert props["display_message"] == "The command needs confirmation before continuing."
+    assert props["permission"] == "command_execution"
     assert props["patterns"] == ["/repo/.env"]
-    assert "permission" not in props
     assert "always" not in props
     assert "reason" not in props
     assert props["metadata"]["raw"]["parsedCmd"] == [
@@ -1676,6 +1779,7 @@ async def test_permission_request_promotes_nested_request_message() -> None:
     assert len(events) == 1
     props = events[0]["properties"]
     assert props["display_message"] == "Agent wants to read the environment file."
+    assert props["permission"] == "command_execution"
     assert props["patterns"] == ["/repo/.env"]
     assert "request" not in props
     assert props["metadata"]["raw"]["request"] == {
