@@ -14,6 +14,7 @@ This document only explains the remaining repository-local maintainer scripts. U
 
 - [`scripts/validate_baseline.sh`](./validate_baseline.sh): run the default local validation baseline used by contributors and CI.
 - [`scripts/validate_runtime_matrix.sh`](./validate_runtime_matrix.sh): run the reduced runtime-only validation used by the multi-version CI matrix.
+- [`scripts/dependency_health.sh`](./dependency_health.sh): run the standalone dependency review flow (`sync`/`pip check`, outdated package listing, and dev vulnerability audit).
 - [`scripts/smoke_test_built_cli.sh`](./smoke_test_built_cli.sh): validate that a built wheel can be installed through `uv tool` and becomes healthy.
 - [`scripts/sync_codex_docs.sh`](./sync_codex_docs.sh): refresh local upstream Codex reference snapshots when maintainers need them.
 
