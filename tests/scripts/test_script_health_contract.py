@@ -4,6 +4,7 @@ DEPENDENCY_HEALTH_TEXT = Path("scripts/dependency_health.sh").read_text()
 HEALTH_COMMON_TEXT = Path("scripts/health_common.sh").read_text()
 SCRIPTS_INDEX_TEXT = Path("scripts/README.md").read_text()
 VALIDATE_BASELINE_TEXT = Path("scripts/validate_baseline.sh").read_text()
+DEPENDABOT_TEXT = Path(".github/dependabot.yml").read_text()
 
 
 def test_shared_repo_health_prerequisites_live_in_common_helper() -> None:
@@ -41,3 +42,12 @@ def test_scripts_index_documents_split_health_entrypoints() -> None:
     assert "standalone dependency review flow" in SCRIPTS_INDEX_TEXT
     assert "health_common.sh" in SCRIPTS_INDEX_TEXT
     assert "intentionally remain separate entrypoints" in SCRIPTS_INDEX_TEXT
+    assert "weekly Dependabot version updates" in SCRIPTS_INDEX_TEXT
+
+
+def test_dependabot_configuration_covers_uv_and_github_actions() -> None:
+    assert 'package-ecosystem: "uv"' in DEPENDABOT_TEXT
+    assert 'package-ecosystem: "github-actions"' in DEPENDABOT_TEXT
+    assert "open-pull-requests-limit: 5" in DEPENDABOT_TEXT
+    assert "open-pull-requests-limit: 3" in DEPENDABOT_TEXT
+    assert "uv-minor-and-patch" in DEPENDABOT_TEXT
