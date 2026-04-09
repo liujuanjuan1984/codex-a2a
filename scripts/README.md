@@ -30,5 +30,6 @@ The `Publish` workflow now separates build, PyPI publish, and GitHub Release syn
 
 - `validate_baseline.sh` and `dependency_health.sh` intentionally remain separate entrypoints and share common prerequisites through [`health_common.sh`](./health_common.sh).
 - `validate_baseline.sh` now blocks on runtime dependency vulnerability audit, while `dependency_health.sh` remains focused on broader dependency review (`outdated` + dev audit).
+- [`.github/dependabot.yml`](../.github/dependabot.yml) enables weekly Dependabot version updates for `uv` and GitHub Actions with grouped low-risk updates, while the repository scripts remain the explicit audit and validation entrypoints.
 - End-user runtime startup does not use repository scripts. Prefer the published CLI command documented in [README.md](../README.md) and [docs/guide.md](../docs/guide.md).
 - Keep long-form documentation changes in `docs/` to avoid divergence.
