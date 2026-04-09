@@ -14,6 +14,7 @@ This document only explains the remaining repository-local maintainer scripts. U
 
 - [`scripts/validate_baseline.sh`](./validate_baseline.sh): run the default local validation baseline used by contributors and CI.
 - [`scripts/validate_runtime_matrix.sh`](./validate_runtime_matrix.sh): run the reduced runtime-only validation used by the multi-version CI matrix.
+- [`scripts/dependency_health.sh`](./dependency_health.sh): run the standalone dependency review flow (`sync`/`pip check`, outdated package listing, and dev vulnerability audit).
 - [`scripts/smoke_test_built_cli.sh`](./smoke_test_built_cli.sh): validate that a built wheel can be installed through `uv tool` and becomes healthy.
 - [`scripts/sync_codex_docs.sh`](./sync_codex_docs.sh): refresh local upstream Codex reference snapshots when maintainers need them.
 
@@ -27,5 +28,7 @@ The `Publish` workflow now separates build, PyPI publish, and GitHub Release syn
 
 ## Notes
 
+- `validate_baseline.sh` and `dependency_health.sh` intentionally remain separate entrypoints and share common prerequisites through [`health_common.sh`](./health_common.sh).
+- `validate_baseline.sh` now blocks on runtime dependency vulnerability audit, while `dependency_health.sh` remains focused on broader dependency review (`outdated` + dev audit).
 - End-user runtime startup does not use repository scripts. Prefer the published CLI command documented in [README.md](../README.md) and [docs/guide.md](../docs/guide.md).
 - Keep long-form documentation changes in `docs/` to avoid divergence.

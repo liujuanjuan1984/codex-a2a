@@ -8,7 +8,9 @@ CONTRIBUTING_TEXT = Path("CONTRIBUTING.md").read_text()
 SECURITY_TEXT = Path("SECURITY.md").read_text()
 SCRIPTS_README_TEXT = Path("scripts/README.md").read_text()
 CI_WORKFLOW_TEXT = Path(".github/workflows/ci.yml").read_text()
+DEPENDENCY_HEALTH_WORKFLOW_TEXT = Path(".github/workflows/dependency-health.yml").read_text()
 PUBLISH_WORKFLOW_TEXT = Path(".github/workflows/publish.yml").read_text()
+DEPENDENCY_HEALTH_SCRIPT_TEXT = Path("scripts/dependency_health.sh").read_text()
 SMOKE_TEST_SCRIPT_TEXT = Path("scripts/smoke_test_built_cli.sh").read_text()
 RUNTIME_MATRIX_SCRIPT_TEXT = Path("scripts/validate_runtime_matrix.sh").read_text()
 SYNC_CODEX_DOCS_TEXT = Path("scripts/sync_codex_docs.sh").read_text()
@@ -52,24 +54,48 @@ def test_readme_documents_released_cli_installation_via_uv_tool() -> None:
 
 
 def test_publish_workflow_builds_and_smoke_tests_release_artifacts() -> None:
+    assert "name: Release Publish" in PUBLISH_WORKFLOW_TEXT
     assert 'tags:\n      - "v*"' in PUBLISH_WORKFLOW_TEXT
     assert "workflow_dispatch" in PUBLISH_WORKFLOW_TEXT
+    assert "name: Build Release Artifacts" in PUBLISH_WORKFLOW_TEXT
+    assert "name: Publish to PyPI" in PUBLISH_WORKFLOW_TEXT
+    assert "name: Sync GitHub Release" in PUBLISH_WORKFLOW_TEXT
+    assert "Export runtime requirements for vulnerability audit" in PUBLISH_WORKFLOW_TEXT
+    assert "Run runtime dependency vulnerability audit" in PUBLISH_WORKFLOW_TEXT
+    assert "uv run pip-audit --requirement /tmp/runtime-requirements.txt" in PUBLISH_WORKFLOW_TEXT
     assert "uv build --no-sources" in PUBLISH_WORKFLOW_TEXT
     assert "bash ./scripts/smoke_test_built_cli.sh" in PUBLISH_WORKFLOW_TEXT
     assert "gh-action-pypi-publish" in PUBLISH_WORKFLOW_TEXT
 
 
 def test_ci_workflow_deduplicates_full_gate_and_runtime_matrix() -> None:
+    assert "name: Validation" in CI_WORKFLOW_TEXT
     assert "quality-gate:" in CI_WORKFLOW_TEXT
+    assert "name: Validation Baseline" in CI_WORKFLOW_TEXT
     assert 'python-version: "3.13"' in CI_WORKFLOW_TEXT
     assert "bash ./scripts/validate_baseline.sh" in CI_WORKFLOW_TEXT
     assert "runtime-matrix:" in CI_WORKFLOW_TEXT
+    assert "name: Runtime Matrix (Python ${{ matrix.python-version }})" in CI_WORKFLOW_TEXT
     assert 'python-version: ["3.11", "3.12"]' in CI_WORKFLOW_TEXT
     assert "bash ./scripts/validate_runtime_matrix.sh" in CI_WORKFLOW_TEXT
 
 
+def test_dependency_health_workflow_runs_as_a_standalone_check() -> None:
+    assert "name: Dependency Health" in DEPENDENCY_HEALTH_WORKFLOW_TEXT
+    assert "workflow_dispatch" in DEPENDENCY_HEALTH_WORKFLOW_TEXT
+    assert 'cron: "0 3 1 * *"' in DEPENDENCY_HEALTH_WORKFLOW_TEXT
+    assert "dependency-health:" in DEPENDENCY_HEALTH_WORKFLOW_TEXT
+    assert "name: Dependency Health Audit" in DEPENDENCY_HEALTH_WORKFLOW_TEXT
+    assert 'python-version: "3.13"' in DEPENDENCY_HEALTH_WORKFLOW_TEXT
+    assert "enable-cache: false" in DEPENDENCY_HEALTH_WORKFLOW_TEXT
+    assert "bash ./scripts/dependency_health.sh" in DEPENDENCY_HEALTH_WORKFLOW_TEXT
+    assert "uv pip list --outdated" in DEPENDENCY_HEALTH_SCRIPT_TEXT
+    assert "uv run pip-audit" in DEPENDENCY_HEALTH_SCRIPT_TEXT
+
+
 def test_scripts_index_exposes_built_cli_smoke_test() -> None:
     assert "validate_runtime_matrix.sh" in SCRIPTS_README_TEXT
+    assert "dependency_health.sh" in SCRIPTS_README_TEXT
     assert "smoke_test_built_cli.sh" in SCRIPTS_README_TEXT
     assert "`uv tool`" in SCRIPTS_README_TEXT
     assert "runtime entrypoints live in the released `codex-a2a` CLI" in SCRIPTS_README_TEXT
@@ -137,6 +163,7 @@ def test_validation_and_publish_paths_filter_known_build_warnings() -> None:
     validate_baseline_text = Path("scripts/validate_baseline.sh").read_text()
     assert "vcs_versioning._backends._git" in validate_baseline_text
     assert "vcs_versioning.overrides" in validate_baseline_text
+    assert "uv run pip-audit --requirement" in validate_baseline_text
     assert "vcs_versioning._backends._git" in PUBLISH_WORKFLOW_TEXT
     assert "vcs_versioning.overrides" in PUBLISH_WORKFLOW_TEXT
 
