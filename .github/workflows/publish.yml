@@ -43,6 +43,17 @@ jobs:
         with:
           enable-cache: true
 
+      - name: Sync dependencies
+        run: uv sync --all-extras --frozen
+
+      - name: Export runtime requirements for vulnerability audit
+        run: >
+          uv export --format requirements.txt --no-dev --locked --no-emit-project
+          --output-file /tmp/runtime-requirements.txt >/dev/null
+
+      - name: Run runtime dependency vulnerability audit
+        run: uv run pip-audit --requirement /tmp/runtime-requirements.txt
+
       - name: Resolve release tag
         id: release_tag
         run: echo "tag=${RELEASE_TAG}" >> "$GITHUB_OUTPUT"

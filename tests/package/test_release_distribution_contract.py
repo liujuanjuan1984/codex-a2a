@@ -60,6 +60,9 @@ def test_publish_workflow_builds_and_smoke_tests_release_artifacts() -> None:
     assert "name: Build Release Artifacts" in PUBLISH_WORKFLOW_TEXT
     assert "name: Publish to PyPI" in PUBLISH_WORKFLOW_TEXT
     assert "name: Sync GitHub Release" in PUBLISH_WORKFLOW_TEXT
+    assert "Export runtime requirements for vulnerability audit" in PUBLISH_WORKFLOW_TEXT
+    assert "Run runtime dependency vulnerability audit" in PUBLISH_WORKFLOW_TEXT
+    assert "uv run pip-audit --requirement /tmp/runtime-requirements.txt" in PUBLISH_WORKFLOW_TEXT
     assert "uv build --no-sources" in PUBLISH_WORKFLOW_TEXT
     assert "bash ./scripts/smoke_test_built_cli.sh" in PUBLISH_WORKFLOW_TEXT
     assert "gh-action-pypi-publish" in PUBLISH_WORKFLOW_TEXT
@@ -160,6 +163,7 @@ def test_validation_and_publish_paths_filter_known_build_warnings() -> None:
     validate_baseline_text = Path("scripts/validate_baseline.sh").read_text()
     assert "vcs_versioning._backends._git" in validate_baseline_text
     assert "vcs_versioning.overrides" in validate_baseline_text
+    assert "uv run pip-audit --requirement" in validate_baseline_text
     assert "vcs_versioning._backends._git" in PUBLISH_WORKFLOW_TEXT
     assert "vcs_versioning.overrides" in PUBLISH_WORKFLOW_TEXT
 
