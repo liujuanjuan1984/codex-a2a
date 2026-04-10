@@ -633,11 +633,11 @@ def install_http_middlewares(
         token = set_correlation_id(correlation_id)
         started_at = time.perf_counter()
         path = request.url.path
-        logger.info("A2A request started method=%s path=%s", request.method, path)
+        logger.debug("A2A request started method=%s path=%s", request.method, path)
         try:
             response = await call_next(request)
             response.headers[CORRELATION_ID_HEADER] = correlation_id
-            logger.info(
+            logger.debug(
                 "A2A request completed method=%s path=%s status=%s duration_ms=%.2f",
                 request.method,
                 path,

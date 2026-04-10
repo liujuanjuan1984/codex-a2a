@@ -386,7 +386,7 @@ class CodexRequestHandler(DefaultRequestHandler):
             ):
                 yield event
         except (asyncio.CancelledError, GeneratorExit):
-            logger.warning("Client disconnected. Cancelling producer task %s", task_id)
+            logger.debug("Client disconnected. Cancelling producer task %s", task_id)
             if producer_task is not None:
                 producer_task.cancel()
             if queue is not None:
@@ -472,7 +472,7 @@ class CodexRequestHandler(DefaultRequestHandler):
             else:
                 try:
                     if asyncio.current_task() and asyncio.current_task().cancelled():
-                        logger.warning(
+                        logger.debug(
                             "Client disconnected from message request. Cancelling task %s", task_id
                         )
                         producer_task.cancel()

@@ -241,13 +241,13 @@ def _normalize_log_level(value: str) -> str:
     normalized = (value or "").strip().upper()
     if normalized in {"CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG"}:
         return normalized
-    return "INFO"
+    return "WARNING"
 
 
 def _configure_logging(level: str) -> None:
     install_log_record_factory()
     logging.basicConfig(
-        level=getattr(logging, level, logging.INFO),
+        level=getattr(logging, level, logging.WARNING),
         format=(
             "%(asctime)s %(levelname)s %(name)s [correlation_id=%(correlation_id)s]: %(message)s"
         ),

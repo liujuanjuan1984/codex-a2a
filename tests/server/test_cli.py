@@ -9,6 +9,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 import codex_a2a.cli as cli
+import codex_a2a.server.application as app_module
 from codex_a2a import __version__
 
 
@@ -39,3 +40,8 @@ def test_cli_defaults_to_serve_when_no_subcommand() -> None:
         assert cli.main([]) == 0
 
     serve_mock.assert_called_once_with()
+
+
+def test_normalize_log_level_defaults_invalid_values_to_warning() -> None:
+    assert app_module._normalize_log_level("debug") == "DEBUG"
+    assert app_module._normalize_log_level("not-a-level") == "WARNING"

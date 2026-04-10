@@ -334,7 +334,7 @@ class CodexThreadLifecycleRuntime:
         if subscription is None:
             return
         if subscription.connection_scope != self._client.connection_scope_id:
-            logger.info(
+            logger.debug(
                 "Skipping upstream thread/unsubscribe for subscription %s because "
                 "connection_scope changed from %s to %s",
                 subscription_key,
@@ -343,7 +343,7 @@ class CodexThreadLifecycleRuntime:
             )
             return
         if not subscription.thread_filter:
-            logger.info(
+            logger.debug(
                 "Skipping upstream thread/unsubscribe for subscription %s because "
                 "thread_filter is not concrete",
                 subscription_key,
