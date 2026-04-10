@@ -21,6 +21,7 @@ from a2a.utils.errors import ServerError
 
 from codex_a2a.contracts.extensions import THREAD_LIFECYCLE_SUPPORTED_EVENTS
 from codex_a2a.execution.output_mapping import build_assistant_message, enqueue_artifact_update
+from codex_a2a.execution.watch_events import normalize_watch_event_filter
 
 logger = logging.getLogger(__name__)
 
@@ -78,7 +79,10 @@ class CodexThreadLifecycleRuntime:
         request: dict[str, Any] | None,
         context: ServerCallContext | None,
     ) -> dict[str, Any]:
-        events = self._normalize_events(request)
+        events = normalize_watch_event_filter(
+            request,
+            supported_events=THREAD_LIFECYCLE_SUPPORTED_EVENTS,
+        )
         thread_ids = self._normalize_thread_ids(request)
         task_id = str(uuid.uuid4())
         context_id = task_id
@@ -185,22 +189,6 @@ class CodexThreadLifecycleRuntime:
                 watch_id=owner.watch_id,
                 release_reason="restart_reconcile",
             )
-
-    def _normalize_events(self, request: dict[str, Any] | None) -> frozenset[str]:
-        if not isinstance(request, dict):
-            return frozenset(THREAD_LIFECYCLE_SUPPORTED_EVENTS)
-        raw_events = request.get("events")
-        if raw_events is None:
-            return frozenset(THREAD_LIFECYCLE_SUPPORTED_EVENTS)
-        if not isinstance(raw_events, list) or not raw_events:
-            raise ValueError("request.events must be a non-empty array")
-        normalized: set[str] = set()
-        for item in raw_events:
-            if not isinstance(item, str) or item not in THREAD_LIFECYCLE_SUPPORTED_EVENTS:
-                allowed = ", ".join(THREAD_LIFECYCLE_SUPPORTED_EVENTS)
-                raise ValueError(f"request.events entries must be one of: {allowed}")
-            normalized.add(item)
-        return frozenset(normalized)
 
     def _normalize_thread_ids(self, request: dict[str, Any] | None) -> frozenset[str] | None:
         if not isinstance(request, dict):

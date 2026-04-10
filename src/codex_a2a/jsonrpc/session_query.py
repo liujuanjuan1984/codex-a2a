@@ -9,10 +9,10 @@ from starlette.responses import Response
 
 from codex_a2a.jsonrpc.errors import (
     ERR_SESSION_NOT_FOUND,
-    ERR_UPSTREAM_HTTP_ERROR,
     ERR_UPSTREAM_PAYLOAD_ERROR,
-    ERR_UPSTREAM_UNREACHABLE,
     invalid_params_response,
+    upstream_http_error_response,
+    upstream_unreachable_response,
 )
 from codex_a2a.jsonrpc.params import (
     JsonRpcParamsValidationError,
@@ -62,25 +62,15 @@ async def handle_session_query_request(
                     data={"type": "SESSION_NOT_FOUND", "session_id": session_id},
                 ),
             )
-        return app._generate_error_response(
+        return upstream_http_error_response(
+            app,
             base_request.id,
-            JSONRPCError(
-                code=ERR_UPSTREAM_HTTP_ERROR,
-                message="Upstream Codex error",
-                data={
-                    "type": "UPSTREAM_HTTP_ERROR",
-                    "upstream_status": upstream_status,
-                },
-            ),
+            upstream_status=upstream_status,
         )
     except httpx.HTTPError:
-        return app._generate_error_response(
+        return upstream_unreachable_response(
+            app,
             base_request.id,
-            JSONRPCError(
-                code=ERR_UPSTREAM_UNREACHABLE,
-                message="Upstream Codex unreachable",
-                data={"type": "UPSTREAM_UNREACHABLE"},
-            ),
         )
     except CodexRPCError as exc:
         if is_thread_not_found_error(exc) and session_id is not None:

@@ -14,11 +14,11 @@ from codex_a2a.auth import (
     request_has_capability,
 )
 from codex_a2a.jsonrpc.errors import (
-    ERR_UPSTREAM_HTTP_ERROR,
-    ERR_UPSTREAM_UNREACHABLE,
     authorization_forbidden_response,
-    extract_directory_from_metadata,
+    extract_directory_from_params_metadata,
     invalid_params_response,
+    upstream_http_error_response,
+    upstream_unreachable_response,
 )
 from codex_a2a.jsonrpc.params import (
     ExecResizeControlParams,
@@ -67,14 +67,10 @@ async def handle_exec_control_request(
     except JsonRpcParamsValidationError as exc:
         return invalid_params_response(app, base_request.id, exc)
 
-    directory, metadata_error = extract_directory_from_metadata(
+    directory, metadata_error = extract_directory_from_params_metadata(
         app,
         request_id=base_request.id,
-        directory=(
-            parsed_params.metadata.codex.directory
-            if parsed_params.metadata is not None and parsed_params.metadata.codex is not None
-            else None
-        ),
+        metadata=parsed_params.metadata,
     )
     if metadata_error is not None:
         return metadata_error
@@ -168,29 +164,19 @@ async def handle_exec_control_request(
             A2AError(root=InternalError(message=str(exc))),
         )
     except httpx.HTTPStatusError as exc:
-        return app._generate_error_response(
+        process_id = str(request_payload.get("processId", "")).strip()
+        return upstream_http_error_response(
+            app,
             base_request.id,
-            JSONRPCError(
-                code=ERR_UPSTREAM_HTTP_ERROR,
-                message="Upstream Codex error",
-                data={
-                    "type": "UPSTREAM_HTTP_ERROR",
-                    "upstream_status": exc.response.status_code,
-                    "process_id": str(request_payload.get("processId", "")).strip(),
-                },
-            ),
+            upstream_status=exc.response.status_code,
+            data={"process_id": process_id},
         )
     except httpx.HTTPError:
-        return app._generate_error_response(
+        process_id = str(request_payload.get("processId", "")).strip()
+        return upstream_unreachable_response(
+            app,
             base_request.id,
-            JSONRPCError(
-                code=ERR_UPSTREAM_UNREACHABLE,
-                message="Upstream Codex unreachable",
-                data={
-                    "type": "UPSTREAM_UNREACHABLE",
-                    "process_id": str(request_payload.get("processId", "")).strip(),
-                },
-            ),
+            data={"process_id": process_id},
         )
     except Exception as exc:
         logger.exception("Codex exec JSON-RPC method failed")

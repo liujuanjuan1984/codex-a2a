@@ -8,6 +8,7 @@ from starlette.requests import Request
 from starlette.responses import Response
 
 from codex_a2a.jsonrpc.errors import invalid_params_response
+from codex_a2a.jsonrpc.owner_guard import validate_thread_owner
 from codex_a2a.jsonrpc.params import (
     JsonRpcParamsValidationError,
     ReviewStartControlParams,
@@ -44,24 +45,17 @@ async def handle_review_control_request(
         return invalid_params_response(app, base_request.id, exc)
 
     thread_id = parsed_params.thread_id
-    identity = getattr(request.state, "user_identity", None)
-    if (
-        isinstance(identity, str)
-        and identity
-        and app._guard_hooks.session_owner_matcher is not None
-    ):
-        owned = await app._guard_hooks.session_owner_matcher(
-            identity=identity, session_id=thread_id
-        )
-        if owned is False:
-            return app._generate_error_response(
-                base_request.id,
-                JSONRPCError(
-                    code=ERR_REVIEW_FORBIDDEN,
-                    message="Review forbidden",
-                    data={"type": "REVIEW_FORBIDDEN", "thread_id": thread_id},
-                ),
-            )
+    owner_error = await validate_thread_owner(
+        app,
+        request=request,
+        request_id=base_request.id,
+        thread_id=thread_id,
+        error_code=ERR_REVIEW_FORBIDDEN,
+        error_message="Review forbidden",
+        error_type="REVIEW_FORBIDDEN",
+    )
+    if owner_error is not None:
+        return owner_error
 
     try:
         if base_request.method == app._method_review_watch:

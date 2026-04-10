@@ -6,6 +6,7 @@ import logging
 from collections.abc import AsyncIterator, Awaitable, Callable
 from typing import Any
 
+from codex_a2a.upstream.discovery_payloads import normalize_app_items
 from codex_a2a.upstream.models import _TurnTracker
 from codex_a2a.upstream.notification_mapping import (
     build_tool_call_output_event,
@@ -218,36 +219,10 @@ class CodexStreamEventBridge:
             return
 
         if method == "app/list/updated":
-            raw_items = params.get("data")
-            items: list[dict[str, Any]] = []
-            if isinstance(raw_items, list):
-                for app in raw_items:
-                    if not isinstance(app, dict):
-                        continue
-                    app_id = app.get("id")
-                    name = app.get("name")
-                    if not isinstance(app_id, str) or not app_id.strip():
-                        continue
-                    if not isinstance(name, str) or not name.strip():
-                        continue
-                    items.append(
-                        {
-                            "id": app_id.strip(),
-                            "name": name.strip(),
-                            "description": app.get("description"),
-                            "is_accessible": bool(app.get("isAccessible", False)),
-                            "is_enabled": bool(app.get("isEnabled", False)),
-                            "install_url": app.get("installUrl"),
-                            "mention_path": f"app://{app_id.strip()}",
-                            "branding": app.get("branding"),
-                            "labels": app.get("labels"),
-                            "codex": {"raw": app},
-                        }
-                    )
             await emit(
                 {
                     "type": "discovery.apps.updated",
-                    "properties": {"items": items},
+                    "properties": {"items": normalize_app_items(params.get("data"))},
                 }
             )
             return

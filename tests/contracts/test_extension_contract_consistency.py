@@ -382,6 +382,9 @@ def test_openapi_jsonrpc_contract_extension_matches_ssot() -> None:
     assert compatibility_profile == expected_compatibility_profile, (
         "OpenAPI compatibility profile drifted from extension_contracts SSOT."
     )
+    assert (
+        compatibility_profile["protocol_compatibility"] == wire_contract["protocol_compatibility"]
+    ), "OpenAPI protocol compatibility summary drifted between profile and wire contract."
 
 
 def test_openapi_and_agent_card_extension_contracts_match() -> None:

@@ -16,6 +16,7 @@ from codex_a2a.jsonrpc.errors import (
     authorization_forbidden_response,
     invalid_params_response,
 )
+from codex_a2a.jsonrpc.owner_guard import validate_thread_owner
 from codex_a2a.jsonrpc.params import (
     JsonRpcParamsValidationError,
     TurnSteerControlParams,
@@ -62,23 +63,17 @@ async def handle_turn_control_request(
             credential_id=credential_id if isinstance(credential_id, str) else None,
             required_principal=OPERATOR_PRINCIPAL,
         )
-    if (
-        isinstance(identity, str)
-        and identity
-        and app._guard_hooks.session_owner_matcher is not None
-    ):
-        owned = await app._guard_hooks.session_owner_matcher(
-            identity=identity, session_id=thread_id
-        )
-        if owned is False:
-            return app._generate_error_response(
-                base_request.id,
-                JSONRPCError(
-                    code=ERR_TURN_FORBIDDEN,
-                    message="Turn forbidden",
-                    data={"type": "TURN_FORBIDDEN", "thread_id": thread_id},
-                ),
-            )
+    owner_error = await validate_thread_owner(
+        app,
+        request=request,
+        request_id=base_request.id,
+        thread_id=thread_id,
+        error_code=ERR_TURN_FORBIDDEN,
+        error_message="Turn forbidden",
+        error_type="TURN_FORBIDDEN",
+    )
+    if owner_error is not None:
+        return owner_error
 
     try:
         result = await app._codex_client.turn_steer(

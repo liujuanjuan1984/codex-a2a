@@ -4,9 +4,11 @@ import hashlib
 import json
 import logging
 import time
+from typing import cast
 from urllib.parse import unquote
 
 from a2a.server.tasks.task_store import TaskStore
+from a2a.types import JSONRPCError
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from starlette.datastructures import Headers
@@ -16,11 +18,23 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 
 from codex_a2a.auth import authenticate_static_credential, build_static_auth_credentials
 from codex_a2a.config import Settings
+from codex_a2a.jsonrpc.errors import (
+    adapt_jsonrpc_error_for_protocol,
+    build_http_error_body,
+    version_not_supported_error,
+)
 from codex_a2a.logging_context import (
     CORRELATION_ID_HEADER,
     reset_correlation_id,
     resolve_correlation_id,
     set_correlation_id,
+)
+from codex_a2a.protocol_versions import (
+    UnsupportedProtocolVersionError,
+    negotiate_protocol_version,
+    normalize_protocol_version,
+    reset_current_protocol_version,
+    set_current_protocol_version,
 )
 from codex_a2a.server.task_store import TaskStoreOperationError, task_store_failure_message
 
@@ -40,6 +54,13 @@ _OPENAPI_PATHS = {
 _REST_MESSAGE_PATHS = {
     "/v1/message:send",
     "/v1/message:stream",
+}
+_V1_JSONRPC_METHOD_ALIASES = {
+    "CancelTask": "tasks/cancel",
+    "GetExtendedAgentCard": "agent/getAuthenticatedExtendedCard",
+    "GetTask": "tasks/get",
+    "SendMessage": "message/send",
+    "SendStreamingMessage": "message/stream",
 }
 GZIP_COMPRESSIBLE_PATHS = (
     _PUBLIC_AGENT_CARD_PATHS | _AUTHENTICATED_EXTENDED_CARD_PATHS | _OPENAPI_PATHS
@@ -204,6 +225,129 @@ def _looks_like_jsonrpc_envelope(payload: dict | None) -> bool:
     return isinstance(method, str) and isinstance(version, str)
 
 
+def _requires_protocol_negotiation(request: Request) -> bool:
+    path = request.url.path
+    return request.method == "POST" and (path == "/" or path.startswith("/v1/"))
+
+
+def _jsonrpc_request_id(payload: dict | None) -> str | int | None:
+    if payload is None:
+        return None
+    request_id = payload.get("id")
+    if isinstance(request_id, bool):
+        return None
+    if isinstance(request_id, str | int):
+        return request_id
+    return None
+
+
+def _requested_protocol_version(request: Request) -> tuple[str | None, str | None]:
+    header_value = request.headers.get("A2A-Version")
+    query_value = request.query_params.get("A2A-Version")
+    if query_value is None:
+        query_value = request.query_params.get("a2a-version")
+    return header_value, query_value
+
+
+def _error_protocol_version(requested_version: str, default_protocol_version: str) -> str:
+    try:
+        return normalize_protocol_version(requested_version)
+    except ValueError:
+        return normalize_protocol_version(default_protocol_version)
+
+
+def _jsonrpc_error_response(
+    *,
+    request_id: str | int | None,
+    protocol_version: str,
+    error: JSONRPCError,
+) -> JSONResponse:
+    adapted_error = adapt_jsonrpc_error_for_protocol(protocol_version, error)
+    if not isinstance(adapted_error, JSONRPCError):  # pragma: no cover - defensive
+        adapted_error = cast(JSONRPCError, adapted_error.root)
+    return JSONResponse(
+        {
+            "jsonrpc": "2.0",
+            "id": request_id,
+            "error": adapted_error.model_dump(mode="json", exclude_none=True),
+        },
+        status_code=200,
+    )
+
+
+def _unsupported_protocol_jsonrpc_response(
+    *,
+    request_id: str | int | None,
+    exc: UnsupportedProtocolVersionError,
+) -> JSONResponse:
+    error_protocol_version = _error_protocol_version(
+        exc.requested_version,
+        exc.default_protocol_version,
+    )
+    return _jsonrpc_error_response(
+        request_id=request_id,
+        protocol_version=error_protocol_version,
+        error=version_not_supported_error(
+            requested_version=exc.requested_version,
+            supported_protocol_versions=list(exc.supported_protocol_versions),
+            default_protocol_version=exc.default_protocol_version,
+        ),
+    )
+
+
+def _unsupported_protocol_http_response(exc: UnsupportedProtocolVersionError) -> JSONResponse:
+    metadata = {
+        "requested_version": exc.requested_version,
+        "supported_protocol_versions": list(exc.supported_protocol_versions),
+        "default_protocol_version": exc.default_protocol_version,
+    }
+    protocol_version = _error_protocol_version(
+        exc.requested_version,
+        exc.default_protocol_version,
+    )
+    return JSONResponse(
+        build_http_error_body(
+            protocol_version=protocol_version,
+            status_code=400,
+            status="INVALID_ARGUMENT",
+            message=f"Unsupported A2A version: {exc.requested_version}",
+            reason="VERSION_NOT_SUPPORTED",
+            metadata=metadata,
+            legacy_payload={
+                "error": "Unsupported A2A version",
+                **metadata,
+            },
+        ),
+        status_code=400,
+    )
+
+
+async def _normalize_v1_jsonrpc_method_alias(
+    request: Request,
+    *,
+    protocol_version: str,
+) -> None:
+    if protocol_version != "1.0" or request.method != "POST" or request.url.path != "/":
+        return
+    body = await _get_request_body(request)
+    payload = _parse_json_body(body)
+    if payload is None:
+        return
+    method = payload.get("method")
+    if not isinstance(method, str):
+        return
+    normalized_method = _V1_JSONRPC_METHOD_ALIASES.get(method)
+    if normalized_method is None:
+        return
+    payload = dict(payload)
+    payload["method"] = normalized_method
+    request._body = json.dumps(
+        payload,
+        ensure_ascii=False,
+        separators=(",", ":"),
+    ).encode("utf-8")
+
+
 def install_http_middlewares(
     app: FastAPI,
     *,
@@ -228,6 +372,45 @@ def install_http_middlewares(
             status_code=401,
             headers={"WWW-Authenticate": ", ".join(challenges)},
         )
+
+    @app.middleware("http")
+    async def negotiate_a2a_protocol(request: Request, call_next):
+        if not _requires_protocol_negotiation(request):
+            return await call_next(request)
+
+        header_value, query_value = _requested_protocol_version(request)
+        try:
+            negotiated = negotiate_protocol_version(
+                header_value=header_value,
+                query_value=query_value,
+                default_protocol_version=settings.a2a_protocol_version,
+                supported_protocol_versions=settings.a2a_supported_protocol_versions,
+            )
+        except UnsupportedProtocolVersionError as exc:
+            request_id: str | int | None = None
+            if request.method == "POST" and request.url.path == "/":
+                request_id = _jsonrpc_request_id(_parse_json_body(await _get_request_body(request)))
+                return _unsupported_protocol_jsonrpc_response(
+                    request_id=request_id,
+                    exc=exc,
+                )
+            return _unsupported_protocol_http_response(exc)
+
+        request.state.a2a_requested_protocol_version = negotiated.requested_version
+        request.state.a2a_protocol_version = negotiated.negotiated_version
+        request.state.a2a_protocol_version_explicit = negotiated.explicit
+        await _normalize_v1_jsonrpc_method_alias(
+            request,
+            protocol_version=negotiated.negotiated_version,
+        )
+
+        token = set_current_protocol_version(negotiated.negotiated_version)
+        try:
+            response = await call_next(request)
+        finally:
+            reset_current_protocol_version(token)
+        response.headers["A2A-Version"] = negotiated.negotiated_version
+        return response
 
     @app.middleware("http")
     async def cache_agent_card_responses(request: Request, call_next):

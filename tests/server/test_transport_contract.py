@@ -735,10 +735,98 @@ async def test_dual_stack_send_accepts_transport_native_payloads(monkeypatch) ->
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         rest_resp = await client.post("/v1/message:send", headers=headers, json=rest_payload)
         assert rest_resp.status_code == 200
+        assert rest_resp.headers["A2A-Version"] == "0.3"
 
         rpc_resp = await client.post("/", headers=headers, json=rpc_payload)
         assert rpc_resp.status_code == 200
+        assert rpc_resp.headers["A2A-Version"] == "0.3"
         assert rpc_resp.json().get("error") is None
+
+
+@pytest.mark.asyncio
+async def test_jsonrpc_v1_method_alias_uses_negotiated_protocol(monkeypatch) -> None:
+    import codex_a2a.server.application as app_module
+
+    monkeypatch.setattr(app_module, "CodexClient", DummyChatCodexClient)
+    app = app_module.create_app(make_settings(a2a_bearer_token="test-token"))
+    transport = httpx.ASGITransport(app=app)
+    headers = {"Authorization": "Bearer test-token", "A2A-Version": "1.0"}
+    rpc_payload = {
+        "jsonrpc": "2.0",
+        "id": 42,
+        "method": "SendMessage",
+        "params": {
+            "message": {
+                "messageId": "m-v1-alias",
+                "role": "user",
+                "parts": [{"kind": "text", "text": "hello from v1 alias"}],
+            }
+        },
+    }
+
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post("/", headers=headers, json=rpc_payload)
+
+    assert response.status_code == 200
+    assert response.headers["A2A-Version"] == "1.0"
+    payload = response.json()
+    assert payload["id"] == 42
+    assert payload.get("error") is None
+    assert "result" in payload
+
+
+@pytest.mark.asyncio
+async def test_jsonrpc_unsupported_protocol_version_preserves_request_id(monkeypatch) -> None:
+    import codex_a2a.server.application as app_module
+
+    monkeypatch.setattr(app_module, "CodexClient", DummyChatCodexClient)
+    app = app_module.create_app(make_settings(a2a_bearer_token="test-token"))
+    transport = httpx.ASGITransport(app=app)
+    headers = {"Authorization": "Bearer test-token", "A2A-Version": "2.0"}
+
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post(
+            "/",
+            headers=headers,
+            json={"jsonrpc": "2.0", "id": 43, "method": "message/send", "params": {}},
+        )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["id"] == 43
+    assert payload["error"]["code"] == -32001
+    assert payload["error"]["data"]["type"] == "VERSION_NOT_SUPPORTED"
+    assert payload["error"]["data"]["requested_version"] == "2.0"
+    assert payload["error"]["data"]["supported_protocol_versions"] == ["0.3", "1.0"]
+
+
+@pytest.mark.asyncio
+async def test_rest_unsupported_v1_protocol_version_uses_protocol_error_shape(
+    monkeypatch,
+) -> None:
+    import codex_a2a.server.application as app_module
+
+    monkeypatch.setattr(app_module, "CodexClient", DummyChatCodexClient)
+    app = app_module.create_app(make_settings(a2a_bearer_token="test-token"))
+    transport = httpx.ASGITransport(app=app)
+    headers = {"Authorization": "Bearer test-token", "A2A-Version": "1.1"}
+
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post(
+            "/v1/message:send",
+            headers=headers,
+            json=_rest_message_payload(),
+        )
+
+    assert response.status_code == 400
+    payload = response.json()
+    assert payload["error"]["code"] == 400
+    assert payload["error"]["status"] == "INVALID_ARGUMENT"
+    assert payload["error"]["message"] == "Unsupported A2A version: 1.1"
+    error_info = payload["error"]["details"][0]
+    assert error_info["reason"] == "VERSION_NOT_SUPPORTED"
+    assert error_info["metadata"]["requestedVersion"] == "1.1"
+    assert error_info["metadata"]["defaultProtocolVersion"] == "0.3"
 
 
 @pytest.mark.asyncio
@@ -828,9 +916,37 @@ async def test_jsonrpc_unsupported_method_returns_supported_method_contract(monk
     assert payload["error"]["message"] == "Unsupported method: SendMessage"
     assert payload["error"]["data"]["type"] == "METHOD_NOT_SUPPORTED"
     assert payload["error"]["data"]["method"] == "SendMessage"
-    assert payload["error"]["data"]["protocol_version"] == settings.a2a_protocol_version
+    assert payload["error"]["data"]["protocol_version"] == "0.3"
     assert "message/send" in payload["error"]["data"]["supported_methods"]
     assert "codex.sessions.list" in payload["error"]["data"]["supported_methods"]
+
+
+@pytest.mark.asyncio
+async def test_jsonrpc_v1_unsupported_method_uses_protocol_error_shape(monkeypatch) -> None:
+    import codex_a2a.server.application as app_module
+
+    monkeypatch.setattr(app_module, "CodexClient", DummyChatCodexClient)
+    settings = make_settings(a2a_bearer_token="test-token")
+    app = app_module.create_app(settings)
+    transport = httpx.ASGITransport(app=app)
+    headers = {"Authorization": "Bearer test-token", "A2A-Version": "1.0"}
+
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post(
+            "/",
+            headers=headers,
+            json={"jsonrpc": "2.0", "id": 44, "method": "UnknownMethod", "params": {}},
+        )
+
+    assert response.status_code == 200
+    assert response.headers["A2A-Version"] == "1.0"
+    payload = response.json()
+    assert payload["error"]["code"] == -32601
+    assert payload["error"]["message"] == "Method not found"
+    assert "type" not in payload["error"]["data"]
+    assert payload["error"]["data"]["method"] == "UnknownMethod"
+    assert payload["error"]["data"]["protocolVersion"] == "1.0"
+    assert "message/send" in payload["error"]["data"]["supportedMethods"]
 
 
 @pytest.mark.asyncio

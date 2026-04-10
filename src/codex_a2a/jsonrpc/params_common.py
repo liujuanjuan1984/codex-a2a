@@ -122,6 +122,45 @@ def map_extra_forbidden(errors: Sequence[Mapping[str, Any]]) -> JsonRpcParamsVal
     )
 
 
+def metadata_validation_error(
+    loc: tuple[Any, ...],
+    *,
+    message_text: str | None = None,
+) -> JsonRpcParamsValidationError | None:
+    metadata_errors = {
+        ("metadata",): ("metadata must be an object", "metadata"),
+        ("metadata", "codex"): ("metadata.codex must be an object", "metadata.codex"),
+        (
+            "metadata",
+            "codex",
+            "directory",
+        ): ("metadata.codex.directory must be a string", "metadata.codex.directory"),
+        (
+            "metadata",
+            "codex",
+            "execution",
+        ): ("metadata.codex.execution must be an object", "metadata.codex.execution"),
+    }
+    mapped_error = metadata_errors.get(loc)
+    if mapped_error is not None:
+        message, field = mapped_error
+        return JsonRpcParamsValidationError(
+            message=message,
+            data={"type": "INVALID_FIELD", "field": field},
+        )
+    if loc in {
+        ("metadata", "codex", "execution", "model"),
+        ("metadata", "codex", "execution", "effort"),
+        ("metadata", "codex", "execution", "summary"),
+        ("metadata", "codex", "execution", "personality"),
+    }:
+        return JsonRpcParamsValidationError(
+            message=message_text or "Invalid params",
+            data={"type": "INVALID_FIELD", "field": format_loc(loc)},
+        )
+    return None
+
+
 class CodexExecutionMetadataParams(_StrictModel):
     model: str | None = None
     effort: str | None = None

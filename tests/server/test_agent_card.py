@@ -655,6 +655,20 @@ def test_authenticated_extended_agent_card_injects_profile_into_extensions() -> 
     wire_contract = ext_by_uri[WIRE_CONTRACT_EXTENSION_URI]
     wire_contract_params = _require_params(wire_contract)
     assert wire_contract_params["protocol_version"] == "0.3.0"
+    assert wire_contract_params["default_protocol_version"] == "0.3"
+    assert wire_contract_params["supported_protocol_versions"] == ["0.3", "1.0"]
+    assert wire_contract_params["protocol_compatibility"]["versions"]["0.3"]["status"] == (
+        "supported"
+    )
+    assert wire_contract_params["protocol_compatibility"]["versions"]["1.0"]["status"] == "partial"
+    assert (
+        "A2A-Version"
+        in (
+            wire_contract_params["protocol_compatibility"]["versions"]["1.0"]["supported_features"][
+                0
+            ]
+        )
+    )
     assert "agent/getAuthenticatedExtendedCard" in wire_contract_params["all_jsonrpc_methods"]
     assert "tasks/pushNotificationConfig/set" in wire_contract_params["all_jsonrpc_methods"]
     assert "POST /v1/message:send" in wire_contract_params["core"]["http_endpoints"]
@@ -664,6 +678,12 @@ def test_authenticated_extended_agent_card_injects_profile_into_extensions() -> 
     compatibility_params = _require_params(compatibility)
     assert compatibility_params["profile_id"] == "codex-a2a-single-tenant-coding-v1"
     assert compatibility_params["protocol_version"] == "0.3.0"
+    assert compatibility_params["default_protocol_version"] == "0.3"
+    assert compatibility_params["supported_protocol_versions"] == ["0.3", "1.0"]
+    assert (
+        compatibility_params["protocol_compatibility"]
+        == wire_contract_params["protocol_compatibility"]
+    )
     assert compatibility_params["deployment"] == profile["deployment"]
     assert compatibility_params["runtime_features"] == profile["runtime_features"]
     assert "agent/getAuthenticatedExtendedCard" in compatibility_params["core"]["jsonrpc_methods"]
@@ -700,6 +720,9 @@ def test_authenticated_extended_agent_card_injects_profile_into_extensions() -> 
     assert any("codex.turns.*" in note for note in compatibility_params["consumer_guidance"])
     assert any("codex.review.*" in note for note in compatibility_params["consumer_guidance"])
     assert any("codex.exec.*" in note for note in compatibility_params["consumer_guidance"])
+    assert any(
+        "protocol_compatibility" in note for note in compatibility_params["consumer_guidance"]
+    )
     interrupt_recovery_policy = compatibility_params["method_retention"]["codex.interrupts.list"]
     assert interrupt_recovery_policy["availability"] == "always"
     assert interrupt_recovery_policy["retention"] == "stable"

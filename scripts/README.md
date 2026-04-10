@@ -12,8 +12,10 @@ This document only explains the remaining repository-local maintainer scripts. U
 
 ## Which Script to Use
 
+- [`scripts/doctor.sh`](./doctor.sh): run the default local validation baseline through the shortest maintainer entrypoint.
 - [`scripts/validate_baseline.sh`](./validate_baseline.sh): run the default local validation baseline used by contributors and CI.
 - [`scripts/validate_runtime_matrix.sh`](./validate_runtime_matrix.sh): run the reduced runtime-only validation used by the multi-version CI matrix.
+- [`scripts/conformance.sh`](./conformance.sh): run the official A2A TCK as a local/manual external compatibility experiment.
 - [`scripts/dependency_health.sh`](./dependency_health.sh): run the standalone dependency review flow (`sync`/`pip check`, outdated package listing, and dev vulnerability audit).
 - [`scripts/smoke_test_built_cli.sh`](./smoke_test_built_cli.sh): validate that a built wheel can be installed through `uv tool` and becomes healthy.
 - [`scripts/sync_codex_docs.sh`](./sync_codex_docs.sh): refresh local upstream Codex reference snapshots when maintainers need them.
@@ -28,6 +30,8 @@ The `Publish` workflow now separates build, PyPI publish, and GitHub Release syn
 
 ## Notes
 
+- `doctor.sh` is a thin alias for the default local regression baseline; `validate_baseline.sh` remains the CI-facing script name.
+- `conformance.sh` intentionally stays outside the default regression gate. Use it to gather external compatibility evidence, then triage results in [`docs/conformance-triage.md`](../docs/conformance-triage.md).
 - `validate_baseline.sh` and `dependency_health.sh` intentionally remain separate entrypoints and share common prerequisites through [`health_common.sh`](./health_common.sh).
 - `validate_baseline.sh` now blocks on runtime dependency vulnerability audit, while `dependency_health.sh` remains focused on broader dependency review (`outdated` + dev audit).
 - [`.github/dependabot.yml`](../.github/dependabot.yml) prefers a single weekly grouped Dependabot PR for `uv`, while the repository scripts remain the explicit audit and validation entrypoints.

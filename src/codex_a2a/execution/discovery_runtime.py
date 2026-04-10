@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any
 from a2a.types import DataPart, Task, TaskState, TaskStatus
 
 from codex_a2a.execution.output_mapping import build_assistant_message, enqueue_artifact_update
+from codex_a2a.execution.watch_events import normalize_watch_event_filter
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +47,11 @@ class CodexDiscoveryRuntime:
         request: dict[str, Any] | None,
         context: ServerCallContext | None,
     ) -> dict[str, Any]:
-        events = self._normalize_events(request)
+        events = normalize_watch_event_filter(
+            request,
+            supported_events=SUPPORTED_DISCOVERY_EVENTS,
+            allowed_events=sorted(SUPPORTED_DISCOVERY_EVENTS),
+        )
         task_id = str(uuid.uuid4())
         context_id = task_id
         handle = DiscoveryWatchHandle(
@@ -85,22 +90,6 @@ class CodexDiscoveryRuntime:
             producer=lambda event_queue: self._run_watch(handle=handle, event_queue=event_queue),
         )
         return {"ok": True, "task_id": task_id, "context_id": context_id}
-
-    def _normalize_events(self, request: dict[str, Any] | None) -> frozenset[str]:
-        if not isinstance(request, dict):
-            return SUPPORTED_DISCOVERY_EVENTS
-        raw_events = request.get("events")
-        if raw_events is None:
-            return SUPPORTED_DISCOVERY_EVENTS
-        if not isinstance(raw_events, list) or not raw_events:
-            raise ValueError("request.events must be a non-empty array")
-        events: set[str] = set()
-        for item in raw_events:
-            if not isinstance(item, str) or item not in SUPPORTED_DISCOVERY_EVENTS:
-                allowed = ", ".join(sorted(SUPPORTED_DISCOVERY_EVENTS))
-                raise ValueError(f"request.events entries must be one of: {allowed}")
-            events.add(item)
-        return frozenset(events)
 
     async def _run_watch(self, *, handle: DiscoveryWatchHandle, event_queue) -> None:  # noqa: ANN001
         append = False

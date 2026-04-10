@@ -11,6 +11,7 @@ from codex_a2a.jsonrpc.params_common import (
     _StrictModel,
     format_loc,
     map_extra_forbidden,
+    metadata_validation_error,
     normalize_non_empty_string,
     strip_optional_string,
 )
@@ -397,37 +398,8 @@ def _raise_control_validation_error(exc: ValidationError) -> None:
             message="request.process_id must be a non-empty string",
             data={"type": "INVALID_FIELD", "field": "request.process_id"},
         )
-    if loc == ("metadata",):
-        raise JsonRpcParamsValidationError(
-            message="metadata must be an object",
-            data={"type": "INVALID_FIELD", "field": "metadata"},
-        )
-    if loc == ("metadata", "codex"):
-        raise JsonRpcParamsValidationError(
-            message="metadata.codex must be an object",
-            data={"type": "INVALID_FIELD", "field": "metadata.codex"},
-        )
-    if loc == ("metadata", "codex", "directory"):
-        raise JsonRpcParamsValidationError(
-            message="metadata.codex.directory must be a string",
-            data={"type": "INVALID_FIELD", "field": "metadata.codex.directory"},
-        )
-    if loc == ("metadata", "codex", "execution"):
-        raise JsonRpcParamsValidationError(
-            message="metadata.codex.execution must be an object",
-            data={"type": "INVALID_FIELD", "field": "metadata.codex.execution"},
-        )
-    if loc in {
-        ("metadata", "codex", "execution", "model"),
-        ("metadata", "codex", "execution", "effort"),
-        ("metadata", "codex", "execution", "summary"),
-        ("metadata", "codex", "execution", "personality"),
-    }:
-        field = format_loc(loc)
-        raise JsonRpcParamsValidationError(
-            message=message_text,
-            data={"type": "INVALID_FIELD", "field": field},
-        )
+    if (metadata_error := metadata_validation_error(loc, message_text=message_text)) is not None:
+        raise metadata_error
     if loc in {
         ("request", "arguments"),
         ("request", "messageID"),

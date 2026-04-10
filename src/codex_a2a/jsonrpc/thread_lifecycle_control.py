@@ -9,10 +9,11 @@ from starlette.requests import Request
 from starlette.responses import Response
 
 from codex_a2a.jsonrpc.errors import (
-    ERR_UPSTREAM_HTTP_ERROR,
-    ERR_UPSTREAM_UNREACHABLE,
     invalid_params_response,
+    upstream_http_error_response,
+    upstream_unreachable_response,
 )
+from codex_a2a.jsonrpc.owner_guard import validate_thread_owner
 from codex_a2a.jsonrpc.params import (
     JsonRpcParamsValidationError,
     ThreadArchiveControlParams,
@@ -38,33 +39,6 @@ ERR_THREAD_NOT_FOUND = -32010
 ERR_THREAD_FORBIDDEN = -32011
 ERR_WATCH_NOT_FOUND = -32014
 ERR_WATCH_FORBIDDEN = -32015
-
-
-async def _validate_thread_owner(
-    app: CodexSessionQueryJSONRPCApplication,
-    *,
-    request: Request,
-    request_id: str | int | None,
-    thread_id: str,
-) -> Response | None:
-    identity = getattr(request.state, "user_identity", None)
-    if (
-        not isinstance(identity, str)
-        or not identity
-        or app._guard_hooks.session_owner_matcher is None
-    ):
-        return None
-    owned = await app._guard_hooks.session_owner_matcher(identity=identity, session_id=thread_id)
-    if owned is False:
-        return app._generate_error_response(
-            request_id,
-            JSONRPCError(
-                code=ERR_THREAD_FORBIDDEN,
-                message="Thread forbidden",
-                data={"type": "THREAD_FORBIDDEN", "thread_id": thread_id},
-            ),
-        )
-    return None
 
 
 def _thread_not_found_response(
@@ -139,11 +113,14 @@ async def handle_thread_lifecycle_control_request(
         return invalid_params_response(app, base_request.id, exc)
 
     if thread_id is not None:
-        owner_error = await _validate_thread_owner(
+        owner_error = await validate_thread_owner(
             app,
             request=request,
             request_id=base_request.id,
             thread_id=thread_id,
+            error_code=ERR_THREAD_FORBIDDEN,
+            error_message="Thread forbidden",
+            error_type="THREAD_FORBIDDEN",
         )
         if owner_error is not None:
             return owner_error
@@ -222,31 +199,17 @@ async def handle_thread_lifecycle_control_request(
         upstream_status = exc.response.status_code
         if upstream_status == 404 and thread_id is not None:
             return _thread_not_found_response(app, base_request.id, thread_id=thread_id)
-        return app._generate_error_response(
+        return upstream_http_error_response(
+            app,
             base_request.id,
-            JSONRPCError(
-                code=ERR_UPSTREAM_HTTP_ERROR,
-                message="Upstream Codex error",
-                data={
-                    "type": "UPSTREAM_HTTP_ERROR",
-                    "thread_id": thread_id,
-                    "upstream_status": upstream_status,
-                    "method": base_request.method,
-                },
-            ),
+            upstream_status=upstream_status,
+            data={"thread_id": thread_id, "method": base_request.method},
         )
     except httpx.HTTPError:
-        return app._generate_error_response(
+        return upstream_unreachable_response(
+            app,
             base_request.id,
-            JSONRPCError(
-                code=ERR_UPSTREAM_UNREACHABLE,
-                message="Upstream Codex unreachable",
-                data={
-                    "type": "UPSTREAM_UNREACHABLE",
-                    "thread_id": thread_id,
-                    "method": base_request.method,
-                },
-            ),
+            data={"thread_id": thread_id, "method": base_request.method},
         )
     except LookupError:
         assert task_id is not None

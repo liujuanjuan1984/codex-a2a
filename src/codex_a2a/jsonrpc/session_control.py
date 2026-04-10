@@ -15,12 +15,12 @@ from codex_a2a.auth import (
 )
 from codex_a2a.jsonrpc.errors import (
     ERR_SESSION_NOT_FOUND,
-    ERR_UPSTREAM_HTTP_ERROR,
-    ERR_UPSTREAM_UNREACHABLE,
     authorization_forbidden_response,
-    extract_directory_from_metadata,
+    extract_directory_from_params_metadata,
     invalid_params_response,
     session_forbidden_response,
+    upstream_http_error_response,
+    upstream_unreachable_response,
 )
 from codex_a2a.jsonrpc.params import (
     CommandControlParams,
@@ -71,14 +71,10 @@ async def handle_session_control_request(
         and parsed_params.metadata.codex.execution is not None
     ):
         execution_options = parsed_params.metadata.codex.execution.to_execution_options()
-    directory, metadata_error = extract_directory_from_metadata(
+    directory, metadata_error = extract_directory_from_params_metadata(
         app,
         request_id=base_request.id,
-        directory=(
-            parsed_params.metadata.codex.directory
-            if parsed_params.metadata is not None and parsed_params.metadata.codex is not None
-            else None
-        ),
+        metadata=parsed_params.metadata,
     )
     if metadata_error is not None:
         return metadata_error
@@ -167,26 +163,17 @@ async def handle_session_control_request(
                     data={"type": "SESSION_NOT_FOUND", "session_id": session_id},
                 ),
             )
-        return app._generate_error_response(
+        return upstream_http_error_response(
+            app,
             base_request.id,
-            JSONRPCError(
-                code=ERR_UPSTREAM_HTTP_ERROR,
-                message="Upstream Codex error",
-                data={
-                    "type": "UPSTREAM_HTTP_ERROR",
-                    "upstream_status": upstream_status,
-                    "session_id": session_id,
-                },
-            ),
+            upstream_status=upstream_status,
+            data={"session_id": session_id},
         )
     except httpx.HTTPError:
-        return app._generate_error_response(
+        return upstream_unreachable_response(
+            app,
             base_request.id,
-            JSONRPCError(
-                code=ERR_UPSTREAM_UNREACHABLE,
-                message="Upstream Codex unreachable",
-                data={"type": "UPSTREAM_UNREACHABLE", "session_id": session_id},
-            ),
+            data={"session_id": session_id},
         )
     except CodexRPCError as exc:
         if is_thread_not_found_error(exc):

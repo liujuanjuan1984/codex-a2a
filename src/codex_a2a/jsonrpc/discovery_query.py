@@ -20,10 +20,10 @@ from codex_a2a.jsonrpc.discovery_payload_mapping import (
     map_skill_scopes,
 )
 from codex_a2a.jsonrpc.errors import (
-    ERR_UPSTREAM_HTTP_ERROR,
     ERR_UPSTREAM_PAYLOAD_ERROR,
-    ERR_UPSTREAM_UNREACHABLE,
     invalid_params_response,
+    upstream_http_error_response,
+    upstream_unreachable_response,
 )
 from codex_a2a.jsonrpc.params import JsonRpcParamsValidationError
 
@@ -59,29 +59,17 @@ async def handle_discovery_query_request(
     except JsonRpcParamsValidationError as exc:
         return invalid_params_response(app, base_request.id, exc)
     except httpx.HTTPStatusError as exc:
-        return app._generate_error_response(
+        return upstream_http_error_response(
+            app,
             base_request.id,
-            JSONRPCError(
-                code=ERR_UPSTREAM_HTTP_ERROR,
-                message="Upstream Codex error",
-                data={
-                    "type": "UPSTREAM_HTTP_ERROR",
-                    "method": base_request.method,
-                    "upstream_status": exc.response.status_code,
-                },
-            ),
+            upstream_status=exc.response.status_code,
+            data={"method": base_request.method},
         )
     except httpx.HTTPError:
-        return app._generate_error_response(
+        return upstream_unreachable_response(
+            app,
             base_request.id,
-            JSONRPCError(
-                code=ERR_UPSTREAM_UNREACHABLE,
-                message="Upstream Codex unreachable",
-                data={
-                    "type": "UPSTREAM_UNREACHABLE",
-                    "method": base_request.method,
-                },
-            ),
+            data={"method": base_request.method},
         )
     except ValueError as exc:
         logger.warning("Upstream Codex discovery payload mismatch: %s", exc)
