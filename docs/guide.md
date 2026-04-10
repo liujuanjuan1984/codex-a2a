@@ -163,7 +163,7 @@ Extension boundary principles:
 
 Current implementation note:
 
-- The compatibility profile is declarative. It does not introduce a global runtime `core-only` switch.
+- The compatibility profile is declarative. It does not introduce a global runtime `core-only` switch; request-time `A2A-Version` negotiation is limited to the protocol lines and gaps published in the profile.
 - This is intentional: current shared session/stream/interrupt behavior is part of the deployed interoperability contract, so a blanket runtime profile split would be misleading without broader wire-level changes.
 - For compatibility policy and stability expectations, use [compatibility.md](./compatibility.md) as the normative repo document rather than this usage guide.
 
@@ -199,6 +199,7 @@ Use the grouped sections below as the deployment-first reading order:
 - `A2A_VERSION`: agent version string
 - `A2A_PROJECT`: optional project label injected into examples and discovery metadata
 - `A2A_PROTOCOL_VERSION`: advertised A2A protocol version, default `0.3.0`
+- `A2A_SUPPORTED_PROTOCOL_VERSIONS`: comma-separated request negotiation lines, default `0.3,1.0`
 - `A2A_DOCUMENTATION_URL`: optional external documentation URL exposed on Agent Card
 - `A2A_STATIC_AUTH_CREDENTIALS`: JSON array of static inbound credentials. Supports multiple `bearer` and `basic` entries, each with a stable `principal`; `bearer` entries must declare `principal`, while `basic` entries derive `principal` from `username`.
 
@@ -278,6 +279,7 @@ These variables are forwarded to the local `codex app-server` subprocess.
 | `A2A_VERSION` | Agent version |
 | `A2A_PROJECT` | Project label |
 | `A2A_PROTOCOL_VERSION` | Protocol version |
+| `A2A_SUPPORTED_PROTOCOL_VERSIONS` | Supported protocol versions |
 | `A2A_DOCUMENTATION_URL` | Documentation URL |
 | `A2A_ENABLE_HEALTH_ENDPOINT` | Enable /health |
 | `A2A_ENABLE_SESSION_SHELL` | Enable session shell |

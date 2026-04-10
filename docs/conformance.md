@@ -73,6 +73,6 @@ When a TCK run fails, inspect the raw report before changing the runtime:
 - Some failures may be local experiment artifacts from the dummy-backed runtime.
 
 The experiment is useful only if those categories stay separate during triage.
-Use the authenticated compatibility profile and wire contract `protocol_compatibility` fields as the repository-owned declaration of which protocol lines are supported today versus reserved for future work.
+Use the authenticated compatibility profile and wire contract `protocol_compatibility` fields as the repository-owned declaration of which protocol lines are supported today, partially supported for compatibility, or reserved for future work.
 
 Record first-pass classifications in [conformance-triage.md](./conformance-triage.md).

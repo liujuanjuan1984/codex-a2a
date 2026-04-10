@@ -21,6 +21,7 @@ from codex_a2a.execution.thread_lifecycle_runtime import CodexThreadLifecycleRun
 from codex_a2a.jsonrpc.discovery_control import handle_discovery_control_request
 from codex_a2a.jsonrpc.discovery_query import handle_discovery_query_request
 from codex_a2a.jsonrpc.dispatch import ExtensionMethodRegistry
+from codex_a2a.jsonrpc.errors import adapt_jsonrpc_error_for_protocol
 from codex_a2a.jsonrpc.exec_control import handle_exec_control_request
 from codex_a2a.jsonrpc.hooks import SessionGuardHooks
 from codex_a2a.jsonrpc.interrupt_recovery import handle_interrupt_recovery_request
@@ -30,6 +31,7 @@ from codex_a2a.jsonrpc.session_control import handle_session_control_request
 from codex_a2a.jsonrpc.session_query import handle_session_query_request
 from codex_a2a.jsonrpc.thread_lifecycle_control import handle_thread_lifecycle_control_request
 from codex_a2a.jsonrpc.turn_control import handle_turn_control_request
+from codex_a2a.protocol_versions import get_current_protocol_version
 from codex_a2a.upstream.client import CodexClient
 
 
@@ -219,6 +221,7 @@ class CodexSessionQueryJSONRPCApplication(A2AFastAPIApplication):
         request_id: str | int,
         method: str,
     ) -> JSONResponse:
+        protocol_version = get_current_protocol_version(self._protocol_version)
         return self._generate_error_response(
             request_id,
             JSONRPCError(
@@ -228,9 +231,20 @@ class CodexSessionQueryJSONRPCApplication(A2AFastAPIApplication):
                     "type": "METHOD_NOT_SUPPORTED",
                     "method": method,
                     "supported_methods": self._supported_methods,
-                    "protocol_version": self._protocol_version,
+                    "protocol_version": protocol_version,
                 },
             ),
+        )
+
+    def _generate_error_response(
+        self,
+        request_id: str | int | None,
+        error: JSONRPCError | A2AError,
+    ) -> JSONResponse:
+        protocol_version = get_current_protocol_version(self._protocol_version)
+        return super()._generate_error_response(
+            request_id,
+            adapt_jsonrpc_error_for_protocol(protocol_version, error),
         )
 
     def _jsonrpc_success_response(self, request_id: str | int, result: Any) -> JSONResponse:

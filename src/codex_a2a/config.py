@@ -8,6 +8,7 @@ from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, field_valida
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 from codex_a2a import __version__
+from codex_a2a.protocol_versions import normalize_protocol_version, normalize_protocol_versions
 
 _SANDBOX_MODES = {
     "unknown",
@@ -320,6 +321,10 @@ class Settings(BaseSettings):
     a2a_description: str = Field(default="A2A wrapper service for Codex", alias="A2A_DESCRIPTION")
     a2a_version: str = Field(default=__version__, alias="A2A_VERSION")
     a2a_protocol_version: str = Field(default="0.3.0", alias="A2A_PROTOCOL_VERSION")
+    a2a_supported_protocol_versions: Annotated[list[str], NoDecode] = Field(
+        default_factory=lambda: ["0.3", "1.0"],
+        alias="A2A_SUPPORTED_PROTOCOL_VERSIONS",
+    )
     a2a_enable_health_endpoint: bool = Field(default=True, alias="A2A_ENABLE_HEALTH_ENDPOINT")
     a2a_enable_session_shell: bool = Field(default=False, alias="A2A_ENABLE_SESSION_SHELL")
     a2a_enable_turn_control: bool = Field(default=True, alias="A2A_ENABLE_TURN_CONTROL")
@@ -439,11 +444,23 @@ class Settings(BaseSettings):
         "codex_sandbox_workspace_write_writable_roots",
         "a2a_execution_sandbox_writable_roots",
         "a2a_execution_network_allowed_domains",
+        "a2a_supported_protocol_versions",
         mode="before",
     )
     @classmethod
     def parse_execution_lists(cls, value: Any) -> Any:
         return _parse_str_list(value)
+
+    @field_validator("a2a_protocol_version")
+    @classmethod
+    def validate_a2a_protocol_version(cls, value: str) -> str:
+        normalize_protocol_version(value)
+        return value
+
+    @field_validator("a2a_supported_protocol_versions")
+    @classmethod
+    def validate_a2a_supported_protocol_versions(cls, value: list[str]) -> list[str]:
+        return list(normalize_protocol_versions(value))
 
     @field_validator("a2a_execution_sandbox_mode")
     @classmethod
@@ -602,6 +619,9 @@ class Settings(BaseSettings):
                 )
         else:
             raise ValueError("Configure runtime authentication via A2A_STATIC_AUTH_CREDENTIALS")
+        normalized_protocol_version = normalize_protocol_version(self.a2a_protocol_version)
+        if normalized_protocol_version not in self.a2a_supported_protocol_versions:
+            raise ValueError("A2A_SUPPORTED_PROTOCOL_VERSIONS must include A2A_PROTOCOL_VERSION")
         if "a2a_database_url" not in self.model_fields_set and self.a2a_database_url is None:
             self.a2a_database_url = _default_a2a_database_url(
                 workspace_root=self.codex_workspace_root

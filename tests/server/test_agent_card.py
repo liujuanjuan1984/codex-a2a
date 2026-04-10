@@ -656,11 +656,19 @@ def test_authenticated_extended_agent_card_injects_profile_into_extensions() -> 
     wire_contract_params = _require_params(wire_contract)
     assert wire_contract_params["protocol_version"] == "0.3.0"
     assert wire_contract_params["default_protocol_version"] == "0.3"
-    assert wire_contract_params["supported_protocol_versions"] == ["0.3"]
+    assert wire_contract_params["supported_protocol_versions"] == ["0.3", "1.0"]
     assert wire_contract_params["protocol_compatibility"]["versions"]["0.3"]["status"] == (
         "supported"
     )
-    assert wire_contract_params["protocol_compatibility"]["versions"]["1.0"]["status"] == "future"
+    assert wire_contract_params["protocol_compatibility"]["versions"]["1.0"]["status"] == "partial"
+    assert (
+        "A2A-Version"
+        in (
+            wire_contract_params["protocol_compatibility"]["versions"]["1.0"]["supported_features"][
+                0
+            ]
+        )
+    )
     assert "agent/getAuthenticatedExtendedCard" in wire_contract_params["all_jsonrpc_methods"]
     assert "tasks/pushNotificationConfig/set" in wire_contract_params["all_jsonrpc_methods"]
     assert "POST /v1/message:send" in wire_contract_params["core"]["http_endpoints"]
@@ -671,7 +679,7 @@ def test_authenticated_extended_agent_card_injects_profile_into_extensions() -> 
     assert compatibility_params["profile_id"] == "codex-a2a-single-tenant-coding-v1"
     assert compatibility_params["protocol_version"] == "0.3.0"
     assert compatibility_params["default_protocol_version"] == "0.3"
-    assert compatibility_params["supported_protocol_versions"] == ["0.3"]
+    assert compatibility_params["supported_protocol_versions"] == ["0.3", "1.0"]
     assert (
         compatibility_params["protocol_compatibility"]
         == wire_contract_params["protocol_compatibility"]
