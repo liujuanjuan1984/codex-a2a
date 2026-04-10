@@ -76,9 +76,6 @@ class CodexSessionQueryJSONRPCApplication(A2AFastAPIApplication):
         self._method_thread_metadata_update = methods["thread_metadata_update"]
         self._method_thread_watch = methods["thread_watch"]
         self._method_thread_watch_release = methods["thread_watch_release"]
-        self._method_interrupts_list = methods.get("interrupts_list")
-        self._method_turn_steer = methods.get("turn_steer")
-        self._method_review_start = methods.get("review_start")
         self._method_review_watch = methods.get("review_watch")
         self._method_exec_start = methods.get("exec_start")
         self._method_exec_write = methods.get("exec_write")
