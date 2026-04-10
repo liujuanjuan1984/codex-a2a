@@ -47,6 +47,7 @@ def test_readme_documents_released_cli_installation_via_uv_tool() -> None:
     assert "create a PR from the working branch" in README_TEXT
     assert "merge into `main` after human review" in README_TEXT
     assert "[Compatibility Guide](docs/compatibility.md)" in README_TEXT
+    assert "[External Conformance Experiments](docs/conformance.md)" in README_TEXT
     assert "[Contributing Guide](CONTRIBUTING.md)" in README_TEXT
     assert "single-tenant trust boundary" in README_TEXT
     assert "Portable vs Private Surface" in README_TEXT
@@ -94,6 +95,8 @@ def test_dependency_health_workflow_runs_as_a_standalone_check() -> None:
 
 
 def test_scripts_index_exposes_built_cli_smoke_test() -> None:
+    assert "doctor.sh" in SCRIPTS_README_TEXT
+    assert "conformance.sh" in SCRIPTS_README_TEXT
     assert "validate_runtime_matrix.sh" in SCRIPTS_README_TEXT
     assert "dependency_health.sh" in SCRIPTS_README_TEXT
     assert "smoke_test_built_cli.sh" in SCRIPTS_README_TEXT

@@ -93,6 +93,7 @@ Use the docs by responsibility:
 - [Maintainer Architecture Guide](maintainer-architecture.md): internal module boundaries, request call chains, and persistence touchpoints
 - [Extension Specifications](extension-specifications.md): stable extension URI/spec index and public-vs-extended disclosure rules
 - [Compatibility Guide](compatibility.md): current compatibility promises and stability expectations
+- [External Conformance Experiments](conformance.md): manual A2A TCK experiment entrypoint and triage workflow
 - [Contributing Guide](../CONTRIBUTING.md): contributor workflow and validation
 - [Security Policy](../SECURITY.md): threat model and disclosure guidance
 
