@@ -10,6 +10,7 @@ from codex_a2a.jsonrpc.params_common import (
     _StrictModel,
     format_loc,
     map_extra_forbidden,
+    metadata_validation_error,
     normalize_non_empty_string,
     strip_optional_string,
 )
@@ -205,21 +206,8 @@ def _raise_interrupt_validation_error(exc: ValidationError) -> None:
             message="content must be null when action is decline or cancel",
             data={"type": "INVALID_FIELD", "field": "content"},
         )
-    if loc == ("metadata",):
-        raise JsonRpcParamsValidationError(
-            message="metadata must be an object",
-            data={"type": "INVALID_FIELD", "field": "metadata"},
-        )
-    if loc == ("metadata", "codex"):
-        raise JsonRpcParamsValidationError(
-            message="metadata.codex must be an object",
-            data={"type": "INVALID_FIELD", "field": "metadata.codex"},
-        )
-    if loc == ("metadata", "codex", "directory"):
-        raise JsonRpcParamsValidationError(
-            message="metadata.codex.directory must be a string",
-            data={"type": "INVALID_FIELD", "field": "metadata.codex.directory"},
-        )
+    if (metadata_error := metadata_validation_error(loc)) is not None:
+        raise metadata_error
     if loc:
         raise JsonRpcParamsValidationError(
             message=str(first.get("msg", "Invalid params")).removeprefix("Value error, "),
