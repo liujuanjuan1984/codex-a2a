@@ -304,6 +304,21 @@ def extract_directory_from_metadata(
         )
 
 
+def extract_directory_from_params_metadata(
+    app: CodexSessionQueryJSONRPCApplication,
+    *,
+    request_id: str | int | None,
+    metadata: Any,
+) -> tuple[str | None, Response | None]:
+    codex_metadata = getattr(metadata, "codex", None)
+    directory = getattr(codex_metadata, "directory", None) if codex_metadata is not None else None
+    return extract_directory_from_metadata(
+        app,
+        request_id=request_id,
+        directory=directory,
+    )
+
+
 def interrupt_error_response(
     app: CodexSessionQueryJSONRPCApplication,
     request_id: str | int | None,

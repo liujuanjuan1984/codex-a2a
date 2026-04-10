@@ -12,7 +12,7 @@ from codex_a2a.jsonrpc.errors import (
     ERR_INTERRUPT_NOT_FOUND,
     ERR_UPSTREAM_HTTP_ERROR,
     ERR_UPSTREAM_UNREACHABLE,
-    extract_directory_from_metadata,
+    extract_directory_from_params_metadata,
     interrupt_error_response,
     interrupt_expected_type,
     invalid_params_response,
@@ -72,14 +72,10 @@ async def handle_interrupt_callback_request(
         return invalid_params_response(app, base_request.id, exc)
 
     request_id = parsed_params.request_id
-    directory, metadata_error = extract_directory_from_metadata(
+    directory, metadata_error = extract_directory_from_params_metadata(
         app,
         request_id=base_request.id,
-        directory=(
-            parsed_params.metadata.codex.directory
-            if parsed_params.metadata is not None and parsed_params.metadata.codex is not None
-            else None
-        ),
+        metadata=parsed_params.metadata,
     )
     if metadata_error is not None:
         return metadata_error
