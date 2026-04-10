@@ -1,20 +1,20 @@
 from __future__ import annotations
 
-import uuid
 from collections.abc import Mapping
 from typing import Any
 
 from a2a.server.agent_execution import RequestContext
 from a2a.server.events.event_queue import EventQueue
+from a2a.server.tasks import TaskUpdater
 from a2a.types import (
     Artifact,
     DataPart,
     Message,
     Part,
-    Role,
     TaskArtifactUpdateEvent,
     TextPart,
 )
+from a2a.utils.message import new_agent_text_message
 
 from codex_a2a.contracts.runtime_output import (
     build_output_metadata as build_runtime_output_metadata,
@@ -28,13 +28,10 @@ def build_assistant_message(
     *,
     message_id: str | None = None,
 ) -> Message:
-    return Message(
-        message_id=message_id or str(uuid.uuid4()),
-        role=Role.agent,
-        parts=[Part(root=TextPart(text=text))],
-        task_id=task_id,
-        context_id=context_id,
-    )
+    message = new_agent_text_message(text, context_id=context_id, task_id=task_id)
+    if message_id is None:
+        return message
+    return message.model_copy(update={"message_id": message_id})
 
 
 async def enqueue_artifact_update(
@@ -50,6 +47,17 @@ async def enqueue_artifact_update(
     event_metadata: Mapping[str, Any] | None = None,
 ) -> None:
     normalized_last_chunk = True if last_chunk is True else None
+    if event_metadata is None:
+        updater = TaskUpdater(event_queue, task_id, context_id)
+        await updater.add_artifact(
+            parts=[Part(root=part)],
+            artifact_id=artifact_id,
+            metadata=dict(artifact_metadata) if artifact_metadata else None,
+            append=append,
+            last_chunk=normalized_last_chunk,
+        )
+        return
+
     artifact = Artifact(
         artifact_id=artifact_id,
         parts=[Part(root=part)],

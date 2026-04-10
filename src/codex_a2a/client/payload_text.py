@@ -3,7 +3,9 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-from a2a.types import Message, TextPart
+from a2a.types import Message, Part, TextPart
+from a2a.utils.message import get_message_text
+from a2a.utils.parts import get_text_parts
 
 
 def _extract_from_iterable(items: Any) -> str | None:
@@ -19,6 +21,11 @@ def _extract_from_iterable(items: Any) -> str | None:
 def _extract_from_parts(parts: Any) -> str | None:
     if not isinstance(parts, (list, tuple)):
         return None
+    if all(isinstance(part, Part) for part in parts):
+        sdk_text = "\n".join(text for text in get_text_parts(list(parts)) if text.strip())
+        if sdk_text:
+            return sdk_text
+
     collected: list[str] = []
     for part in parts:
         text_part = None
@@ -100,6 +107,9 @@ def extract_text_from_payload(payload: Any) -> str | None:
         return _extract_from_iterable(payload)
 
     if isinstance(payload, Message):
+        sdk_text = get_message_text(payload).strip()
+        if sdk_text:
+            return sdk_text
         return _extract_from_parts(payload.parts)
 
     if isinstance(payload, str):

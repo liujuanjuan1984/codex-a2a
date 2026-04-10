@@ -14,6 +14,7 @@ class A2AClientConfig(BaseModel):
     request_timeout_seconds: float | None = None
     close_http_client: bool = True
     default_headers: dict[str, str] = Field(default_factory=dict)
+    auth_credentials: dict[str, str] = Field(default_factory=dict)
     accepted_output_modes: list[str] = Field(default_factory=list)
     extensions: list[str] = Field(default_factory=list)
 

@@ -7,6 +7,8 @@ from uuid import uuid4
 
 import httpx
 from a2a.client import A2ACardResolver, ClientConfig, ClientFactory
+from a2a.client.auth.credentials import CredentialService
+from a2a.client.auth.interceptor import AuthInterceptor
 from a2a.client.middleware import ClientCallContext, ClientCallInterceptor
 from a2a.types import (
     AgentCard,
@@ -21,6 +23,7 @@ from a2a.types import (
 )
 
 from .agent_card import build_agent_card_request_kwargs, resolve_agent_card_endpoint
+from .auth import StaticCredentialService
 from .config import A2AClientConfig
 from .errors import (
     A2AClientConfigError,
@@ -103,6 +106,7 @@ class A2AClient:
         httpx_client: httpx.AsyncClient | None = None,
         card_resolver_factory=A2ACardResolver,
         client_factory_type=ClientFactory,
+        credential_service: CredentialService | None = None,
     ) -> None:
         if not config.agent_url:
             raise A2AClientConfigError("agent_url is required")
@@ -118,6 +122,7 @@ class A2AClient:
         self._sdk_client: _SDKClientProtocol | None = None
         self._card_resolver_factory = card_resolver_factory
         self._client_factory_type = client_factory_type
+        self._credential_service = credential_service
         self._client_config = ClientConfig(
             streaming=True,
             supported_transports=list(config.supported_transports),
@@ -328,7 +333,15 @@ class A2AClient:
         return self._sdk_client
 
     def _build_interceptors(self) -> list[ClientCallInterceptor]:
-        return [_HeaderInterceptor(self._config.default_headers)]
+        interceptors: list[ClientCallInterceptor] = [
+            _HeaderInterceptor(self._config.default_headers)
+        ]
+        credential_service = self._credential_service
+        if credential_service is None and self._config.auth_credentials:
+            credential_service = StaticCredentialService(self._config.auth_credentials)
+        if credential_service is not None:
+            interceptors.append(AuthInterceptor(credential_service))
+        return interceptors
 
     def _build_user_message(
         self,

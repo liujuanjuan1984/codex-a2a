@@ -3,13 +3,16 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
+from a2a.client.auth.interceptor import AuthInterceptor
 from a2a.types import (
     AgentCapabilities,
     AgentCard,
     Artifact,
+    HTTPAuthSecurityScheme,
     Message,
     Part,
     Role,
+    SecurityScheme,
     Task,
     TaskArtifactUpdateEvent,
     TaskIdParams,
@@ -23,6 +26,7 @@ from codex_a2a.client import (
     A2AClient,
     A2AClientConfig,
     A2AUnsupportedBindingError,
+    StaticCredentialService,
 )
 from codex_a2a.client.types import A2ACancelTaskRequest, A2AGetTaskRequest, A2ASendRequest
 
@@ -201,6 +205,55 @@ async def test_build_client_maps_unsupported_transport_binding() -> None:
 
     with pytest.raises(A2AUnsupportedBindingError):
         await client._build_client()
+
+
+def test_build_interceptors_adds_sdk_auth_interceptor_for_config_credentials() -> None:
+    client = A2AClient(
+        A2AClientConfig(
+            agent_url="https://example.org",
+            auth_credentials={"bearerAuth": "peer-token"},
+        ),
+        httpx_client=_MockAsyncHttpClient(),
+        card_resolver_factory=_MockAgentCardResolver,
+    )
+
+    interceptors = client._build_interceptors()  # noqa: SLF001
+
+    assert any(isinstance(interceptor, AuthInterceptor) for interceptor in interceptors)
+
+
+@pytest.mark.asyncio
+async def test_static_credential_service_works_with_sdk_auth_interceptor() -> None:
+    card = AgentCard(
+        name="mock",
+        description="mock agent",
+        url="https://example.org",
+        version="1.0.0",
+        capabilities=AgentCapabilities(),
+        default_input_modes=["text/plain"],
+        default_output_modes=["text/plain"],
+        skills=[],
+        security_schemes={
+            "bearerAuth": SecurityScheme(
+                root=HTTPAuthSecurityScheme(
+                    scheme="bearer",
+                    bearer_format="opaque",
+                )
+            )
+        },
+        security=[{"bearerAuth": []}],
+    )
+    interceptor = AuthInterceptor(StaticCredentialService({"bearerAuth": "peer-token"}))
+
+    _payload, http_kwargs = await interceptor.intercept(
+        "message/send",
+        {},
+        {},
+        card,
+        None,
+    )
+
+    assert http_kwargs["headers"]["Authorization"] == "Bearer peer-token"
 
 
 def test_extract_text_prefers_stream_artifact_payload() -> None:
