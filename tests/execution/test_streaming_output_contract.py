@@ -1899,7 +1899,7 @@ async def test_streaming_logs_idle_diagnostics_at_debug_when_only_transport_keep
 
 
 @pytest.mark.asyncio
-async def test_streaming_logs_completion_observed_in_close_diagnostics(
+async def test_streaming_logs_completion_observed_in_close_diagnostics_at_debug(
     monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
@@ -1922,7 +1922,7 @@ async def test_streaming_logs_completion_observed_in_close_diagnostics(
     executor._should_stream = lambda context: True  # type: ignore[method-assign]
     queue = DummyEventQueue()
 
-    caplog.set_level(logging.INFO, logger="codex_a2a.execution.streaming")
+    caplog.set_level(logging.DEBUG, logger="codex_a2a.execution.streaming")
 
     await executor.execute(
         make_request_context(task_id="task-close-log", context_id="ctx-close-log", text="go"),

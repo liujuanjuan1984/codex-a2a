@@ -76,6 +76,7 @@ def test_settings_valid():
         assert settings.a2a_version == __version__
         assert settings.a2a_protocol_version == "0.3.0"
         assert settings.a2a_supported_protocol_versions == ["0.3", "1.0"]
+        assert settings.a2a_log_level == "WARNING"
 
 
 def test_settings_parse_a2a_supported_protocol_versions() -> None:

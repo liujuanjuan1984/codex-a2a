@@ -122,7 +122,7 @@ class StreamEventProcessor:
         self._diagnostics = StreamDiagnostics(started_at=time.monotonic())
 
     def log_started(self, logger) -> None:  # noqa: ANN001
-        logger.info(
+        logger.debug(
             "Codex event stream started task_id=%s session_id=%s idle_diagnostic_seconds=%.1f",
             self._task_id,
             self._session_id,
@@ -178,7 +178,7 @@ class StreamEventProcessor:
         if self._diagnostics.completion_observed:
             return
         self._diagnostics.completion_observed = True
-        logger.info(
+        logger.debug(
             "Codex event stream completion observed task_id=%s session_id=%s "
             "emitted_chunk_count=%s suppressed_chunk_count=%s",
             self._task_id,
@@ -192,7 +192,7 @@ class StreamEventProcessor:
         if self._completion_event.is_set():
             await self.observe_completion(logger)
         snapshot = self._diagnostics.snapshot(now=time.monotonic(), stream_open=False)
-        logger.info(
+        logger.debug(
             "Codex event stream closed task_id=%s session_id=%s completion_observed=%s "
             "emitted_chunk_count=%s suppressed_chunk_count=%s started_ms_ago=%s "
             "last_upstream_event_ms_ago=%s last_visible_chunk_ms_ago=%s idle_log_count=%s",

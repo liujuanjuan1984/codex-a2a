@@ -74,7 +74,7 @@ async def await_cancel_cleanup(
         return
 
     if waitables:
-        logger.info(
+        logger.debug(
             "Cancel abort wait skipped task_id=%s context_id=%s abort_timeout_seconds=%.3f",
             task_id,
             context_id,

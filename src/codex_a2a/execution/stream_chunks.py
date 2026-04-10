@@ -387,6 +387,14 @@ def tool_delta_chunks(
     if not isinstance(delta_value, Mapping):
         logger.warning(
             "Suppressing non-structured tool_call payload "
+            "task_id=%s session_id=%s source=%s payload_type=%s",
+            task_id,
+            session_id,
+            source,
+            type(delta_value).__name__,
+        )
+        logger.debug(
+            "Suppressed non-structured tool_call payload "
             "task_id=%s session_id=%s source=%s payload=%s",
             task_id,
             session_id,
@@ -398,6 +406,14 @@ def tool_delta_chunks(
     if payload is None:
         logger.warning(
             "Suppressing unrecognized tool_call payload "
+            "task_id=%s session_id=%s source=%s payload_keys=%s",
+            task_id,
+            session_id,
+            source,
+            sorted(str(key) for key in delta_value),
+        )
+        logger.debug(
+            "Suppressed unrecognized tool_call payload "
             "task_id=%s session_id=%s source=%s payload=%s",
             task_id,
             session_id,
