@@ -142,3 +142,21 @@ def test_tool_delta_chunks_normalizes_payload_and_rejects_unstructured_payload(c
 
     assert rejected == []
     assert "Suppressing non-structured tool_call payload" in caplog.text
+    assert "payload_type=str" in caplog.text
+    assert "bad-payload" not in caplog.text
+
+    caplog.clear()
+    with caplog.at_level(logging.WARNING):
+        rejected = tool_delta_chunks(
+            state=state,
+            delta_value={"unexpected": "secret-value"},
+            message_id=None,
+            source="delta",
+            task_id="task-1",
+            session_id="ses-1",
+        )
+
+    assert rejected == []
+    assert "Suppressing unrecognized tool_call payload" in caplog.text
+    assert "payload_keys=['unexpected']" in caplog.text
+    assert "secret-value" not in caplog.text

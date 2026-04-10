@@ -176,7 +176,7 @@ class CodexAgentExecutor(AgentExecutor):
         try:
             directory = self._resolve_and_validate_directory(requested_dir)
         except ValueError as e:
-            logger.warning("Directory validation failed: %s", e)
+            logger.debug("Directory validation failed: %s", e)
             await self._emit_error(
                 event_queue,
                 task_id=task_id,
