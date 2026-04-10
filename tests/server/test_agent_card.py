@@ -672,9 +672,10 @@ def test_authenticated_extended_agent_card_injects_profile_into_extensions() -> 
     assert compatibility_params["protocol_version"] == "0.3.0"
     assert compatibility_params["default_protocol_version"] == "0.3"
     assert compatibility_params["supported_protocol_versions"] == ["0.3"]
-    assert compatibility_params["protocol_compatibility"] == wire_contract_params[
-        "protocol_compatibility"
-    ]
+    assert (
+        compatibility_params["protocol_compatibility"]
+        == wire_contract_params["protocol_compatibility"]
+    )
     assert compatibility_params["deployment"] == profile["deployment"]
     assert compatibility_params["runtime_features"] == profile["runtime_features"]
     assert "agent/getAuthenticatedExtendedCard" in compatibility_params["core"]["jsonrpc_methods"]
