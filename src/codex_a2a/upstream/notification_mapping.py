@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from codex_a2a import payload_helpers
 from codex_a2a.execution.tool_call_payloads import (
     ToolCallSourceMethod,
     as_tool_call_payload,
@@ -10,28 +11,13 @@ from codex_a2a.execution.tool_call_payloads import (
 )
 
 
-def _normalized_string(value: Any) -> str | None:
-    if not isinstance(value, str):
-        return None
-    normalized = value.strip()
-    return normalized or None
-
-
-def _first_string(payload: dict[str, Any], *keys: str) -> str | None:
-    for key in keys:
-        value = _normalized_string(payload.get(key))
-        if value is not None:
-            return value
-    return None
-
-
 def _extract_tool_status(payload: dict[str, Any]) -> str | None:
-    value = _first_string(payload, "status")
+    value = payload_helpers.first_string(payload, "status")
     if value is not None:
         return value
     state = payload.get("state")
     if isinstance(state, dict):
-        return _first_string(state, "status")
+        return payload_helpers.first_string(state, "status")
     return None
 
 
@@ -39,7 +25,7 @@ def _tool_source_method(method: str) -> ToolCallSourceMethod | None:
     parts = method.split("/")
     if len(parts) < 2:
         return None
-    normalized = _normalized_string(parts[1])
+    normalized = payload_helpers.normalized_string(parts[1])
     if normalized == "commandExecution":
         return "commandExecution"
     if normalized == "fileChange":
@@ -48,19 +34,19 @@ def _tool_source_method(method: str) -> ToolCallSourceMethod | None:
 
 
 def build_tool_call_output_event(method: str, params: dict[str, Any]) -> dict[str, Any] | None:
-    thread_id = _first_string(params, "threadId")
+    thread_id = payload_helpers.first_string(params, "threadId")
     delta = params.get("delta")
     if thread_id is None or not isinstance(delta, str) or delta == "":
         return None
 
-    explicit_call_id = _first_string(params, "callID", "callId", "call_id")
-    item_id = _first_string(params, "itemId")
+    explicit_call_id = payload_helpers.first_string(params, "callID", "callId", "call_id")
+    item_id = payload_helpers.first_string(params, "itemId")
     call_id = explicit_call_id or item_id
     part_id = item_id or call_id
     if part_id is None:
         return None
 
-    tool = _first_string(params, "tool", "name")
+    tool = payload_helpers.first_string(params, "tool", "name")
     status = _extract_tool_status(params)
     source_method = _tool_source_method(method)
     if source_method is None:
@@ -102,7 +88,7 @@ def build_tool_call_output_event(method: str, params: dict[str, Any]) -> dict[st
 
 
 def build_tool_call_state_event(params: dict[str, Any]) -> dict[str, Any] | None:
-    thread_id = _first_string(params, "threadId")
+    thread_id = payload_helpers.first_string(params, "threadId")
     item = params.get("item")
     if thread_id is None or not isinstance(item, dict):
         return None
@@ -111,7 +97,7 @@ def build_tool_call_state_event(params: dict[str, Any]) -> dict[str, Any] | None
     if payload is None:
         return None
 
-    part_id = _first_string(item, "id")
+    part_id = payload_helpers.first_string(item, "id")
     if part_id is None:
         return None
 
