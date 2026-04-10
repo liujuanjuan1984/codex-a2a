@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from codex_a2a.upstream.discovery_payloads import normalize_app_items
+
 
 def _normalized_interface(value: Any) -> dict[str, Any] | None:
     if not isinstance(value, dict):
@@ -71,32 +73,9 @@ def map_apps_list(raw_result: Any) -> tuple[list[dict[str, Any]], str | None]:
     data = raw_result.get("data")
     if not isinstance(data, list):
         raise ValueError("app/list payload missing data array")
-    items: list[dict[str, Any]] = []
-    for app in data:
-        if not isinstance(app, dict):
-            continue
-        app_id = app.get("id")
-        name = app.get("name")
-        if not isinstance(app_id, str) or not app_id.strip():
-            continue
-        if not isinstance(name, str) or not name.strip():
-            continue
-        items.append(
-            {
-                "id": app_id.strip(),
-                "name": name.strip(),
-                "description": app.get("description"),
-                "is_accessible": bool(app.get("isAccessible", False)),
-                "is_enabled": bool(app.get("isEnabled", False)),
-                "install_url": app.get("installUrl"),
-                "mention_path": f"app://{app_id.strip()}",
-                "branding": app.get("branding"),
-                "labels": app.get("labels"),
-                "codex": {"raw": app},
-            }
-        )
     next_cursor = raw_result.get("nextCursor")
-    return items, next_cursor if isinstance(next_cursor, str) and next_cursor else None
+    normalized_cursor = next_cursor if isinstance(next_cursor, str) and next_cursor else None
+    return normalize_app_items(data), normalized_cursor
 
 
 def map_plugin_marketplaces(raw_result: Any) -> dict[str, Any]:
