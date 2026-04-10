@@ -9,9 +9,9 @@ from starlette.requests import Request
 from starlette.responses import Response
 
 from codex_a2a.jsonrpc.errors import (
-    ERR_UPSTREAM_HTTP_ERROR,
-    ERR_UPSTREAM_UNREACHABLE,
     invalid_params_response,
+    upstream_http_error_response,
+    upstream_unreachable_response,
 )
 from codex_a2a.jsonrpc.owner_guard import validate_thread_owner
 from codex_a2a.jsonrpc.params import (
@@ -199,31 +199,17 @@ async def handle_thread_lifecycle_control_request(
         upstream_status = exc.response.status_code
         if upstream_status == 404 and thread_id is not None:
             return _thread_not_found_response(app, base_request.id, thread_id=thread_id)
-        return app._generate_error_response(
+        return upstream_http_error_response(
+            app,
             base_request.id,
-            JSONRPCError(
-                code=ERR_UPSTREAM_HTTP_ERROR,
-                message="Upstream Codex error",
-                data={
-                    "type": "UPSTREAM_HTTP_ERROR",
-                    "thread_id": thread_id,
-                    "upstream_status": upstream_status,
-                    "method": base_request.method,
-                },
-            ),
+            upstream_status=upstream_status,
+            data={"thread_id": thread_id, "method": base_request.method},
         )
     except httpx.HTTPError:
-        return app._generate_error_response(
+        return upstream_unreachable_response(
+            app,
             base_request.id,
-            JSONRPCError(
-                code=ERR_UPSTREAM_UNREACHABLE,
-                message="Upstream Codex unreachable",
-                data={
-                    "type": "UPSTREAM_UNREACHABLE",
-                    "thread_id": thread_id,
-                    "method": base_request.method,
-                },
-            ),
+            data={"thread_id": thread_id, "method": base_request.method},
         )
     except LookupError:
         assert task_id is not None

@@ -280,6 +280,46 @@ def authorization_forbidden_response(
     )
 
 
+def upstream_http_error_response(
+    app: CodexSessionQueryJSONRPCApplication,
+    request_id: str | int | None,
+    *,
+    upstream_status: int,
+    data: Mapping[str, Any] | None = None,
+) -> Response:
+    payload: dict[str, Any] = {"type": "UPSTREAM_HTTP_ERROR"}
+    if data is not None:
+        payload.update(data)
+    payload["upstream_status"] = upstream_status
+    return app._generate_error_response(
+        request_id,
+        JSONRPCError(
+            code=ERR_UPSTREAM_HTTP_ERROR,
+            message="Upstream Codex error",
+            data=payload,
+        ),
+    )
+
+
+def upstream_unreachable_response(
+    app: CodexSessionQueryJSONRPCApplication,
+    request_id: str | int | None,
+    *,
+    data: Mapping[str, Any] | None = None,
+) -> Response:
+    payload: dict[str, Any] = {"type": "UPSTREAM_UNREACHABLE"}
+    if data is not None:
+        payload.update(data)
+    return app._generate_error_response(
+        request_id,
+        JSONRPCError(
+            code=ERR_UPSTREAM_UNREACHABLE,
+            message="Upstream Codex unreachable",
+            data=payload,
+        ),
+    )
+
+
 def extract_directory_from_metadata(
     app: CodexSessionQueryJSONRPCApplication,
     *,

@@ -4,18 +4,18 @@ import logging
 from typing import TYPE_CHECKING, cast
 
 import httpx
-from a2a.types import A2AError, InternalError, JSONRPCError, JSONRPCRequest
+from a2a.types import A2AError, InternalError, JSONRPCRequest
 from starlette.requests import Request
 from starlette.responses import Response
 
 from codex_a2a.jsonrpc.errors import (
     ERR_INTERRUPT_NOT_FOUND,
-    ERR_UPSTREAM_HTTP_ERROR,
-    ERR_UPSTREAM_UNREACHABLE,
     extract_directory_from_params_metadata,
     interrupt_error_response,
     interrupt_expected_type,
     invalid_params_response,
+    upstream_http_error_response,
+    upstream_unreachable_response,
 )
 from codex_a2a.jsonrpc.interrupt_lifecycle import (
     interrupt_error_from_exception,
@@ -177,26 +177,17 @@ async def handle_interrupt_callback_request(
                 message="Interrupt request not found",
                 data={"type": "INTERRUPT_REQUEST_NOT_FOUND", "request_id": request_id},
             )
-        return app._generate_error_response(
+        return upstream_http_error_response(
+            app,
             base_request.id,
-            JSONRPCError(
-                code=ERR_UPSTREAM_HTTP_ERROR,
-                message="Upstream Codex error",
-                data={
-                    "type": "UPSTREAM_HTTP_ERROR",
-                    "upstream_status": upstream_status,
-                    "request_id": request_id,
-                },
-            ),
+            upstream_status=upstream_status,
+            data={"request_id": request_id},
         )
     except httpx.HTTPError:
-        return app._generate_error_response(
+        return upstream_unreachable_response(
+            app,
             base_request.id,
-            JSONRPCError(
-                code=ERR_UPSTREAM_UNREACHABLE,
-                message="Upstream Codex unreachable",
-                data={"type": "UPSTREAM_UNREACHABLE", "request_id": request_id},
-            ),
+            data={"request_id": request_id},
         )
     except Exception as exc:
         logger.exception("Codex interrupt callback JSON-RPC method failed")
