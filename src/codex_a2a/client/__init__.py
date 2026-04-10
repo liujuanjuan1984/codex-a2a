@@ -1,5 +1,6 @@
 """Minimal A2A client facade package."""
 
+from .auth import StaticCredentialService
 from .client import A2AClient
 from .config import A2AClientConfig
 from .errors import (
@@ -25,6 +26,7 @@ __all__ = [
     "A2AClient",
     "A2AClientManager",
     "A2AClientConfig",
+    "StaticCredentialService",
     "A2AClientConfigError",
     "A2AClientError",
     "A2AClientLifecycleError",
