@@ -49,6 +49,7 @@ class BlockingThreadLifecycleClientStub:
     def __init__(self) -> None:
         self.connection_scope_id = "scope-test"
         self.thread_unsubscribe_calls: list[str] = []
+        self._events: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
 
     async def stream_events(  # noqa: ANN201
         self,
@@ -57,12 +58,11 @@ class BlockingThreadLifecycleClientStub:
         directory: str | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
         del directory
-        while True:
-            if stop_event is not None and stop_event.is_set():
-                break
-            await asyncio.sleep(0.01)
-            if False:  # pragma: no cover
-                yield {}
+        while stop_event is None or not stop_event.is_set():
+            try:
+                yield await asyncio.wait_for(self._events.get(), timeout=0.01)
+            except TimeoutError:
+                continue
 
     async def thread_unsubscribe(self, thread_id: str) -> None:
         self.thread_unsubscribe_calls.append(thread_id)
