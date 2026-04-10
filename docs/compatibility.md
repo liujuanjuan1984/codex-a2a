@@ -7,8 +7,11 @@ This document explains the compatibility promises this repository currently trie
 - Python versions: 3.11, 3.12, 3.13
 - A2A SDK line: `0.3.x`
 - A2A protocol version advertised by default: `0.3.0`
+- Normalized protocol compatibility line declared today: `0.3`
 
 The repository pins the SDK version in `pyproject.toml` and validates the published CLI build in CI. Upgrade the SDK deliberately rather than relying on floating dependency resolution.
+
+The authenticated compatibility profile and wire contract publish `default_protocol_version`, `supported_protocol_versions`, and `protocol_compatibility`. Those fields are declarative discovery metadata. They do not imply request-time `A2A-Version` negotiation for protocol lines outside the current SDK-backed `0.3` behavior.
 
 ## Contract Honesty
 

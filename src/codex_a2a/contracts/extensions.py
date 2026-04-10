@@ -15,6 +15,12 @@ from codex_a2a.contracts.runtime_output import (
 from codex_a2a.execution.request_overrides import request_execution_options_fields
 from codex_a2a.execution.tool_call_payloads import build_tool_call_payload_contract_params
 from codex_a2a.profile.runtime import RuntimeProfile
+from codex_a2a.protocol_versions import (
+    build_protocol_compatibility_summary,
+    default_supported_protocol_versions,
+    normalize_protocol_version,
+    normalize_protocol_versions,
+)
 
 COMPATIBILITY_PROFILE_EXTENSION_URI = "urn:codex-a2a:compatibility-profile/v1"
 WIRE_CONTRACT_EXTENSION_URI = "urn:codex-a2a:wire-contract/v1"
@@ -981,7 +987,19 @@ def build_wire_contract_extension_params(
     *,
     protocol_version: str,
     runtime_profile: RuntimeProfile,
+    supported_protocol_versions: tuple[str, ...] | list[str] | None = None,
+    default_protocol_version: str | None = None,
 ) -> dict[str, Any]:
+    declared_default_protocol_version = normalize_protocol_version(
+        default_protocol_version or protocol_version
+    )
+    declared_supported_protocol_versions = normalize_protocol_versions(
+        supported_protocol_versions or default_supported_protocol_versions(protocol_version)
+    )
+    protocol_compatibility = build_protocol_compatibility_summary(
+        default_protocol_version=declared_default_protocol_version,
+        supported_protocol_versions=declared_supported_protocol_versions,
+    )
     snapshot = build_capability_snapshot(runtime_profile=runtime_profile)
     resubscribe_behavior = {
         "scope": "service-level",
@@ -1002,6 +1020,9 @@ def build_wire_contract_extension_params(
     }
     return {
         "protocol_version": protocol_version,
+        "default_protocol_version": declared_default_protocol_version,
+        "supported_protocol_versions": list(declared_supported_protocol_versions),
+        "protocol_compatibility": protocol_compatibility,
         "preferred_transport": "HTTP+JSON",
         "additional_transports": ["JSON-RPC"],
         "core": {
@@ -1040,7 +1061,19 @@ def build_compatibility_profile_params(
     *,
     protocol_version: str,
     runtime_profile: RuntimeProfile,
+    supported_protocol_versions: tuple[str, ...] | list[str] | None = None,
+    default_protocol_version: str | None = None,
 ) -> dict[str, Any]:
+    declared_default_protocol_version = normalize_protocol_version(
+        default_protocol_version or protocol_version
+    )
+    declared_supported_protocol_versions = normalize_protocol_versions(
+        supported_protocol_versions or default_supported_protocol_versions(protocol_version)
+    )
+    protocol_compatibility = build_protocol_compatibility_summary(
+        default_protocol_version=declared_default_protocol_version,
+        supported_protocol_versions=declared_supported_protocol_versions,
+    )
     snapshot = build_capability_snapshot(runtime_profile=runtime_profile)
     resubscribe_behavior = {
         "scope": "service-level",
@@ -1226,6 +1259,9 @@ def build_compatibility_profile_params(
     return {
         "profile_id": runtime_profile.profile_id,
         "protocol_version": protocol_version,
+        "default_protocol_version": declared_default_protocol_version,
+        "supported_protocol_versions": list(declared_supported_protocol_versions),
+        "protocol_compatibility": protocol_compatibility,
         "deployment": runtime_profile.deployment.as_dict(),
         "runtime_features": runtime_profile.runtime_features_dict(),
         "core": {
@@ -1317,6 +1353,10 @@ def build_compatibility_profile_params(
             (
                 "Treat this service's terminal tasks/resubscribe replay-once behavior as a "
                 "declared service-level contract rather than a generic A2A baseline promise."
+            ),
+            (
+                "Treat protocol_compatibility as the runtime truth for which protocol "
+                "line is supported today versus reserved for future compatibility work."
             ),
         ],
     }
