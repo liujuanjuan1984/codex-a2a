@@ -9,7 +9,7 @@ from a2a.server.apps.jsonrpc.fastapi_app import A2AFastAPI
 from a2a.server.apps.rest.rest_adapter import RESTAdapter
 from fastapi import FastAPI
 
-from codex_a2a.client import A2AClientManager
+from codex_a2a.client.manager import A2AClientManager
 from codex_a2a.config import Settings
 from codex_a2a.contracts.extensions import (
     DISCOVERY_METHODS,
