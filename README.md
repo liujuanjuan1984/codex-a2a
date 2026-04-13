@@ -110,11 +110,7 @@ Use this project when:
 - you want a thin service boundary instead of building your own adapter
 - you want inbound serving and outbound peer access in one deployable unit
 
-Prefer [a2a-client-hub](https://github.com/liujuanjuan1984/a2a-client-hub) when:
-
-- you need a broader application-facing client integration layer
-- you want higher-level A2A consumption and upstream adapter normalization
-- you want client-side integration concerns separated from the Codex runtime boundary
+Prefer **[a2a-client-hub](https://github.com/liujuanjuan1984/a2a-client-hub)** when you need a broader application-facing integration layer or higher-level A2A consumption (see [Ecosystem](#ecosystem) for details).
 
 Look elsewhere if:
 
@@ -157,6 +153,11 @@ The normative compatibility split and deployment model live in [Compatibility Gu
 ## Ecosystem
 
 `codex-a2a` is part of a growing landscape of A2A-compliant projects. Depending on your architecture, you may find these related projects useful:
+
+### Foundations (Upstream)
+
+- **[A2A Python SDK](https://github.com/Intelligent-Internet/a2a-python)**: The core protocol implementation and SDK used by this adapter.
+- **Codex**: The underlying local agent runtime (Proprietary).
 
 ### Gateways & Hubs (Vertical Integration)
 
