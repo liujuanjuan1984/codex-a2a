@@ -156,18 +156,18 @@ The normative compatibility split and deployment model live in [Compatibility Gu
 
 ### Foundations (Upstream)
 
-- **[A2A Python SDK](https://github.com/Intelligent-Internet/a2a-python)**: The core protocol implementation and SDK used by this adapter.
+- **[Intelligent-Internet/a2a-python](https://github.com/Intelligent-Internet/a2a-python)**: The core protocol implementation and SDK used by this adapter.
 - **Codex**: The underlying local agent runtime (Proprietary).
 
 ### Gateways & Hubs (Vertical Integration)
 
-- **[a2a-gateway](https://github.com/jinyitao123/a2a-gateway)**: Operates at the protocol-bridging layer, sitting between agent platforms and the A2A/MCP ecosystem to handle discovery and routing.
-- **[a2a-client-hub](https://github.com/liujuanjuan1984/a2a-client-hub)**: An application-facing integration layer that consumes A2A-compliant instances (like `codex-a2a`) and provides higher-level normalization.
+- **[liujuanjuan1984/a2a-client-hub](https://github.com/liujuanjuan1984/a2a-client-hub)**: An application-facing integration layer that consumes A2A-compliant instances (like `codex-a2a`) and provides higher-level normalization.
+- **[jinyitao123/a2a-gateway](https://github.com/jinyitao123/a2a-gateway)**: Operates at the protocol-bridging layer, sitting between agent platforms and the A2A/MCP ecosystem to handle discovery and routing.
 
 ### Alternative Implementations & Runtimes (Horizontal Differences)
 
+- **[Intelligent-Internet/opencode-a2a](https://github.com/Intelligent-Internet/opencode-a2a)**: A complementary Python runtime implementation that shares similar protocol patterns and output negotiation practices.
 - **[MyPrototypeWhat/codex-a2a](https://github.com/MyPrototypeWhat/codex-a2a)**: A lightweight **TypeScript** Express middleware implementation. Ideal for developers looking for in-process SDK integration within a Node.js environment.
-- **[opencode-a2a](https://github.com/Intelligent-Internet/opencode-a2a)**: A complementary Python runtime implementation that shares similar protocol patterns and output negotiation practices.
 
 ## Development
 
