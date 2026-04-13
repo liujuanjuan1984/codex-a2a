@@ -35,7 +35,6 @@ from .runtime_state_schema import (
     _SESSION_OWNERS,
     _THREAD_WATCH_OWNERS,
     _THREAD_WATCH_SUBSCRIPTIONS,
-    apply_runtime_state_schema_migrations,
     initialize_runtime_state_schema,
 )
 
@@ -252,10 +251,6 @@ class RuntimeStateStore:
     @staticmethod
     def _expires_at(*, ttl_seconds: int) -> float:
         return time.time() + float(ttl_seconds)
-
-    @staticmethod
-    def _apply_schema_migrations(sync_conn: Any) -> None:
-        apply_runtime_state_schema_migrations(sync_conn)
 
     def _interrupt_request_tombstone_expires_at(self, *, now: float) -> float | None:
         ttl_seconds = self._interrupt_request_tombstone_ttl_seconds

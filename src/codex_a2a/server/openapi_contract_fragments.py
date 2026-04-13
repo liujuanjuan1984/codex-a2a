@@ -510,31 +510,19 @@ def build_openapi_extension_contracts(
     runtime_profile: RuntimeProfile,
 ) -> dict[str, dict[str, Any]]:
     return {
-        "session_binding": build_session_binding_extension_params(
-            runtime_profile=runtime_profile
-        ),
+        "session_binding": build_session_binding_extension_params(runtime_profile=runtime_profile),
         "streaming": build_streaming_extension_params(),
-        "session_query": build_session_query_extension_params(
-            runtime_profile=runtime_profile
-        ),
-        "discovery": build_discovery_extension_params(
-            runtime_profile=runtime_profile
-        ),
+        "session_query": build_session_query_extension_params(runtime_profile=runtime_profile),
+        "discovery": build_discovery_extension_params(runtime_profile=runtime_profile),
         "thread_lifecycle": build_thread_lifecycle_extension_params(
             runtime_profile=runtime_profile
         ),
         "interrupt_recovery": build_interrupt_recovery_extension_params(
             runtime_profile=runtime_profile
         ),
-        "turn_control": build_turn_control_extension_params(
-            runtime_profile=runtime_profile
-        ),
-        "review_control": build_review_control_extension_params(
-            runtime_profile=runtime_profile
-        ),
-        "exec_control": build_exec_control_extension_params(
-            runtime_profile=runtime_profile
-        ),
+        "turn_control": build_turn_control_extension_params(runtime_profile=runtime_profile),
+        "review_control": build_review_control_extension_params(runtime_profile=runtime_profile),
+        "exec_control": build_exec_control_extension_params(runtime_profile=runtime_profile),
         "interrupt_callback": build_interrupt_callback_extension_params(
             runtime_profile=runtime_profile
         ),
