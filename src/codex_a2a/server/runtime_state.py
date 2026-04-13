@@ -28,12 +28,24 @@ from codex_a2a.upstream.interrupts import (
 
 from .database import build_database_engine
 from .runtime_state_schema import (
-    _PENDING_INTERRUPT_REQUESTS,
-    _PENDING_SESSION_CLAIMS,
-    _SESSION_BINDINGS,
-    _SESSION_OWNERS,
-    _THREAD_WATCH_OWNERS,
-    _THREAD_WATCH_SUBSCRIPTIONS,
+    _PENDING_INTERRUPT_REQUESTS as _TABLE_PENDING_INTERRUPT_REQUESTS,
+)
+from .runtime_state_schema import (
+    _PENDING_SESSION_CLAIMS as _TABLE_PENDING_SESSION_CLAIMS,
+)
+from .runtime_state_schema import (
+    _SESSION_BINDINGS as _TABLE_SESSION_BINDINGS,
+)
+from .runtime_state_schema import (
+    _SESSION_OWNERS as _TABLE_SESSION_OWNERS,
+)
+from .runtime_state_schema import (
+    _THREAD_WATCH_OWNERS as _TABLE_THREAD_WATCH_OWNERS,
+)
+from .runtime_state_schema import (
+    _THREAD_WATCH_SUBSCRIPTIONS as _TABLE_THREAD_WATCH_SUBSCRIPTIONS,
+)
+from .runtime_state_schema import (
     initialize_runtime_state_schema,
 )
 
@@ -260,17 +272,19 @@ class RuntimeStateStore:
     async def _purge_expired_pending_claims(self, session: AsyncSession) -> None:
         now = time.time()
         await session.execute(
-            delete(_PENDING_SESSION_CLAIMS).where(_PENDING_SESSION_CLAIMS.c.expires_at <= now)
+            delete(_TABLE_PENDING_SESSION_CLAIMS).where(
+                _TABLE_PENDING_SESSION_CLAIMS.c.expires_at <= now
+            )
         )
 
     async def _purge_expired_interrupt_tombstones(
         self, session: AsyncSession, *, now: float
     ) -> None:
         await session.execute(
-            delete(_PENDING_INTERRUPT_REQUESTS).where(
+            delete(_TABLE_PENDING_INTERRUPT_REQUESTS).where(
                 and_(
-                    _PENDING_INTERRUPT_REQUESTS.c.tombstone_expires_at.is_not(None),
-                    _PENDING_INTERRUPT_REQUESTS.c.tombstone_expires_at <= now,
+                    _TABLE_PENDING_INTERRUPT_REQUESTS.c.tombstone_expires_at.is_not(None),
+                    _TABLE_PENDING_INTERRUPT_REQUESTS.c.tombstone_expires_at <= now,
                 )
             )
         )
@@ -285,14 +299,14 @@ class RuntimeStateStore:
         tombstone_expires_at = self._interrupt_request_tombstone_expires_at(now=now)
         if tombstone_expires_at is None:
             await session.execute(
-                delete(_PENDING_INTERRUPT_REQUESTS).where(
-                    _PENDING_INTERRUPT_REQUESTS.c.request_id == request_id
+                delete(_TABLE_PENDING_INTERRUPT_REQUESTS).where(
+                    _TABLE_PENDING_INTERRUPT_REQUESTS.c.request_id == request_id
                 )
             )
             return
         await session.execute(
-            update(_PENDING_INTERRUPT_REQUESTS)
-            .where(_PENDING_INTERRUPT_REQUESTS.c.request_id == request_id)
+            update(_TABLE_PENDING_INTERRUPT_REQUESTS)
+            .where(_TABLE_PENDING_INTERRUPT_REQUESTS.c.request_id == request_id)
             .values(tombstone_expires_at=tombstone_expires_at)
         )
 
@@ -369,10 +383,10 @@ class RuntimeStateStore:
         await self._ensure_initialized()
         async with self._session_maker.begin() as session:
             result = await session.execute(
-                select(_SESSION_BINDINGS.c.session_id).where(
+                select(_TABLE_SESSION_BINDINGS.c.session_id).where(
                     and_(
-                        _SESSION_BINDINGS.c.identity == identity,
-                        _SESSION_BINDINGS.c.context_id == context_id,
+                        _TABLE_SESSION_BINDINGS.c.identity == identity,
+                        _TABLE_SESSION_BINDINGS.c.context_id == context_id,
                     )
                 )
             )
@@ -389,7 +403,7 @@ class RuntimeStateStore:
         async with self._session_maker.begin() as session:
             await _insert_then_update_on_conflict(
                 session,
-                table=_SESSION_BINDINGS,
+                table=_TABLE_SESSION_BINDINGS,
                 key_values={
                     "identity": identity,
                     "context_id": context_id,
@@ -401,10 +415,10 @@ class RuntimeStateStore:
         await self._ensure_initialized()
         async with self._session_maker.begin() as session:
             await session.execute(
-                delete(_SESSION_BINDINGS).where(
+                delete(_TABLE_SESSION_BINDINGS).where(
                     and_(
-                        _SESSION_BINDINGS.c.identity == identity,
-                        _SESSION_BINDINGS.c.context_id == context_id,
+                        _TABLE_SESSION_BINDINGS.c.identity == identity,
+                        _TABLE_SESSION_BINDINGS.c.context_id == context_id,
                     )
                 )
             )
@@ -413,8 +427,8 @@ class RuntimeStateStore:
         await self._ensure_initialized()
         async with self._session_maker.begin() as session:
             result = await session.execute(
-                select(_SESSION_OWNERS.c.owner_identity).where(
-                    _SESSION_OWNERS.c.session_id == session_id
+                select(_TABLE_SESSION_OWNERS.c.owner_identity).where(
+                    _TABLE_SESSION_OWNERS.c.session_id == session_id
                 )
             )
             return result.scalar_one_or_none()
@@ -429,7 +443,7 @@ class RuntimeStateStore:
         async with self._session_maker.begin() as session:
             await _insert_then_update_on_conflict(
                 session,
-                table=_SESSION_OWNERS,
+                table=_TABLE_SESSION_OWNERS,
                 key_values={"session_id": session_id},
                 update_values={"owner_identity": identity},
             )
@@ -439,8 +453,8 @@ class RuntimeStateStore:
         async with self._session_maker.begin() as session:
             await self._purge_expired_pending_claims(session)
             result = await session.execute(
-                select(_PENDING_SESSION_CLAIMS.c.pending_identity).where(
-                    _PENDING_SESSION_CLAIMS.c.session_id == session_id
+                select(_TABLE_PENDING_SESSION_CLAIMS.c.pending_identity).where(
+                    _TABLE_PENDING_SESSION_CLAIMS.c.session_id == session_id
                 )
             )
             return result.scalar_one_or_none()
@@ -456,7 +470,7 @@ class RuntimeStateStore:
         async with self._session_maker.begin() as session:
             await _insert_then_update_on_conflict(
                 session,
-                table=_PENDING_SESSION_CLAIMS,
+                table=_TABLE_PENDING_SESSION_CLAIMS,
                 key_values={"session_id": session_id},
                 update_values={
                     "pending_identity": identity,
@@ -468,8 +482,8 @@ class RuntimeStateStore:
         await self._ensure_initialized()
         async with self._session_maker.begin() as session:
             await session.execute(
-                delete(_PENDING_SESSION_CLAIMS).where(
-                    _PENDING_SESSION_CLAIMS.c.session_id == session_id
+                delete(_TABLE_PENDING_SESSION_CLAIMS).where(
+                    _TABLE_PENDING_SESSION_CLAIMS.c.session_id == session_id
                 )
             )
 
@@ -492,7 +506,7 @@ class RuntimeStateStore:
         async with self._session_maker.begin() as session:
             await _insert_then_update_on_conflict(
                 session,
-                table=_PENDING_INTERRUPT_REQUESTS,
+                table=_TABLE_PENDING_INTERRUPT_REQUESTS,
                 key_values={"request_id": request_id},
                 update_values={
                     "interrupt_type": interrupt_type,
@@ -528,8 +542,8 @@ class RuntimeStateStore:
             row = (
                 (
                     await session.execute(
-                        select(_PENDING_INTERRUPT_REQUESTS).where(
-                            _PENDING_INTERRUPT_REQUESTS.c.request_id == request_id
+                        select(_TABLE_PENDING_INTERRUPT_REQUESTS).where(
+                            _TABLE_PENDING_INTERRUPT_REQUESTS.c.request_id == request_id
                         )
                     )
                 )
@@ -553,8 +567,8 @@ class RuntimeStateStore:
         await self._ensure_initialized()
         async with self._session_maker.begin() as session:
             await session.execute(
-                delete(_PENDING_INTERRUPT_REQUESTS).where(
-                    _PENDING_INTERRUPT_REQUESTS.c.request_id == request_id
+                delete(_TABLE_PENDING_INTERRUPT_REQUESTS).where(
+                    _TABLE_PENDING_INTERRUPT_REQUESTS.c.request_id == request_id
                 )
             )
 
@@ -563,7 +577,9 @@ class RuntimeStateStore:
         now = time.time()
         async with self._session_maker.begin() as session:
             await self._purge_expired_interrupt_tombstones(session, now=now)
-            rows = (await session.execute(select(_PENDING_INTERRUPT_REQUESTS))).mappings().all()
+            rows = (
+                (await session.execute(select(_TABLE_PENDING_INTERRUPT_REQUESTS))).mappings().all()
+            )
 
             restored: list[PersistedInterruptRequest] = []
             for row in rows:
@@ -601,8 +617,8 @@ class RuntimeStateStore:
             subscription_row = (
                 (
                     await session.execute(
-                        select(_THREAD_WATCH_SUBSCRIPTIONS).where(
-                            _THREAD_WATCH_SUBSCRIPTIONS.c.subscription_key == subscription_key
+                        select(_TABLE_THREAD_WATCH_SUBSCRIPTIONS).where(
+                            _TABLE_THREAD_WATCH_SUBSCRIPTIONS.c.subscription_key == subscription_key
                         )
                     )
                 )
@@ -611,7 +627,7 @@ class RuntimeStateStore:
             )
             if subscription_row is None:
                 await session.execute(
-                    insert(_THREAD_WATCH_SUBSCRIPTIONS).values(
+                    insert(_TABLE_THREAD_WATCH_SUBSCRIPTIONS).values(
                         subscription_key=subscription_key,
                         connection_scope=connection_scope,
                         owner_count=1,
@@ -626,8 +642,8 @@ class RuntimeStateStore:
             else:
                 owner_count = int(subscription_row["owner_count"])
                 await session.execute(
-                    update(_THREAD_WATCH_SUBSCRIPTIONS)
-                    .where(_THREAD_WATCH_SUBSCRIPTIONS.c.subscription_key == subscription_key)
+                    update(_TABLE_THREAD_WATCH_SUBSCRIPTIONS)
+                    .where(_TABLE_THREAD_WATCH_SUBSCRIPTIONS.c.subscription_key == subscription_key)
                     .values(
                         connection_scope=connection_scope,
                         owner_count=owner_count + 1,
@@ -641,7 +657,7 @@ class RuntimeStateStore:
 
             await _insert_then_update_on_conflict(
                 session,
-                table=_THREAD_WATCH_OWNERS,
+                table=_TABLE_THREAD_WATCH_OWNERS,
                 key_values={"watch_id": watch_id},
                 update_values={
                     "owner_identity": owner_identity,
@@ -659,8 +675,8 @@ class RuntimeStateStore:
             owner_row = (
                 (
                     await session.execute(
-                        select(_THREAD_WATCH_OWNERS).where(
-                            _THREAD_WATCH_OWNERS.c.watch_id == watch_id
+                        select(_TABLE_THREAD_WATCH_OWNERS).where(
+                            _TABLE_THREAD_WATCH_OWNERS.c.watch_id == watch_id
                         )
                     )
                 )
@@ -670,8 +686,8 @@ class RuntimeStateStore:
             refreshed_subscription_row = (
                 (
                     await session.execute(
-                        select(_THREAD_WATCH_SUBSCRIPTIONS).where(
-                            _THREAD_WATCH_SUBSCRIPTIONS.c.subscription_key == subscription_key
+                        select(_TABLE_THREAD_WATCH_SUBSCRIPTIONS).where(
+                            _TABLE_THREAD_WATCH_SUBSCRIPTIONS.c.subscription_key == subscription_key
                         )
                     )
                 )
@@ -697,8 +713,8 @@ class RuntimeStateStore:
             owner_row = (
                 (
                     await session.execute(
-                        select(_THREAD_WATCH_OWNERS).where(
-                            _THREAD_WATCH_OWNERS.c.watch_id == watch_id
+                        select(_TABLE_THREAD_WATCH_OWNERS).where(
+                            _TABLE_THREAD_WATCH_OWNERS.c.watch_id == watch_id
                         )
                     )
                 )
@@ -722,8 +738,9 @@ class RuntimeStateStore:
                 subscription_row = (
                     (
                         await session.execute(
-                            select(_THREAD_WATCH_SUBSCRIPTIONS).where(
-                                _THREAD_WATCH_SUBSCRIPTIONS.c.subscription_key == subscription_key
+                            select(_TABLE_THREAD_WATCH_SUBSCRIPTIONS).where(
+                                _TABLE_THREAD_WATCH_SUBSCRIPTIONS.c.subscription_key
+                                == subscription_key
                             )
                         )
                     )
@@ -748,8 +765,8 @@ class RuntimeStateStore:
 
             next_owner_status = "orphaned" if release_reason == "restart_reconcile" else "released"
             await session.execute(
-                update(_THREAD_WATCH_OWNERS)
-                .where(_THREAD_WATCH_OWNERS.c.watch_id == watch_id)
+                update(_TABLE_THREAD_WATCH_OWNERS)
+                .where(_TABLE_THREAD_WATCH_OWNERS.c.watch_id == watch_id)
                 .values(
                     status=next_owner_status,
                     updated_at=now,
@@ -761,8 +778,8 @@ class RuntimeStateStore:
             subscription_row = (
                 (
                     await session.execute(
-                        select(_THREAD_WATCH_SUBSCRIPTIONS).where(
-                            _THREAD_WATCH_SUBSCRIPTIONS.c.subscription_key == subscription_key
+                        select(_TABLE_THREAD_WATCH_SUBSCRIPTIONS).where(
+                            _TABLE_THREAD_WATCH_SUBSCRIPTIONS.c.subscription_key == subscription_key
                         )
                     )
                 )
@@ -783,8 +800,8 @@ class RuntimeStateStore:
             owner_count = max(int(subscription_row["owner_count"]) - 1, 0)
             subscription_released = owner_count == 0
             await session.execute(
-                update(_THREAD_WATCH_SUBSCRIPTIONS)
-                .where(_THREAD_WATCH_SUBSCRIPTIONS.c.subscription_key == subscription_key)
+                update(_TABLE_THREAD_WATCH_SUBSCRIPTIONS)
+                .where(_TABLE_THREAD_WATCH_SUBSCRIPTIONS.c.subscription_key == subscription_key)
                 .values(
                     owner_count=owner_count,
                     status="released" if subscription_released else "active",
@@ -808,8 +825,8 @@ class RuntimeStateStore:
             rows = (
                 (
                     await session.execute(
-                        select(_THREAD_WATCH_OWNERS).where(
-                            _THREAD_WATCH_OWNERS.c.status == "active"
+                        select(_TABLE_THREAD_WATCH_OWNERS).where(
+                            _TABLE_THREAD_WATCH_OWNERS.c.status == "active"
                         )
                     )
                 )
@@ -828,8 +845,8 @@ class RuntimeStateStore:
             row = (
                 (
                     await session.execute(
-                        select(_THREAD_WATCH_OWNERS).where(
-                            _THREAD_WATCH_OWNERS.c.watch_id == watch_id
+                        select(_TABLE_THREAD_WATCH_OWNERS).where(
+                            _TABLE_THREAD_WATCH_OWNERS.c.watch_id == watch_id
                         )
                     )
                 )
@@ -850,8 +867,8 @@ class RuntimeStateStore:
             row = (
                 (
                     await session.execute(
-                        select(_THREAD_WATCH_SUBSCRIPTIONS).where(
-                            _THREAD_WATCH_SUBSCRIPTIONS.c.subscription_key == subscription_key
+                        select(_TABLE_THREAD_WATCH_SUBSCRIPTIONS).where(
+                            _TABLE_THREAD_WATCH_SUBSCRIPTIONS.c.subscription_key == subscription_key
                         )
                     )
                 )
