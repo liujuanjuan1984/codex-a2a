@@ -154,6 +154,20 @@ The normative compatibility split and deployment model live in [Compatibility Gu
 - [External Conformance Experiments](docs/conformance.md) Manual A2A TCK experiment entrypoint and triage workflow.
 - [Security Policy](SECURITY.md) Threat model, deployment caveats, and vulnerability disclosure guidance.
 
+## Ecosystem
+
+`codex-a2a` is part of a growing landscape of A2A-compliant projects. Depending on your architecture, you may find these related projects useful:
+
+### Gateways & Hubs (Vertical Integration)
+
+- **[a2a-gateway](https://github.com/jinyitao123/a2a-gateway)**: Operates at the protocol-bridging layer, sitting between agent platforms and the A2A/MCP ecosystem to handle discovery and routing.
+- **[a2a-client-hub](https://github.com/liujuanjuan1984/a2a-client-hub)**: An application-facing integration layer that consumes A2A-compliant instances (like `codex-a2a`) and provides higher-level normalization.
+
+### Alternative Implementations & Runtimes (Horizontal Differences)
+
+- **[MyPrototypeWhat/codex-a2a](https://github.com/MyPrototypeWhat/codex-a2a)**: A lightweight **TypeScript** Express middleware implementation. Ideal for developers looking for in-process SDK integration within a Node.js environment.
+- **[opencode-a2a](https://github.com/Intelligent-Internet/opencode-a2a)**: A complementary Python runtime implementation that shares similar protocol patterns and output negotiation practices.
+
 ## Development
 
 For contributor workflow, validation, release handling, and helper scripts, see [Contributing Guide](CONTRIBUTING.md) and [Scripts Reference](scripts/README.md). Use that workflow to create a PR from the working branch and merge into `main` after human review.
