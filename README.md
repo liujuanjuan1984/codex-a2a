@@ -110,11 +110,7 @@ Use this project when:
 - you want a thin service boundary instead of building your own adapter
 - you want inbound serving and outbound peer access in one deployable unit
 
-Prefer [a2a-client-hub](https://github.com/liujuanjuan1984/a2a-client-hub) when:
-
-- you need a broader application-facing client integration layer
-- you want higher-level A2A consumption and upstream adapter normalization
-- you want client-side integration concerns separated from the Codex runtime boundary
+Prefer **[a2a-client-hub](https://github.com/liujuanjuan1984/a2a-client-hub)** when you need a broader application-facing integration layer or higher-level A2A consumption (see [Ecosystem](#ecosystem) for details).
 
 Look elsewhere if:
 
@@ -153,6 +149,25 @@ The normative compatibility split and deployment model live in [Compatibility Gu
 - [Compatibility Guide](docs/compatibility.md) Supported Python/runtime surface, extension stability, and ecosystem-facing compatibility expectations.
 - [External Conformance Experiments](docs/conformance.md) Manual A2A TCK experiment entrypoint and triage workflow.
 - [Security Policy](SECURITY.md) Threat model, deployment caveats, and vulnerability disclosure guidance.
+
+## Ecosystem
+
+`codex-a2a` is part of a growing landscape of A2A-compliant projects. Depending on your architecture, you may find these related projects useful:
+
+### Foundations (Upstream)
+
+- **[Intelligent-Internet/a2a-python](https://github.com/Intelligent-Internet/a2a-python)**: The core protocol implementation and SDK used by this adapter.
+- **Codex**: The underlying local agent runtime (Proprietary).
+
+### Gateways & Hubs (Vertical Integration)
+
+- **[liujuanjuan1984/a2a-client-hub](https://github.com/liujuanjuan1984/a2a-client-hub)**: An application-facing integration layer that consumes A2A-compliant instances (like `codex-a2a`) and provides higher-level normalization.
+- **[jinyitao123/a2a-gateway](https://github.com/jinyitao123/a2a-gateway)**: Operates at the protocol-bridging layer, sitting between agent platforms and the A2A/MCP ecosystem to handle discovery and routing.
+
+### Alternative Implementations & Runtimes (Horizontal Differences)
+
+- **[Intelligent-Internet/opencode-a2a](https://github.com/Intelligent-Internet/opencode-a2a)**: A complementary Python runtime implementation that shares similar protocol patterns and output negotiation practices.
+- **[MyPrototypeWhat/codex-a2a](https://github.com/MyPrototypeWhat/codex-a2a)**: A lightweight **TypeScript** Express middleware implementation. Ideal for developers looking for in-process SDK integration within a Node.js environment.
 
 ## Development
 
