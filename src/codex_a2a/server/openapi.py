@@ -4,521 +4,16 @@ from typing import Any, cast
 
 from fastapi import FastAPI
 
-from codex_a2a.auth import has_configured_auth_scheme
 from codex_a2a.config import Settings
-from codex_a2a.contracts.extensions import (
-    DISCOVERY_METHODS,
-    EXEC_CONTROL_METHODS,
-    INTERRUPT_CALLBACK_METHODS,
-    INTERRUPT_RECOVERY_METHODS,
-    REVIEW_CONTROL_METHODS,
-    SESSION_CONTROL_METHODS,
-    SESSION_QUERY_DEFAULT_LIMIT,
-    SESSION_QUERY_METHODS,
-    THREAD_LIFECYCLE_METHODS,
-    TURN_CONTROL_METHODS,
-    build_compatibility_profile_params,
-    build_discovery_extension_params,
-    build_exec_control_extension_params,
-    build_interrupt_callback_extension_params,
-    build_interrupt_recovery_extension_params,
-    build_review_control_extension_params,
-    build_session_binding_extension_params,
-    build_session_query_extension_params,
-    build_streaming_extension_params,
-    build_thread_lifecycle_extension_params,
-    build_turn_control_extension_params,
-    build_wire_contract_extension_params,
-)
 from codex_a2a.profile.runtime import RuntimeProfile
 
-
-def _build_openapi_security(
-    settings: Settings,
-) -> tuple[dict[str, Any], list[dict[str, list[str]]]]:
-    schemes: dict[str, Any] = {}
-    security: list[dict[str, list[str]]] = []
-    if has_configured_auth_scheme(settings, "bearer"):
-        schemes["bearerAuth"] = {
-            "type": "http",
-            "scheme": "bearer",
-            "bearerFormat": "opaque",
-            "description": "Bearer token authentication",
-        }
-        security.append({"bearerAuth": []})
-    if has_configured_auth_scheme(settings, "basic"):
-        schemes["basicAuth"] = {
-            "type": "http",
-            "scheme": "basic",
-            "description": "Basic authentication",
-        }
-        security.append({"basicAuth": []})
-    return schemes, security
-
-
-def _build_jsonrpc_extension_openapi_description(*, runtime_profile: RuntimeProfile) -> str:
-    session_methods: list[str] = [
-        SESSION_QUERY_METHODS["list_sessions"],
-        SESSION_QUERY_METHODS["get_session_messages"],
-        SESSION_CONTROL_METHODS["prompt_async"],
-        SESSION_CONTROL_METHODS["command"],
-    ]
-    if runtime_profile.session_shell_enabled:
-        session_methods.append(SESSION_CONTROL_METHODS["shell"])
-    discovery_methods = ", ".join(DISCOVERY_METHODS.values())
-    thread_lifecycle_methods = ", ".join(THREAD_LIFECYCLE_METHODS.values())
-    interrupt_recovery_methods = ", ".join(INTERRUPT_RECOVERY_METHODS.values())
-    turn_methods = (
-        ", ".join(TURN_CONTROL_METHODS.values())
-        if runtime_profile.turn_control_enabled
-        else "(disabled)"
-    )
-    review_methods = (
-        ", ".join(REVIEW_CONTROL_METHODS.values())
-        if runtime_profile.review_control_enabled
-        else "(disabled)"
-    )
-    exec_methods = (
-        ", ".join(EXEC_CONTROL_METHODS.values())
-        if runtime_profile.exec_control_enabled
-        else "(disabled)"
-    )
-    interrupt_methods = ", ".join(sorted(INTERRUPT_CALLBACK_METHODS.values()))
-    return (
-        "A2A JSON-RPC entrypoint. Supports core A2A methods "
-        "(message/send, message/stream, tasks/get, tasks/cancel, "
-        "tasks/pushNotificationConfig/*, tasks/resubscribe, "
-        "agent/getAuthenticatedExtendedCard) plus Codex session extensions, "
-        "Codex thread lifecycle extensions, interrupt recovery extensions, "
-        "active-turn control extensions, review "
-        "control extensions, Codex discovery extensions, interactive exec "
-        "extensions, and shared interrupt callback methods.\n\n"
-        f"Codex session query/control methods: {', '.join(session_methods)}.\n"
-        f"Codex thread lifecycle methods: {thread_lifecycle_methods}.\n"
-        f"Codex interrupt recovery methods: {interrupt_recovery_methods}.\n"
-        f"Codex active-turn control methods: {turn_methods}.\n"
-        f"Codex review control methods: {review_methods}.\n"
-        f"Codex discovery methods: {discovery_methods}.\n"
-        f"Codex interactive exec methods: {exec_methods}.\n"
-        f"Shared interrupt callback methods: {interrupt_methods}.\n\n"
-        "Notification semantics: extension requests without JSON-RPC id return HTTP 204. "
-        "Unsupported methods return JSON-RPC -32601 with supported_methods and "
-        "protocol_version in error.data."
-    )
-
-
-def _build_jsonrpc_extension_openapi_examples(*, runtime_profile: RuntimeProfile) -> dict[str, Any]:
-    examples: dict[str, Any] = {
-        "message_send": {
-            "summary": "Send message via JSON-RPC core method",
-            "value": {
-                "jsonrpc": "2.0",
-                "id": 101,
-                "method": "message/send",
-                "params": {
-                    "message": {
-                        "messageId": "msg-1",
-                        "role": "user",
-                        "parts": [{"kind": "text", "text": "Explain what this repository does."}],
-                    }
-                },
-            },
-        },
-        "message_stream": {
-            "summary": "Stream message via JSON-RPC core method",
-            "value": {
-                "jsonrpc": "2.0",
-                "id": 102,
-                "method": "message/stream",
-                "params": {
-                    "message": {
-                        "messageId": "msg-stream-1",
-                        "role": "user",
-                        "parts": [{"kind": "text", "text": "Stream the answer and summarize."}],
-                    }
-                },
-            },
-        },
-        "authenticated_extended_card": {
-            "summary": "Fetch the authenticated extended Agent Card",
-            "value": {
-                "jsonrpc": "2.0",
-                "id": 103,
-                "method": "agent/getAuthenticatedExtendedCard",
-                "params": {},
-            },
-        },
-        "session_list": {
-            "summary": "List Codex sessions",
-            "value": {
-                "jsonrpc": "2.0",
-                "id": 1,
-                "method": SESSION_QUERY_METHODS["list_sessions"],
-                "params": {"limit": SESSION_QUERY_DEFAULT_LIMIT},
-            },
-        },
-        "session_messages": {
-            "summary": "List messages for a session",
-            "value": {
-                "jsonrpc": "2.0",
-                "id": 2,
-                "method": SESSION_QUERY_METHODS["get_session_messages"],
-                "params": {"session_id": "s-1", "limit": SESSION_QUERY_DEFAULT_LIMIT},
-            },
-        },
-        "session_prompt_async": {
-            "summary": "Send async prompt to an existing session",
-            "value": {
-                "jsonrpc": "2.0",
-                "id": 21,
-                "method": SESSION_CONTROL_METHODS["prompt_async"],
-                "params": {
-                    "session_id": "s-1",
-                    "request": {
-                        "parts": [
-                            {"type": "text", "text": "Use the app to summarize next steps."},
-                            {
-                                "type": "image",
-                                "url": "https://example.com/screenshot.png",
-                            },
-                            {
-                                "type": "mention",
-                                "name": "Demo App",
-                                "path": "app://demo-app",
-                            },
-                        ]
-                    },
-                },
-            },
-        },
-        "session_command": {
-            "summary": "Send command to an existing session",
-            "value": {
-                "jsonrpc": "2.0",
-                "id": 22,
-                "method": SESSION_CONTROL_METHODS["command"],
-                "params": {
-                    "session_id": "s-1",
-                    "request": {
-                        "command": "plan",
-                        "arguments": "show current work",
-                    },
-                },
-            },
-        },
-        "discovery_skills_list": {
-            "summary": "List available Codex skills",
-            "value": {
-                "jsonrpc": "2.0",
-                "id": 23,
-                "method": DISCOVERY_METHODS["list_skills"],
-                "params": {"cwds": ["/workspace/project"], "force_reload": True},
-            },
-        },
-        "discovery_apps_list": {
-            "summary": "List available Codex apps",
-            "value": {
-                "jsonrpc": "2.0",
-                "id": 24,
-                "method": DISCOVERY_METHODS["list_apps"],
-                "params": {"limit": 20, "force_refetch": False},
-            },
-        },
-        "discovery_plugins_list": {
-            "summary": "List available Codex plugins",
-            "value": {
-                "jsonrpc": "2.0",
-                "id": 25,
-                "method": DISCOVERY_METHODS["list_plugins"],
-                "params": {"cwds": ["/workspace/project"], "force_remote_sync": False},
-            },
-        },
-        "discovery_plugin_read": {
-            "summary": "Read one Codex plugin",
-            "value": {
-                "jsonrpc": "2.0",
-                "id": 26,
-                "method": DISCOVERY_METHODS["read_plugin"],
-                "params": {
-                    "marketplace_path": "/workspace/project/.codex/plugins/marketplace.json",
-                    "plugin_name": "sample",
-                },
-            },
-        },
-        "discovery_watch": {
-            "summary": "Watch discovery invalidation and refresh signals",
-            "value": {
-                "jsonrpc": "2.0",
-                "id": 27,
-                "method": DISCOVERY_METHODS["watch"],
-                "params": {"request": {"events": ["skills.changed", "apps.updated"]}},
-            },
-        },
-        "thread_fork": {
-            "summary": "Fork a Codex thread",
-            "value": {
-                "jsonrpc": "2.0",
-                "id": 271,
-                "method": THREAD_LIFECYCLE_METHODS["fork"],
-                "params": {"thread_id": "thr-1", "request": {"ephemeral": True}},
-            },
-        },
-        "thread_archive": {
-            "summary": "Archive a Codex thread",
-            "value": {
-                "jsonrpc": "2.0",
-                "id": 272,
-                "method": THREAD_LIFECYCLE_METHODS["archive"],
-                "params": {"thread_id": "thr-1"},
-            },
-        },
-        "thread_unarchive": {
-            "summary": "Restore an archived Codex thread",
-            "value": {
-                "jsonrpc": "2.0",
-                "id": 273,
-                "method": THREAD_LIFECYCLE_METHODS["unarchive"],
-                "params": {"thread_id": "thr-1"},
-            },
-        },
-        "thread_metadata_update": {
-            "summary": "Patch persisted Codex thread git metadata",
-            "value": {
-                "jsonrpc": "2.0",
-                "id": 274,
-                "method": THREAD_LIFECYCLE_METHODS["metadata_update"],
-                "params": {
-                    "thread_id": "thr-1",
-                    "request": {"git_info": {"branch": "feature/thread-lifecycle"}},
-                },
-            },
-        },
-        "thread_watch": {
-            "summary": "Watch thread lifecycle signals through a task stream",
-            "value": {
-                "jsonrpc": "2.0",
-                "id": 275,
-                "method": THREAD_LIFECYCLE_METHODS["watch"],
-                "params": {
-                    "request": {
-                        "events": ["thread.started", "thread.status.changed"],
-                        "thread_ids": ["thr-1"],
-                    }
-                },
-            },
-        },
-        "thread_watch_release": {
-            "summary": "Release an owned thread lifecycle watch task",
-            "value": {
-                "jsonrpc": "2.0",
-                "id": 276,
-                "method": THREAD_LIFECYCLE_METHODS["watch_release"],
-                "params": {"task_id": "task-thread-watch-1"},
-            },
-        },
-        "interrupts_list": {
-            "summary": "List active pending interrupts for the current caller",
-            "value": {
-                "jsonrpc": "2.0",
-                "id": 277,
-                "method": INTERRUPT_RECOVERY_METHODS["list"],
-                "params": {"type": "permission"},
-            },
-        },
-        "permission_reply": {
-            "summary": "Reply to permission interrupt request",
-            "value": {
-                "jsonrpc": "2.0",
-                "id": 31,
-                "method": INTERRUPT_CALLBACK_METHODS["reply_permission"],
-                "params": {"request_id": "req-1", "reply": "once"},
-            },
-        },
-        "question_reply": {
-            "summary": "Reply to question interrupt request",
-            "value": {
-                "jsonrpc": "2.0",
-                "id": 32,
-                "method": INTERRUPT_CALLBACK_METHODS["reply_question"],
-                "params": {"request_id": "req-2", "answers": [["answer"]]},
-            },
-        },
-        "question_reject": {
-            "summary": "Reject question interrupt request",
-            "value": {
-                "jsonrpc": "2.0",
-                "id": 33,
-                "method": INTERRUPT_CALLBACK_METHODS["reject_question"],
-                "params": {"request_id": "req-3"},
-            },
-        },
-        "permissions_reply": {
-            "summary": "Reply to permissions interrupt request",
-            "value": {
-                "jsonrpc": "2.0",
-                "id": 34,
-                "method": INTERRUPT_CALLBACK_METHODS["reply_permissions"],
-                "params": {
-                    "request_id": "req-4",
-                    "permissions": {
-                        "fileSystem": {"write": ["/workspace/project"]},
-                    },
-                    "scope": "session",
-                },
-            },
-        },
-        "elicitation_reply": {
-            "summary": "Reply to elicitation interrupt request",
-            "value": {
-                "jsonrpc": "2.0",
-                "id": 35,
-                "method": INTERRUPT_CALLBACK_METHODS["reply_elicitation"],
-                "params": {
-                    "request_id": "req-5",
-                    "action": "accept",
-                    "content": {"workspace_root": "/workspace/project"},
-                },
-            },
-        },
-    }
-    if runtime_profile.turn_control_enabled:
-        examples["turn_steer"] = {
-            "summary": "Append user input to the active regular turn",
-            "value": {
-                "jsonrpc": "2.0",
-                "id": 276,
-                "method": TURN_CONTROL_METHODS["steer"],
-                "params": {
-                    "thread_id": "thr-1",
-                    "expected_turn_id": "turn-9",
-                    "request": {
-                        "parts": [{"type": "text", "text": "Focus on the failing tests first."}]
-                    },
-                },
-            },
-        }
-    if runtime_profile.review_control_enabled:
-        examples["review_start"] = {
-            "summary": "Start a provider-private review turn",
-            "value": {
-                "jsonrpc": "2.0",
-                "id": 277,
-                "method": REVIEW_CONTROL_METHODS["start"],
-                "params": {
-                    "thread_id": "thr-1",
-                    "delivery": "inline",
-                    "target": {
-                        "type": "commit",
-                        "sha": "commit-demo-123",
-                        "title": "Polish tui colors",
-                    },
-                },
-            },
-        }
-        examples["review_watch"] = {
-            "summary": "Watch coarse-grained review lifecycle signals through a task stream",
-            "value": {
-                "jsonrpc": "2.0",
-                "id": 278,
-                "method": REVIEW_CONTROL_METHODS["watch"],
-                "params": {
-                    "thread_id": "thr-1",
-                    "review_thread_id": "thr-1-review",
-                    "turn_id": "turn-review-1",
-                    "request": {"events": ["review.started", "review.completed", "review.failed"]},
-                },
-            },
-        }
-    if runtime_profile.exec_control_enabled:
-        examples["exec_start"] = {
-            "summary": "Start standalone interactive command execution",
-            "value": {
-                "jsonrpc": "2.0",
-                "id": 28,
-                "method": EXEC_CONTROL_METHODS["exec_start"],
-                "params": {
-                    "request": {
-                        "command": "bash",
-                        "arguments": "-lc 'printf hello && sleep 1'",
-                        "process_id": "exec-1",
-                        "tty": True,
-                        "rows": 24,
-                        "cols": 80,
-                    }
-                },
-            },
-        }
-        examples["exec_write"] = {
-            "summary": "Write stdin bytes to an interactive exec session",
-            "value": {
-                "jsonrpc": "2.0",
-                "id": 29,
-                "method": EXEC_CONTROL_METHODS["exec_write"],
-                "params": {"request": {"process_id": "exec-1", "delta_base64": "cHdkCg=="}},
-            },
-        }
-        examples["exec_resize"] = {
-            "summary": "Resize the interactive exec PTY",
-            "value": {
-                "jsonrpc": "2.0",
-                "id": 30,
-                "method": EXEC_CONTROL_METHODS["exec_resize"],
-                "params": {"request": {"process_id": "exec-1", "rows": 40, "cols": 120}},
-            },
-        }
-        examples["exec_terminate"] = {
-            "summary": "Terminate an interactive exec session",
-            "value": {
-                "jsonrpc": "2.0",
-                "id": 31,
-                "method": EXEC_CONTROL_METHODS["exec_terminate"],
-                "params": {"request": {"process_id": "exec-1"}},
-            },
-        }
-    if runtime_profile.session_shell_enabled:
-        examples["session_shell"] = {
-            "summary": "Run a one-shot shell command attributed to an existing session",
-            "value": {
-                "jsonrpc": "2.0",
-                "id": 23,
-                "method": SESSION_CONTROL_METHODS["shell"],
-                "params": {
-                    "session_id": "s-1",
-                    "request": {"command": "git status --short"},
-                },
-            },
-        }
-    return examples
-
-
-def _build_rest_message_openapi_examples() -> dict[str, Any]:
-    return {
-        "basic_message": {
-            "summary": "Send a basic user message (HTTP+JSON)",
-            "value": {
-                "message": {
-                    "messageId": "msg-rest-1",
-                    "role": "ROLE_USER",
-                    "content": [{"text": "Explain what this repository does."}],
-                }
-            },
-        },
-        "continue_session": {
-            "summary": "Continue a historical Codex session",
-            "value": {
-                "message": {
-                    "messageId": "msg-rest-continue-1",
-                    "role": "ROLE_USER",
-                    "content": [{"text": "Continue previous work and summarize next steps."}],
-                },
-                "metadata": {
-                    "shared": {
-                        "session": {"id": "s-1"},
-                    }
-                },
-            },
-        },
-    }
+from .openapi_contract_fragments import (
+    build_jsonrpc_extension_openapi_description,
+    build_jsonrpc_extension_openapi_examples,
+    build_openapi_extension_contracts,
+    build_openapi_security,
+    build_rest_message_openapi_examples,
+)
 
 
 def patch_openapi_contract(
@@ -528,44 +23,9 @@ def patch_openapi_contract(
     protocol_version: str,
     runtime_profile: RuntimeProfile,
 ) -> None:
-    session_binding = build_session_binding_extension_params(
-        runtime_profile=runtime_profile,
-    )
-    streaming = build_streaming_extension_params()
-    session_query = build_session_query_extension_params(
-        runtime_profile=runtime_profile,
-    )
-    discovery = build_discovery_extension_params(
-        runtime_profile=runtime_profile,
-    )
-    thread_lifecycle = build_thread_lifecycle_extension_params(
-        runtime_profile=runtime_profile,
-    )
-    interrupt_recovery = build_interrupt_recovery_extension_params(
-        runtime_profile=runtime_profile,
-    )
-    turn_control = build_turn_control_extension_params(
-        runtime_profile=runtime_profile,
-    )
-    review_control = build_review_control_extension_params(
-        runtime_profile=runtime_profile,
-    )
-    exec_control = build_exec_control_extension_params(
-        runtime_profile=runtime_profile,
-    )
-    interrupt_callback = build_interrupt_callback_extension_params(
-        runtime_profile=runtime_profile,
-    )
-    wire_contract = build_wire_contract_extension_params(
+    extension_contracts = build_openapi_extension_contracts(
+        settings=settings,
         protocol_version=protocol_version,
-        supported_protocol_versions=settings.a2a_supported_protocol_versions,
-        default_protocol_version=settings.a2a_protocol_version,
-        runtime_profile=runtime_profile,
-    )
-    compatibility_profile = build_compatibility_profile_params(
-        protocol_version=protocol_version,
-        supported_protocol_versions=settings.a2a_supported_protocol_versions,
-        default_protocol_version=settings.a2a_protocol_version,
         runtime_profile=runtime_profile,
     )
     original_openapi = app.openapi
@@ -577,7 +37,7 @@ def patch_openapi_contract(
         schema = original_openapi()
         components = schema.setdefault("components", {})
         if isinstance(components, dict):
-            security_schemes, security = _build_openapi_security(settings)
+            security_schemes, security = build_openapi_security(settings)
             if security_schemes:
                 components["securitySchemes"] = security_schemes
             if security:
@@ -593,23 +53,10 @@ def patch_openapi_contract(
                             cast(list[dict[str, list[str]]], schema["security"])
                         )
                     post["summary"] = "Handle A2A JSON-RPC Requests"
-                    post["description"] = _build_jsonrpc_extension_openapi_description(
+                    post["description"] = build_jsonrpc_extension_openapi_description(
                         runtime_profile=runtime_profile
                     )
-                    post["x-a2a-extension-contracts"] = {
-                        "session_binding": session_binding,
-                        "streaming": streaming,
-                        "session_query": session_query,
-                        "discovery": discovery,
-                        "thread_lifecycle": thread_lifecycle,
-                        "interrupt_recovery": interrupt_recovery,
-                        "turn_control": turn_control,
-                        "review_control": review_control,
-                        "exec_control": exec_control,
-                        "interrupt_callback": interrupt_callback,
-                        "wire_contract": wire_contract,
-                        "compatibility_profile": compatibility_profile,
-                    }
+                    post["x-a2a-extension-contracts"] = dict(extension_contracts)
 
                     request_body = post.setdefault("requestBody", {})
                     if isinstance(request_body, dict):
@@ -617,7 +64,7 @@ def patch_openapi_contract(
                         if isinstance(content, dict):
                             app_json = content.setdefault("application/json", {})
                             if isinstance(app_json, dict):
-                                app_json["examples"] = _build_jsonrpc_extension_openapi_examples(
+                                app_json["examples"] = build_jsonrpc_extension_openapi_examples(
                                     runtime_profile=runtime_profile
                                 )
 
@@ -629,7 +76,9 @@ def patch_openapi_contract(
                         "Use REST payload shape with message.content and ROLE_* roles."
                     ),
                     "schema_ref": "#/components/schemas/SendMessageRequest",
-                    "contracts": {"session_binding": session_binding},
+                    "contracts": {
+                        "session_binding": extension_contracts["session_binding"],
+                    },
                 },
                 "/v1/message:stream": {
                     "summary": "Stream Message (HTTP+JSON)",
@@ -639,13 +88,13 @@ def patch_openapi_contract(
                     ),
                     "schema_ref": "#/components/schemas/SendStreamingMessageRequest",
                     "contracts": {
-                        "session_binding": session_binding,
-                        "streaming": streaming,
-                        "interrupt_callback": interrupt_callback,
+                        "session_binding": extension_contracts["session_binding"],
+                        "streaming": extension_contracts["streaming"],
+                        "interrupt_callback": extension_contracts["interrupt_callback"],
                     },
                 },
             }
-            rest_examples = _build_rest_message_openapi_examples()
+            rest_examples = build_rest_message_openapi_examples()
             for rest_path, contract in rest_post_contracts.items():
                 rest_path_item = paths.get(rest_path)
                 if not isinstance(rest_path_item, dict):
@@ -662,7 +111,7 @@ def patch_openapi_contract(
                 rest_post["description"] = contract["description"]
                 rest_post["x-a2a-extension-contracts"] = contract["contracts"]
                 if rest_path == "/v1/message:stream":
-                    rest_post["x-a2a-streaming"] = streaming
+                    rest_post["x-a2a-streaming"] = extension_contracts["streaming"]
 
                 request_body = rest_post.setdefault("requestBody", {})
                 if not isinstance(request_body, dict):
