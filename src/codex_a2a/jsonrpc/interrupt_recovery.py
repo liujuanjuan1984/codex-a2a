@@ -11,7 +11,7 @@ from codex_a2a.jsonrpc.interrupt_recovery_params import (
     InterruptRecoveryListParams,
     parse_interrupt_recovery_list_params,
 )
-from codex_a2a.jsonrpc.params import JsonRpcParamsValidationError
+from codex_a2a.jsonrpc.params_common import JsonRpcParamsValidationError
 
 if TYPE_CHECKING:
     from codex_a2a.jsonrpc.application import CodexSessionQueryJSONRPCApplication

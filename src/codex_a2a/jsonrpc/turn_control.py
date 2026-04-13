@@ -17,8 +17,8 @@ from codex_a2a.jsonrpc.errors import (
     invalid_params_response,
 )
 from codex_a2a.jsonrpc.owner_guard import validate_thread_owner
-from codex_a2a.jsonrpc.params import (
-    JsonRpcParamsValidationError,
+from codex_a2a.jsonrpc.params_common import JsonRpcParamsValidationError
+from codex_a2a.jsonrpc.turn_control_params import (
     TurnSteerControlParams,
     parse_turn_steer_params,
 )

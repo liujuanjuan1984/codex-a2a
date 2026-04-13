@@ -1,20 +1,3 @@
-from codex_a2a.jsonrpc.control_params import (
-    CommandControlParams,
-    ExecResizeControlParams,
-    ExecStartControlParams,
-    ExecTerminateControlParams,
-    ExecWriteControlParams,
-    MetadataParams,
-    PromptAsyncControlParams,
-    ShellControlParams,
-    parse_command_params,
-    parse_exec_resize_params,
-    parse_exec_start_params,
-    parse_exec_terminate_params,
-    parse_exec_write_params,
-    parse_prompt_async_params,
-    parse_shell_params,
-)
 from codex_a2a.jsonrpc.discovery_params import (
     DiscoveryAppsListParams,
     DiscoveryPluginReadParams,
@@ -26,6 +9,16 @@ from codex_a2a.jsonrpc.discovery_params import (
     parse_discovery_plugins_list_params,
     parse_discovery_skills_list_params,
     parse_discovery_watch_params,
+)
+from codex_a2a.jsonrpc.exec_control_params import (
+    ExecResizeControlParams,
+    ExecStartControlParams,
+    ExecTerminateControlParams,
+    ExecWriteControlParams,
+    parse_exec_resize_params,
+    parse_exec_start_params,
+    parse_exec_terminate_params,
+    parse_exec_write_params,
 )
 from codex_a2a.jsonrpc.interrupt_params import (
     ElicitationReplyParams,
@@ -43,7 +36,7 @@ from codex_a2a.jsonrpc.interrupt_recovery_params import (
     InterruptRecoveryListParams,
     parse_interrupt_recovery_list_params,
 )
-from codex_a2a.jsonrpc.params_common import JsonRpcParamsValidationError
+from codex_a2a.jsonrpc.params_common import JsonRpcParamsValidationError, MetadataParams
 from codex_a2a.jsonrpc.query_params import (
     parse_get_session_messages_params,
     parse_list_sessions_params,
@@ -53,6 +46,14 @@ from codex_a2a.jsonrpc.review_control_params import (
     ReviewWatchControlParams,
     parse_review_start_params,
     parse_review_watch_params,
+)
+from codex_a2a.jsonrpc.session_control_params import (
+    CommandControlParams,
+    PromptAsyncControlParams,
+    ShellControlParams,
+    parse_command_params,
+    parse_prompt_async_params,
+    parse_shell_params,
 )
 from codex_a2a.jsonrpc.thread_lifecycle_params import (
     ThreadArchiveControlParams,

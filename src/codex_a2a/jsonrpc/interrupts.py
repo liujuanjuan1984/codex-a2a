@@ -22,9 +22,8 @@ from codex_a2a.jsonrpc.interrupt_lifecycle import (
     resolve_interrupt_binding,
     validate_interrupt_owner,
 )
-from codex_a2a.jsonrpc.params import (
+from codex_a2a.jsonrpc.interrupt_params import (
     ElicitationReplyParams,
-    JsonRpcParamsValidationError,
     PermissionReplyParams,
     PermissionsReplyParams,
     QuestionRejectParams,
@@ -35,6 +34,7 @@ from codex_a2a.jsonrpc.params import (
     parse_question_reject_params,
     parse_question_reply_params,
 )
+from codex_a2a.jsonrpc.params_common import JsonRpcParamsValidationError
 from codex_a2a.upstream.interrupts import InterruptRequestError
 
 if TYPE_CHECKING:

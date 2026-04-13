@@ -4,7 +4,6 @@ from typing import Any
 
 from pydantic import AliasChoices, Field, ValidationError, field_validator
 
-from codex_a2a.jsonrpc.control_params import PromptAsyncPart
 from codex_a2a.jsonrpc.params_common import (
     JsonRpcParamsValidationError,
     _StrictModel,
@@ -12,6 +11,7 @@ from codex_a2a.jsonrpc.params_common import (
     map_extra_forbidden,
     normalize_non_empty_string,
 )
+from codex_a2a.jsonrpc.session_control_params import PromptAsyncPart
 
 
 class TurnSteerRequestParams(_StrictModel):

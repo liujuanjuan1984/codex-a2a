@@ -20,17 +20,17 @@ from codex_a2a.jsonrpc.errors import (
     upstream_http_error_response,
     upstream_unreachable_response,
 )
-from codex_a2a.jsonrpc.params import (
+from codex_a2a.jsonrpc.exec_control_params import (
     ExecResizeControlParams,
     ExecStartControlParams,
     ExecTerminateControlParams,
     ExecWriteControlParams,
-    JsonRpcParamsValidationError,
     parse_exec_resize_params,
     parse_exec_start_params,
     parse_exec_terminate_params,
     parse_exec_write_params,
 )
+from codex_a2a.jsonrpc.params_common import JsonRpcParamsValidationError
 
 if TYPE_CHECKING:
     from codex_a2a.jsonrpc.application import CodexSessionQueryJSONRPCApplication

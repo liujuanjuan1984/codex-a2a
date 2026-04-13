@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any
 from a2a.types import A2AError, InvalidParamsError, JSONRPCError
 from starlette.responses import Response
 
-from codex_a2a.jsonrpc.params import JsonRpcParamsValidationError
+from codex_a2a.jsonrpc.params_common import JsonRpcParamsValidationError
 from codex_a2a.protocol_versions import normalize_protocol_version
 
 if TYPE_CHECKING:

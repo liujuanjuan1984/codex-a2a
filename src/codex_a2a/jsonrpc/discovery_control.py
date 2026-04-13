@@ -7,11 +7,9 @@ from a2a.types import A2AError, InternalError, InvalidParamsError, JSONRPCReques
 from starlette.requests import Request
 from starlette.responses import Response
 
+from codex_a2a.jsonrpc.discovery_params import parse_discovery_watch_params
 from codex_a2a.jsonrpc.errors import invalid_params_response
-from codex_a2a.jsonrpc.params import (
-    JsonRpcParamsValidationError,
-    parse_discovery_watch_params,
-)
+from codex_a2a.jsonrpc.params_common import JsonRpcParamsValidationError
 
 if TYPE_CHECKING:
     from codex_a2a.jsonrpc.application import CodexSessionQueryJSONRPCApplication
