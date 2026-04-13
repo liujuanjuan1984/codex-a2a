@@ -30,7 +30,6 @@ from .database import build_database_engine
 from .runtime_state_schema import (
     _PENDING_INTERRUPT_REQUESTS,
     _PENDING_SESSION_CLAIMS,
-    _SCHEMA_VERSION,  # noqa: F401
     _SESSION_BINDINGS,
     _SESSION_OWNERS,
     _THREAD_WATCH_OWNERS,

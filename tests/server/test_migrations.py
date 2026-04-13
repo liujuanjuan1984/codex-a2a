@@ -5,7 +5,8 @@ from sqlalchemy.dialects.postgresql import dialect as postgresql_dialect
 from sqlalchemy.exc import IntegrityError
 
 import codex_a2a.server.migrations as migrations_module
-from codex_a2a.server.runtime_state import _PENDING_INTERRUPT_REQUESTS, _SCHEMA_VERSION
+from codex_a2a.server.runtime_state import _PENDING_INTERRUPT_REQUESTS
+from codex_a2a.server.runtime_state_schema import _SCHEMA_VERSION
 
 
 def test_add_missing_columns_supports_non_sqlite_dialects(monkeypatch) -> None:
