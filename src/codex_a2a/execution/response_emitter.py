@@ -7,11 +7,13 @@ from a2a.server.agent_execution import RequestContext
 from a2a.server.events.event_queue import EventQueue
 from a2a.types import Artifact, Part, Task, TaskState, TaskStatus, TaskStatusUpdateEvent, TextPart
 
-from codex_a2a.contracts.runtime_output import build_status_stream_metadata
+from codex_a2a.contracts.runtime_output import (
+    build_output_metadata,
+    build_status_stream_metadata,
+)
 from codex_a2a.execution.output_mapping import (
     build_assistant_message,
     build_history,
-    build_output_metadata,
     enqueue_artifact_update,
 )
 from codex_a2a.execution.stream_state import (

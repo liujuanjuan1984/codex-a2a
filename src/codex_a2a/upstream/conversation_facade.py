@@ -6,7 +6,10 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 from codex_a2a.execution.request_overrides import RequestExecutionOptions
-from codex_a2a.input_mapping import build_turn_input_from_normalized_items
+from codex_a2a.input_mapping import (
+    build_turn_input_from_normalized_items,
+    convert_request_parts_to_turn_input,
+)
 from codex_a2a.upstream.models import (
     CodexMessage,
     CodexRPCError,
@@ -18,7 +21,6 @@ from codex_a2a.upstream.request_mapping import (
     apply_turn_start_execution_options,
     build_shell_exec_params,
     coerce_request_execution_options,
-    convert_request_parts_to_turn_input,
     format_shell_response,
     uuid_like_suffix,
 )

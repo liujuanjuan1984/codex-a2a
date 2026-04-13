@@ -186,6 +186,3 @@ def extract_text_from_payload(payload: Any) -> str | None:
             return mapped_text
 
     return None
-
-
-__all__ = ["extract_text_from_payload"]

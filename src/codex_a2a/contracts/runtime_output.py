@@ -73,25 +73,6 @@ def _model_dump_if_present(model: _StrictContractModel | None) -> dict[str, Any]
     return payload or None
 
 
-def build_artifact_stream_metadata_payload(
-    *,
-    block_type: StreamBlockType,
-    source: str,
-    message_id: str | None = None,
-    role: str | None = None,
-    sequence: int | None = None,
-    event_id: str | None = None,
-) -> dict[str, Any]:
-    return ArtifactStreamMetadata(
-        block_type=block_type,
-        source=source,
-        message_id=message_id,
-        role=role,
-        sequence=sequence,
-        event_id=event_id,
-    ).model_dump(mode="json", by_alias=False, exclude_none=True)
-
-
 def build_status_stream_metadata(
     *,
     source: str,
@@ -166,14 +147,14 @@ def build_stream_artifact_metadata(
 ) -> dict[str, Any]:
     return {
         SHARED_METADATA_NAMESPACE: {
-            "stream": build_artifact_stream_metadata_payload(
+            "stream": ArtifactStreamMetadata(
                 block_type=block_type,
                 source=source,
                 message_id=message_id,
                 role=role,
                 sequence=sequence,
                 event_id=event_id,
-            )
+            ).model_dump(mode="json", by_alias=False, exclude_none=True)
         }
     }
 

@@ -41,38 +41,6 @@ ERR_WATCH_NOT_FOUND = -32014
 ERR_WATCH_FORBIDDEN = -32015
 
 
-def _thread_not_found_response(
-    app: CodexSessionQueryJSONRPCApplication,
-    request_id: str | int | None,
-    *,
-    thread_id: str,
-) -> Response:
-    return app._generate_error_response(
-        request_id,
-        JSONRPCError(
-            code=ERR_THREAD_NOT_FOUND,
-            message="Thread not found",
-            data={"type": "THREAD_NOT_FOUND", "thread_id": thread_id},
-        ),
-    )
-
-
-def _watch_not_found_response(
-    app: CodexSessionQueryJSONRPCApplication,
-    request_id: str | int | None,
-    *,
-    task_id: str,
-) -> Response:
-    return app._generate_error_response(
-        request_id,
-        JSONRPCError(
-            code=ERR_WATCH_NOT_FOUND,
-            message="Watch not found",
-            data={"type": "WATCH_NOT_FOUND", "task_id": task_id},
-        ),
-    )
-
-
 async def handle_thread_lifecycle_control_request(
     app: CodexSessionQueryJSONRPCApplication,
     base_request: JSONRPCRequest,
@@ -198,7 +166,14 @@ async def handle_thread_lifecycle_control_request(
     except httpx.HTTPStatusError as exc:
         upstream_status = exc.response.status_code
         if upstream_status == 404 and thread_id is not None:
-            return _thread_not_found_response(app, base_request.id, thread_id=thread_id)
+            return app._generate_error_response(
+                base_request.id,
+                JSONRPCError(
+                    code=ERR_THREAD_NOT_FOUND,
+                    message="Thread not found",
+                    data={"type": "THREAD_NOT_FOUND", "thread_id": thread_id},
+                ),
+            )
         return upstream_http_error_response(
             app,
             base_request.id,
@@ -213,7 +188,14 @@ async def handle_thread_lifecycle_control_request(
         )
     except LookupError:
         assert task_id is not None
-        return _watch_not_found_response(app, base_request.id, task_id=task_id)
+        return app._generate_error_response(
+            base_request.id,
+            JSONRPCError(
+                code=ERR_WATCH_NOT_FOUND,
+                message="Watch not found",
+                data={"type": "WATCH_NOT_FOUND", "task_id": task_id},
+            ),
+        )
     except PermissionError:
         if task_id is not None:
             return app._generate_error_response(

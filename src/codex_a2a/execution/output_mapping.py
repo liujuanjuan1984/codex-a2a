@@ -16,10 +16,6 @@ from a2a.types import (
 )
 from a2a.utils.message import new_agent_text_message
 
-from codex_a2a.contracts.runtime_output import (
-    build_output_metadata as build_runtime_output_metadata,
-)
-
 
 def build_assistant_message(
     task_id: str,
@@ -72,25 +68,6 @@ async def enqueue_artifact_update(
             last_chunk=normalized_last_chunk,
             metadata=dict(event_metadata) if event_metadata else None,
         )
-    )
-
-
-def build_output_metadata(
-    *,
-    session_id: str | None = None,
-    session_title: str | None = None,
-    usage: Mapping[str, Any] | None = None,
-    stream: Mapping[str, Any] | None = None,
-    interrupt: Mapping[str, Any] | None = None,
-    codex_private: Mapping[str, Any] | None = None,
-) -> dict[str, Any] | None:
-    return build_runtime_output_metadata(
-        session_id=session_id,
-        session_title=session_title,
-        usage=usage,
-        stream=stream,
-        interrupt=interrupt,
-        codex_private=codex_private,
     )
 
 

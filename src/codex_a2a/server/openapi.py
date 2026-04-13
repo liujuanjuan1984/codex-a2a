@@ -681,6 +681,3 @@ def patch_openapi_contract(
         return schema
 
     cast(Any, app).openapi = custom_openapi
-
-
-__all__ = ["patch_openapi_contract"]
