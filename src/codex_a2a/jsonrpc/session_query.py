@@ -14,15 +14,15 @@ from codex_a2a.jsonrpc.errors import (
     upstream_http_error_response,
     upstream_unreachable_response,
 )
-from codex_a2a.jsonrpc.params import (
-    JsonRpcParamsValidationError,
-    parse_get_session_messages_params,
-    parse_list_sessions_params,
-)
+from codex_a2a.jsonrpc.params_common import JsonRpcParamsValidationError
 from codex_a2a.jsonrpc.payload_mapping import (
     as_a2a_message,
     as_a2a_session_task,
     extract_raw_items,
+)
+from codex_a2a.jsonrpc.query_params import (
+    parse_get_session_messages_params,
+    parse_list_sessions_params,
 )
 from codex_a2a.upstream.models import CodexRPCError, is_thread_not_found_error
 

@@ -5,13 +5,6 @@ from dataclasses import replace
 from typing import Any
 
 from codex_a2a.execution.request_overrides import RequestExecutionOptions
-from codex_a2a.input_mapping import (
-    convert_request_parts_to_turn_input as _convert_request_parts_to_turn_input,
-)
-
-
-def convert_request_parts_to_turn_input(request: dict[str, Any]) -> list[dict[str, Any]]:
-    return _convert_request_parts_to_turn_input(request)
 
 
 def coerce_request_execution_options(

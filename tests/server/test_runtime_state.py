@@ -4,7 +4,8 @@ import pytest
 from sqlalchemy.exc import IntegrityError
 
 import codex_a2a.server.runtime_state as runtime_state_module
-from codex_a2a.server.runtime_state import _PENDING_INTERRUPT_REQUESTS, build_runtime_state_runtime
+from codex_a2a.server.runtime_state import build_runtime_state_runtime
+from codex_a2a.server.runtime_state_schema import _PENDING_INTERRUPT_REQUESTS
 from tests.support.settings import make_settings
 
 

@@ -11,10 +11,10 @@ from a2a.types import TaskState, TaskStatus, TaskStatusUpdateEvent, TextPart
 
 from codex_a2a.contracts.runtime_output import (
     build_interrupt_metadata,
+    build_output_metadata,
     build_status_stream_metadata,
 )
 from codex_a2a.execution.output_mapping import (
-    build_output_metadata,
     enqueue_artifact_update,
     extract_token_usage,
 )

@@ -9,7 +9,7 @@ from a2a.server.apps.jsonrpc.fastapi_app import A2AFastAPI
 from a2a.server.apps.rest.rest_adapter import RESTAdapter
 from fastapi import FastAPI
 
-from codex_a2a.client import A2AClientManager
+from codex_a2a.client.manager import A2AClientManager
 from codex_a2a.config import Settings
 from codex_a2a.contracts.extensions import (
     DISCOVERY_METHODS,
@@ -25,7 +25,7 @@ from codex_a2a.contracts.extensions import (
 )
 from codex_a2a.execution.discovery_runtime import CodexDiscoveryRuntime
 from codex_a2a.execution.exec_runtime import CodexExecRuntime
-from codex_a2a.execution.executor import CodexAgentExecutor, SessionGuardBindings
+from codex_a2a.execution.executor import CodexAgentExecutor
 from codex_a2a.execution.review_runtime import CodexReviewRuntime
 from codex_a2a.execution.thread_lifecycle_runtime import CodexThreadLifecycleRuntime
 from codex_a2a.jsonrpc.application import CodexSessionQueryJSONRPCApplication
@@ -49,18 +49,6 @@ from .http_middlewares import (
     PathScopedGZipMiddleware,
     install_http_middlewares,
 )
-
-
-def _build_session_guard_hooks(
-    bindings: SessionGuardBindings,
-) -> SessionGuardHooks:
-    return SessionGuardHooks(
-        directory_resolver=bindings.directory_resolver,
-        session_claim=bindings.session_claim,
-        session_claim_finalize=bindings.session_claim_finalize,
-        session_claim_release=bindings.session_claim_release,
-        session_owner_matcher=bindings.session_owner_matcher,
-    )
 
 
 def create_app(settings: Settings) -> FastAPI:
@@ -155,7 +143,14 @@ def create_app(settings: Settings) -> FastAPI:
         jsonrpc_methods["review_watch"] = REVIEW_CONTROL_METHODS["watch"]
     if capability_snapshot.exec_control_methods:
         jsonrpc_methods.update(EXEC_CONTROL_METHODS)
-    session_guard_hooks = _build_session_guard_hooks(executor.session_guard_bindings)
+    bindings = executor.session_guard_bindings
+    session_guard_hooks = SessionGuardHooks(
+        directory_resolver=bindings.directory_resolver,
+        session_claim=bindings.session_claim,
+        session_claim_finalize=bindings.session_claim_finalize,
+        session_claim_release=bindings.session_claim_release,
+        session_owner_matcher=bindings.session_owner_matcher,
+    )
 
     # Compose the shared FastAPI app from the SDK JSON-RPC and REST application wrappers.
     jsonrpc_app = CodexSessionQueryJSONRPCApplication(
