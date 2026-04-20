@@ -32,6 +32,7 @@ from a2a.types import (
 )
 from a2a.utils.errors import ServerError
 
+from codex_a2a.contracts.runtime_output import build_interrupt_metadata, build_output_metadata
 from codex_a2a.server.output_negotiation import (
     NegotiatingResultAggregator,
     merge_output_negotiation_metadata,
@@ -164,6 +165,82 @@ async def test_message_send_returns_failed_task_for_task_store_error() -> None:
             }
         }
     }
+
+
+@pytest.mark.asyncio
+async def test_background_interrupt_resolution_updates_task_snapshot_for_get_and_resubscribe() -> (
+    None
+):
+    async def _producer(queue: EventQueue) -> None:
+        await queue.enqueue_event(
+            TaskStatusUpdateEvent(
+                task_id="task-1",
+                context_id="ctx-1",
+                status=TaskStatus(state=TaskState.input_required),
+                final=False,
+                metadata=build_output_metadata(
+                    interrupt=build_interrupt_metadata(
+                        request_id="perm-1",
+                        interrupt_type="permission",
+                        phase="asked",
+                        details={"permission": "read"},
+                    )
+                ),
+            )
+        )
+        await queue.enqueue_event(
+            TaskStatusUpdateEvent(
+                task_id="task-1",
+                context_id="ctx-1",
+                status=TaskStatus(state=TaskState.working),
+                final=False,
+                metadata=build_output_metadata(
+                    interrupt=build_interrupt_metadata(
+                        request_id="perm-1",
+                        interrupt_type="permission",
+                        phase="resolved",
+                        resolution="replied",
+                    )
+                ),
+            )
+        )
+        await queue.enqueue_event(
+            TaskStatusUpdateEvent(
+                task_id="task-1",
+                context_id="ctx-1",
+                status=TaskStatus(state=TaskState.completed),
+                final=True,
+            )
+        )
+
+    async def _wait_for_completed(task_store: InMemoryTaskStore) -> Task:
+        for _ in range(100):
+            task = await task_store.get("task-1")
+            if task is not None and task.status.state == TaskState.completed:
+                return task
+            await asyncio.sleep(0.01)
+        pytest.fail("task snapshot did not reach completed state after interrupt resolution")
+
+    task_store = InMemoryTaskStore()
+    handler = CodexRequestHandler(agent_executor=MagicMock(), task_store=task_store)
+    task = Task(
+        id="task-1",
+        context_id="ctx-1",
+        status=TaskStatus(state=TaskState.working),
+    )
+
+    producer_task = await handler.start_background_task_stream(task=task, producer=_producer)
+    await producer_task
+    stored_task = await _wait_for_completed(task_store)
+
+    assert stored_task.status.state == TaskState.completed
+
+    fetched_task = await handler.on_get_task(TaskQueryParams(id="task-1"))
+    assert fetched_task is not None
+    assert fetched_task.status.state == TaskState.completed
+
+    replayed = [event async for event in handler.on_resubscribe_to_task(TaskIdParams(id="task-1"))]
+    assert replayed == [fetched_task]
 
 
 @pytest.mark.asyncio

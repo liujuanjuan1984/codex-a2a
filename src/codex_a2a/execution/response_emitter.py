@@ -57,7 +57,7 @@ async def emit_streaming_completion(
         TaskStatusUpdateEvent(
             task_id=task_id,
             context_id=context_id,
-            status=TaskStatus(state=TaskState.input_required),
+            status=TaskStatus(state=TaskState.completed),
             final=True,
             metadata=build_output_metadata(
                 session_id=session_id,
@@ -98,7 +98,7 @@ async def emit_non_stream_completion(
     task = Task(
         id=task_id,
         context_id=context_id,
-        status=TaskStatus(state=TaskState.input_required),
+        status=TaskStatus(state=TaskState.completed),
         history=build_history(context),
         artifacts=[artifact],
         metadata=build_output_metadata(

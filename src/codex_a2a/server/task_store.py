@@ -33,7 +33,6 @@ _TERMINAL_TASK_STATES = frozenset(
         TaskState.canceled,
         TaskState.failed,
         TaskState.rejected,
-        TaskState.input_required,
         TaskState.unknown,
     }
 )

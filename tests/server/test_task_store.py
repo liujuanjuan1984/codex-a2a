@@ -101,7 +101,7 @@ async def test_task_store_runtime_does_not_dispose_shared_engine(
 
 
 @pytest.mark.asyncio
-async def test_guarded_task_store_keeps_first_terminal_state() -> None:
+async def test_guarded_task_store_allows_input_required_to_resume_working() -> None:
     task_store = GuardedTaskStore(InMemoryTaskStore())
 
     await task_store.save(
@@ -122,14 +122,14 @@ async def test_guarded_task_store_keeps_first_terminal_state() -> None:
         Task(
             id="task-1",
             context_id="ctx-1",
-            status=TaskStatus(state=TaskState.failed),
+            status=TaskStatus(state=TaskState.working),
         )
     )
 
     restored = await task_store.get("task-1")
 
     assert restored is not None
-    assert restored.status.state == TaskState.input_required
+    assert restored.status.state == TaskState.working
 
 
 @pytest.mark.asyncio
@@ -138,12 +138,12 @@ async def test_guarded_task_store_drops_late_terminal_mutation() -> None:
     authoritative = Task(
         id="task-1",
         context_id="ctx-1",
-        status=TaskStatus(state=TaskState.input_required),
+        status=TaskStatus(state=TaskState.completed),
     )
     mutated = Task(
         id="task-1",
         context_id="ctx-1",
-        status=TaskStatus(state=TaskState.input_required),
+        status=TaskStatus(state=TaskState.completed),
         metadata={"codex": {"late_mutation": True}},
     )
 
@@ -157,7 +157,7 @@ async def test_guarded_task_store_drops_late_terminal_mutation() -> None:
 
 
 @pytest.mark.asyncio
-async def test_guarded_database_task_store_keeps_first_terminal_state_across_independent_runtimes(
+async def test_guarded_database_task_store_resumes_from_input_required(
     tmp_path: Path,
 ) -> None:
     database_url = f"sqlite+aiosqlite:///{(tmp_path / 'terminal-guard.db').resolve()}"
@@ -188,7 +188,7 @@ async def test_guarded_database_task_store_keeps_first_terminal_state_across_ind
             Task(
                 id="task-1",
                 context_id="ctx-1",
-                status=TaskStatus(state=TaskState.failed),
+                status=TaskStatus(state=TaskState.working),
             )
         )
 
@@ -198,7 +198,7 @@ async def test_guarded_database_task_store_keeps_first_terminal_state_across_ind
         await second_runtime.shutdown()
 
     assert restored is not None
-    assert restored.status.state == TaskState.input_required
+    assert restored.status.state == TaskState.working
 
 
 @pytest.mark.asyncio
@@ -214,12 +214,12 @@ async def test_guarded_database_task_store_does_not_depend_on_stale_read_before_
     authoritative = Task(
         id="task-1",
         context_id="ctx-1",
-        status=TaskStatus(state=TaskState.input_required),
+        status=TaskStatus(state=TaskState.completed),
     )
     late_mutation = Task(
         id="task-1",
         context_id="ctx-1",
-        status=TaskStatus(state=TaskState.input_required),
+        status=TaskStatus(state=TaskState.completed),
         metadata={"codex": {"late_mutation": True}},
     )
     stale_snapshot = Task(
@@ -256,7 +256,7 @@ async def test_guarded_database_task_store_does_not_depend_on_stale_read_before_
         await second_runtime.shutdown()
 
     assert restored is not None
-    assert restored.status.state == TaskState.input_required
+    assert restored.status.state == TaskState.completed
     assert restored.metadata is None
 
 

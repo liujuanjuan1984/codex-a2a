@@ -513,6 +513,7 @@ async def test_streaming_emits_events_without_message_id_using_stable_fallback()
     final_status = [
         event for event in queue.events if isinstance(event, TaskStatusUpdateEvent) and event.final
     ][-1]
+    assert final_status.status.state == TaskState.completed
     assert _status_shared_meta(final_status)["stream"]["message_id"] == "task-6:ctx-6:assistant"
     assert (
         _status_shared_meta(final_status)["stream"]["event_id"]
@@ -558,6 +559,7 @@ async def test_streaming_includes_usage_in_final_status_metadata() -> None:
     final_status = [
         event for event in queue.events if isinstance(event, TaskStatusUpdateEvent) and event.final
     ][-1]
+    assert final_status.status.state == TaskState.completed
     usage = _status_shared_meta(final_status)["usage"]
     assert usage["input_tokens"] == 12
     assert usage["output_tokens"] == 4
