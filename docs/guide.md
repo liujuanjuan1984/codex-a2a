@@ -438,7 +438,7 @@ This path is for contributors. End users should prefer the released CLI path des
 - `mention.path` and `skill.path` are forwarded verbatim. The service does not guess app or plugin identifiers from display names.
 - `local_image` is not part of the current declared stable rich-input contract.
 - Session query projections currently use the upstream Codex `session_id` as the A2A `contextId`. This is intentional for the current deployment model: `contextId` and `metadata.shared.session.id` refer to the same upstream session identity, and the contract declares that equality explicitly.
-- Task state defaults to `input-required` to support multi-turn interactions.
+- Completed chat turns are persisted as `completed`; `input-required` is reserved for active interrupt asks that still need a reply.
 - Non-streaming requests return a `Task` directly.
 - Non-streaming `message:send` responses may include normalized token usage at `Task.metadata.shared.usage` with the same field schema.
 - `tasks/resubscribe` remains part of the core A2A method baseline, but this deployment's terminal-task replay-once policy is a declared service-level behavior rather than a generic A2A guarantee.
