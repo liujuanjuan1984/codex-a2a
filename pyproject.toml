@@ -24,9 +24,9 @@ classifiers = [
     "Topic :: Internet :: WWW/HTTP",
 ]
 dependencies = [
-    "a2a-sdk==0.3.26",
+    "a2a-sdk==1.0.1",
     "aiosqlite>=0.20,<1.0",
-    "fastapi>=0.121,<0.136",
+    "fastapi>=0.121,<0.137",
     "httpx>=0.28.1,<0.29",
     "protobuf>=6.33.5,<8.0",
     "pyasn1>=0.6.3,<1.0",
@@ -35,7 +35,7 @@ dependencies = [
     "requests>=2.33.0,<3.0",
     "sqlalchemy>=2.0,<3.0",
     "sse-starlette>=2.1,<4.0",
-    "uvicorn>=0.29,<0.45",
+    "uvicorn>=0.29,<0.46",
 ]
 
 [project.optional-dependencies]
