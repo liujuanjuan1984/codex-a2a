@@ -6,7 +6,6 @@ from dataclasses import dataclass
 @dataclass(frozen=True)
 class ExtensionMethodRegistry:
     session_query_methods: frozenset[str]
-    session_control_methods: frozenset[str]
     discovery_query_methods: frozenset[str]
     discovery_control_methods: frozenset[str]
     thread_lifecycle_control_methods: frozenset[str]
@@ -19,7 +18,6 @@ class ExtensionMethodRegistry:
 
     @classmethod
     def from_methods(cls, methods: dict[str, str]) -> ExtensionMethodRegistry:
-        shell_method = methods.get("shell")
         turn_method = methods.get("turn_steer")
         review_start_method = methods.get("review_start")
         review_watch_method = methods.get("review_watch")
@@ -34,13 +32,6 @@ class ExtensionMethodRegistry:
                 methods["get_session_messages"],
             }
         )
-        session_control = {
-            methods["prompt_async"],
-            methods["command"],
-        }
-        if shell_method is not None:
-            session_control.add(shell_method)
-        session_control_methods = frozenset(session_control)
         discovery_query_methods = frozenset(
             {
                 methods["list_skills"],
@@ -88,7 +79,6 @@ class ExtensionMethodRegistry:
         )
         extension_methods = (
             session_query_methods
-            | session_control_methods
             | discovery_query_methods
             | discovery_control_methods
             | thread_lifecycle_control_methods
@@ -100,7 +90,6 @@ class ExtensionMethodRegistry:
         )
         return cls(
             session_query_methods=session_query_methods,
-            session_control_methods=session_control_methods,
             discovery_query_methods=discovery_query_methods,
             discovery_control_methods=discovery_control_methods,
             thread_lifecycle_control_methods=thread_lifecycle_control_methods,

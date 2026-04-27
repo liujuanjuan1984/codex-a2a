@@ -333,8 +333,6 @@ def test_openapi_jsonrpc_examples_include_core_and_extension_methods() -> None:
     assert "GetExtendedAgentCard" in methods
     assert "codex.sessions.list" in methods
     assert "codex.sessions.messages.list" in methods
-    assert "codex.sessions.prompt_async" in methods
-    assert "codex.sessions.command" in methods
     assert "codex.discovery.skills.list" in methods
     assert "codex.discovery.apps.list" in methods
     assert "codex.discovery.plugins.list" in methods
@@ -513,7 +511,6 @@ async def test_health_endpoint_with_bearer_token_reports_profile(monkeypatch) ->
 
     settings = make_settings(
         a2a_bearer_token="test-token",
-        a2a_enable_session_shell=False,
         a2a_interrupt_request_ttl_seconds=90,
     )
     monkeypatch.setattr(app_module, "CodexClient", DummyChatCodexClient)
@@ -541,11 +538,6 @@ async def test_health_endpoint_with_bearer_token_reports_profile(monkeypatch) ->
                 "directory_binding": {
                     "allow_override": True,
                     "scope": "workspace_root_or_descendant",
-                },
-                "session_shell": {
-                    "enabled": False,
-                    "availability": "disabled",
-                    "toggle": "A2A_ENABLE_SESSION_SHELL",
                 },
                 "turn_control": {
                     "enabled": True,
@@ -623,7 +615,6 @@ def test_openapi_jsonrpc_examples_hide_boundary_sensitive_methods_when_disabled(
     app = create_app(
         make_settings(
             a2a_bearer_token="test-token",
-            a2a_enable_session_shell=False,
             a2a_enable_turn_control=False,
             a2a_enable_review_control=False,
             a2a_enable_exec_control=False,
@@ -639,7 +630,6 @@ def test_openapi_jsonrpc_examples_hide_boundary_sensitive_methods_when_disabled(
     )
     methods = {value.get("value", {}).get("method") for value in example_values}
 
-    assert "codex.sessions.shell" not in methods
     assert "codex.turns.steer" not in methods
     assert "codex.review.start" not in methods
     assert "codex.review.watch" not in methods
@@ -939,10 +929,7 @@ async def test_jsonrpc_disabled_shell_reports_current_supported_methods(monkeypa
     import codex_a2a.server.application as app_module
 
     monkeypatch.setattr(app_module, "CodexClient", DummyChatCodexClient)
-    settings = make_settings(
-        a2a_bearer_token="test-token",
-        a2a_enable_session_shell=False,
-    )
+    settings = make_settings(a2a_bearer_token="test-token")
     app = app_module.create_app(settings)
     transport = httpx.ASGITransport(app=app)
     headers = {"Authorization": "Bearer test-token"}
@@ -954,8 +941,11 @@ async def test_jsonrpc_disabled_shell_reports_current_supported_methods(monkeypa
             json={
                 "jsonrpc": "2.0",
                 "id": 41,
-                "method": "codex.sessions.shell",
-                "params": {"session_id": "s-1", "request": {"command": "pwd"}},
+                "method": "codex.sessions.prompt_async",
+                "params": {
+                    "session_id": "s-1",
+                    "request": {"parts": [{"type": "text", "text": "hi"}]},
+                },
             },
         )
 
@@ -963,9 +953,9 @@ async def test_jsonrpc_disabled_shell_reports_current_supported_methods(monkeypa
     payload = response.json()
     assert payload["error"]["code"] == -32601
     assert payload["error"]["message"] == "Method not found"
-    assert payload["error"]["data"]["method"] == "codex.sessions.shell"
+    assert payload["error"]["data"]["method"] == "codex.sessions.prompt_async"
     assert payload["error"]["data"]["protocolVersion"] == "1.0"
-    assert "codex.sessions.shell" not in payload["error"]["data"]["supportedMethods"]
+    assert "codex.sessions.prompt_async" not in payload["error"]["data"]["supportedMethods"]
 
 
 @pytest.mark.asyncio

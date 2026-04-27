@@ -8,7 +8,6 @@ def test_runtime_profile_splits_stable_deployment_and_runtime_features() -> None
             a2a_bearer_token="test-token",
             a2a_project="alpha",
             a2a_allow_directory_override=False,
-            a2a_enable_session_shell=False,
             a2a_enable_turn_control=False,
             a2a_enable_review_control=False,
             a2a_enable_exec_control=False,
@@ -40,11 +39,6 @@ def test_runtime_profile_splits_stable_deployment_and_runtime_features() -> None
         "directory_binding": {
             "allow_override": False,
             "scope": "workspace_root_only",
-        },
-        "session_shell": {
-            "enabled": False,
-            "availability": "disabled",
-            "toggle": "A2A_ENABLE_SESSION_SHELL",
         },
         "turn_control": {
             "enabled": False,

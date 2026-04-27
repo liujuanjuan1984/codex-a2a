@@ -8,7 +8,6 @@ from codex_a2a.contracts.extensions import (
     INTERRUPT_CALLBACK_METHODS,
     INTERRUPT_RECOVERY_METHODS,
     REVIEW_CONTROL_METHODS,
-    SESSION_CONTROL_METHODS,
     SESSION_QUERY_METHODS,
     THREAD_LIFECYCLE_METHODS,
     TURN_CONTROL_METHODS,
@@ -31,7 +30,6 @@ def _build_extension_app(
     settings = make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, codex_timeout=1.0)
     methods = {
         **SESSION_QUERY_METHODS,
-        **SESSION_CONTROL_METHODS,
         **DISCOVERY_METHODS,
         "thread_fork": THREAD_LIFECYCLE_METHODS["fork"],
         "thread_archive": THREAD_LIFECYCLE_METHODS["archive"],
@@ -65,50 +63,27 @@ def _build_extension_app(
 
 
 def test_session_extension_accepts_guard_hook_bundle() -> None:
-    async def claim(*, identity: str, session_id: str) -> bool:
-        del identity, session_id
-        return False
-
-    async def finalize(*, identity: str, session_id: str) -> None:
-        del identity, session_id
-
-    async def release(*, identity: str, session_id: str) -> None:
-        del identity, session_id
-
     async def owner_matcher(*, identity: str, session_id: str) -> bool:
         del identity, session_id
         return True
 
     app = _build_extension_app(
         guard_hooks=SessionGuardHooks(
-            session_claim=claim,
-            session_claim_finalize=finalize,
-            session_claim_release=release,
             session_owner_matcher=owner_matcher,
         )
     )
 
-    assert app._guard_hooks.session_claim is claim
-    assert app._guard_hooks.session_claim_finalize is finalize
-    assert app._guard_hooks.session_claim_release is release
     assert app._guard_hooks.session_owner_matcher is owner_matcher
 
 
 def test_session_extension_guard_hook_bundle_fails_when_incomplete() -> None:
-    async def owner_matcher(*, identity: str, session_id: str) -> bool:
-        del identity, session_id
-        return True
-
-    with pytest.raises(ValueError, match="missing required session control hooks"):
-        _build_extension_app(guard_hooks=SessionGuardHooks(session_owner_matcher=owner_matcher))
+    with pytest.raises(ValueError, match="missing required interrupt ownership hook"):
+        _build_extension_app(guard_hooks=SessionGuardHooks())
 
 
 def test_create_codex_jsonrpc_routes_returns_single_post_route() -> None:
     settings = make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, codex_timeout=1.0)
     guard_hooks = SessionGuardHooks(
-        session_claim=AsyncMock(),
-        session_claim_finalize=AsyncMock(),
-        session_claim_release=AsyncMock(),
         session_owner_matcher=AsyncMock(return_value=True),
     )
     captured: dict[str, object] = {}
@@ -128,7 +103,6 @@ def test_create_codex_jsonrpc_routes_returns_single_post_route() -> None:
         thread_lifecycle_runtime=MagicMock(),
         methods={
             **SESSION_QUERY_METHODS,
-            **SESSION_CONTROL_METHODS,
             **DISCOVERY_METHODS,
             "thread_fork": THREAD_LIFECYCLE_METHODS["fork"],
             "thread_archive": THREAD_LIFECYCLE_METHODS["archive"],

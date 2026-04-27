@@ -37,7 +37,6 @@ from codex_a2a.profile.runtime import build_runtime_profile
 from codex_a2a.server.agent_card import build_authenticated_extended_agent_card
 from codex_a2a.server.application import create_app
 from tests.support.dummy_clients import DummySessionQueryCodexClient as DummyCodexClient
-from tests.support.http_auth import basic_auth_header as _basic_auth_header
 from tests.support.settings import make_settings
 
 
@@ -67,29 +66,17 @@ def _params(extension) -> dict[str, object]:  # noqa: ANN001
     return proto_to_python(extension.params)
 
 
-def test_capability_snapshot_tracks_conditional_shell_surface() -> None:
-    runtime_profile = build_runtime_profile(
-        make_settings(
-            a2a_bearer_token="test-token",
-            a2a_enable_session_shell=False,
-        )
-    )
+def test_capability_snapshot_tracks_session_query_only_surface() -> None:
+    runtime_profile = build_runtime_profile(make_settings(a2a_bearer_token="test-token"))
 
     snapshot = build_capability_snapshot(runtime_profile=runtime_profile)
 
     assert snapshot.session_query_method_keys == (
         "list_sessions",
         "get_session_messages",
-        "prompt_async",
-        "command",
     )
-    assert "codex.sessions.shell" not in snapshot.supported_jsonrpc_methods
-    assert snapshot.conditional_methods == {
-        "codex.sessions.shell": {
-            "reason": "disabled_by_configuration",
-            "toggle": "A2A_ENABLE_SESSION_SHELL",
-        }
-    }
+    assert "codex.sessions.command" not in snapshot.supported_jsonrpc_methods
+    assert "codex.sessions.prompt_async" not in snapshot.supported_jsonrpc_methods
 
 
 def test_session_query_extension_ssot_matches_agent_card_contract() -> None:
@@ -105,28 +92,6 @@ def test_session_query_extension_ssot_matches_agent_card_contract() -> None:
 
     assert _params(session_query) == expected, (
         "Session query extension drifted from extension_contracts SSOT."
-    )
-    assert _params(session_query)["pagination"]["default_limit"] == SESSION_QUERY_DEFAULT_LIMIT
-    assert _params(session_query)["pagination"]["max_limit"] == SESSION_QUERY_MAX_LIMIT
-    assert _params(session_query)["pagination"]["behavior"] == "mixed"
-
-
-def test_session_query_extension_ssot_matches_agent_card_contract_when_shell_disabled() -> None:
-    settings = make_settings(
-        a2a_bearer_token="test-token",
-        a2a_enable_session_shell=False,
-    )
-    runtime_profile = build_runtime_profile(settings)
-    card = build_authenticated_extended_agent_card(settings)
-    ext_by_uri = {ext.uri: ext for ext in card.capabilities.extensions or []}
-
-    session_query = ext_by_uri[SESSION_QUERY_EXTENSION_URI]
-    expected = build_session_query_extension_params(
-        runtime_profile=runtime_profile,
-    )
-
-    assert _params(session_query) == expected, (
-        "Disabled shell session query contract drifted from extension_contracts SSOT."
     )
     assert _params(session_query)["pagination"]["default_limit"] == SESSION_QUERY_DEFAULT_LIMIT
     assert _params(session_query)["pagination"]["max_limit"] == SESSION_QUERY_MAX_LIMIT
@@ -209,27 +174,6 @@ def test_review_control_extension_ssot_matches_agent_card_contract() -> None:
     [
         ("codex.sessions.list", {"limit": 10}),
         ("codex.sessions.messages.list", {"session_id": "s-1", "limit": 5}),
-        (
-            "codex.sessions.prompt_async",
-            {
-                "session_id": "s-1",
-                "request": {"parts": [{"type": "text", "text": "Continue"}]},
-            },
-        ),
-        (
-            "codex.sessions.command",
-            {
-                "session_id": "s-1",
-                "request": {"command": "plan", "arguments": "show current work"},
-            },
-        ),
-        (
-            "codex.sessions.shell",
-            {
-                "session_id": "s-1",
-                "request": {"command": "pwd"},
-            },
-        ),
     ],
 )
 async def test_session_query_runtime_result_envelope_matches_declared_contract(
@@ -259,11 +203,7 @@ async def test_session_query_runtime_result_envelope_matches_declared_contract(
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.post(
             "/",
-            headers=(
-                _basic_auth_header("operator", "op-pass")
-                if method == "codex.sessions.shell"
-                else {"Authorization": "Bearer t-1"}
-            ),
+            headers={"Authorization": "Bearer t-1"},
             json={"jsonrpc": "2.0", "id": 1, "method": method, "params": params},
         )
 
@@ -461,12 +401,12 @@ def test_guide_mentions_declared_rich_input_contract() -> None:
         runtime_profile=build_runtime_profile(make_settings(a2a_bearer_token="test-token")),
     )["rich_input"]
 
-    assert "codex.sessions.prompt_async.request.parts[]" in guide_text
+    assert "core A2A `SendMessage` and `SendStreamingMessage`" in guide_text
     assert 'Part(data={"type":"mention"|"skill", ...})' in guide_text
     assert "turn/start.input[].type=input_image" in guide_text
     assert "local_image" in guide_text
 
-    for fragment in rich_input["prompt_async_part_types"]:
+    for fragment in rich_input["supported_part_types"]:
         assert fragment in guide_text
 
     assert "Rich input mapping is compatibility-sensitive" in compatibility_text
@@ -620,36 +560,20 @@ def test_openapi_jsonrpc_examples_match_declared_extension_contracts() -> None:
             )
 
 
-def test_openapi_jsonrpc_examples_hide_shell_when_shell_disabled() -> None:
-    settings = make_settings(
-        a2a_bearer_token="test-token",
-        a2a_enable_session_shell=False,
-    )
+def test_openapi_jsonrpc_examples_drop_removed_session_control_methods() -> None:
+    settings = make_settings(a2a_bearer_token="test-token")
     openapi = create_app(settings).openapi()
     post = openapi["paths"]["/"]["post"]
     examples = post["requestBody"]["content"]["application/json"]["examples"]
     methods = {example["value"]["method"] for example in examples.values()}
     session_contracts = post["x-a2a-extension-contracts"]["session_query"]["method_contracts"]
 
-    assert "codex.sessions.shell" not in methods
+    assert "codex.sessions.command" not in methods
+    assert "codex.sessions.prompt_async" not in methods
     assert "codex.sessions.shell" not in session_contracts
-
-
-def test_openapi_shell_example_declares_one_shot_contract() -> None:
-    settings = make_settings(a2a_bearer_token="test-token")
-    openapi = create_app(settings).openapi()
-    post = openapi["paths"]["/"]["post"]
-    examples = post["requestBody"]["content"]["application/json"]["examples"]
-    session_contracts = post["x-a2a-extension-contracts"]["session_query"]["method_contracts"]
-
-    assert examples["session_shell"]["summary"] == (
-        "Run a one-shot shell command attributed to an existing session"
-    )
-    shell_contract = session_contracts["codex.sessions.shell"]
-    assert shell_contract["execution_binding"] == "standalone_command_exec"
-    assert shell_contract["session_binding"] == "ownership_attribution_only"
-    assert shell_contract["uses_upstream_session_context"] is False
-    assert any("one-shot shell snapshot" in note for note in shell_contract["notes"])
+    assert "codex.sessions.command" not in session_contracts
+    assert "codex.sessions.prompt_async" not in session_contracts
+    assert "control_methods" not in post["x-a2a-extension-contracts"]["session_query"]
 
 
 def test_openapi_exec_examples_declare_task_streaming_contract() -> None:

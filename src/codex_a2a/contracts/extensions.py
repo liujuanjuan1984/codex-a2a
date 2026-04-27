@@ -222,13 +222,6 @@ def build_compatibility_profile_params(
             for method in snapshot.session_query_methods
         }
     )
-    method_retention[SESSION_CONTROL_METHODS["shell"]] = {
-        "surface": "extension",
-        "availability": ("enabled" if runtime_profile.session_shell_enabled else "disabled"),
-        "retention": "deployment-conditional",
-        "extension_uri": SESSION_QUERY_EXTENSION_URI,
-        "toggle": "A2A_ENABLE_SESSION_SHELL",
-    }
     method_retention.update(
         {
             method: {
@@ -387,15 +380,10 @@ def build_compatibility_profile_params(
                 "task-stream bridge for coarse-grained lifecycle observation."
             ),
             (
-                "codex.sessions.shell is deployment-conditional: discover it from the "
-                "declared profile and current extension contracts before calling it, and "
-                "treat it as a bounded shell snapshot helper for internal workflows."
-            ),
-            (
                 "Treat codex.exec.* as the interactive standalone command runtime for "
                 "internal or tightly controlled deployments. Use it for write/resize/"
-                "terminate flows instead of inferring those semantics from "
-                "codex.sessions.shell."
+                "terminate flows instead of overloading the core A2A chat surface with "
+                "terminal-control semantics."
             ),
             (
                 "Treat execution_environment fields as deployment-configured discovery "
@@ -502,11 +490,6 @@ def build_session_query_extension_params(
     active_query_methods = {
         key: contract.method for key, contract in active_method_contracts.items()
     }
-    active_control_methods = {
-        key: active_query_methods[key]
-        for key in SESSION_CONTROL_METHOD_KEYS
-        if key in active_query_methods
-    }
     method_contracts: dict[str, Any] = {}
     pagination_applies_to: list[str] = []
     pagination_behavior_by_method: dict[str, str] = {}
@@ -552,14 +535,13 @@ def build_session_query_extension_params(
 
     return {
         "methods": active_query_methods,
-        "control_methods": active_control_methods,
         "profile": runtime_profile.summary_dict(),
         "supported_metadata": list(_REQUEST_EXECUTION_PROVIDER_METADATA),
         "provider_private_metadata": list(_REQUEST_EXECUTION_PROVIDER_METADATA),
         "request_execution_options": _build_request_execution_options_contract(),
         "rich_input": {
-            "prompt_async_part_types": ["text", "image", "mention", "skill"],
-            "prompt_async_part_contracts": {
+            "supported_part_types": ["text", "image", "mention", "skill"],
+            "part_contracts": {
                 "text": {"fields": ["type", "text"]},
                 "image": {
                     "fields": ["type", "url"],
@@ -1073,7 +1055,7 @@ def build_review_control_extension_params(
         "consumer_guidance": [
             (
                 "Use review/start when you want the upstream reviewer surface, not when you "
-                "simply want to send a slash command through codex.sessions.command."
+                "want to repurpose core A2A chat turns as review control."
             ),
             (
                 "Use codex.review.watch when clients need a stable task-stream bridge "

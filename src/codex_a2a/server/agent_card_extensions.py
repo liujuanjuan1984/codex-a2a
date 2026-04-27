@@ -166,8 +166,7 @@ def build_agent_extensions(
             required=False,
             description=(
                 "Support Codex session list/history queries via custom JSON-RPC methods "
-                "on the agent's A2A JSON-RPC interface, including structured rich "
-                "input for codex.sessions.prompt_async."
+                "on the agent's A2A JSON-RPC interface."
             ),
             params=session_query_extension_params if include_detailed_contracts else None,
         ),

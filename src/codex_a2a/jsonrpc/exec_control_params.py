@@ -7,12 +7,11 @@ from pydantic import AliasChoices, Field, ValidationError, field_validator, mode
 from codex_a2a.jsonrpc.params_common import (
     MetadataParams,
     _StrictModel,
+    raise_control_validation_error,
     strip_optional_string,
     validate_request_command,
     validate_required_process_id,
 )
-
-from .session_control_params import _raise_control_validation_error
 
 
 class ExecStartRequestParams(_StrictModel):
@@ -175,7 +174,7 @@ def parse_exec_start_params(params: dict[str, Any]) -> ExecStartControlParams:
     try:
         return ExecStartControlParams.model_validate(params)
     except ValidationError as exc:
-        _raise_control_validation_error(exc)
+        raise_control_validation_error(exc)
         raise AssertionError("unreachable") from exc
 
 
@@ -183,7 +182,7 @@ def parse_exec_write_params(params: dict[str, Any]) -> ExecWriteControlParams:
     try:
         return ExecWriteControlParams.model_validate(params)
     except ValidationError as exc:
-        _raise_control_validation_error(exc)
+        raise_control_validation_error(exc)
         raise AssertionError("unreachable") from exc
 
 
@@ -191,7 +190,7 @@ def parse_exec_resize_params(params: dict[str, Any]) -> ExecResizeControlParams:
     try:
         return ExecResizeControlParams.model_validate(params)
     except ValidationError as exc:
-        _raise_control_validation_error(exc)
+        raise_control_validation_error(exc)
         raise AssertionError("unreachable") from exc
 
 
@@ -199,5 +198,5 @@ def parse_exec_terminate_params(params: dict[str, Any]) -> ExecTerminateControlP
     try:
         return ExecTerminateControlParams.model_validate(params)
     except ValidationError as exc:
-        _raise_control_validation_error(exc)
+        raise_control_validation_error(exc)
         raise AssertionError("unreachable") from exc

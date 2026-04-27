@@ -11,7 +11,6 @@ from codex_a2a.config import Settings
 AUTOMATION_PRINCIPAL = "automation"
 OPERATOR_PRINCIPAL = "operator"
 
-CAPABILITY_SESSION_SHELL = "session_shell"
 CAPABILITY_EXEC_CONTROL = "exec_control"
 CAPABILITY_TURN_CONTROL = "turn_control"
 
@@ -38,7 +37,6 @@ class StaticAuthCredential:
 def default_capabilities_for_scheme(scheme: str) -> tuple[str, ...]:
     if scheme == "basic":
         return (
-            CAPABILITY_SESSION_SHELL,
             CAPABILITY_EXEC_CONTROL,
             CAPABILITY_TURN_CONTROL,
         )

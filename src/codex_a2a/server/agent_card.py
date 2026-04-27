@@ -115,15 +115,6 @@ def _build_agent_skills(
     runtime_profile: RuntimeProfile,
     include_detailed_contracts: bool,
 ) -> list[AgentSkill]:
-    session_control_description = (
-        "Start async Codex session turns and issue provider-private "
-        "session command control methods."
-    )
-    if runtime_profile.session_shell_enabled:
-        session_control_description = (
-            "Start async Codex session turns and issue provider-private "
-            "session command or shell helper methods for internal workflows."
-        )
     if not include_detailed_contracts:
         skills = [
             AgentSkill(
@@ -147,14 +138,6 @@ def _build_agent_skills(
                 tags=["codex", "sessions", "history", "provider-private"],
                 input_modes=list(JSON_RPC_INPUT_MEDIA_MODES),
                 output_modes=list(JSON_OUTPUT_MEDIA_MODES),
-            ),
-            AgentSkill(
-                id="codex.sessions.control",
-                name="Codex Sessions Control",
-                description=session_control_description,
-                tags=["codex", "sessions", "control", "provider-private"],
-                input_modes=list(JSON_RPC_INPUT_MEDIA_MODES),
-                output_modes=list(DEFAULT_OUTPUT_MEDIA_MODES),
             ),
             AgentSkill(
                 id="codex.discovery.query",
@@ -290,23 +273,6 @@ def _build_agent_skills(
             )
         return skills
 
-    session_control_examples = [
-        "Start an async session turn (method codex.sessions.prompt_async).",
-        "Run a session command (method codex.sessions.command).",
-    ]
-    detailed_session_control_description = (
-        "Start async session turns and issue session-scoped command methods "
-        "via provider-private JSON-RPC."
-    )
-    if runtime_profile.session_shell_enabled:
-        detailed_session_control_description = (
-            "Start async session turns and issue session-scoped command or "
-            "one-shot shell helper methods via provider-private JSON-RPC."
-        )
-        session_control_examples.append(
-            "Run a one-shot shell snapshot for a session (method codex.sessions.shell)."
-        )
-
     skills = [
         AgentSkill(
             id="codex.chat",
@@ -335,15 +301,6 @@ def _build_agent_skills(
             ],
             input_modes=list(JSON_RPC_INPUT_MEDIA_MODES),
             output_modes=list(JSON_OUTPUT_MEDIA_MODES),
-        ),
-        AgentSkill(
-            id="codex.sessions.control",
-            name="Codex Sessions Control",
-            description=detailed_session_control_description,
-            tags=["codex", "sessions", "control", "commands"],
-            examples=session_control_examples,
-            input_modes=list(JSON_RPC_INPUT_MEDIA_MODES),
-            output_modes=list(DEFAULT_OUTPUT_MEDIA_MODES),
         ),
         AgentSkill(
             id="codex.discovery.query",

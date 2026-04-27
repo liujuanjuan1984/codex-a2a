@@ -17,7 +17,6 @@ from codex_a2a.contracts.extensions import (
     INTERRUPT_CALLBACK_METHODS,
     INTERRUPT_RECOVERY_METHODS,
     REVIEW_CONTROL_METHODS,
-    SESSION_CONTROL_METHODS,
     SESSION_QUERY_METHODS,
     THREAD_LIFECYCLE_METHODS,
     TURN_CONTROL_METHODS,
@@ -128,7 +127,6 @@ def create_app(settings: Settings) -> FastAPI:
     context_builder = IdentityAwareCallContextBuilder()
     jsonrpc_methods = {
         **SESSION_QUERY_METHODS,
-        **SESSION_CONTROL_METHODS,
         **DISCOVERY_METHODS,
         "thread_fork": THREAD_LIFECYCLE_METHODS["fork"],
         "thread_archive": THREAD_LIFECYCLE_METHODS["archive"],
@@ -139,8 +137,6 @@ def create_app(settings: Settings) -> FastAPI:
         "interrupts_list": INTERRUPT_RECOVERY_METHODS["list"],
         **INTERRUPT_CALLBACK_METHODS,
     }
-    if "shell" not in capability_snapshot.session_query_method_keys:
-        jsonrpc_methods.pop("shell", None)
     if capability_snapshot.turn_control_methods:
         jsonrpc_methods["turn_steer"] = TURN_CONTROL_METHODS["steer"]
     if capability_snapshot.review_control_methods:

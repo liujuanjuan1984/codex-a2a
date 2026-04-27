@@ -175,81 +175,11 @@ SESSION_QUERY_METHOD_CONTRACTS: dict[str, SessionQueryMethodContract] = {
         notification_response_status=204,
         pagination_mode=SESSION_QUERY_PAGINATION_MODE,
     ),
-    "prompt_async": SessionQueryMethodContract(
-        method="codex.sessions.prompt_async",
-        required_params=("session_id", "request.parts"),
-        optional_params=(
-            "request.messageID",
-            "request.agent",
-            "request.system",
-            "request.variant",
-            CODEX_DIRECTORY_METADATA_FIELD,
-            CODEX_EXECUTION_METADATA_FIELD,
-        ),
-        result_fields=("ok", "session_id", "turn_id"),
-        notification_response_status=204,
-        notes=(
-            (
-                "request.parts supports structured rich input items with type=text, "
-                "image, mention, and skill."
-            ),
-            (
-                "image parts map to upstream input_image. URL forms pass through "
-                "directly; bytes forms are converted to data URLs."
-            ),
-            (
-                "This contract does not currently declare upstream local_image; "
-                "mention and skill paths are forwarded verbatim."
-            ),
-        ),
-    ),
-    "command": SessionQueryMethodContract(
-        method="codex.sessions.command",
-        required_params=("session_id", "request.command"),
-        optional_params=(
-            "request.arguments",
-            "request.messageID",
-            CODEX_DIRECTORY_METADATA_FIELD,
-            CODEX_EXECUTION_METADATA_FIELD,
-        ),
-        result_fields=("item",),
-        notification_response_status=204,
-    ),
-    "shell": SessionQueryMethodContract(
-        method="codex.sessions.shell",
-        required_params=("session_id", "request.command"),
-        optional_params=(CODEX_DIRECTORY_METADATA_FIELD,),
-        result_fields=("item",),
-        notification_response_status=204,
-        execution_binding="standalone_command_exec",
-        session_binding="ownership_attribution_only",
-        uses_upstream_session_context=False,
-        notes=(
-            (
-                "Shell requests run through Codex command/exec and do not resume or "
-                "create an upstream thread."
-            ),
-            (
-                "session_id is used for ownership checks and A2A result attribution; "
-                "it does not provide an upstream session-bound shell context."
-            ),
-            (
-                "This method returns a one-shot shell snapshot and does not expose "
-                "interactive PTY lifecycle operations such as write, resize, or "
-                "terminate."
-            ),
-        ),
-    ),
 }
 
 SESSION_QUERY_METHODS: dict[str, str] = {
     key: contract.method for key, contract in SESSION_QUERY_METHOD_CONTRACTS.items()
 }
-SESSION_CONTROL_METHOD_KEYS: tuple[str, ...] = ("prompt_async", "command", "shell")
-SESSION_CONTROL_METHODS: dict[str, str] = {
-    key: SESSION_QUERY_METHODS[key] for key in SESSION_CONTROL_METHOD_KEYS
-}
-
 SESSION_QUERY_ERROR_BUSINESS_CODES: dict[str, int] = {
     "SESSION_NOT_FOUND": -32001,
     "SESSION_FORBIDDEN": -32006,
@@ -291,7 +221,7 @@ DISCOVERY_METHOD_CONTRACTS: dict[str, DiscoveryMethodContract] = {
             ),
             (
                 "Use item.skills[].path directly when constructing rich-input skill items "
-                "for codex.sessions.prompt_async or core A2A Part(data) payloads."
+                "for core A2A Part(data) payloads."
             ),
         ),
     ),
@@ -584,8 +514,8 @@ TURN_CONTROL_METHOD_CONTRACTS: dict[str, TurnControlMethodContract] = {
             ),
             (
                 "request.parts accepts the same rich input item types as "
-                "codex.sessions.prompt_async, but turn-level overrides are intentionally "
-                "not accepted on this surface."
+                "core A2A chat turns, but turn-level overrides are intentionally not "
+                "accepted on this surface."
             ),
             (
                 "Upstream rejects steering when there is no active turn, expected_turn_id "
@@ -775,8 +705,8 @@ EXEC_CONTROL_METHOD_CONTRACTS: dict[str, ExecMethodContract] = {
                 "SubscribeToTask rather than the JSON-RPC response body."
             ),
             (
-                "This surface is intentionally separate from codex.sessions.shell, which "
-                "remains a one-shot shell snapshot contract."
+                "This surface is intentionally separate from the core A2A chat contract "
+                "because it exposes standalone interactive terminal control."
             ),
         ),
     ),
@@ -898,17 +828,8 @@ def build_capability_snapshot(*, runtime_profile: RuntimeProfile) -> CapabilityS
     session_query_method_keys = [
         "list_sessions",
         "get_session_messages",
-        "prompt_async",
-        "command",
     ]
     conditional_methods: dict[str, dict[str, str]] = {}
-    if runtime_profile.session_shell_enabled:
-        session_query_method_keys.append("shell")
-    else:
-        conditional_methods[SESSION_CONTROL_METHODS["shell"]] = {
-            "reason": "disabled_by_configuration",
-            "toggle": "A2A_ENABLE_SESSION_SHELL",
-        }
     session_query_methods = tuple(SESSION_QUERY_METHODS[key] for key in session_query_method_keys)
     discovery_methods = tuple(DISCOVERY_METHODS.values())
     thread_lifecycle_methods = tuple(THREAD_LIFECYCLE_METHODS.values())

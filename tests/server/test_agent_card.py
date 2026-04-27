@@ -161,10 +161,6 @@ def test_agent_card_declares_media_modes_that_match_runtime_contract() -> None:
     assert sessions_query_skill.input_modes == [APPLICATION_JSON_MEDIA_MODE]
     assert sessions_query_skill.output_modes == JSON_OUTPUT_MEDIA_MODES
 
-    sessions_control_skill = skill_by_id["codex.sessions.control"]
-    assert sessions_control_skill.input_modes == [APPLICATION_JSON_MEDIA_MODE]
-    assert sessions_control_skill.output_modes == DEFAULT_OUTPUT_MEDIA_MODES
-
     discovery_skill = skill_by_id["codex.discovery.query"]
     assert discovery_skill.input_modes == [APPLICATION_JSON_MEDIA_MODE]
     assert discovery_skill.output_modes == JSON_OUTPUT_MEDIA_MODES
@@ -325,11 +321,6 @@ def test_authenticated_extended_agent_card_injects_profile_into_extensions() -> 
         "allow_override": False,
         "scope": "workspace_root_only",
     }
-    assert profile["runtime_features"]["session_shell"] == {
-        "enabled": True,
-        "availability": "enabled",
-        "toggle": "A2A_ENABLE_SESSION_SHELL",
-    }
     assert profile["runtime_features"]["turn_control"] == {
         "enabled": True,
         "availability": "enabled",
@@ -461,7 +452,7 @@ def test_authenticated_extended_agent_card_injects_profile_into_extensions() -> 
         "codex.sessions.list": "upstream_passthrough",
         "codex.sessions.messages.list": "local_tail_slice",
     }
-    assert session_query_params["rich_input"]["prompt_async_part_types"] == [
+    assert session_query_params["rich_input"]["supported_part_types"] == [
         "text",
         "image",
         "mention",
@@ -473,13 +464,14 @@ def test_authenticated_extended_agent_card_injects_profile_into_extensions() -> 
         "Part(data mention|skill payloads)": "mention|skill",
     }
     assert (
-        session_query_params["rich_input"]["prompt_async_part_contracts"]["image"]["maps_to"]
+        session_query_params["rich_input"]["part_contracts"]["image"]["maps_to"]
         == "turn/start.input[].type=input_image"
     )
     assert any(
         "mention.path values are forwarded verbatim" in note
         for note in session_query_params["rich_input"]["notes"]
     )
+    assert "control_methods" not in session_query_params
     assert session_query_params["result_envelope"] == {}
     assert any(
         "forwards limit upstream" in note for note in session_query_params["pagination"]["notes"]
@@ -495,15 +487,9 @@ def test_authenticated_extended_agent_card_injects_profile_into_extensions() -> 
         "contextId equal to the upstream session_id" in note
         for note in session_query_params["context_semantics"]["notes"]
     )
-    shell_contract = session_query_params["method_contracts"]["codex.sessions.shell"]
-    assert shell_contract["execution_binding"] == "standalone_command_exec"
-    assert shell_contract["session_binding"] == "ownership_attribution_only"
-    assert shell_contract["uses_upstream_session_context"] is False
-    assert any("command/exec" in note for note in shell_contract["notes"])
-    assert any("one-shot shell snapshot" in note for note in shell_contract["notes"])
-    prompt_contract = session_query_params["method_contracts"]["codex.sessions.prompt_async"]
-    assert any("type=text, image, mention, and skill" in note for note in prompt_contract["notes"])
-    assert any("local_image" in note for note in prompt_contract["notes"])
+    assert "codex.sessions.shell" not in session_query_params["method_contracts"]
+    assert "codex.sessions.prompt_async" not in session_query_params["method_contracts"]
+    assert "codex.sessions.command" not in session_query_params["method_contracts"]
 
     discovery = ext_by_uri[DISCOVERY_EXTENSION_URI]
     discovery_params = _require_params(discovery)
@@ -672,7 +658,7 @@ def test_authenticated_extended_agent_card_injects_profile_into_extensions() -> 
     start_contract = exec_control_params["method_contracts"]["codex.exec.start"]
     assert start_contract["execution_binding"] == "standalone_interactive_command_exec"
     assert start_contract["result"]["fields"] == ["ok", "task_id", "context_id", "process_id"]
-    assert any("codex.sessions.shell" in note for note in start_contract["notes"])
+    assert any("interactive command/exec session" in note for note in start_contract["notes"])
 
     wire_contract = ext_by_uri[WIRE_CONTRACT_EXTENSION_URI]
     wire_contract_params = _require_params(wire_contract)
@@ -759,10 +745,12 @@ def test_authenticated_extended_agent_card_injects_profile_into_extensions() -> 
     assert interrupt_recovery_policy["availability"] == "always"
     assert interrupt_recovery_policy["retention"] == "stable"
     assert interrupt_recovery_policy["extension_uri"] == "urn:codex-a2a:codex-interrupt-recovery/v1"
-    shell_policy = compatibility_params["method_retention"]["codex.sessions.shell"]
-    assert shell_policy["availability"] == "enabled"
-    assert shell_policy["retention"] == "deployment-conditional"
-    assert shell_policy["toggle"] == "A2A_ENABLE_SESSION_SHELL"
+    assert compatibility_params["method_retention"]["codex.sessions.list"] == {
+        "surface": "extension",
+        "availability": "always",
+        "retention": "stable",
+        "extension_uri": "urn:codex-a2a:codex-session-query/v1",
+    }
     exec_policy = compatibility_params["method_retention"]["codex.exec.start"]
     assert exec_policy["availability"] == "enabled"
     assert exec_policy["retention"] == "deployment-conditional"
@@ -802,9 +790,6 @@ def test_authenticated_extended_agent_card_chat_examples_include_project_hint_wh
 def test_public_agent_card_skills_are_minimal() -> None:
     card = build_agent_card(make_settings(a2a_bearer_token="test-token"))
     session_skill = next(skill for skill in card.skills if skill.id == "codex.sessions.query")
-    session_control_skill = next(
-        skill for skill in card.skills if skill.id == "codex.sessions.control"
-    )
     thread_control_skill = next(
         skill for skill in card.skills if skill.id == "codex.threads.control"
     )
@@ -820,8 +805,6 @@ def test_public_agent_card_skills_are_minimal() -> None:
 
     assert list(session_skill.examples) == []
     assert "provider-private" in session_skill.tags
-    assert list(session_control_skill.examples) == []
-    assert "provider-private" in session_control_skill.tags
     assert list(thread_control_skill.examples) == []
     assert "provider-private" in thread_control_skill.tags
     assert list(thread_watch_skill.examples) == []
@@ -836,11 +819,10 @@ def test_public_agent_card_skills_are_minimal() -> None:
     assert "provider-private" in review_watch_skill.tags
 
 
-def test_authenticated_extended_agent_card_omits_shell_method_when_disabled() -> None:
+def test_authenticated_extended_agent_card_omits_removed_session_control_contracts() -> None:
     card = build_authenticated_extended_agent_card(
         make_settings(
             a2a_bearer_token="test-token",
-            a2a_enable_session_shell=False,
             a2a_interrupt_request_ttl_seconds=45,
         )
     )
@@ -848,14 +830,10 @@ def test_authenticated_extended_agent_card_omits_shell_method_when_disabled() ->
     session_query = ext_by_uri[SESSION_QUERY_EXTENSION_URI]
     session_query_params = _require_params(session_query)
 
-    assert "shell" not in session_query_params["methods"]
-    assert "shell" not in session_query_params["control_methods"]
+    assert "control_methods" not in session_query_params
     assert "codex.sessions.shell" not in session_query_params["method_contracts"]
-    assert session_query_params["profile"]["runtime_features"]["session_shell"] == {
-        "enabled": False,
-        "availability": "disabled",
-        "toggle": "A2A_ENABLE_SESSION_SHELL",
-    }
+    assert "codex.sessions.prompt_async" not in session_query_params["method_contracts"]
+    assert "codex.sessions.command" not in session_query_params["method_contracts"]
     assert session_query_params["profile"]["runtime_features"]["interrupts"] == {
         "request_ttl_seconds": 45
     }
@@ -877,27 +855,21 @@ def test_authenticated_extended_agent_card_omits_shell_method_when_disabled() ->
     wire_contract = ext_by_uri[WIRE_CONTRACT_EXTENSION_URI]
     wire_contract_params = _require_params(wire_contract)
     assert "codex.sessions.shell" not in wire_contract_params["all_jsonrpc_methods"]
-    assert wire_contract_params["extensions"]["conditionally_available_methods"] == {
-        "codex.sessions.shell": {
-            "reason": "disabled_by_configuration",
-            "toggle": "A2A_ENABLE_SESSION_SHELL",
-        }
-    }
+    assert "codex.sessions.prompt_async" not in wire_contract_params["all_jsonrpc_methods"]
+    assert "codex.sessions.command" not in wire_contract_params["all_jsonrpc_methods"]
+    assert (
+        "codex.sessions.shell"
+        not in wire_contract_params["extensions"]["conditionally_available_methods"]
+    )
     compatibility = ext_by_uri[COMPATIBILITY_PROFILE_EXTENSION_URI]
     compatibility_params = _require_params(compatibility)
-    shell_policy = compatibility_params["method_retention"]["codex.sessions.shell"]
-    assert shell_policy["availability"] == "disabled"
-    assert compatibility_params["runtime_features"]["session_shell"] == {
-        "enabled": False,
-        "availability": "disabled",
-        "toggle": "A2A_ENABLE_SESSION_SHELL",
-    }
+    assert "codex.sessions.shell" not in compatibility_params["method_retention"]
+    assert "session_shell" not in compatibility_params["runtime_features"]
 
 
 def test_agent_card_hides_boundary_sensitive_control_surfaces_when_disabled() -> None:
     settings = make_settings(
         a2a_bearer_token="test-token",
-        a2a_enable_session_shell=False,
         a2a_enable_turn_control=False,
         a2a_enable_review_control=False,
         a2a_enable_exec_control=False,
@@ -940,10 +912,6 @@ def test_agent_card_hides_boundary_sensitive_control_surfaces_when_disabled() ->
     assert "codex.review.watch" not in wire_contract_params["all_jsonrpc_methods"]
     assert "codex.exec.start" not in wire_contract_params["all_jsonrpc_methods"]
     assert wire_contract_params["extensions"]["conditionally_available_methods"] == {
-        "codex.sessions.shell": {
-            "reason": "disabled_by_configuration",
-            "toggle": "A2A_ENABLE_SESSION_SHELL",
-        },
         "codex.turns.steer": {
             "reason": "disabled_by_configuration",
             "toggle": "A2A_ENABLE_TURN_CONTROL",

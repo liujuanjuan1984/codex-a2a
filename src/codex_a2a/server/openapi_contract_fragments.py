@@ -10,7 +10,6 @@ from codex_a2a.contracts.extensions import (
     INTERRUPT_CALLBACK_METHODS,
     INTERRUPT_RECOVERY_METHODS,
     REVIEW_CONTROL_METHODS,
-    SESSION_CONTROL_METHODS,
     SESSION_QUERY_DEFAULT_LIMIT,
     SESSION_QUERY_METHODS,
     THREAD_LIFECYCLE_METHODS,
@@ -58,11 +57,7 @@ def build_jsonrpc_extension_openapi_description(*, runtime_profile: RuntimeProfi
     session_methods: list[str] = [
         SESSION_QUERY_METHODS["list_sessions"],
         SESSION_QUERY_METHODS["get_session_messages"],
-        SESSION_CONTROL_METHODS["prompt_async"],
-        SESSION_CONTROL_METHODS["command"],
     ]
-    if runtime_profile.session_shell_enabled:
-        session_methods.append(SESSION_CONTROL_METHODS["shell"])
     discovery_methods = ", ".join(DISCOVERY_METHODS.values())
     thread_lifecycle_methods = ", ".join(THREAD_LIFECYCLE_METHODS.values())
     interrupt_recovery_methods = ", ".join(INTERRUPT_RECOVERY_METHODS.values())
@@ -92,7 +87,7 @@ def build_jsonrpc_extension_openapi_description(*, runtime_profile: RuntimeProfi
         "active-turn control extensions, review "
         "control extensions, Codex discovery extensions, interactive exec "
         "extensions, and shared interrupt callback methods.\n\n"
-        f"Codex session query/control methods: {', '.join(session_methods)}.\n"
+        f"Codex session query methods: {', '.join(session_methods)}.\n"
         f"Codex thread lifecycle methods: {thread_lifecycle_methods}.\n"
         f"Codex interrupt recovery methods: {interrupt_recovery_methods}.\n"
         f"Codex active-turn control methods: {turn_methods}.\n"
@@ -166,36 +161,6 @@ def build_jsonrpc_extension_openapi_examples(
                 "id": 2,
                 "method": SESSION_QUERY_METHODS["get_session_messages"],
                 "params": {"session_id": "s-1", "limit": SESSION_QUERY_DEFAULT_LIMIT},
-            },
-        },
-        "session_prompt_async": {
-            "summary": "Send async prompt to an existing session",
-            "value": {
-                "jsonrpc": "2.0",
-                "id": 21,
-                "method": SESSION_CONTROL_METHODS["prompt_async"],
-                "params": {
-                    "session_id": "s-1",
-                    "request": {
-                        "parts": [
-                            {"type": "text", "text": "Use the app to summarize next steps."},
-                            {"type": "image", "url": "https://example.com/screenshot.png"},
-                            {"type": "mention", "name": "Demo App", "path": "app://demo-app"},
-                        ]
-                    },
-                },
-            },
-        },
-        "session_command": {
-            "summary": "Send command to an existing session",
-            "value": {
-                "jsonrpc": "2.0",
-                "id": 22,
-                "method": SESSION_CONTROL_METHODS["command"],
-                "params": {
-                    "session_id": "s-1",
-                    "request": {"command": "plan", "arguments": "show current work"},
-                },
             },
         },
         "discovery_skills_list": {
@@ -463,16 +428,6 @@ def build_jsonrpc_extension_openapi_examples(
                 "id": 31,
                 "method": EXEC_CONTROL_METHODS["exec_terminate"],
                 "params": {"request": {"process_id": "exec-1"}},
-            },
-        }
-    if runtime_profile.session_shell_enabled:
-        examples["session_shell"] = {
-            "summary": "Run a one-shot shell command attributed to an existing session",
-            "value": {
-                "jsonrpc": "2.0",
-                "id": 23,
-                "method": SESSION_CONTROL_METHODS["shell"],
-                "params": {"session_id": "s-1", "request": {"command": "git status --short"}},
             },
         }
     return examples
