@@ -299,21 +299,13 @@ def test_extract_text_reads_task_status_message() -> None:
     assert A2AClient.extract_text(task) == "status message text"
 
 
-def test_extract_text_reads_nested_mapping_payload() -> None:
-    payload = {
-        "result": {
-            "history": [
-                {"parts": [{"text": "mapped nested text"}]},
-            ]
-        }
-    }
+def test_extract_text_reads_stream_message_payload() -> None:
+    payload = StreamResponse(
+        message=Message(
+            role=Role.ROLE_AGENT,
+            message_id="m2",
+            parts=[new_text_part("stream message text")],
+        )
+    )
 
-    assert A2AClient.extract_text(payload) == "mapped nested text"
-
-
-def test_extract_text_reads_model_dump_payload() -> None:
-    class _Payload:
-        def model_dump(self) -> dict[str, object]:
-            return {"artifacts": [{"parts": [{"text": "model dump text"}]}]}
-
-    assert A2AClient.extract_text(_Payload()) == "model dump text"
+    assert A2AClient.extract_text(payload) == "stream message text"

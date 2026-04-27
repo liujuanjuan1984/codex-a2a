@@ -693,6 +693,18 @@ def test_authenticated_extended_agent_card_injects_profile_into_extensions() -> 
     assert "CreateTaskPushNotificationConfig" in wire_contract_params["all_jsonrpc_methods"]
     assert "POST /v1/message:send" in wire_contract_params["core"]["http_endpoints"]
     assert "GET /v1/extendedAgentCard" in wire_contract_params["core"]["http_endpoints"]
+    assert wire_contract_params["transport_interfaces"] == [
+        {
+            "protocol_binding": "HTTP+JSON",
+            "protocol_version": "1.0.0",
+            "url_path_prefix": "/v1",
+        },
+        {
+            "protocol_binding": "JSON-RPC",
+            "protocol_version": "1.0.0",
+            "url_path": "/",
+        },
+    ]
 
     compatibility = ext_by_uri[COMPATIBILITY_PROFILE_EXTENSION_URI]
     compatibility_params = _require_params(compatibility)

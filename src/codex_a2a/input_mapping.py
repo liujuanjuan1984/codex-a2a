@@ -31,57 +31,9 @@ def _guess_mime_type(*candidates: Any) -> str | None:
     return None
 
 
-def _resolve_file_payload(part: Any) -> Mapping[str, Any] | None:
-    if isinstance(part, Part) and is_file_part(part):
-        payload: dict[str, Any] = {}
-        if part.url:
-            payload["uri"] = part.url
-        if part.raw:
-            payload["bytes"] = part.raw
-        if part.filename:
-            payload["name"] = part.filename
-        if part.media_type:
-            payload["mimeType"] = part.media_type
-        return payload
-
-    if isinstance(part, Mapping) and "file" in part and isinstance(part["file"], Mapping):
-        return part["file"]
-
-    root = getattr(part, "root", None)
-    if isinstance(root, Part):
-        return _resolve_file_payload(root)
-    if isinstance(root, Mapping) and "file" in root and isinstance(root["file"], Mapping):
-        return root["file"]
-    return None
-
-
-def _resolve_data_payload(part: Any) -> Mapping[str, Any] | None:
-    if isinstance(part, Part) and is_data_part(part):
-        payload = part_data(part)
-        if isinstance(payload, Mapping):
-            return payload
-    if isinstance(part, Mapping) and "data" in part and isinstance(part["data"], Mapping):
-        return part["data"]
-
-    root = getattr(part, "root", None)
-    if isinstance(root, Part):
-        return _resolve_data_payload(root)
-    if isinstance(root, Mapping) and "data" in root and isinstance(root["data"], Mapping):
-        return root["data"]
-    return None
-
-
 def _resolve_text_payload(part: Any) -> str | None:
     if isinstance(part, Part) and is_text_part(part):
         return part_text(part)
-    if isinstance(part, Mapping) and isinstance(part.get("text"), str):
-        return part["text"]
-
-    root = getattr(part, "root", None)
-    if isinstance(root, Part):
-        return _resolve_text_payload(root)
-    if isinstance(root, Mapping) and isinstance(root.get("text"), str):
-        return root["text"]
     return None
 
 
@@ -183,37 +135,37 @@ def map_a2a_message_parts_to_normalized_items(parts: Any) -> list[dict[str, Any]
 
     normalized: list[dict[str, Any]] = []
     for part in parts:
+        if not isinstance(part, Part):
+            raise UnsupportedInputError("A2A message parts must be protobuf Part values.")
+
         text = _resolve_text_payload(part)
         if isinstance(text, str):
             normalized.append({"type": "text", "text": text})
             continue
 
-        file_payload = _resolve_file_payload(part)
-        if file_payload is not None:
-            file_uri = _optional_string(file_payload.get("uri"))
-            file_name = _optional_string(file_payload.get("name"))
-            mime_type = _optional_string(file_payload.get("mimeType")) or _guess_mime_type(
-                file_name,
-                file_uri,
-            )
+        if is_file_part(part):
+            file_uri = _optional_string(part.url)
+            file_name = _optional_string(part.filename)
+            mime_type = _optional_string(part.media_type) or _guess_mime_type(file_name, file_uri)
             if file_uri:
-                if mime_type and mime_type.startswith("image/"):
-                    normalized.append({"type": "image", "url": file_uri})
-                    continue
                 if file_uri.startswith("data:image/"):
                     normalized.append({"type": "image", "url": file_uri})
                     continue
-            file_bytes = file_payload.get("bytes")
-            if isinstance(file_bytes, bytes):
-                file_bytes = base64.b64encode(file_bytes).decode("ascii")
+                if mime_type and mime_type.startswith("image/"):
+                    normalized.append({"type": "image", "url": file_uri})
+                    continue
+            file_bytes_raw = part.raw
+            file_bytes_text: str | None = None
+            if isinstance(file_bytes_raw, bytes):
+                file_bytes_text = base64.b64encode(file_bytes_raw).decode("ascii")
             else:
-                file_bytes = _optional_string(file_bytes)
-            if file_bytes and mime_type and mime_type.startswith("image/"):
+                file_bytes_text = _optional_string(file_bytes_raw)
+            if file_bytes_text and mime_type and mime_type.startswith("image/"):
                 normalized.append(
                     {
                         "type": "image",
                         "url": _data_url_for_image_bytes(
-                            encoded_bytes=file_bytes,
+                            encoded_bytes=file_bytes_text,
                             mime_type=mime_type,
                         ),
                     }
@@ -223,8 +175,12 @@ def map_a2a_message_parts_to_normalized_items(parts: Any) -> list[dict[str, Any]
                 "Only text, image file, and codex rich input data parts are supported."
             )
 
-        data_payload = _resolve_data_payload(part)
-        if data_payload is not None:
+        if is_data_part(part):
+            data_payload = part_data(part)
+            if not isinstance(data_payload, dict):
+                raise UnsupportedInputError(
+                    "codex rich input data parts must be structured objects."
+                )
             item_type = _optional_string(data_payload.get("type"))
             if item_type in {"mention", "skill"}:
                 name = _optional_string(data_payload.get("name"))

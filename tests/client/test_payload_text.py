@@ -4,6 +4,7 @@ from a2a.types import (
     Artifact,
     Message,
     Role,
+    StreamResponse,
     Task,
     TaskArtifactUpdateEvent,
     TaskState,
@@ -30,7 +31,10 @@ def test_extract_text_from_payload_prefers_stream_artifact_update() -> None:
         ),
     )
 
-    assert extract_text_from_payload((task, update)) == "streamed remote text"
+    assert extract_text_from_payload(StreamResponse(task=task)) is None
+    assert (
+        extract_text_from_payload(StreamResponse(artifact_update=update)) == "streamed remote text"
+    )
 
 
 def test_extract_text_from_payload_reads_status_message() -> None:
@@ -50,21 +54,13 @@ def test_extract_text_from_payload_reads_status_message() -> None:
     assert extract_text_from_payload(task) == "status message text"
 
 
-def test_extract_text_from_payload_reads_nested_mapping_history() -> None:
-    payload = {
-        "result": {
-            "history": [
-                {"parts": [{"text": "mapped nested text"}]},
-            ]
-        }
-    }
+def test_extract_text_from_payload_reads_stream_message() -> None:
+    response = StreamResponse(
+        message=Message(
+            role=Role.ROLE_AGENT,
+            message_id="m2",
+            parts=[new_text_part("stream message text")],
+        )
+    )
 
-    assert extract_text_from_payload(payload) == "mapped nested text"
-
-
-def test_extract_text_from_payload_reads_model_dump_payload() -> None:
-    class _Payload:
-        def model_dump(self) -> dict[str, object]:
-            return {"artifacts": [{"parts": [{"text": "model dump text"}]}]}
-
-    assert extract_text_from_payload(_Payload()) == "model dump text"
+    assert extract_text_from_payload(response) == "stream message text"

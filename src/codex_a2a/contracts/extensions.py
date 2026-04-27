@@ -66,8 +66,18 @@ def build_wire_contract_extension_params(
         "default_protocol_version": declared_default_protocol_version,
         "supported_protocol_versions": list(declared_supported_protocol_versions),
         "protocol_compatibility": protocol_compatibility,
-        "preferred_transport": "HTTP+JSON",
-        "additional_transports": ["JSON-RPC"],
+        "transport_interfaces": [
+            {
+                "protocol_binding": "HTTP+JSON",
+                "protocol_version": protocol_version,
+                "url_path_prefix": "/v1",
+            },
+            {
+                "protocol_binding": "JSON-RPC",
+                "protocol_version": protocol_version,
+                "url_path": "/",
+            },
+        ],
         "core": {
             "jsonrpc_methods": list(CORE_JSONRPC_METHODS),
             "http_endpoints": list(CORE_HTTP_ENDPOINTS),

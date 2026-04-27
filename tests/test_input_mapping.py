@@ -1,10 +1,13 @@
 from __future__ import annotations
 
-from types import SimpleNamespace
-
 import pytest
 
-from codex_a2a.a2a_proto import new_text_part
+from codex_a2a.a2a_proto import (
+    new_data_part,
+    new_file_bytes_part,
+    new_file_url_part,
+    new_text_part,
+)
 from codex_a2a.input_mapping import (
     UnsupportedInputError,
     convert_request_parts_to_turn_input,
@@ -71,16 +74,18 @@ def test_convert_request_parts_to_turn_input_rejects_invalid_shapes(
         convert_request_parts_to_turn_input(request_payload)
 
 
-def test_map_a2a_message_parts_supports_root_wrappers_and_image_variants() -> None:
+def test_map_a2a_message_parts_supports_v1_parts_and_image_variants() -> None:
     parts = [
-        SimpleNamespace(root=new_text_part("hello")),
-        {"file": {"uri": "https://example.com/demo.png", "name": "demo.png"}},
-        {"file": {"uri": "data:image/png;base64,AAAA"}},
-        {"file": {"bytes": "AAAA", "mimeType": "image/jpeg"}},
-        SimpleNamespace(
-            root={"data": {"type": "mention", "name": "Demo App", "path": "app://demo"}}
+        new_text_part("hello"),
+        new_file_url_part(
+            "https://example.com/demo.png",
+            media_type="image/png",
+            filename="demo.png",
         ),
-        {"data": {"type": "skill", "name": "skill-creator", "path": "/tmp/SKILL.md"}},
+        new_file_url_part("data:image/png;base64,AAAA"),
+        new_file_bytes_part(b"\x00\x00\x00", media_type="image/jpeg"),
+        new_data_part({"type": "mention", "name": "Demo App", "path": "app://demo"}),
+        new_data_part({"type": "skill", "name": "skill-creator", "path": "/tmp/SKILL.md"}),
     ]
 
     assert map_a2a_message_parts_to_normalized_items(parts) == [
@@ -97,20 +102,20 @@ def test_map_a2a_message_parts_supports_root_wrappers_and_image_variants() -> No
     ("parts", "message"),
     [
         (
-            [{"file": {"uri": "https://example.com/demo.txt", "name": "demo.txt"}}],
+            [new_file_url_part("https://example.com/demo.txt", filename="demo.txt")],
             "Only text, image file, and codex rich input data parts are supported.",
         ),
         (
-            [{"data": {"type": "mention", "name": "Demo App"}}],
+            [new_data_part({"type": "mention", "name": "Demo App"})],
             "codex rich input data parts require string type, name, and path fields.",
         ),
         (
-            [{"data": {"type": "audio", "name": "Clip", "path": "/tmp/clip.wav"}}],
+            [new_data_part({"type": "audio", "name": "Clip", "path": "/tmp/clip.wav"})],
             "Only mention and skill codex rich input data parts are supported.",
         ),
         (
-            [SimpleNamespace(root={"unknown": "shape"})],
-            "Only text, image file, and codex rich input data parts are supported.",
+            [{"unknown": "shape"}],
+            "A2A message parts must be protobuf Part values.",
         ),
     ],
 )

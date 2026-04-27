@@ -249,7 +249,7 @@ class A2AClient:
         )
 
     @staticmethod
-    def extract_text(event: Task | Message | Any) -> str:
+    def extract_text(event: StreamResponse | Task | Message) -> str:
         extracted = extract_text_from_payload(event)
         return extracted or ""
 
@@ -267,12 +267,9 @@ class A2AClient:
             endpoint.agent_card_path,
         )
         try:
-            try:
-                self._card = await resolver.get_agent_card(
-                    http_kwargs=build_agent_card_request_kwargs(self._config)
-                )
-            except TypeError:
-                self._card = await resolver.get_agent_card()
+            self._card = await resolver.get_agent_card(
+                http_kwargs=build_agent_card_request_kwargs(self._config)
+            )
         except Exception as exc:
             raise map_a2a_sdk_error(exc, operation="agent_card") from exc
         return cast(AgentCard, self._card)
