@@ -16,7 +16,7 @@ from codex_a2a.execution.thread_lifecycle_runtime import CodexThreadLifecycleRun
 from codex_a2a.jsonrpc.discovery_control import handle_discovery_control_request
 from codex_a2a.jsonrpc.discovery_query import handle_discovery_query_request
 from codex_a2a.jsonrpc.dispatch import ExtensionMethodRegistry
-from codex_a2a.jsonrpc.errors import adapt_jsonrpc_error_for_protocol
+from codex_a2a.jsonrpc.errors import adapt_jsonrpc_error
 from codex_a2a.jsonrpc.exec_control import handle_exec_control_request
 from codex_a2a.jsonrpc.hooks import SessionGuardHooks
 from codex_a2a.jsonrpc.interrupt_recovery import handle_interrupt_recovery_request
@@ -223,11 +223,8 @@ class CodexSessionQueryJSONRPCApplication(JsonRpcDispatcher):
         request_id: str | int | None,
         error: Exception | JSONRPCError | A2AError,
     ) -> JSONResponse:
-        protocol_version = get_current_protocol_version(self._protocol_version)
         if isinstance(error, JSONRPCError | A2AError):
-            adapted_error: Exception | JSONRPCError | A2AError = adapt_jsonrpc_error_for_protocol(
-                protocol_version, error
-            )
+            adapted_error: Exception | JSONRPCError | A2AError = adapt_jsonrpc_error(error)
         else:
             adapted_error = error
         return super()._generate_error_response(

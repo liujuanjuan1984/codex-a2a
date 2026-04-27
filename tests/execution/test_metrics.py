@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Iterator
-from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from a2a.server.tasks.inmemory_task_store import InMemoryTaskStore
@@ -19,8 +18,11 @@ from codex_a2a.metrics import (
     TOOL_CALL_CHUNKS_EMITTED_TOTAL,
     get_metrics_registry,
 )
-from codex_a2a.server.request_handler import CodexRequestHandler
-from tests.server.test_request_handler import _make_agent_card, _make_message_send_params
+from tests.server.test_request_handler import (
+    _make_message_send_params,
+    _StubActiveTask,
+    _StubActiveTaskHandler,
+)
 from tests.support.context import DummyEventQueue
 
 
@@ -38,36 +40,33 @@ def reset_metrics_state() -> Iterator[None]:
 
 @pytest.mark.asyncio
 async def test_stream_request_metrics_track_total_and_active() -> None:
-    class _FakeAggregator:
-        async def consume_and_emit(self, _consumer):
-            task = Task(
-                id="task-1",
-                context_id="ctx-1",
-                status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
-            )
-            yield task
-            await asyncio.sleep(10)
+    class _BlockingActiveTask(_StubActiveTask):
+        def __init__(self) -> None:
+            super().__init__()
+            self.closed = asyncio.Event()
 
-    class _TestHandler(CodexRequestHandler):
-        async def _setup_message_execution(self, params, context=None):  # noqa: ANN001
-            del params, context
-            queue = AsyncMock()
-            producer_task = asyncio.create_task(asyncio.sleep(10))
-            self._producer_task = producer_task
-            self._queue = queue
-            return MagicMock(), "task-1", queue, _FakeAggregator(), producer_task
-
-        async def _cleanup_producer(self, producer_task, task_id):  # noqa: ANN001
-            del task_id
+        async def subscribe(
+            self,
+            *,
+            request,
+            include_initial_task=False,
+            replace_status_update_with_task=False,
+        ):
+            del request, include_initial_task, replace_status_update_with_task
             try:
-                await producer_task
-            except asyncio.CancelledError:
-                pass
+                yield Task(
+                    id="task-1",
+                    context_id="ctx-1",
+                    status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
+                )
+                await asyncio.sleep(10)
+            finally:
+                self.closed.set()
 
-    handler = _TestHandler(
-        agent_executor=MagicMock(),
+    active_task = _BlockingActiveTask()
+    handler = _StubActiveTaskHandler(
+        active_task=active_task,
         task_store=InMemoryTaskStore(),
-        agent_card=_make_agent_card(),
     )
 
     stream = handler.on_message_send_stream(_make_message_send_params())
@@ -83,6 +82,7 @@ async def test_stream_request_metrics_track_total_and_active() -> None:
     snapshot = get_metrics_registry().snapshot()
     assert snapshot["counters"][A2A_STREAM_REQUESTS_TOTAL] == 1
     assert snapshot["gauges"][A2A_STREAM_ACTIVE] == 0
+    assert active_task.closed.is_set()
 
 
 @pytest.mark.asyncio

@@ -10,7 +10,7 @@ from a2a.client import (
     A2ACardResolver,
     ClientCallContext,
     ClientConfig,
-    ClientFactory,
+    create_client,
 )
 from a2a.client.auth.credentials import CredentialService
 from a2a.client.auth.interceptor import AuthInterceptor
@@ -41,7 +41,7 @@ from .errors import (
 )
 from .payload_text import extract_text_from_payload
 from .request_context import build_call_context, split_request_metadata
-from .types import A2ACancelTaskRequest, A2AClientEvent, A2AGetTaskRequest, A2ASendRequest
+from .types import A2ACancelTaskRequest, A2AGetTaskRequest, A2ASendRequest
 
 
 class _SDKClientProtocol(Protocol):
@@ -76,7 +76,7 @@ class A2AClient:
         *,
         httpx_client: httpx.AsyncClient | None = None,
         card_resolver_factory=A2ACardResolver,
-        client_factory_type=ClientFactory,
+        client_creator=create_client,
         credential_service: CredentialService | None = None,
     ) -> None:
         if not config.agent_url:
@@ -92,7 +92,7 @@ class A2AClient:
         self._card: AgentCard | None = None
         self._sdk_client: _SDKClientProtocol | None = None
         self._card_resolver_factory = card_resolver_factory
-        self._client_factory_type = client_factory_type
+        self._client_creator = client_creator
         self._credential_service = credential_service
         self._client_config = ClientConfig(
             streaming=True,
@@ -148,7 +148,7 @@ class A2AClient:
         accepted_output_modes: list[str] | None = None,
         history_length: int | None = None,
         blocking: bool = True,
-    ) -> AsyncIterator[A2AClientEvent]:
+    ) -> AsyncIterator[StreamResponse]:
         client = await self._get_client()
         sdk_client = client
         request = self._build_user_message(
@@ -181,8 +181,8 @@ class A2AClient:
         except Exception as exc:
             raise map_a2a_sdk_error(exc, operation="SendMessage") from exc
 
-    async def send(self, request: A2ASendRequest) -> A2AClientEvent:
-        last_event: A2AClientEvent | None = None
+    async def send(self, request: A2ASendRequest) -> StreamResponse:
+        last_event: StreamResponse | None = None
         async for item in self.send_message(
             request.text,
             context_id=request.context_id,
@@ -287,24 +287,19 @@ class A2AClient:
 
     async def _build_client(self) -> _SDKClientProtocol:
         card = await self._get_agent_card()
-        try:
-            factory = self._client_factory_type(self._client_config)
-        except ValueError as exc:
-            raise A2AUnsupportedBindingError(
-                f"Unable to initialize A2A client with transport preference: {exc}"
-            ) from exc
-        except Exception as exc:
-            raise A2AClientError(f"Unable to initialize A2A client factory: {exc}") from exc
-
         interceptors = self._build_interceptors()
         try:
-            self._sdk_client = factory.create(card, interceptors=interceptors)
+            self._sdk_client = await self._client_creator(
+                card,
+                client_config=self._client_config,
+                interceptors=interceptors or None,
+            )
         except ValueError as exc:
             raise A2AUnsupportedBindingError(
                 f"Unable to bind A2A client to peer transport: {exc}"
             ) from exc
-        except TypeError:
-            self._sdk_client = factory.create(card)
+        except Exception as exc:
+            raise A2AClientError(f"Failed to initialize A2A client: {exc}") from exc
         if self._sdk_client is None:
             raise A2AClientError("Failed to initialize A2A client")
         return self._sdk_client

@@ -19,6 +19,7 @@ from a2a.types import (
     SecurityRequirement,
     SecurityScheme,
     SendMessageRequest,
+    StreamResponse,
     Task,
     TaskArtifactUpdateEvent,
     TaskState,
@@ -95,7 +96,7 @@ class _MockSDKClient:
             context_id="ctx-1",
             status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
         )
-        yield task
+        yield StreamResponse(task=task)
 
     async def get_task(self, request: GetTaskRequest, *, context=None) -> Task:
         self.get_task_calls.append(request)
@@ -138,7 +139,8 @@ async def test_send_get_task_and_cancel_use_sdk_methods() -> None:
             blocking=False,
         )
     )
-    assert send_result.id == "task-1"
+    assert send_result.HasField("task")
+    assert send_result.task.id == "task-1"
     send_call = sdk_client.send_calls[0]
     assert proto_to_python(send_call["request"].metadata) == {"trace_id": "trace-1"}
     assert send_call["context"].service_parameters == {"Authorization": "Bearer token"}
@@ -193,18 +195,14 @@ async def test_get_agent_card_uses_resolver_and_cached() -> None:
 
 @pytest.mark.asyncio
 async def test_build_client_maps_unsupported_transport_binding() -> None:
-    class _RejectingFactory:
-        def __init__(self, *_args, **_kwargs) -> None:
-            pass
-
-        def create(self, *_args, **_kwargs):
-            raise ValueError("No shared transport found")
+    async def _rejecting_creator(*_args, **_kwargs):
+        raise ValueError("No shared transport found")
 
     client = A2AClient(
         A2AClientConfig(agent_url="https://example.org"),
         httpx_client=_MockAsyncHttpClient(),
         card_resolver_factory=_MockAgentCardResolver,
-        client_factory_type=_RejectingFactory,
+        client_creator=_rejecting_creator,
     )
 
     with pytest.raises(A2AUnsupportedBindingError):
@@ -271,11 +269,6 @@ async def test_static_credential_service_works_with_sdk_auth_interceptor() -> No
 
 
 def test_extract_text_prefers_stream_artifact_payload() -> None:
-    task = Task(
-        id="remote-task",
-        context_id="remote-context",
-        status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
-    )
     update = TaskArtifactUpdateEvent(
         task_id="remote-task",
         context_id="remote-context",
@@ -286,7 +279,7 @@ def test_extract_text_prefers_stream_artifact_payload() -> None:
         ),
     )
 
-    assert A2AClient.extract_text((task, update)) == "streamed remote text"
+    assert A2AClient.extract_text(StreamResponse(artifact_update=update)) == "streamed remote text"
 
 
 def test_extract_text_reads_task_status_message() -> None:

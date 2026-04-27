@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from a2a.types import Part
@@ -18,7 +18,7 @@ _STREAM_REASONING_FLUSH_CHARS = 240
 _STREAM_REASONING_FLUSH_SECONDS = 0.35
 
 
-class BlockType(str, Enum):
+class BlockType(StrEnum):
     TEXT = "text"
     REASONING = "reasoning"
     TOOL_CALL = "tool_call"

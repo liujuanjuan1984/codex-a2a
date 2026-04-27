@@ -777,9 +777,12 @@ async def test_jsonrpc_unsupported_protocol_version_preserves_request_id(monkeyp
     payload = response.json()
     assert payload["id"] == 43
     assert payload["error"]["code"] == -32001
-    assert payload["error"]["data"]["type"] == "VERSION_NOT_SUPPORTED"
-    assert payload["error"]["data"]["requested_version"] == "2.0"
-    assert payload["error"]["data"]["supported_protocol_versions"] == ["1.0"]
+    details = payload["error"]["data"]
+    assert isinstance(details, list)
+    error_info = details[0]
+    assert error_info["reason"] == "VERSION_NOT_SUPPORTED"
+    assert error_info["metadata"]["requestedVersion"] == "2.0"
+    assert error_info["metadata"]["supportedProtocolVersions"] == '["1.0"]'
 
 
 @pytest.mark.asyncio

@@ -7,7 +7,7 @@ This guide covers runtime configuration, transport contracts, streaming/session/
 - The service supports both transports:
   - HTTP+JSON (REST endpoints such as `/v1/message:send`)
   - JSON-RPC (`POST /`)
-- Agent Card keeps `preferredTransport=HTTP+JSON` and also exposes JSON-RPC in `additional_interfaces`.
+- Agent Card publishes both HTTP+JSON and JSON-RPC endpoints through `supported_interfaces[]`.
 - The public Agent Card at `/.well-known/agent-card.json` is intentionally slimmed to the minimum discovery surface.
 - Detailed provider-private contracts are available through the authenticated extended card:
   - preferred: JSON-RPC `GetExtendedAgentCard`
@@ -15,7 +15,6 @@ This guide covers runtime configuration, transport contracts, streaming/session/
 - Agent Card responses publish `ETag` and `Cache-Control`; clients should revalidate instead of repeatedly fetching full payloads.
 - Larger discovery documents support gzip compression on these HTTP GET routes:
   - `/.well-known/agent-card.json`
-  - `/.well-known/agent.json`
   - `GET /v1/extendedAgentCard`
   - `GET /openapi.json`
 - Streaming and task routes do not rely on this gzip behavior.
@@ -196,8 +195,7 @@ Use the grouped sections below as the deployment-first reading order:
 - `A2A_DESCRIPTION`: agent description exposed on Agent Card and docs surfaces
 - `A2A_VERSION`: agent version string
 - `A2A_PROJECT`: optional project label injected into examples and discovery metadata
-- `A2A_PROTOCOL_VERSION`: advertised A2A protocol version, default `1.0.0`
-- `A2A_SUPPORTED_PROTOCOL_VERSIONS`: comma-separated request negotiation lines, default `1.0`
+- `A2A_PROTOCOL_VERSION`: advertised A2A protocol version, default `1.0.0`; values outside the `1.0` protocol line are rejected
 - `A2A_DOCUMENTATION_URL`: optional external documentation URL exposed on Agent Card
 - `A2A_STATIC_AUTH_CREDENTIALS`: JSON array of static inbound credentials. Supports multiple `bearer` and `basic` entries, each with a stable `principal`; `bearer` entries must declare `principal`, while `basic` entries derive `principal` from `username`.
 
@@ -277,7 +275,6 @@ These variables are forwarded to the local `codex app-server` subprocess.
 | `A2A_VERSION` | Agent version |
 | `A2A_PROJECT` | Project label |
 | `A2A_PROTOCOL_VERSION` | Protocol version |
-| `A2A_SUPPORTED_PROTOCOL_VERSIONS` | Supported protocol versions |
 | `A2A_DOCUMENTATION_URL` | Documentation URL |
 | `A2A_ENABLE_HEALTH_ENDPOINT` | Enable /health |
 | `A2A_ENABLE_SESSION_SHELL` | Enable session shell |
@@ -556,7 +553,7 @@ This service exposes Codex session list and message-history queries via A2A JSON
 - Trigger: call extension methods through A2A JSON-RPC
 - Auth: same `Authorization: Bearer <token>`
 - Privacy guard: when `A2A_LOG_PAYLOADS=true`, request/response bodies are still suppressed for `method=codex.sessions.*`
-- Endpoint discovery: prefer `additional_interfaces[]` with `transport=jsonrpc` from Agent Card
+- Endpoint discovery: prefer the `supported_interfaces[]` entry with `protocol_binding=JSONRPC` from Agent Card
 - Result format:
   - `result.items` is always an array of A2A standard objects
   - session list => `Task` with `status.state=completed`

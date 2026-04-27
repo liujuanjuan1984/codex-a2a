@@ -79,30 +79,17 @@ def test_settings_valid():
         assert settings.a2a_log_level == "WARNING"
 
 
-def test_settings_parse_a2a_supported_protocol_versions() -> None:
+@pytest.mark.parametrize("protocol_version", ["0.3.0", "1.1.0"])
+def test_settings_reject_non_1_0_protocol_line(protocol_version: str) -> None:
     env = {
         **_registry_env(),
-        "A2A_PROTOCOL_VERSION": "0.3.0",
-        "A2A_SUPPORTED_PROTOCOL_VERSIONS": "0.3.0,1.0,1.0.0",
-    }
-    with mock.patch.dict(os.environ, env, clear=True):
-        settings = Settings.from_env()
-
-    assert settings.a2a_protocol_version == "0.3.0"
-    assert settings.a2a_supported_protocol_versions == ["0.3", "1.0"]
-
-
-def test_settings_reject_supported_protocol_versions_missing_default() -> None:
-    env = {
-        **_registry_env(),
-        "A2A_PROTOCOL_VERSION": "0.3.0",
-        "A2A_SUPPORTED_PROTOCOL_VERSIONS": "1.0",
+        "A2A_PROTOCOL_VERSION": protocol_version,
     }
     with mock.patch.dict(os.environ, env, clear=True):
         with pytest.raises(ValidationError) as excinfo:
             Settings.from_env()
 
-    assert "A2A_SUPPORTED_PROTOCOL_VERSIONS must include A2A_PROTOCOL_VERSION" in str(excinfo.value)
+    assert "A2A_PROTOCOL_VERSION must stay on the 1.0 protocol line" in str(excinfo.value)
 
 
 def test_settings_accept_static_auth_registry_without_legacy_credentials() -> None:

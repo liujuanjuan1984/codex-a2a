@@ -9,9 +9,6 @@ from a2a.types import (
     Role,
     SendMessageConfiguration,
     StreamResponse,
-    Task,
-    TaskArtifactUpdateEvent,
-    TaskStatusUpdateEvent,
 )
 from pydantic import BaseModel, Field
 
@@ -75,9 +72,4 @@ class A2ACancelTaskRequest(BaseModel):
         return request
 
 
-A2AClientEvent = (
-    StreamResponse
-    | Task
-    | Message
-    | tuple[Task, TaskStatusUpdateEvent | TaskArtifactUpdateEvent | None]
-)
+A2AClientEvent = StreamResponse

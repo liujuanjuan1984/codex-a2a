@@ -21,7 +21,7 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 from codex_a2a.auth import authenticate_static_credential, build_static_auth_credentials
 from codex_a2a.config import Settings
 from codex_a2a.jsonrpc.errors import (
-    adapt_jsonrpc_error_for_protocol,
+    adapt_jsonrpc_error,
     build_http_error_body,
     version_not_supported_error,
 )
@@ -34,7 +34,6 @@ from codex_a2a.logging_context import (
 from codex_a2a.protocol_versions import (
     UnsupportedProtocolVersionError,
     negotiate_protocol_version,
-    normalize_protocol_version,
     reset_current_protocol_version,
     set_current_protocol_version,
 )
@@ -44,7 +43,6 @@ logger = logging.getLogger(__name__)
 
 _PUBLIC_AGENT_CARD_PATHS = {
     "/.well-known/agent-card.json",
-    "/.well-known/agent.json",
 }
 _AUTHENTICATED_EXTENDED_CARD_PATHS = {
     "/v1/extendedAgentCard",
@@ -238,20 +236,12 @@ def _requested_protocol_version(request: Request) -> tuple[str | None, str | Non
     return header_value, query_value
 
 
-def _error_protocol_version(requested_version: str, default_protocol_version: str) -> str:
-    try:
-        return normalize_protocol_version(requested_version)
-    except ValueError:
-        return normalize_protocol_version(default_protocol_version)
-
-
 def _jsonrpc_error_response(
     *,
     request_id: str | int | None,
-    protocol_version: str,
     error: JSONRPCError,
 ) -> JSONResponse:
-    adapted_error = adapt_jsonrpc_error_for_protocol(protocol_version, error)
+    adapted_error = adapt_jsonrpc_error(error)
     error_payload = (
         adapted_error.model_dump(mode="json", exclude_none=True)
         if isinstance(adapted_error, JSONRPCError)
@@ -272,13 +262,8 @@ def _unsupported_protocol_jsonrpc_response(
     request_id: str | int | None,
     exc: UnsupportedProtocolVersionError,
 ) -> JSONResponse:
-    error_protocol_version = _error_protocol_version(
-        exc.requested_version,
-        exc.default_protocol_version,
-    )
     return _jsonrpc_error_response(
         request_id=request_id,
-        protocol_version=error_protocol_version,
         error=version_not_supported_error(
             requested_version=exc.requested_version,
             supported_protocol_versions=list(exc.supported_protocol_versions),
@@ -293,22 +278,13 @@ def _unsupported_protocol_http_response(exc: UnsupportedProtocolVersionError) ->
         "supported_protocol_versions": list(exc.supported_protocol_versions),
         "default_protocol_version": exc.default_protocol_version,
     }
-    protocol_version = _error_protocol_version(
-        exc.requested_version,
-        exc.default_protocol_version,
-    )
     return JSONResponse(
         build_http_error_body(
-            protocol_version=protocol_version,
             status_code=400,
             status="INVALID_ARGUMENT",
             message=f"Unsupported A2A version: {exc.requested_version}",
             reason="VERSION_NOT_SUPPORTED",
             metadata=metadata,
-            legacy_payload={
-                "error": "Unsupported A2A version",
-                **metadata,
-            },
         ),
         status_code=400,
     )

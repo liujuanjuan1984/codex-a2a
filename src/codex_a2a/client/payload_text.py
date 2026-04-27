@@ -121,6 +121,24 @@ def extract_text_from_payload(payload: Any) -> str | None:
         if text:
             return text
 
+    task_payload = getattr(payload, "task", None)
+    if task_payload is not None:
+        text = extract_text_from_payload(task_payload)
+        if text:
+            return text
+
+    status_update_payload = getattr(payload, "status_update", None)
+    if status_update_payload is not None:
+        text = extract_text_from_payload(status_update_payload)
+        if text:
+            return text
+
+    artifact_update_payload = getattr(payload, "artifact_update", None)
+    if artifact_update_payload is not None:
+        text = extract_text_from_payload(artifact_update_payload)
+        if text:
+            return text
+
     artifact_payload = getattr(payload, "artifact", None)
     if artifact_payload is not None:
         text = extract_text_from_payload(artifact_payload)

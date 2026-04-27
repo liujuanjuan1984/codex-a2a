@@ -178,9 +178,6 @@ def create_app(settings: Settings) -> FastAPI:
         paths=GZIP_COMPRESSIBLE_PATHS,
     )
     app.router.routes.extend(create_agent_card_routes(agent_card))
-    app.router.routes.extend(
-        create_agent_card_routes(agent_card, card_url="/.well-known/agent.json")
-    )
     app.router.routes.append(
         Route(path="/", endpoint=jsonrpc_app.handle_requests, methods=["POST"])
     )
