@@ -311,14 +311,20 @@ def test_openapi_rest_message_routes_include_schema_examples_and_extension_contr
 
     stream_contract = paths["/v1/message:stream"]["post"].get("x-a2a-streaming")
     assert isinstance(stream_contract, dict)
+    stream_codex_contracts = paths["/v1/message:stream"]["post"].get("x-codex-contracts")
+    assert isinstance(stream_codex_contracts, dict)
+    assert "interrupt_callback" in stream_codex_contracts
 
     root_contracts = paths[CORE_JSONRPC_PATH]["post"].get("x-a2a-extension-contracts")
     assert isinstance(root_contracts, dict)
     assert "session_binding" in root_contracts
     assert "streaming" in root_contracts
-    assert "wire_contract" in root_contracts
+    root_codex_contracts = paths[CORE_JSONRPC_PATH]["post"].get("x-codex-contracts")
+    assert isinstance(root_codex_contracts, dict)
+    assert "wire_contract" in root_codex_contracts
+    assert "compatibility_profile" in root_codex_contracts
 
-    extension_contracts = paths[EXTENSION_JSONRPC_PATH]["post"].get("x-a2a-extension-contracts")
+    extension_contracts = paths[EXTENSION_JSONRPC_PATH]["post"].get("x-codex-contracts")
     assert isinstance(extension_contracts, dict)
     assert "discovery" in extension_contracts
     assert "thread_lifecycle" in extension_contracts
@@ -426,14 +432,19 @@ async def test_agent_card_routes_split_public_and_authenticated_extended_contrac
         extended_extensions = {
             item["uri"]: item for item in extended_card.json()["capabilities"]["extensions"]
         }
-        assert public_extensions["urn:codex-a2a:codex-session-query/v1"].get("params") is None
-        assert (
-            extended_extensions["urn:codex-a2a:codex-session-query/v1"]["params"]["methods"][
-                "list_sessions"
-            ]
-            == "codex.sessions.list"
-        )
+        assert set(public_extensions) == {
+            "urn:a2a:session-binding/v1",
+            "urn:a2a:stream-hints/v1",
+        }
+        assert set(extended_extensions) == {
+            "urn:a2a:session-binding/v1",
+            "urn:a2a:stream-hints/v1",
+        }
         assert len(public_card.content) < len(extended_card.content)
+        public_skill_ids = {item["id"] for item in public_card.json()["skills"]}
+        extended_skill_ids = {item["id"] for item in extended_card.json()["skills"]}
+        assert public_skill_ids == {"codex.chat"}
+        assert "codex.sessions.query" in extended_skill_ids
 
         rpc_card = await client.post(
             "/",
@@ -449,12 +460,10 @@ async def test_agent_card_routes_split_public_and_authenticated_extended_contrac
         rpc_extensions = {
             item["uri"]: item for item in rpc_card.json()["result"]["capabilities"]["extensions"]
         }
-        assert (
-            rpc_extensions["urn:codex-a2a:codex-session-query/v1"]["params"]["methods"][
-                "list_sessions"
-            ]
-            == "codex.sessions.list"
-        )
+        assert set(rpc_extensions) == {
+            "urn:a2a:session-binding/v1",
+            "urn:a2a:stream-hints/v1",
+        }
 
 
 @pytest.mark.asyncio

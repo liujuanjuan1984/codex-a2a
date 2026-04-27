@@ -62,7 +62,7 @@ The service keeps a shared session continuation contract around `metadata.shared
 When Codex asks for permission or answers, the service exposes:
 
 - shared asked/resolved lifecycle metadata in stream status events
-- callback methods through A2A JSON-RPC extensions
+- callback methods through the provider-private JSON-RPC control surface
 - lifecycle and type validation before forwarding callback replies
 
 ## Boundary Model

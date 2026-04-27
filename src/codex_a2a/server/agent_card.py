@@ -37,7 +37,8 @@ def _build_agent_card_description(
             base,
             (
                 "Supports HTTP+JSON and JSON-RPC transports, standard A2A messaging, "
-                "and authenticated extended Agent Card discovery."
+                "authenticated extended Agent Card discovery, and OpenAPI-based "
+                "provider-private contract discovery."
             ),
             (
                 "Single-tenant deployment; all consumers share the same underlying Codex "
@@ -49,12 +50,7 @@ def _build_agent_card_description(
             public_parts.append(f"Deployment project: {project}.")
         return " ".join(public_parts)
 
-    codex_surfaces = [
-        "Codex session-query",
-        "thread lifecycle",
-        "discovery",
-        "interrupt recovery",
-    ]
+    codex_surfaces = ["Codex session-query", "thread lifecycle", "discovery", "interrupt recovery"]
     if runtime_profile.turn_control_enabled:
         codex_surfaces.append("active-turn control")
     if runtime_profile.review_control_enabled:
@@ -66,10 +62,12 @@ def _build_agent_card_description(
         "Supports HTTP+JSON and JSON-RPC transports, standard A2A messaging "
         "(SendMessage, SendStreamingMessage), authenticated extended Agent Card "
         "(GetExtendedAgentCard), task APIs (GetTask, ListTasks, CancelTask, "
-        "SubscribeToTask), shared session-binding and streaming contracts, "
-        f"{codex_surface_summary} extensions, shared interrupt callback "
-        "extensions, a machine-readable compatibility profile, and a "
-        "machine-readable wire contract."
+        "SubscribeToTask), and shared session-binding plus streaming contracts. "
+        "Provider-private control surfaces are published as authenticated skills "
+        "and OpenAPI contracts rather than as negotiated A2A extensions. "
+        f"Provider-private surfaces in this deployment include {codex_surface_summary}, "
+        "shared interrupt callback handling, a machine-readable compatibility profile, "
+        "and a machine-readable wire contract."
     )
     parts: list[str] = [base, summary]
     parts.append(
@@ -116,7 +114,7 @@ def _build_agent_skills(
     include_detailed_contracts: bool,
 ) -> list[AgentSkill]:
     if not include_detailed_contracts:
-        skills = [
+        return [
             AgentSkill(
                 id="codex.chat",
                 name="Codex Chat",
@@ -128,150 +126,7 @@ def _build_agent_skills(
                 input_modes=list(DEFAULT_INPUT_MEDIA_MODES),
                 output_modes=list(DEFAULT_OUTPUT_MEDIA_MODES),
             ),
-            AgentSkill(
-                id="codex.sessions.query",
-                name="Codex Sessions Query",
-                description=(
-                    "Inspect Codex sessions and history through provider-private "
-                    "JSON-RPC extensions."
-                ),
-                tags=["codex", "sessions", "history", "provider-private"],
-                input_modes=list(JSON_RPC_INPUT_MEDIA_MODES),
-                output_modes=list(JSON_OUTPUT_MEDIA_MODES),
-            ),
-            AgentSkill(
-                id="codex.discovery.query",
-                name="Codex Discovery Query",
-                description=(
-                    "List skills, apps, and plugins through provider-private "
-                    "JSON-RPC discovery methods."
-                ),
-                tags=["codex", "discovery", "provider-private"],
-                input_modes=list(JSON_RPC_INPUT_MEDIA_MODES),
-                output_modes=list(JSON_OUTPUT_MEDIA_MODES),
-            ),
-            AgentSkill(
-                id="codex.discovery.watch",
-                name="Codex Discovery Watch",
-                description=(
-                    "Start provider-private discovery watch tasks that emit "
-                    "structured invalidation events through A2A task streams."
-                ),
-                tags=["codex", "discovery", "watch", "provider-private"],
-                input_modes=list(JSON_RPC_INPUT_MEDIA_MODES),
-                output_modes=list(JSON_OUTPUT_MEDIA_MODES),
-            ),
-            AgentSkill(
-                id="codex.threads.control",
-                name="Codex Thread Control",
-                description=(
-                    "Manage provider-private thread fork, archive, unarchive, "
-                    "metadata-update, and watch-release actions."
-                ),
-                tags=["codex", "threads", "control", "provider-private"],
-                input_modes=list(JSON_RPC_INPUT_MEDIA_MODES),
-                output_modes=list(JSON_OUTPUT_MEDIA_MODES),
-            ),
-            AgentSkill(
-                id="codex.threads.watch",
-                name="Codex Thread Watch",
-                description=(
-                    "Start and release provider-private thread lifecycle watch "
-                    "tasks that emit structured events through A2A task streams."
-                ),
-                tags=["codex", "threads", "watch", "provider-private"],
-                input_modes=list(JSON_RPC_INPUT_MEDIA_MODES),
-                output_modes=list(JSON_OUTPUT_MEDIA_MODES),
-            ),
-            AgentSkill(
-                id="codex.interrupt.recovery",
-                name="Codex Interrupt Recovery",
-                description=(
-                    "Rediscover pending interrupt request_ids for the current authenticated "
-                    "caller after reconnecting."
-                ),
-                tags=["codex", "interrupt", "recovery", "provider-private"],
-                input_modes=list(JSON_RPC_INPUT_MEDIA_MODES),
-                output_modes=list(JSON_OUTPUT_MEDIA_MODES),
-            ),
-            AgentSkill(
-                id="codex.interrupt.callback",
-                name="Codex Interrupt Callback",
-                description=("Reply to shared interrupt callbacks emitted during streaming."),
-                tags=["interrupt", "shared"],
-                input_modes=list(JSON_RPC_INPUT_MEDIA_MODES),
-                output_modes=list(JSON_OUTPUT_MEDIA_MODES),
-            ),
         ]
-        if runtime_profile.turn_control_enabled:
-            skills.append(
-                AgentSkill(
-                    id="codex.turns.control",
-                    name="Codex Turn Control",
-                    description=(
-                        "Append additional input to an active regular turn through the "
-                        "provider-private codex.turns.steer method."
-                    ),
-                    tags=["codex", "turns", "control", "provider-private"],
-                    input_modes=list(JSON_RPC_INPUT_MEDIA_MODES),
-                    output_modes=list(JSON_OUTPUT_MEDIA_MODES),
-                )
-            )
-        if runtime_profile.review_control_enabled:
-            skills.extend(
-                [
-                    AgentSkill(
-                        id="codex.review.control",
-                        name="Codex Review Control",
-                        description=(
-                            "Start provider-private review turns against uncommitted changes, "
-                            "base branches, commits, or custom instructions."
-                        ),
-                        tags=["codex", "review", "control", "provider-private"],
-                        input_modes=list(JSON_RPC_INPUT_MEDIA_MODES),
-                        output_modes=list(JSON_OUTPUT_MEDIA_MODES),
-                    ),
-                    AgentSkill(
-                        id="codex.review.watch",
-                        name="Codex Review Watch",
-                        description=(
-                            "Start provider-private review watch tasks that emit "
-                            "coarse-grained lifecycle events through A2A task streams."
-                        ),
-                        tags=["codex", "review", "watch", "provider-private"],
-                        input_modes=list(JSON_RPC_INPUT_MEDIA_MODES),
-                        output_modes=list(JSON_OUTPUT_MEDIA_MODES),
-                    ),
-                ]
-            )
-        if runtime_profile.exec_control_enabled:
-            skills.extend(
-                [
-                    AgentSkill(
-                        id="codex.exec.control",
-                        name="Codex Exec Control",
-                        description=(
-                            "Start and control standalone interactive command execution "
-                            "through provider-private JSON-RPC extensions."
-                        ),
-                        tags=["codex", "exec", "control", "provider-private"],
-                        input_modes=list(JSON_RPC_INPUT_MEDIA_MODES),
-                        output_modes=list(JSON_OUTPUT_MEDIA_MODES),
-                    ),
-                    AgentSkill(
-                        id="codex.exec.stream",
-                        name="Codex Exec Stream",
-                        description=(
-                            "Consume interactive exec stdout/stderr and terminal summaries "
-                            "through A2A task streams after codex.exec.start."
-                        ),
-                        tags=["codex", "exec", "stream", "provider-private"],
-                        input_modes=list(JSON_RPC_INPUT_MEDIA_MODES),
-                        output_modes=list(TEXT_OUTPUT_MEDIA_MODES),
-                    ),
-                ]
-            )
-        return skills
 
     skills = [
         AgentSkill(
@@ -306,12 +161,12 @@ def _build_agent_skills(
             id="codex.discovery.query",
             name="Codex Discovery Query",
             description=(
-                "List skills, apps, plugins, and stable path identifiers via "
-                "codex.discovery.* query methods."
+                "List runtime skill scopes, apps, plugins, and stable path identifiers via "
+                "provider-private codex.discovery.* query methods."
             ),
             tags=["codex", "discovery", "skills", "apps", "plugins"],
             examples=[
-                "List available Codex skills (method codex.discovery.skills.list).",
+                "List runtime-discovered Codex skill scopes (method codex.discovery.skills.list).",
                 "List available apps or plugins before constructing mention.path values.",
             ],
             input_modes=list(JSON_RPC_INPUT_MEDIA_MODES),
@@ -560,7 +415,6 @@ def _build_agent_card(
             streaming=True,
             extended_agent_card=True,
             extensions=build_agent_extensions(
-                settings=settings,
                 runtime_profile=runtime_profile,
                 include_detailed_contracts=include_detailed_contracts,
             ),

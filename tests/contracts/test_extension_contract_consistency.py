@@ -3,24 +3,12 @@ from pathlib import Path
 import httpx
 import pytest
 
-from codex_a2a.a2a_proto import proto_to_python
 from codex_a2a.contracts.extensions import (
-    COMPATIBILITY_PROFILE_EXTENSION_URI,
     CORE_JSONRPC_PATH,
-    DISCOVERY_EXTENSION_URI,
-    EXEC_CONTROL_EXTENSION_URI,
     EXTENSION_JSONRPC_PATH,
-    INTERRUPT_CALLBACK_EXTENSION_URI,
-    INTERRUPT_RECOVERY_EXTENSION_URI,
-    REVIEW_CONTROL_EXTENSION_URI,
     SESSION_BINDING_EXTENSION_URI,
     SESSION_QUERY_DEFAULT_LIMIT,
-    SESSION_QUERY_EXTENSION_URI,
-    SESSION_QUERY_MAX_LIMIT,
     STREAMING_EXTENSION_URI,
-    THREAD_LIFECYCLE_EXTENSION_URI,
-    TURN_CONTROL_EXTENSION_URI,
-    WIRE_CONTRACT_EXTENSION_URI,
     build_capability_snapshot,
     build_compatibility_profile_params,
     build_discovery_extension_params,
@@ -38,6 +26,9 @@ from codex_a2a.contracts.extensions import (
 from codex_a2a.profile.runtime import build_runtime_profile
 from codex_a2a.server.agent_card import build_authenticated_extended_agent_card
 from codex_a2a.server.application import create_app
+from codex_a2a.server.openapi_contract_fragments import (
+    build_openapi_codex_contracts,
+)
 from tests.support.dummy_clients import DummySessionQueryCodexClient as DummyCodexClient
 from tests.support.settings import make_settings
 
@@ -64,8 +55,13 @@ def _example_params_include_field(payload: object, dotted_field: str) -> bool:
     return True
 
 
-def _params(extension) -> dict[str, object]:  # noqa: ANN001
-    return proto_to_python(extension.params)
+def _codex_contracts(settings) -> dict[str, dict[str, object]]:  # noqa: ANN001
+    runtime_profile = build_runtime_profile(settings)
+    return build_openapi_codex_contracts(
+        settings=settings,
+        protocol_version=settings.a2a_protocol_version,
+        runtime_profile=runtime_profile,
+    )
 
 
 def test_capability_snapshot_tracks_session_query_only_surface() -> None:
@@ -81,91 +77,68 @@ def test_capability_snapshot_tracks_session_query_only_surface() -> None:
     assert "codex.sessions.prompt_async" not in snapshot.supported_jsonrpc_methods
 
 
-def test_session_query_extension_ssot_matches_agent_card_contract() -> None:
+def test_session_query_contract_ssot_matches_openapi_contract() -> None:
     settings = make_settings(a2a_bearer_token="test-token")
     runtime_profile = build_runtime_profile(settings)
-    card = build_authenticated_extended_agent_card(settings)
-    ext_by_uri = {ext.uri: ext for ext in card.capabilities.extensions or []}
-
-    session_query = ext_by_uri[SESSION_QUERY_EXTENSION_URI]
     expected = build_session_query_extension_params(
         runtime_profile=runtime_profile,
     )
+    session_query = _codex_contracts(settings)["session_query"]
 
-    assert _params(session_query) == expected, (
+    assert session_query == expected, (
         "Session query extension drifted from extension_contracts SSOT."
     )
-    assert _params(session_query)["pagination"]["default_limit"] == SESSION_QUERY_DEFAULT_LIMIT
-    assert _params(session_query)["pagination"]["max_limit"] == SESSION_QUERY_MAX_LIMIT
-    assert _params(session_query)["pagination"]["behavior"] == "mixed"
+    assert session_query["pagination"]["default_limit"] == SESSION_QUERY_DEFAULT_LIMIT
+    assert session_query["pagination"]["behavior"] == "mixed"
 
 
-def test_discovery_extension_ssot_matches_agent_card_contract() -> None:
+def test_discovery_contract_ssot_matches_openapi_contract() -> None:
     settings = make_settings(a2a_bearer_token="test-token")
     runtime_profile = build_runtime_profile(settings)
-    card = build_authenticated_extended_agent_card(settings)
-    ext_by_uri = {ext.uri: ext for ext in card.capabilities.extensions or []}
-
-    discovery = ext_by_uri[DISCOVERY_EXTENSION_URI]
     expected = build_discovery_extension_params(runtime_profile=runtime_profile)
+    discovery = _codex_contracts(settings)["discovery"]
 
-    assert _params(discovery) == expected, (
-        "Discovery extension drifted from extension_contracts SSOT."
-    )
+    assert discovery == expected, "Discovery extension drifted from extension_contracts SSOT."
 
 
-def test_thread_lifecycle_extension_ssot_matches_agent_card_contract() -> None:
+def test_thread_lifecycle_contract_ssot_matches_openapi_contract() -> None:
     settings = make_settings(a2a_bearer_token="test-token")
     runtime_profile = build_runtime_profile(settings)
-    card = build_authenticated_extended_agent_card(settings)
-    ext_by_uri = {ext.uri: ext for ext in card.capabilities.extensions or []}
-
-    thread_lifecycle = ext_by_uri[THREAD_LIFECYCLE_EXTENSION_URI]
     expected = build_thread_lifecycle_extension_params(runtime_profile=runtime_profile)
+    thread_lifecycle = _codex_contracts(settings)["thread_lifecycle"]
 
-    assert _params(thread_lifecycle) == expected, (
+    assert thread_lifecycle == expected, (
         "Thread lifecycle extension drifted from extension_contracts SSOT."
     )
 
 
-def test_interrupt_recovery_extension_ssot_matches_agent_card_contract() -> None:
+def test_interrupt_recovery_contract_ssot_matches_openapi_contract() -> None:
     settings = make_settings(a2a_bearer_token="test-token")
     runtime_profile = build_runtime_profile(settings)
-    card = build_authenticated_extended_agent_card(settings)
-    ext_by_uri = {ext.uri: ext for ext in card.capabilities.extensions or []}
-
-    interrupt_recovery = ext_by_uri[INTERRUPT_RECOVERY_EXTENSION_URI]
     expected = build_interrupt_recovery_extension_params(runtime_profile=runtime_profile)
+    interrupt_recovery = _codex_contracts(settings)["interrupt_recovery"]
 
-    assert _params(interrupt_recovery) == expected, (
+    assert interrupt_recovery == expected, (
         "Interrupt recovery extension drifted from extension_contracts SSOT."
     )
 
 
-def test_turn_control_extension_ssot_matches_agent_card_contract() -> None:
+def test_turn_control_contract_ssot_matches_openapi_contract() -> None:
     settings = make_settings(a2a_bearer_token="test-token")
     runtime_profile = build_runtime_profile(settings)
-    card = build_authenticated_extended_agent_card(settings)
-    ext_by_uri = {ext.uri: ext for ext in card.capabilities.extensions or []}
-
-    turn_control = ext_by_uri[TURN_CONTROL_EXTENSION_URI]
     expected = build_turn_control_extension_params(runtime_profile=runtime_profile)
+    turn_control = _codex_contracts(settings)["turn_control"]
 
-    assert _params(turn_control) == expected, (
-        "Turn control extension drifted from extension_contracts SSOT."
-    )
+    assert turn_control == expected, "Turn control extension drifted from extension_contracts SSOT."
 
 
-def test_review_control_extension_ssot_matches_agent_card_contract() -> None:
+def test_review_control_contract_ssot_matches_openapi_contract() -> None:
     settings = make_settings(a2a_bearer_token="test-token")
     runtime_profile = build_runtime_profile(settings)
-    card = build_authenticated_extended_agent_card(settings)
-    ext_by_uri = {ext.uri: ext for ext in card.capabilities.extensions or []}
-
-    review_control = ext_by_uri[REVIEW_CONTROL_EXTENSION_URI]
     expected = build_review_control_extension_params(runtime_profile=runtime_profile)
+    review_control = _codex_contracts(settings)["review_control"]
 
-    assert _params(review_control) == expected, (
+    assert review_control == expected, (
         "Review control extension drifted from extension_contracts SSOT."
     )
 
@@ -192,9 +165,7 @@ async def test_session_query_runtime_result_envelope_matches_declared_contract(
         a2a_log_payloads=False,
         codex_timeout=1.0,
     )
-    card = build_authenticated_extended_agent_card(settings)
-    ext_by_uri = {ext.uri: ext for ext in card.capabilities.extensions or []}
-    method_contracts = _params(ext_by_uri[SESSION_QUERY_EXTENSION_URI])["method_contracts"]
+    method_contracts = _codex_contracts(settings)["session_query"]["method_contracts"]
     expected_result = method_contracts[method]["result"]
 
     dummy = DummyCodexClient(settings)
@@ -220,11 +191,9 @@ async def test_session_query_runtime_result_envelope_matches_declared_contract(
 
 def test_session_query_result_envelope_omits_method_level_contracts() -> None:
     settings = make_settings(a2a_bearer_token="test-token")
-    card = build_authenticated_extended_agent_card(settings)
-    ext_by_uri = {ext.uri: ext for ext in card.capabilities.extensions or []}
-    session_query = ext_by_uri[SESSION_QUERY_EXTENSION_URI]
+    session_query = _codex_contracts(settings)["session_query"]
 
-    assert _params(session_query)["result_envelope"] == {}
+    assert session_query["result_envelope"] == {}
 
 
 def test_openapi_jsonrpc_contract_extension_matches_ssot() -> None:
@@ -236,25 +205,23 @@ def test_openapi_jsonrpc_contract_extension_matches_ssot() -> None:
     assert isinstance(core_contract, dict), (
         "POST / OpenAPI is missing x-a2a-extension-contracts metadata."
     )
-    extension_contract = openapi["paths"][EXTENSION_JSONRPC_PATH]["post"].get(
-        "x-a2a-extension-contracts"
-    )
-    assert isinstance(extension_contract, dict), (
-        f"POST {EXTENSION_JSONRPC_PATH} OpenAPI is missing x-a2a-extension-contracts metadata."
+    codex_contract = openapi["paths"][EXTENSION_JSONRPC_PATH]["post"].get("x-codex-contracts")
+    assert isinstance(codex_contract, dict), (
+        f"POST {EXTENSION_JSONRPC_PATH} OpenAPI is missing x-codex-contracts metadata."
     )
 
     session_binding = core_contract["session_binding"]
     streaming = core_contract["streaming"]
-    session_query = extension_contract["session_query"]
-    discovery = extension_contract["discovery"]
-    interrupt_recovery = extension_contract["interrupt_recovery"]
-    interrupt_callback = extension_contract["interrupt_callback"]
-    exec_control = extension_contract["exec_control"]
-    thread_lifecycle = extension_contract["thread_lifecycle"]
-    turn_control = extension_contract["turn_control"]
-    review_control = extension_contract["review_control"]
-    wire_contract = extension_contract["wire_contract"]
-    compatibility_profile = extension_contract["compatibility_profile"]
+    session_query = codex_contract["session_query"]
+    discovery = codex_contract["discovery"]
+    interrupt_recovery = codex_contract["interrupt_recovery"]
+    interrupt_callback = codex_contract["interrupt_callback"]
+    exec_control = codex_contract["exec_control"]
+    thread_lifecycle = codex_contract["thread_lifecycle"]
+    turn_control = codex_contract["turn_control"]
+    review_control = codex_contract["review_control"]
+    wire_contract = codex_contract["wire_contract"]
+    compatibility_profile = codex_contract["compatibility_profile"]
     expected_session_binding = build_session_binding_extension_params(
         runtime_profile=runtime_profile,
     )
@@ -333,38 +300,22 @@ def test_openapi_jsonrpc_contract_extension_matches_ssot() -> None:
     ), "OpenAPI protocol compatibility summary drifted between profile and wire contract."
 
 
-def test_openapi_and_agent_card_extension_contracts_match() -> None:
+def test_openapi_and_agent_card_contract_partitions_match() -> None:
     settings = make_settings(a2a_bearer_token="test-token")
     card = build_authenticated_extended_agent_card(settings)
     ext_by_uri = {ext.uri: ext for ext in card.capabilities.extensions or []}
     openapi = create_app(settings).openapi()
     core_contract = openapi["paths"][CORE_JSONRPC_PATH]["post"]["x-a2a-extension-contracts"]
-    extension_contract = openapi["paths"][EXTENSION_JSONRPC_PATH]["post"][
-        "x-a2a-extension-contracts"
-    ]
+    core_codex_contract = openapi["paths"][CORE_JSONRPC_PATH]["post"]["x-codex-contracts"]
+    extension_codex_contract = openapi["paths"][EXTENSION_JSONRPC_PATH]["post"]["x-codex-contracts"]
 
     assert core_contract["session_binding"] == ext_by_uri[SESSION_BINDING_EXTENSION_URI].params
     assert core_contract["streaming"] == ext_by_uri[STREAMING_EXTENSION_URI].params
-    assert extension_contract["session_query"] == ext_by_uri[SESSION_QUERY_EXTENSION_URI].params
-    assert extension_contract["discovery"] == ext_by_uri[DISCOVERY_EXTENSION_URI].params
+    assert set(ext_by_uri) == {SESSION_BINDING_EXTENSION_URI, STREAMING_EXTENSION_URI}
+    assert core_codex_contract["wire_contract"] == extension_codex_contract["wire_contract"]
     assert (
-        extension_contract["thread_lifecycle"] == ext_by_uri[THREAD_LIFECYCLE_EXTENSION_URI].params
-    )
-    assert (
-        extension_contract["interrupt_recovery"]
-        == ext_by_uri[INTERRUPT_RECOVERY_EXTENSION_URI].params
-    )
-    assert extension_contract["turn_control"] == ext_by_uri[TURN_CONTROL_EXTENSION_URI].params
-    assert extension_contract["review_control"] == ext_by_uri[REVIEW_CONTROL_EXTENSION_URI].params
-    assert extension_contract["exec_control"] == ext_by_uri[EXEC_CONTROL_EXTENSION_URI].params
-    assert (
-        extension_contract["interrupt_callback"]
-        == ext_by_uri[INTERRUPT_CALLBACK_EXTENSION_URI].params
-    )
-    assert extension_contract["wire_contract"] == ext_by_uri[WIRE_CONTRACT_EXTENSION_URI].params
-    assert (
-        extension_contract["compatibility_profile"]
-        == ext_by_uri[COMPATIBILITY_PROFILE_EXTENSION_URI].params
+        core_codex_contract["compatibility_profile"]
+        == extension_codex_contract["compatibility_profile"]
     )
 
 
@@ -518,7 +469,7 @@ def test_openapi_jsonrpc_examples_match_declared_extension_contracts() -> None:
     settings = make_settings(a2a_bearer_token="test-token")
     openapi = create_app(settings).openapi()
     post = openapi["paths"][EXTENSION_JSONRPC_PATH]["post"]
-    extension_contracts = post["x-a2a-extension-contracts"]
+    extension_contracts = post["x-codex-contracts"]
     session_method_contracts = extension_contracts["session_query"]["method_contracts"]
     discovery_method_contracts = extension_contracts["discovery"]["method_contracts"]
     interrupt_recovery_method_contracts = extension_contracts["interrupt_recovery"][
@@ -579,14 +530,14 @@ def test_openapi_jsonrpc_examples_drop_removed_session_control_methods() -> None
     post = openapi["paths"][EXTENSION_JSONRPC_PATH]["post"]
     examples = post["requestBody"]["content"]["application/json"]["examples"]
     methods = {example["value"]["method"] for example in examples.values()}
-    session_contracts = post["x-a2a-extension-contracts"]["session_query"]["method_contracts"]
+    session_contracts = post["x-codex-contracts"]["session_query"]["method_contracts"]
 
     assert "codex.sessions.command" not in methods
     assert "codex.sessions.prompt_async" not in methods
     assert "codex.sessions.shell" not in session_contracts
     assert "codex.sessions.command" not in session_contracts
     assert "codex.sessions.prompt_async" not in session_contracts
-    assert "control_methods" not in post["x-a2a-extension-contracts"]["session_query"]
+    assert "control_methods" not in post["x-codex-contracts"]["session_query"]
 
 
 def test_openapi_exec_examples_declare_task_streaming_contract() -> None:
@@ -594,8 +545,8 @@ def test_openapi_exec_examples_declare_task_streaming_contract() -> None:
     openapi = create_app(settings).openapi()
     post = openapi["paths"][EXTENSION_JSONRPC_PATH]["post"]
     examples = post["requestBody"]["content"]["application/json"]["examples"]
-    exec_contracts = post["x-a2a-extension-contracts"]["exec_control"]["method_contracts"]
-    streaming_contract = post["x-a2a-extension-contracts"]["exec_control"]["task_streaming"]
+    exec_contracts = post["x-codex-contracts"]["exec_control"]["method_contracts"]
+    streaming_contract = post["x-codex-contracts"]["exec_control"]["task_streaming"]
 
     assert examples["exec_start"]["value"]["method"] == "codex.exec.start"
     assert examples["exec_write"]["value"]["method"] == "codex.exec.write"

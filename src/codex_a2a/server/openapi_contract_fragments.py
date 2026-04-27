@@ -474,15 +474,23 @@ def build_rest_message_openapi_examples() -> dict[str, Any]:
     }
 
 
-def build_openapi_extension_contracts(
+def build_openapi_a2a_extension_contracts(
+    *,
+    runtime_profile: RuntimeProfile,
+) -> dict[str, dict[str, Any]]:
+    return {
+        "session_binding": build_session_binding_extension_params(runtime_profile=runtime_profile),
+        "streaming": build_streaming_extension_params(),
+    }
+
+
+def build_openapi_codex_contracts(
     *,
     settings: Settings,
     protocol_version: str,
     runtime_profile: RuntimeProfile,
 ) -> dict[str, dict[str, Any]]:
     return {
-        "session_binding": build_session_binding_extension_params(runtime_profile=runtime_profile),
-        "streaming": build_streaming_extension_params(),
         "session_query": build_session_query_extension_params(runtime_profile=runtime_profile),
         "discovery": build_discovery_extension_params(runtime_profile=runtime_profile),
         "thread_lifecycle": build_thread_lifecycle_extension_params(

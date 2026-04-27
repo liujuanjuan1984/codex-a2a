@@ -11,7 +11,7 @@ This document explains the compatibility promises this repository currently trie
 
 The repository pins the SDK version in `pyproject.toml` and validates the published CLI build in CI. Upgrade the SDK deliberately rather than relying on floating dependency resolution.
 
-The authenticated compatibility profile and wire contract publish `default_protocol_version`, `supported_protocol_versions`, and `protocol_compatibility`. Request-time `A2A-Version` negotiation now targets the repository's `1.0` baseline only, and the published contracts should describe the implemented `1.0` transport surface rather than any legacy compatibility line.
+The OpenAPI-published compatibility profile and wire contract publish `default_protocol_version`, `supported_protocol_versions`, and `protocol_compatibility`. Request-time `A2A-Version` negotiation now targets the repository's `1.0` baseline only, and the published contracts should describe the implemented `1.0` transport surface rather than any legacy compatibility line.
 
 ## Contract Honesty
 
@@ -19,7 +19,7 @@ Machine-readable discovery surfaces must reflect actual runtime behavior:
 
 - public Agent Card
 - authenticated extended card
-- OpenAPI metadata
+- OpenAPI metadata, including `x-a2a-extension-contracts` and `x-codex-contracts`
 - JSON-RPC wire contract
 - compatibility profile
 
@@ -30,6 +30,7 @@ Open-source consumption guidance:
 - Treat the core A2A send / stream / task methods as the portable baseline.
 - Treat `POST /` as the core A2A JSON-RPC surface and `POST /codex/jsonrpc` as the provider-private extension surface.
 - Treat `urn:a2a:*` entries in this repository as shared repo-family conventions, not as claims that they are part of the A2A core baseline.
+- Treat `a2a.interrupt.*` reply methods as a shared provider-private callback contract on `POST /codex/jsonrpc`, not as core A2A methods or Agent Card-negotiated extensions.
 - Treat `codex.*` methods plus `metadata.codex.directory` and `metadata.codex.execution` as a Codex-specific control plane layered on top of the portable A2A surface.
 - Treat [extension-specifications.md](./extension-specifications.md) as the stable URI/spec index, not as the main usage guide.
 
@@ -91,7 +92,7 @@ Execution-environment boundary fields are also published through the runtime pro
 ## Extension Stability
 
 - Shared metadata and extension contracts should stay synchronized across Agent Card, OpenAPI, and runtime behavior.
-- Public Agent Card should stay intentionally minimal. Detailed extension params belong in the authenticated extended card and OpenAPI, not back in the anonymous discovery surface.
+- Public Agent Card should stay intentionally minimal. Negotiated shared extension params belong in `capabilities.extensions`; provider-private contract payloads belong in OpenAPI `x-codex-contracts`, with the authenticated extended card focused on skill discovery and deployment-aware examples.
 - Product-specific extensions should remain stable within the current major line unless explicitly documented otherwise.
 - Deployment-conditional methods must be declared as conditional rather than silently disappearing.
 - Rich input mapping is compatibility-sensitive across the core A2A message surface and `codex.turns.steer`. Changes to supported part types, `Part(url|raw)` image handling, or `Part(data)` mention/skill mapping should be treated as wire-level behavior changes.
@@ -140,8 +141,9 @@ This repository distinguishes between three layers:
 - core A2A surface
   - standard send / stream / task methods
 - shared extensions
-  - repo-family conventions such as session binding, stream hints, and interrupt callbacks (`permission`, `question`, `permissions`, and `elicitation` reply surfaces)
-- Codex-specific extensions
+  - repo-family conventions such as session binding and stream hints
+- provider-private control contracts
+  - `a2a.interrupt.*` reply methods on `POST /codex/jsonrpc`
   - `codex.*` JSON-RPC methods plus `metadata.codex.directory` and `metadata.codex.execution`
   - this now includes:
     - session query
@@ -164,6 +166,7 @@ Discovery note:
 - `codex.review.watch` is the declared review lifecycle watch-task bridge for `review.started`, `review.status.changed`, `review.completed`, and `review.failed`.
 - `codex.review.start` remains a control-handle surface; clients should use `codex.review.watch` plus `SubscribeToTask` for review lifecycle observation.
 - `codex.interrupts.list` is always-on but adapter-local and identity-scoped. `codex.turns.steer`, `codex.review.*`, and `codex.exec.*` remain deployment-conditional surfaces and should be discovered from machine-readable contracts before use.
+- `a2a.interrupt.*` reply methods remain shared repo-family callback contracts, but they are published through provider-private OpenAPI contracts rather than Agent Card extension negotiation.
 - `thread/unsubscribe` is intentionally excluded from the stable public contract until this service exposes connection-safe subscription ownership.
 - This repository does not claim a generic standalone server-push JSON-RPC transport for those notifications; the compatibility contract is the watch-task bridge published through Agent Card and OpenAPI.
 

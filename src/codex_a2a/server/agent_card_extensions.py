@@ -4,33 +4,11 @@ from typing import Any
 
 from a2a.types import AgentExtension
 
-from codex_a2a.config import Settings
 from codex_a2a.contracts.extensions import (
-    COMPATIBILITY_PROFILE_EXTENSION_URI,
-    DISCOVERY_EXTENSION_URI,
-    EXEC_CONTROL_EXTENSION_URI,
-    EXTENSION_JSONRPC_PATH,
-    INTERRUPT_CALLBACK_EXTENSION_URI,
-    INTERRUPT_RECOVERY_EXTENSION_URI,
-    REVIEW_CONTROL_EXTENSION_URI,
     SESSION_BINDING_EXTENSION_URI,
-    SESSION_QUERY_EXTENSION_URI,
     STREAMING_EXTENSION_URI,
-    THREAD_LIFECYCLE_EXTENSION_URI,
-    TURN_CONTROL_EXTENSION_URI,
-    WIRE_CONTRACT_EXTENSION_URI,
-    build_compatibility_profile_params,
-    build_discovery_extension_params,
-    build_exec_control_extension_params,
-    build_interrupt_callback_extension_params,
-    build_interrupt_recovery_extension_params,
-    build_review_control_extension_params,
     build_session_binding_extension_params,
-    build_session_query_extension_params,
     build_streaming_extension_params,
-    build_thread_lifecycle_extension_params,
-    build_turn_control_extension_params,
-    build_wire_contract_extension_params,
 )
 from codex_a2a.profile.runtime import RuntimeProfile
 
@@ -79,7 +57,6 @@ def _build_public_streaming_extension_params(
 
 def build_agent_extensions(
     *,
-    settings: Settings,
     runtime_profile: RuntimeProfile,
     include_detailed_contracts: bool,
 ) -> list[AgentExtension]:
@@ -87,42 +64,6 @@ def build_agent_extensions(
         runtime_profile=runtime_profile,
     )
     streaming_extension_params = build_streaming_extension_params()
-    session_query_extension_params = build_session_query_extension_params(
-        runtime_profile=runtime_profile,
-    )
-    discovery_extension_params = build_discovery_extension_params(
-        runtime_profile=runtime_profile,
-    )
-    thread_lifecycle_extension_params = build_thread_lifecycle_extension_params(
-        runtime_profile=runtime_profile,
-    )
-    turn_control_extension_params = build_turn_control_extension_params(
-        runtime_profile=runtime_profile,
-    )
-    review_control_extension_params = build_review_control_extension_params(
-        runtime_profile=runtime_profile,
-    )
-    exec_control_extension_params = build_exec_control_extension_params(
-        runtime_profile=runtime_profile,
-    )
-    interrupt_callback_extension_params = build_interrupt_callback_extension_params(
-        runtime_profile=runtime_profile,
-    )
-    interrupt_recovery_extension_params = build_interrupt_recovery_extension_params(
-        runtime_profile=runtime_profile,
-    )
-    wire_contract_extension_params = build_wire_contract_extension_params(
-        protocol_version=settings.a2a_protocol_version,
-        supported_protocol_versions=settings.a2a_supported_protocol_versions,
-        default_protocol_version=settings.a2a_protocol_version,
-        runtime_profile=runtime_profile,
-    )
-    compatibility_profile_params = build_compatibility_profile_params(
-        protocol_version=settings.a2a_protocol_version,
-        supported_protocol_versions=settings.a2a_supported_protocol_versions,
-        default_protocol_version=settings.a2a_protocol_version,
-        runtime_profile=runtime_profile,
-    )
 
     return [
         AgentExtension(
@@ -161,112 +102,5 @@ def build_agent_extensions(
                 if include_detailed_contracts
                 else _build_public_streaming_extension_params(streaming_extension_params)
             ),
-        ),
-        AgentExtension(
-            uri=SESSION_QUERY_EXTENSION_URI,
-            required=False,
-            description=(
-                "Support Codex session list/history queries via custom JSON-RPC methods "
-                f"on the dedicated provider-private extension endpoint ({EXTENSION_JSONRPC_PATH})."
-            ),
-            params=session_query_extension_params if include_detailed_contracts else None,
-        ),
-        AgentExtension(
-            uri=DISCOVERY_EXTENSION_URI,
-            required=False,
-            description=(
-                "Expose read-only skills/apps/plugins discovery plus a task-stream "
-                "notification bridge for invalidation and refresh signals."
-            ),
-            params=discovery_extension_params if include_detailed_contracts else None,
-        ),
-        AgentExtension(
-            uri=THREAD_LIFECYCLE_EXTENSION_URI,
-            required=False,
-            description=(
-                "Expose provider-private thread lifecycle control plus a task-stream "
-                "notification bridge for lifecycle status, archive, and restore "
-                "signals."
-            ),
-            params=thread_lifecycle_extension_params if include_detailed_contracts else None,
-        ),
-        AgentExtension(
-            uri=TURN_CONTROL_EXTENSION_URI,
-            required=False,
-            description=(
-                "Expose provider-private active-turn steering through the custom "
-                f"JSON-RPC method codex.turns.steer on {EXTENSION_JSONRPC_PATH}."
-            ),
-            params=turn_control_extension_params if include_detailed_contracts else None,
-        ),
-        AgentExtension(
-            uri=REVIEW_CONTROL_EXTENSION_URI,
-            required=False,
-            description=(
-                "Expose provider-private reviewer control plus a task-stream "
-                "watch bridge through the custom JSON-RPC methods "
-                f"codex.review.start and codex.review.watch on {EXTENSION_JSONRPC_PATH}."
-            ),
-            params=review_control_extension_params if include_detailed_contracts else None,
-        ),
-        AgentExtension(
-            uri=EXEC_CONTROL_EXTENSION_URI,
-            required=False,
-            description=(
-                "Expose standalone interactive command execution via custom JSON-RPC "
-                "methods codex.exec.start, codex.exec.write, codex.exec.resize, and "
-                f"codex.exec.terminate on {EXTENSION_JSONRPC_PATH}."
-            ),
-            params=exec_control_extension_params if include_detailed_contracts else None,
-        ),
-        AgentExtension(
-            uri=INTERRUPT_RECOVERY_EXTENSION_URI,
-            required=False,
-            description=(
-                "Expose adapter-local interrupt recovery so authenticated clients can "
-                "rediscover pending interrupt request_ids after reconnecting."
-            ),
-            params=(
-                interrupt_recovery_extension_params
-                if include_detailed_contracts
-                else _select_public_extension_params(
-                    interrupt_recovery_extension_params,
-                    keys=("methods", "supported_interrupt_types", "identity_scope"),
-                )
-            ),
-        ),
-        AgentExtension(
-            uri=INTERRUPT_CALLBACK_EXTENSION_URI,
-            required=False,
-            description=(
-                "Handle interactive interrupt callbacks generated during "
-                "streaming through shared JSON-RPC methods."
-            ),
-            params=(
-                interrupt_callback_extension_params
-                if include_detailed_contracts
-                else _select_public_extension_params(
-                    interrupt_callback_extension_params,
-                    keys=("methods", "supported_interrupt_events", "request_id_field"),
-                )
-            ),
-        ),
-        AgentExtension(
-            uri=COMPATIBILITY_PROFILE_EXTENSION_URI,
-            required=False,
-            description=(
-                "Machine-readable compatibility profile for the current A2A core "
-                "baseline, declared custom extensions, and retention policy."
-            ),
-            params=compatibility_profile_params if include_detailed_contracts else None,
-        ),
-        AgentExtension(
-            uri=WIRE_CONTRACT_EXTENSION_URI,
-            required=False,
-            description=(
-                "Declare the current JSON-RPC/HTTP method boundary and the "
-                "unsupported method error contract for generic A2A clients."
-            ),
-            params=wire_contract_extension_params if include_detailed_contracts else None,
         ),
     ]

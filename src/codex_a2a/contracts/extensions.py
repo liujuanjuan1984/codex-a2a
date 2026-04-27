@@ -352,12 +352,14 @@ def build_compatibility_profile_params(
             TASKS_RESUBSCRIBE_METHOD: resubscribe_behavior,
         },
         "extension_taxonomy": {
-            "shared_extensions": [
+            "shared_agent_card_extensions": [
                 SESSION_BINDING_EXTENSION_URI,
                 STREAMING_EXTENSION_URI,
+            ],
+            "shared_provider_private_contracts": [
                 INTERRUPT_CALLBACK_EXTENSION_URI,
             ],
-            "codex_extensions": [
+            "codex_provider_private_contracts": [
                 SESSION_QUERY_EXTENSION_URI,
                 DISCOVERY_EXTENSION_URI,
                 THREAD_LIFECYCLE_EXTENSION_URI,
@@ -384,8 +386,13 @@ def build_compatibility_profile_params(
                 "of the A2A core baseline."
             ),
             (
-                "Treat shared session-binding, stream-hints, and interrupt callback surfaces "
-                "as shared extensions rather than provider-private Codex capabilities."
+                "Treat shared session-binding and stream-hints as the negotiated "
+                "Agent Card extension surface for this deployment."
+            ),
+            (
+                "Treat a2a.interrupt.* callback methods as a shared provider-private "
+                "contract exposed on the extension endpoint rather than as core A2A "
+                "behavior or an Agent Card-negotiated extension."
             ),
             (
                 f"Use {CORE_JSONRPC_PATH} for core A2A JSON-RPC methods and "

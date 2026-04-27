@@ -10,9 +10,13 @@ This guide covers runtime configuration, transport contracts, streaming/session/
   - Provider-private extension JSON-RPC (`POST /codex/jsonrpc`)
 - Agent Card publishes both HTTP+JSON and JSON-RPC endpoints through `supported_interfaces[]`.
 - The public Agent Card at `/.well-known/agent-card.json` is intentionally slimmed to the minimum discovery surface.
-- Detailed provider-private contracts are available through the authenticated extended card:
+- The authenticated extended card exposes the authenticated provider-private skill inventory and deployment-aware examples:
   - preferred: JSON-RPC `GetExtendedAgentCard`
   - HTTP core route: `GET /v1/extendedAgentCard`
+- Full provider-private contract payloads are available through OpenAPI metadata:
+  - `GET /openapi.json`
+  - `x-a2a-extension-contracts` for negotiated shared extensions
+  - `x-codex-contracts` for provider-private control contracts
 - Agent Card responses publish `ETag` and `Cache-Control`; clients should revalidate instead of repeatedly fetching full payloads.
 - Larger discovery documents support gzip compression on these HTTP GET routes:
   - `/.well-known/agent-card.json`
@@ -22,11 +26,11 @@ This guide covers runtime configuration, transport contracts, streaming/session/
 - Payload schema is transport-specific and should not be mixed:
   - REST send payload uses `message.parts` and role values like `ROLE_USER`
   - JSON-RPC `SendMessage` payload uses `params.message.parts` and role values like `ROLE_USER`
-- The core JSON-RPC entrypoint, extension JSON-RPC entrypoint, and authenticated extended card publish the explicit wire contract for the supported method set and unsupported-method error shape.
+- OpenAPI metadata on the core JSON-RPC entrypoint and provider-private extension entrypoint publishes the explicit wire contract for the supported method set and unsupported-method error shape.
 
 ## Wire Contract
 
-The full machine-readable wire contract is published through the authenticated extended card and OpenAPI metadata. The public Agent Card keeps only the minimum capability declarations needed for discovery.
+The full machine-readable wire contract is published through OpenAPI metadata. The authenticated extended card mirrors the same provider-private skill partition for authenticated discovery, while the public Agent Card keeps only the minimum capability declarations needed for discovery.
 
 Use it to answer:
 
@@ -70,7 +74,8 @@ Unsupported method contract:
 Consumer guidance:
 
 - Discover the current method set from Agent Card / OpenAPI before calling custom JSON-RPC methods.
-- Fetch the authenticated extended card when you need the detailed method matrix, provider-private notes, or full extension params.
+- Fetch the authenticated extended card when you need the authenticated skill inventory or deployment-aware examples.
+- Use OpenAPI when you need the detailed method matrix, provider-private notes, or full provider-private contract payloads.
 - Treat `supported_methods` in extension JSON-RPC `error.data` as the runtime truth for the current deployment, especially when a deployment-conditional method is disabled.
 - Treat the core A2A methods as the portable interoperability baseline.
 - Treat `codex.*` methods plus `metadata.codex.directory` and `metadata.codex.execution` as a Codex-specific control plane for Codex-aware clients rather than generic A2A portability claims.
@@ -78,7 +83,7 @@ Consumer guidance:
 
 ## Compatibility Profile
 
-The full machine-readable compatibility profile is published through the authenticated extended card and OpenAPI metadata. Its purpose is to declare:
+The full machine-readable compatibility profile is published through OpenAPI metadata. The authenticated extended card carries aligned skill inventory and deployment-aware examples, but not the full compatibility payload. Its purpose is to declare:
 
 - the stable A2A core interoperability baseline
 - which shared extensions are intended to be reused across this repo family
@@ -135,7 +140,7 @@ Retention guidance:
 - Treat this deployment as a single-tenant, shared-workspace coding profile.
 - Treat shared session-binding and streaming metadata contracts as required for the current deployment model; they are not optional documentation-only hints.
 - Treat `urn:a2a:*` extension URIs in this repository as shared extension conventions used across this repo family, not as claims that they are part of the A2A core baseline.
-- Treat `a2a.interrupt.*` methods as shared extensions.
+- Treat `a2a.interrupt.*` methods as a shared provider-private callback contract on `POST /codex/jsonrpc`, not as core A2A methods or Agent Card-negotiated extensions.
 - Treat `codex.*` methods plus `metadata.codex.directory` and `metadata.codex.execution` as Codex-specific extensions or provider-private operational surfaces rather than portable A2A baseline capabilities.
 - Treat `codex.interrupts.list` as an adapter-local recovery surface for rediscovering active pending interrupt request IDs after reconnecting.
 - Treat `codex.turns.steer`, `codex.review.*`, and `codex.exec.*` as deployment-aware provider-private controls. Discover them from the authenticated extended card or OpenAPI before calling them.
@@ -421,6 +426,7 @@ This path is for contributors. End users should prefer the released CLI path des
 - Agent Card media modes reflect that stable core message surface: default input modes are `text/plain`, `image/*`, and `application/json`; default output modes are `text/plain` and `application/json`.
 - The authenticated extended Agent Card also decomposes provider-private JSON-RPC surfaces into narrower skills: `codex.sessions.query`, `codex.discovery.query`, `codex.discovery.watch`, `codex.threads.control`, `codex.threads.watch`, `codex.turns.control`, `codex.review.control`, `codex.exec.control`, `codex.exec.stream`, and `codex.interrupt.callback`.
 - `codex.turns.control`, `codex.review.*`, and `codex.exec.*` only appear in the authenticated extended card when their deployment toggles are enabled.
+- OpenAPI carries the full provider-private contract payloads for those skills under `x-codex-contracts`; the authenticated extended card is intentionally narrower and discovery-oriented.
 - Those provider-private skills use narrower `output_modes` where practical: query/control/watch handle surfaces declare `application/json` when their primary contract is a structured JSON-RPC result or `Part(data)` watch payload, while `codex.exec.stream` declares `text/plain` because stdout/stderr deltas and terminal summaries are emitted as `Part(text)`.
 - On the core chat surface, the `application/json` input mode is intentionally narrower than arbitrary JSON: only `Part(data={"type":"mention"|"skill", ...})` is part of the declared stable contract.
 - Image input maps to upstream `turn/start.input[].type=input_image`.
@@ -547,7 +553,7 @@ This service exposes Codex session list and message-history queries via A2A JSON
 - Trigger: call extension methods through the dedicated extension JSON-RPC endpoint
 - Auth: same `Authorization: Bearer <token>`
 - Privacy guard: when `A2A_LOG_PAYLOADS=true`, request/response bodies are still suppressed for `method=codex.sessions.*`
-- Endpoint discovery: use `supported_interfaces[]` for the core A2A JSON-RPC surface, then read the authenticated extended card / OpenAPI to discover the provider-private extension endpoint (`/codex/jsonrpc`)
+- Endpoint discovery: use `supported_interfaces[]` for the core A2A JSON-RPC surface, then use the authenticated extended card for provider-private skill discovery and OpenAPI for the provider-private endpoint contract (`/codex/jsonrpc`)
 - Result format:
   - `result.items` is always an array of A2A standard objects
   - session list => `Task` with `status.state=completed`
