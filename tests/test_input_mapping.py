@@ -41,6 +41,27 @@ def test_convert_request_parts_to_turn_input_supports_rich_inputs() -> None:
 @pytest.mark.parametrize(
     ("request_payload", "message"),
     [
+        (
+            {"parts": [{"type": "image", "image_url": "https://example.com/demo.png"}]},
+            "request.parts\\[\\]\\.url or request.parts\\[\\]\\.bytes is required",
+        ),
+        (
+            {"parts": [{"type": "image", "bytes": "YWJj", "mime_type": "image/png"}]},
+            "request.parts\\[\\]\\.mimeType must be an image MIME type when bytes is provided",
+        ),
+    ],
+)
+def test_convert_request_parts_to_turn_input_rejects_legacy_image_aliases(
+    request_payload: dict[str, object],
+    message: str,
+) -> None:
+    with pytest.raises(UnsupportedInputError, match=message):
+        convert_request_parts_to_turn_input(request_payload)
+
+
+@pytest.mark.parametrize(
+    ("request_payload", "message"),
+    [
         ({}, "request.parts must be an array"),
         ({"parts": [123]}, "request.parts items must be objects"),
         ({"parts": [{"type": "text", "text": 123}]}, "request.parts\\[\\]\\.text must be a string"),

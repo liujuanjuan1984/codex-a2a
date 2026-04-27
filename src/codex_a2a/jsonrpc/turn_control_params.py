@@ -6,7 +6,6 @@ from pydantic import AliasChoices, Field, ValidationError, field_validator, mode
 
 from codex_a2a.jsonrpc.params_common import (
     JsonRpcParamsValidationError,
-    _PermissiveModel,
     _StrictModel,
     format_loc,
     map_extra_forbidden,
@@ -17,7 +16,7 @@ from codex_a2a.jsonrpc.params_common import (
 )
 
 
-class TurnTextPart(_PermissiveModel):
+class TurnTextPart(_StrictModel):
     type: Literal["text"]
     text: str
 
@@ -29,16 +28,13 @@ class TurnTextPart(_PermissiveModel):
         return value
 
 
-class TurnImagePart(_PermissiveModel):
+class TurnImagePart(_StrictModel):
     type: Literal["image"]
-    url: str | None = Field(
-        default=None,
-        validation_alias=AliasChoices("url", "image_url", "imageUrl"),
-    )
+    url: str | None = None
     bytes: str | None = None
     mime_type: str | None = Field(
         default=None,
-        validation_alias=AliasChoices("mime_type", "mimeType"),
+        validation_alias=AliasChoices("mimeType"),
         serialization_alias="mimeType",
     )
     name: str | None = None
@@ -57,7 +53,7 @@ class TurnImagePart(_PermissiveModel):
         return self
 
 
-class TurnMentionPart(_PermissiveModel):
+class TurnMentionPart(_StrictModel):
     type: Literal["mention"]
     name: str
     path: str
@@ -68,7 +64,7 @@ class TurnMentionPart(_PermissiveModel):
         return normalize_non_empty_string(value, message="must be a non-empty string")
 
 
-class TurnSkillPart(_PermissiveModel):
+class TurnSkillPart(_StrictModel):
     type: Literal["skill"]
     name: str
     path: str

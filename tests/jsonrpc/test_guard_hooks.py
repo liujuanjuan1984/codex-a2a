@@ -5,6 +5,7 @@ import pytest
 from codex_a2a.contracts.extensions import (
     DISCOVERY_METHODS,
     EXEC_CONTROL_METHODS,
+    EXTENSION_JSONRPC_PATH,
     INTERRUPT_CALLBACK_METHODS,
     INTERRUPT_RECOVERY_METHODS,
     REVIEW_CONTROL_METHODS,
@@ -15,7 +16,7 @@ from codex_a2a.contracts.extensions import (
 )
 from codex_a2a.jsonrpc.application import (
     CodexSessionQueryJSONRPCApplication,
-    create_codex_jsonrpc_routes,
+    create_extension_jsonrpc_routes,
 )
 from codex_a2a.jsonrpc.hooks import SessionGuardHooks
 from codex_a2a.profile.runtime import build_runtime_profile
@@ -81,7 +82,7 @@ def test_session_extension_guard_hook_bundle_fails_when_incomplete() -> None:
         _build_extension_app(guard_hooks=SessionGuardHooks())
 
 
-def test_create_codex_jsonrpc_routes_returns_single_post_route() -> None:
+def test_create_extension_jsonrpc_routes_returns_single_post_route() -> None:
     settings = make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, codex_timeout=1.0)
     guard_hooks = SessionGuardHooks(
         session_owner_matcher=AsyncMock(return_value=True),
@@ -93,7 +94,7 @@ def test_create_codex_jsonrpc_routes_returns_single_post_route() -> None:
             captured.update(kwargs)
             self.handle_requests = AsyncMock()
 
-    routes = create_codex_jsonrpc_routes(
+    routes = create_extension_jsonrpc_routes(
         request_handler=MagicMock(),
         context_builder=MagicMock(),
         codex_client=DummyCodexClient(settings),
@@ -124,11 +125,11 @@ def test_create_codex_jsonrpc_routes_returns_single_post_route() -> None:
             ).supported_jsonrpc_methods
         ),
         guard_hooks=guard_hooks,
-        rpc_url="/rpc",
+        rpc_url=EXTENSION_JSONRPC_PATH,
         dispatcher_factory=DummyDispatcher,
     )
 
     assert len(routes) == 1
-    assert routes[0].path == "/rpc"
+    assert routes[0].path == EXTENSION_JSONRPC_PATH
     assert routes[0].methods == {"POST"}
     assert captured["guard_hooks"] is guard_hooks

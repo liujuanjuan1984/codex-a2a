@@ -6,6 +6,7 @@ import httpx
 import pytest
 from a2a.server.jsonrpc_models import InternalError
 
+from codex_a2a.contracts.extensions import EXTENSION_JSONRPC_PATH
 from tests.support.dummy_clients import DummySessionQueryCodexClient as DummyCodexClient
 from tests.support.settings import make_settings
 
@@ -42,7 +43,7 @@ async def test_session_list_routes_to_query_surface(monkeypatch: pytest.MonkeyPa
 
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.post(
-            "/",
+            EXTENSION_JSONRPC_PATH,
             headers={"Authorization": "Bearer t-1"},
             json={
                 "jsonrpc": "2.0",
@@ -74,7 +75,7 @@ async def test_session_messages_routes_to_query_surface(
 
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.post(
-            "/",
+            EXTENSION_JSONRPC_PATH,
             headers={"Authorization": "Bearer t-1"},
             json={
                 "jsonrpc": "2.0",
@@ -106,7 +107,7 @@ async def test_removed_session_control_methods_return_method_not_found(
 
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.post(
-            "/",
+            EXTENSION_JSONRPC_PATH,
             headers={"Authorization": "Bearer t-1"},
             json={
                 "jsonrpc": "2.0",
@@ -147,7 +148,7 @@ async def test_session_query_surfaces_upstream_internal_error(
 
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.post(
-            "/",
+            EXTENSION_JSONRPC_PATH,
             headers={"Authorization": "Bearer t-1"},
             json={
                 "jsonrpc": "2.0",
@@ -180,7 +181,7 @@ async def test_removed_session_control_methods_do_not_call_client(
 
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.post(
-            "/",
+            EXTENSION_JSONRPC_PATH,
             headers={"Authorization": "Bearer t-1"},
             json={
                 "jsonrpc": "2.0",

@@ -12,6 +12,11 @@ from a2a.utils.constants import TransportProtocol
 from sse_starlette.sse import EventSourceResponse
 from starlette.requests import Request
 
+from codex_a2a.contracts.extensions import (
+    CORE_JSONRPC_PATH,
+    EXTENSION_JSONRPC_PATH,
+    REST_API_PATH_PREFIX,
+)
 from codex_a2a.server.agent_card import build_agent_card
 from codex_a2a.server.application import create_app
 from codex_a2a.server.http_middlewares import (
@@ -42,13 +47,14 @@ def test_rest_subscription_route_matches_current_sdk_contract() -> None:
     app = create_app(make_settings(a2a_bearer_token="test-token"))
     route_paths = {route.path for route in app.router.routes if hasattr(route, "path")}
 
-    assert "/" in route_paths
+    assert CORE_JSONRPC_PATH in route_paths
+    assert EXTENSION_JSONRPC_PATH in route_paths
     assert "/health" in route_paths
-    assert "/v1/tasks/{id}:subscribe" in route_paths
-    assert "/v1/tasks/{id}:resubscribe" not in route_paths
-    assert "/v1/extendedAgentCard" in route_paths
+    assert f"{REST_API_PATH_PREFIX}/tasks/{{id}}:subscribe" in route_paths
+    assert f"{REST_API_PATH_PREFIX}/tasks/{{id}}:resubscribe" not in route_paths
+    assert f"{REST_API_PATH_PREFIX}/extendedAgentCard" in route_paths
     assert "/agent/authenticatedExtendedCard" not in route_paths
-    assert "/v1/card" not in route_paths
+    assert f"{REST_API_PATH_PREFIX}/card" not in route_paths
 
 
 def test_health_route_can_be_disabled() -> None:
@@ -306,31 +312,48 @@ def test_openapi_rest_message_routes_include_schema_examples_and_extension_contr
     stream_contract = paths["/v1/message:stream"]["post"].get("x-a2a-streaming")
     assert isinstance(stream_contract, dict)
 
-    root_contracts = paths["/"]["post"].get("x-a2a-extension-contracts")
+    root_contracts = paths[CORE_JSONRPC_PATH]["post"].get("x-a2a-extension-contracts")
     assert isinstance(root_contracts, dict)
-    assert "discovery" in root_contracts
-    assert "thread_lifecycle" in root_contracts
-    assert "interrupt_recovery" in root_contracts
-    assert "turn_control" in root_contracts
-    assert "review_control" in root_contracts
+    assert "session_binding" in root_contracts
+    assert "streaming" in root_contracts
     assert "wire_contract" in root_contracts
+
+    extension_contracts = paths[EXTENSION_JSONRPC_PATH]["post"].get("x-a2a-extension-contracts")
+    assert isinstance(extension_contracts, dict)
+    assert "discovery" in extension_contracts
+    assert "thread_lifecycle" in extension_contracts
+    assert "interrupt_recovery" in extension_contracts
+    assert "turn_control" in extension_contracts
+    assert "review_control" in extension_contracts
 
 
 def test_openapi_jsonrpc_examples_include_core_and_extension_methods() -> None:
     app = create_app(make_settings(a2a_bearer_token="test-token"))
     openapi = app.openapi()
-    post = openapi["paths"]["/"]["post"]
-    example_values = (
-        post.get("requestBody", {})
+    core_post = openapi["paths"][CORE_JSONRPC_PATH]["post"]
+    core_methods = {
+        value.get("value", {}).get("method")
+        for value in (
+            core_post.get("requestBody", {})
+            .get("content", {})
+            .get("application/json", {})
+            .get("examples", {})
+            .values()
+        )
+    }
+    assert "SendMessage" in core_methods
+    assert "SendStreamingMessage" in core_methods
+    assert "GetExtendedAgentCard" in core_methods
+
+    extension_post = openapi["paths"][EXTENSION_JSONRPC_PATH]["post"]
+    extension_example_values = (
+        extension_post.get("requestBody", {})
         .get("content", {})
         .get("application/json", {})
         .get("examples", {})
         .values()
     )
-    methods = {value.get("value", {}).get("method") for value in example_values}
-    assert "SendMessage" in methods
-    assert "SendStreamingMessage" in methods
-    assert "GetExtendedAgentCard" in methods
+    methods = {value.get("value", {}).get("method") for value in extension_example_values}
     assert "codex.sessions.list" in methods
     assert "codex.sessions.messages.list" in methods
     assert "codex.discovery.skills.list" in methods
@@ -620,7 +643,7 @@ def test_openapi_jsonrpc_examples_hide_boundary_sensitive_methods_when_disabled(
             a2a_enable_exec_control=False,
         )
     )
-    post = app.openapi()["paths"]["/"]["post"]
+    post = app.openapi()["paths"][EXTENSION_JSONRPC_PATH]["post"]
     example_values = (
         post.get("requestBody", {})
         .get("content", {})
@@ -649,7 +672,14 @@ def test_openapi_declares_configured_http_auth_schemes() -> None:
 
     assert set(security_schemes.keys()) == {"bearerAuth", "basicAuth"}
     assert openapi["security"] == [{"bearerAuth": []}, {"basicAuth": []}]
-    assert openapi["paths"]["/"]["post"]["security"] == [{"bearerAuth": []}, {"basicAuth": []}]
+    assert openapi["paths"][CORE_JSONRPC_PATH]["post"]["security"] == [
+        {"bearerAuth": []},
+        {"basicAuth": []},
+    ]
+    assert openapi["paths"][EXTENSION_JSONRPC_PATH]["post"]["security"] == [
+        {"bearerAuth": []},
+        {"basicAuth": []},
+    ]
 
 
 @pytest.mark.asyncio
@@ -704,11 +734,15 @@ async def test_dual_stack_send_accepts_transport_native_payloads(monkeypatch) ->
     }
 
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-        rest_resp = await client.post("/v1/message:send", headers=headers, json=rest_payload)
+        rest_resp = await client.post(
+            f"{REST_API_PATH_PREFIX}/message:send",
+            headers=headers,
+            json=rest_payload,
+        )
         assert rest_resp.status_code == 200
         assert rest_resp.headers["A2A-Version"] == "1.0"
 
-        rpc_resp = await client.post("/", headers=headers, json=rpc_payload)
+        rpc_resp = await client.post(CORE_JSONRPC_PATH, headers=headers, json=rpc_payload)
         assert rpc_resp.status_code == 200
         assert rpc_resp.headers["A2A-Version"] == "1.0"
         assert rpc_resp.json().get("error") is None
@@ -736,7 +770,7 @@ async def test_jsonrpc_legacy_core_method_alias_is_rejected_under_v1(monkeypatch
     }
 
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-        response = await client.post("/", headers=headers, json=rpc_payload)
+        response = await client.post(CORE_JSONRPC_PATH, headers=headers, json=rpc_payload)
 
     assert response.status_code == 200
     assert response.headers["A2A-Version"] == "1.0"
@@ -744,8 +778,7 @@ async def test_jsonrpc_legacy_core_method_alias_is_rejected_under_v1(monkeypatch
     assert payload["id"] == 42
     assert payload["error"]["code"] == -32601
     assert payload["error"]["message"] == "Method not found"
-    assert payload["error"]["data"]["method"] == "message/send"
-    assert "SendMessage" in payload["error"]["data"]["supportedMethods"]
+    assert payload["error"].get("data") is None
 
 
 @pytest.mark.asyncio
@@ -759,7 +792,7 @@ async def test_jsonrpc_unsupported_protocol_version_preserves_request_id(monkeyp
 
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.post(
-            "/",
+            CORE_JSONRPC_PATH,
             headers=headers,
             json={"jsonrpc": "2.0", "id": 43, "method": "SendMessage", "params": {}},
         )
@@ -789,7 +822,7 @@ async def test_rest_unsupported_v1_protocol_version_uses_protocol_error_shape(
 
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.post(
-            "/v1/message:send",
+            f"{REST_API_PATH_PREFIX}/message:send",
             headers=headers,
             json=_rest_message_payload(),
         )
@@ -848,29 +881,30 @@ async def test_dual_stack_send_rejects_cross_transport_payload_shapes(monkeypatc
 
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         rest_resp = await client.post(
-            "/v1/message:send",
+            f"{REST_API_PATH_PREFIX}/message:send",
             headers=headers,
             json=rest_with_legacy_shape,
         )
         assert rest_resp.status_code == 400
-        assert "Invalid HTTP+JSON payload" in rest_resp.text
 
         rest_envelope_resp = await client.post(
-            "/v1/message:send",
+            f"{REST_API_PATH_PREFIX}/message:send",
             headers=headers,
             json=full_jsonrpc_envelope,
         )
         assert rest_envelope_resp.status_code == 400
         assert "Invalid HTTP+JSON payload" in rest_envelope_resp.text
 
-        rpc_resp = await client.post("/", headers=headers, json=rpc_with_legacy_shape)
+        rpc_resp = await client.post(CORE_JSONRPC_PATH, headers=headers, json=rpc_with_legacy_shape)
         assert rpc_resp.status_code == 200
         payload = rpc_resp.json()
         assert payload["error"]["code"] in {-32600, -32602, -32603}
 
 
 @pytest.mark.asyncio
-async def test_jsonrpc_unsupported_method_returns_supported_method_contract(monkeypatch) -> None:
+async def test_extension_jsonrpc_unsupported_method_returns_supported_method_contract(
+    monkeypatch,
+) -> None:
     import codex_a2a.server.application as app_module
 
     monkeypatch.setattr(app_module, "CodexClient", DummyChatCodexClient)
@@ -881,7 +915,7 @@ async def test_jsonrpc_unsupported_method_returns_supported_method_contract(monk
 
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.post(
-            "/",
+            EXTENSION_JSONRPC_PATH,
             headers=headers,
             json={"jsonrpc": "2.0", "id": 40, "method": "message/send", "params": {}},
         )
@@ -892,12 +926,13 @@ async def test_jsonrpc_unsupported_method_returns_supported_method_contract(monk
     assert payload["error"]["message"] == "Method not found"
     assert payload["error"]["data"]["method"] == "message/send"
     assert payload["error"]["data"]["protocolVersion"] == "1.0"
-    assert "SendMessage" in payload["error"]["data"]["supportedMethods"]
     assert "codex.sessions.list" in payload["error"]["data"]["supportedMethods"]
 
 
 @pytest.mark.asyncio
-async def test_jsonrpc_v1_unsupported_method_uses_protocol_error_shape(monkeypatch) -> None:
+async def test_extension_jsonrpc_v1_unsupported_method_uses_protocol_error_shape(
+    monkeypatch,
+) -> None:
     import codex_a2a.server.application as app_module
 
     monkeypatch.setattr(app_module, "CodexClient", DummyChatCodexClient)
@@ -908,7 +943,7 @@ async def test_jsonrpc_v1_unsupported_method_uses_protocol_error_shape(monkeypat
 
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.post(
-            "/",
+            EXTENSION_JSONRPC_PATH,
             headers=headers,
             json={"jsonrpc": "2.0", "id": 44, "method": "UnknownMethod", "params": {}},
         )
@@ -918,10 +953,9 @@ async def test_jsonrpc_v1_unsupported_method_uses_protocol_error_shape(monkeypat
     payload = response.json()
     assert payload["error"]["code"] == -32601
     assert payload["error"]["message"] == "Method not found"
-    assert "type" not in payload["error"]["data"]
     assert payload["error"]["data"]["method"] == "UnknownMethod"
     assert payload["error"]["data"]["protocolVersion"] == "1.0"
-    assert "SendMessage" in payload["error"]["data"]["supportedMethods"]
+    assert "codex.sessions.list" in payload["error"]["data"]["supportedMethods"]
 
 
 @pytest.mark.asyncio
@@ -936,7 +970,7 @@ async def test_jsonrpc_disabled_shell_reports_current_supported_methods(monkeypa
 
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.post(
-            "/",
+            EXTENSION_JSONRPC_PATH,
             headers=headers,
             json={
                 "jsonrpc": "2.0",
@@ -968,7 +1002,10 @@ async def test_subscribe_missing_task_returns_controlled_404(monkeypatch) -> Non
     headers = {"Authorization": "Bearer test-token"}
 
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-        response = await client.get("/v1/tasks/task-missing:subscribe", headers=headers)
+        response = await client.get(
+            f"{REST_API_PATH_PREFIX}/tasks/task-missing:subscribe",
+            headers=headers,
+        )
 
     assert response.status_code == 404
     assert response.json() == {"error": "Task not found", "task_id": "task-missing"}

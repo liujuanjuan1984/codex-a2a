@@ -282,23 +282,6 @@ def test_extract_text_prefers_stream_artifact_payload() -> None:
     assert A2AClient.extract_text(StreamResponse(artifact_update=update)) == "streamed remote text"
 
 
-def test_extract_text_reads_task_status_message() -> None:
-    task = Task(
-        id="remote-task",
-        context_id="remote-context",
-        status=TaskStatus(
-            state=TaskState.TASK_STATE_COMPLETED,
-            message=Message(
-                role=Role.ROLE_AGENT,
-                message_id="m1",
-                parts=[new_text_part("status message text")],
-            ),
-        ),
-    )
-
-    assert A2AClient.extract_text(task) == "status message text"
-
-
 def test_extract_text_reads_stream_message_payload() -> None:
     payload = StreamResponse(
         message=Message(

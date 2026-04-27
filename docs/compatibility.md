@@ -28,6 +28,7 @@ If runtime support is not implemented, do not expose it as a supported machine-r
 Open-source consumption guidance:
 
 - Treat the core A2A send / stream / task methods as the portable baseline.
+- Treat `POST /` as the core A2A JSON-RPC surface and `POST /codex/jsonrpc` as the provider-private extension surface.
 - Treat `urn:a2a:*` entries in this repository as shared repo-family conventions, not as claims that they are part of the A2A core baseline.
 - Treat `codex.*` methods plus `metadata.codex.directory` and `metadata.codex.execution` as a Codex-specific control plane layered on top of the portable A2A surface.
 - Treat [extension-specifications.md](./extension-specifications.md) as the stable URI/spec index, not as the main usage guide.

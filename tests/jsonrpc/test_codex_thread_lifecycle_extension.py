@@ -3,6 +3,7 @@ from unittest.mock import AsyncMock
 import httpx
 import pytest
 
+from codex_a2a.contracts.extensions import EXTENSION_JSONRPC_PATH
 from tests.support.dummy_clients import DummySessionQueryCodexClient as DummyCodexClient
 from tests.support.jsonrpc_errors import (
     error_context as _error_context,
@@ -34,7 +35,7 @@ async def test_thread_lifecycle_extension_routes_control_methods(monkeypatch) ->
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         headers = {"Authorization": "Bearer t-1"}
         fork_response = await client.post(
-            "/",
+            EXTENSION_JSONRPC_PATH,
             headers=headers,
             json={
                 "jsonrpc": "2.0",
@@ -48,7 +49,7 @@ async def test_thread_lifecycle_extension_routes_control_methods(monkeypatch) ->
             },
         )
         archive_response = await client.post(
-            "/",
+            EXTENSION_JSONRPC_PATH,
             headers=headers,
             json={
                 "jsonrpc": "2.0",
@@ -58,7 +59,7 @@ async def test_thread_lifecycle_extension_routes_control_methods(monkeypatch) ->
             },
         )
         unarchive_response = await client.post(
-            "/",
+            EXTENSION_JSONRPC_PATH,
             headers=headers,
             json={
                 "jsonrpc": "2.0",
@@ -68,7 +69,7 @@ async def test_thread_lifecycle_extension_routes_control_methods(monkeypatch) ->
             },
         )
         metadata_response = await client.post(
-            "/",
+            EXTENSION_JSONRPC_PATH,
             headers=headers,
             json={
                 "jsonrpc": "2.0",
@@ -124,7 +125,7 @@ async def test_thread_lifecycle_watch_routes_to_runtime(monkeypatch) -> None:
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.post(
-            "/",
+            EXTENSION_JSONRPC_PATH,
             headers={"Authorization": "Bearer t-1"},
             json={
                 "jsonrpc": "2.0",
@@ -177,7 +178,7 @@ async def test_thread_lifecycle_watch_release_routes_to_runtime(monkeypatch) -> 
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.post(
-            "/",
+            EXTENSION_JSONRPC_PATH,
             headers={"Authorization": "Bearer t-1"},
             json={
                 "jsonrpc": "2.0",
@@ -211,7 +212,7 @@ async def test_thread_lifecycle_extension_rejects_invalid_request_shapes(monkeyp
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         headers = {"Authorization": "Bearer t-1"}
         fork_response = await client.post(
-            "/",
+            EXTENSION_JSONRPC_PATH,
             headers=headers,
             json={
                 "jsonrpc": "2.0",
@@ -221,7 +222,7 @@ async def test_thread_lifecycle_extension_rejects_invalid_request_shapes(monkeyp
             },
         )
         metadata_response = await client.post(
-            "/",
+            EXTENSION_JSONRPC_PATH,
             headers=headers,
             json={
                 "jsonrpc": "2.0",
@@ -231,7 +232,7 @@ async def test_thread_lifecycle_extension_rejects_invalid_request_shapes(monkeyp
             },
         )
         watch_response = await client.post(
-            "/",
+            EXTENSION_JSONRPC_PATH,
             headers=headers,
             json={
                 "jsonrpc": "2.0",
@@ -241,7 +242,7 @@ async def test_thread_lifecycle_extension_rejects_invalid_request_shapes(monkeyp
             },
         )
         watch_release_response = await client.post(
-            "/",
+            EXTENSION_JSONRPC_PATH,
             headers=headers,
             json={
                 "jsonrpc": "2.0",
@@ -279,7 +280,7 @@ async def test_thread_lifecycle_watch_release_maps_not_found_and_forbidden(monke
             side_effect=LookupError("task-404")
         )
         not_found_response = await client.post(
-            "/",
+            EXTENSION_JSONRPC_PATH,
             headers={"Authorization": "Bearer t-1"},
             json={
                 "jsonrpc": "2.0",
@@ -293,7 +294,7 @@ async def test_thread_lifecycle_watch_release_maps_not_found_and_forbidden(monke
             side_effect=PermissionError("task-403")
         )
         forbidden_response = await client.post(
-            "/",
+            EXTENSION_JSONRPC_PATH,
             headers={"Authorization": "Bearer t-1"},
             json={
                 "jsonrpc": "2.0",

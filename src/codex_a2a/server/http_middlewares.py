@@ -20,6 +20,11 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 
 from codex_a2a.auth import authenticate_static_credential, build_static_auth_credentials
 from codex_a2a.config import Settings
+from codex_a2a.contracts.extensions import (
+    CORE_JSONRPC_PATH,
+    EXTENSION_JSONRPC_PATH,
+    REST_API_PATH_PREFIX,
+)
 from codex_a2a.jsonrpc.errors import (
     adapt_jsonrpc_error,
     build_http_error_body,
@@ -45,14 +50,14 @@ _PUBLIC_AGENT_CARD_PATHS = {
     "/.well-known/agent-card.json",
 }
 _AUTHENTICATED_EXTENDED_CARD_PATHS = {
-    "/v1/extendedAgentCard",
+    f"{REST_API_PATH_PREFIX}/extendedAgentCard",
 }
 _OPENAPI_PATHS = {
     "/openapi.json",
 }
 _REST_MESSAGE_PATHS = {
-    "/v1/message:send",
-    "/v1/message:stream",
+    f"{REST_API_PATH_PREFIX}/message:send",
+    f"{REST_API_PATH_PREFIX}/message:stream",
 }
 GZIP_COMPRESSIBLE_PATHS = (
     _PUBLIC_AGENT_CARD_PATHS | _AUTHENTICATED_EXTENDED_CARD_PATHS | _OPENAPI_PATHS
@@ -190,18 +195,6 @@ async def _get_request_body(request: Request) -> bytes:
     return body
 
 
-def _looks_like_legacy_message_payload(payload: dict | None) -> bool:
-    if payload is None:
-        return False
-    message = payload.get("message")
-    if not isinstance(message, dict):
-        return False
-    if "content" in message:
-        return True
-    role = message.get("role")
-    return isinstance(role, str) and role in {"user", "agent"}
-
-
 def _looks_like_jsonrpc_envelope(payload: dict | None) -> bool:
     if payload is None:
         return False
@@ -210,11 +203,15 @@ def _looks_like_jsonrpc_envelope(payload: dict | None) -> bool:
     return isinstance(method, str) and isinstance(version, str)
 
 
+def _is_jsonrpc_path(path: str) -> bool:
+    return path in {CORE_JSONRPC_PATH, EXTENSION_JSONRPC_PATH}
+
+
 def _requires_protocol_negotiation(request: Request) -> bool:
     path = request.url.path
     if request.method == "OPTIONS":
         return False
-    return path == "/" or path.startswith("/v1/")
+    return _is_jsonrpc_path(path) or path.startswith(f"{REST_API_PATH_PREFIX}/")
 
 
 def _jsonrpc_request_id(payload: dict | None) -> str | int | None:
@@ -343,7 +340,7 @@ def install_http_middlewares(
             )
         except UnsupportedProtocolVersionError as exc:
             request_id: str | int | None = None
-            if request.method == "POST" and request.url.path == "/":
+            if request.method == "POST" and _is_jsonrpc_path(request.url.path):
                 request_id = _jsonrpc_request_id(_parse_json_body(await _get_request_body(request)))
                 return _unsupported_protocol_jsonrpc_response(
                     request_id=request_id,
@@ -419,13 +416,13 @@ def install_http_middlewares(
 
         body = await _get_request_body(request)
         payload = _parse_json_body(body)
-        if _looks_like_jsonrpc_envelope(payload) or _looks_like_legacy_message_payload(payload):
+        if _looks_like_jsonrpc_envelope(payload):
             return JSONResponse(
                 {
                     "error": (
                         "Invalid HTTP+JSON payload for REST endpoint. "
                         "Use an A2A 1.0 request body with message.parts, or call "
-                        "POST / with JSON-RPC method=SendMessage or "
+                        f"POST {CORE_JSONRPC_PATH} with JSON-RPC method=SendMessage or "
                         "method=SendStreamingMessage."
                     )
                 },

@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-from collections.abc import Mapping
 from typing import Any
 
 from a2a.helpers import get_artifact_text, get_message_text, get_stream_response_text
-from a2a.types import Artifact, Message, Part, StreamResponse, Task, TaskArtifactUpdateEvent
+from a2a.types import Artifact, Message, Part, StreamResponse, Task
 
 from codex_a2a.a2a_proto import is_text_part, part_text
 
@@ -23,16 +22,6 @@ def _extract_from_parts(parts: Any) -> str | None:
             if part.text:
                 collected.append(part.text)
             continue
-        if isinstance(part, Mapping):
-            text_value = part.get("text")
-            if isinstance(text_value, str) and text_value.strip():
-                collected.append(text_value)
-                continue
-            if isinstance(part.get("role"), str):
-                nested = extract_text_from_payload(part)
-                if nested:
-                    collected.append(nested)
-                    continue
     if collected:
         return "\n".join(collected)
     return None
@@ -68,9 +57,6 @@ def extract_text_from_payload(payload: Any) -> str | None:
         if sdk_text:
             return sdk_text
         return _extract_from_parts(payload.parts)
-
-    if isinstance(payload, TaskArtifactUpdateEvent):
-        return extract_text_from_payload(payload.artifact)
 
     return None
 

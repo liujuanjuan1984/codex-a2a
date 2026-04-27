@@ -5,11 +5,14 @@ from typing import Any, cast
 from fastapi import FastAPI
 
 from codex_a2a.config import Settings
+from codex_a2a.contracts.extensions import CORE_JSONRPC_PATH, EXTENSION_JSONRPC_PATH
 from codex_a2a.profile.runtime import RuntimeProfile
 
 from .openapi_contract_fragments import (
-    build_jsonrpc_extension_openapi_description,
-    build_jsonrpc_extension_openapi_examples,
+    build_core_jsonrpc_openapi_description,
+    build_core_jsonrpc_openapi_examples,
+    build_extension_jsonrpc_openapi_description,
+    build_extension_jsonrpc_openapi_examples,
     build_openapi_extension_contracts,
     build_openapi_security,
     build_rest_message_openapi_examples,
@@ -163,14 +166,31 @@ def patch_openapi_contract(
                 schema["security"] = security
         paths = schema.setdefault("paths", {})
         if isinstance(paths, dict):
-            post = _ensure_path_item(paths, "/", "post")
+            core_contracts = {
+                "session_binding": extension_contracts["session_binding"],
+                "streaming": extension_contracts["streaming"],
+                "wire_contract": extension_contracts["wire_contract"],
+                "compatibility_profile": extension_contracts["compatibility_profile"],
+            }
+            extension_only_contracts = {
+                "session_query": extension_contracts["session_query"],
+                "discovery": extension_contracts["discovery"],
+                "thread_lifecycle": extension_contracts["thread_lifecycle"],
+                "interrupt_recovery": extension_contracts["interrupt_recovery"],
+                "turn_control": extension_contracts["turn_control"],
+                "review_control": extension_contracts["review_control"],
+                "exec_control": extension_contracts["exec_control"],
+                "interrupt_callback": extension_contracts["interrupt_callback"],
+                "wire_contract": extension_contracts["wire_contract"],
+                "compatibility_profile": extension_contracts["compatibility_profile"],
+            }
+
+            post = _ensure_path_item(paths, CORE_JSONRPC_PATH, "post")
             if "security" in schema:
                 post["security"] = list(cast(list[dict[str, list[str]]], schema["security"]))
-            post["summary"] = "Handle A2A JSON-RPC Requests"
-            post["description"] = build_jsonrpc_extension_openapi_description(
-                runtime_profile=runtime_profile
-            )
-            post["x-a2a-extension-contracts"] = dict(extension_contracts)
+            post["summary"] = "Handle Core A2A JSON-RPC Requests"
+            post["description"] = build_core_jsonrpc_openapi_description()
+            post["x-a2a-extension-contracts"] = core_contracts
             post.setdefault("responses", {"200": {"description": "JSON-RPC response"}})
 
             request_body = post.setdefault("requestBody", {})
@@ -184,7 +204,32 @@ def patch_openapi_contract(
                             "schema",
                             {"$ref": "#/components/schemas/A2AJsonRpcRequest"},
                         )
-                        app_json["examples"] = build_jsonrpc_extension_openapi_examples(
+                        app_json["examples"] = build_core_jsonrpc_openapi_examples()
+
+            extension_post = _ensure_path_item(paths, EXTENSION_JSONRPC_PATH, "post")
+            if "security" in schema:
+                extension_post["security"] = list(
+                    cast(list[dict[str, list[str]]], schema["security"])
+                )
+            extension_post["summary"] = "Handle Codex Extension JSON-RPC Requests"
+            extension_post["description"] = build_extension_jsonrpc_openapi_description(
+                runtime_profile=runtime_profile
+            )
+            extension_post["x-a2a-extension-contracts"] = extension_only_contracts
+            extension_post.setdefault("responses", {"200": {"description": "JSON-RPC response"}})
+
+            extension_request_body = extension_post.setdefault("requestBody", {})
+            if isinstance(extension_request_body, dict):
+                extension_request_body.setdefault("required", True)
+                extension_content = extension_request_body.setdefault("content", {})
+                if isinstance(extension_content, dict):
+                    extension_app_json = extension_content.setdefault("application/json", {})
+                    if isinstance(extension_app_json, dict):
+                        extension_app_json.setdefault(
+                            "schema",
+                            {"$ref": "#/components/schemas/A2AJsonRpcRequest"},
+                        )
+                        extension_app_json["examples"] = build_extension_jsonrpc_openapi_examples(
                             runtime_profile=runtime_profile
                         )
 

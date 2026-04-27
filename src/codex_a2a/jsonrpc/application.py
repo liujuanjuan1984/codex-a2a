@@ -31,7 +31,7 @@ from codex_a2a.protocol_versions import get_current_protocol_version
 from codex_a2a.upstream.client import CodexClient
 
 
-def create_codex_jsonrpc_routes(
+def create_extension_jsonrpc_routes(
     *,
     request_handler,
     context_builder,
@@ -151,7 +151,9 @@ class CodexSessionQueryJSONRPCApplication(JsonRpcDispatcher):
             return self._unsupported_method_response(base_request.id, base_request.method)
 
         if not self._method_registry.is_extension_method(base_request.method):
-            return await super().handle_requests(request)
+            if base_request.id is None:
+                return Response(status_code=204)
+            return self._unsupported_method_response(base_request.id, base_request.method)
 
         params = base_request.params or {}
         if not isinstance(params, dict):

@@ -5,8 +5,10 @@ from typing import Any
 from codex_a2a.auth import has_configured_auth_scheme
 from codex_a2a.config import Settings
 from codex_a2a.contracts.extensions import (
+    CORE_JSONRPC_PATH,
     DISCOVERY_METHODS,
     EXEC_CONTROL_METHODS,
+    EXTENSION_JSONRPC_PATH,
     INTERRUPT_CALLBACK_METHODS,
     INTERRUPT_RECOVERY_METHODS,
     REVIEW_CONTROL_METHODS,
@@ -53,7 +55,19 @@ def build_openapi_security(
     return schemes, security
 
 
-def build_jsonrpc_extension_openapi_description(*, runtime_profile: RuntimeProfile) -> str:
+def build_core_jsonrpc_openapi_description() -> str:
+    return (
+        "Core A2A JSON-RPC entrypoint. Supports the standard A2A methods "
+        "(SendMessage, SendStreamingMessage, GetTask, CancelTask, "
+        "ListTasks, CreateTaskPushNotificationConfig, GetTaskPushNotificationConfig, "
+        "ListTaskPushNotificationConfigs, DeleteTaskPushNotificationConfig, "
+        f"SubscribeToTask, GetExtendedAgentCard) on POST {CORE_JSONRPC_PATH}.\n\n"
+        f"Provider-private Codex extension methods are exposed separately on "
+        f"POST {EXTENSION_JSONRPC_PATH}."
+    )
+
+
+def build_extension_jsonrpc_openapi_description(*, runtime_profile: RuntimeProfile) -> str:
     session_methods: list[str] = [
         SESSION_QUERY_METHODS["list_sessions"],
         SESSION_QUERY_METHODS["get_session_messages"],
@@ -78,13 +92,9 @@ def build_jsonrpc_extension_openapi_description(*, runtime_profile: RuntimeProfi
     )
     interrupt_methods = ", ".join(sorted(INTERRUPT_CALLBACK_METHODS.values()))
     return (
-        "A2A JSON-RPC entrypoint. Supports core A2A methods "
-        "(SendMessage, SendStreamingMessage, GetTask, CancelTask, "
-        "ListTasks, CreateTaskPushNotificationConfig, GetTaskPushNotificationConfig, "
-        "ListTaskPushNotificationConfigs, DeleteTaskPushNotificationConfig, "
-        "SubscribeToTask, GetExtendedAgentCard) plus Codex session extensions, "
-        "Codex thread lifecycle extensions, interrupt recovery extensions, "
-        "active-turn control extensions, review "
+        f"Provider-private Codex JSON-RPC extension entrypoint on POST {EXTENSION_JSONRPC_PATH}. "
+        "Supports Codex session extensions, Codex thread lifecycle extensions, "
+        "interrupt recovery extensions, active-turn control extensions, review "
         "control extensions, Codex discovery extensions, interactive exec "
         "extensions, and shared interrupt callback methods.\n\n"
         f"Codex session query methods: {', '.join(session_methods)}.\n"
@@ -101,11 +111,8 @@ def build_jsonrpc_extension_openapi_description(*, runtime_profile: RuntimeProfi
     )
 
 
-def build_jsonrpc_extension_openapi_examples(
-    *,
-    runtime_profile: RuntimeProfile,
-) -> dict[str, Any]:
-    examples: dict[str, Any] = {
+def build_core_jsonrpc_openapi_examples() -> dict[str, Any]:
+    return {
         "message_send": {
             "summary": "Send message via JSON-RPC core method",
             "value": {
@@ -145,6 +152,14 @@ def build_jsonrpc_extension_openapi_examples(
                 "params": {},
             },
         },
+    }
+
+
+def build_extension_jsonrpc_openapi_examples(
+    *,
+    runtime_profile: RuntimeProfile,
+) -> dict[str, Any]:
+    examples: dict[str, Any] = {
         "session_list": {
             "summary": "List Codex sessions",
             "value": {

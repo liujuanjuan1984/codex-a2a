@@ -249,7 +249,7 @@ class A2AClient:
         )
 
     @staticmethod
-    def extract_text(event: StreamResponse | Task | Message) -> str:
+    def extract_text(event: StreamResponse) -> str:
         extracted = extract_text_from_payload(event)
         return extracted or ""
 

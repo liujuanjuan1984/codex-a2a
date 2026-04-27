@@ -320,7 +320,7 @@ def raise_control_validation_error(exc: ValidationError) -> None:
     if (
         len(loc) >= 3
         and loc[:2] == ("request", "parts")
-        and loc[-1] in {"url", "bytes", "mimeType", "mime_type", "name", "path"}
+        and loc[-1] in {"url", "bytes", "mimeType", "name", "path"}
     ):
         field = format_loc(loc)
         raise JsonRpcParamsValidationError(

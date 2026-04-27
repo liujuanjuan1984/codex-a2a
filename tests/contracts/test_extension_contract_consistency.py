@@ -6,8 +6,10 @@ import pytest
 from codex_a2a.a2a_proto import proto_to_python
 from codex_a2a.contracts.extensions import (
     COMPATIBILITY_PROFILE_EXTENSION_URI,
+    CORE_JSONRPC_PATH,
     DISCOVERY_EXTENSION_URI,
     EXEC_CONTROL_EXTENSION_URI,
+    EXTENSION_JSONRPC_PATH,
     INTERRUPT_CALLBACK_EXTENSION_URI,
     INTERRUPT_RECOVERY_EXTENSION_URI,
     REVIEW_CONTROL_EXTENSION_URI,
@@ -202,7 +204,7 @@ async def test_session_query_runtime_result_envelope_matches_declared_contract(
 
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.post(
-            "/",
+            EXTENSION_JSONRPC_PATH,
             headers={"Authorization": "Bearer t-1"},
             json={"jsonrpc": "2.0", "id": 1, "method": method, "params": params},
         )
@@ -230,25 +232,29 @@ def test_openapi_jsonrpc_contract_extension_matches_ssot() -> None:
     runtime_profile = build_runtime_profile(settings)
     app = create_app(settings)
     openapi = app.openapi()
-    post = openapi["paths"]["/"]["post"]
-
-    contract = post.get("x-a2a-extension-contracts")
-    assert isinstance(contract, dict), (
+    core_contract = openapi["paths"][CORE_JSONRPC_PATH]["post"].get("x-a2a-extension-contracts")
+    assert isinstance(core_contract, dict), (
         "POST / OpenAPI is missing x-a2a-extension-contracts metadata."
     )
+    extension_contract = openapi["paths"][EXTENSION_JSONRPC_PATH]["post"].get(
+        "x-a2a-extension-contracts"
+    )
+    assert isinstance(extension_contract, dict), (
+        f"POST {EXTENSION_JSONRPC_PATH} OpenAPI is missing x-a2a-extension-contracts metadata."
+    )
 
-    session_binding = contract["session_binding"]
-    streaming = contract["streaming"]
-    session_query = contract["session_query"]
-    discovery = contract["discovery"]
-    interrupt_recovery = contract["interrupt_recovery"]
-    interrupt_callback = contract["interrupt_callback"]
-    exec_control = contract["exec_control"]
-    thread_lifecycle = contract["thread_lifecycle"]
-    turn_control = contract["turn_control"]
-    review_control = contract["review_control"]
-    wire_contract = contract["wire_contract"]
-    compatibility_profile = contract["compatibility_profile"]
+    session_binding = core_contract["session_binding"]
+    streaming = core_contract["streaming"]
+    session_query = extension_contract["session_query"]
+    discovery = extension_contract["discovery"]
+    interrupt_recovery = extension_contract["interrupt_recovery"]
+    interrupt_callback = extension_contract["interrupt_callback"]
+    exec_control = extension_contract["exec_control"]
+    thread_lifecycle = extension_contract["thread_lifecycle"]
+    turn_control = extension_contract["turn_control"]
+    review_control = extension_contract["review_control"]
+    wire_contract = extension_contract["wire_contract"]
+    compatibility_profile = extension_contract["compatibility_profile"]
     expected_session_binding = build_session_binding_extension_params(
         runtime_profile=runtime_profile,
     )
@@ -332,25 +338,32 @@ def test_openapi_and_agent_card_extension_contracts_match() -> None:
     card = build_authenticated_extended_agent_card(settings)
     ext_by_uri = {ext.uri: ext for ext in card.capabilities.extensions or []}
     openapi = create_app(settings).openapi()
-    post_contract = openapi["paths"]["/"]["post"]["x-a2a-extension-contracts"]
+    core_contract = openapi["paths"][CORE_JSONRPC_PATH]["post"]["x-a2a-extension-contracts"]
+    extension_contract = openapi["paths"][EXTENSION_JSONRPC_PATH]["post"][
+        "x-a2a-extension-contracts"
+    ]
 
-    assert post_contract["session_binding"] == ext_by_uri[SESSION_BINDING_EXTENSION_URI].params
-    assert post_contract["streaming"] == ext_by_uri[STREAMING_EXTENSION_URI].params
-    assert post_contract["session_query"] == ext_by_uri[SESSION_QUERY_EXTENSION_URI].params
-    assert post_contract["discovery"] == ext_by_uri[DISCOVERY_EXTENSION_URI].params
-    assert post_contract["thread_lifecycle"] == ext_by_uri[THREAD_LIFECYCLE_EXTENSION_URI].params
+    assert core_contract["session_binding"] == ext_by_uri[SESSION_BINDING_EXTENSION_URI].params
+    assert core_contract["streaming"] == ext_by_uri[STREAMING_EXTENSION_URI].params
+    assert extension_contract["session_query"] == ext_by_uri[SESSION_QUERY_EXTENSION_URI].params
+    assert extension_contract["discovery"] == ext_by_uri[DISCOVERY_EXTENSION_URI].params
     assert (
-        post_contract["interrupt_recovery"] == ext_by_uri[INTERRUPT_RECOVERY_EXTENSION_URI].params
+        extension_contract["thread_lifecycle"] == ext_by_uri[THREAD_LIFECYCLE_EXTENSION_URI].params
     )
-    assert post_contract["turn_control"] == ext_by_uri[TURN_CONTROL_EXTENSION_URI].params
-    assert post_contract["review_control"] == ext_by_uri[REVIEW_CONTROL_EXTENSION_URI].params
-    assert post_contract["exec_control"] == ext_by_uri[EXEC_CONTROL_EXTENSION_URI].params
     assert (
-        post_contract["interrupt_callback"] == ext_by_uri[INTERRUPT_CALLBACK_EXTENSION_URI].params
+        extension_contract["interrupt_recovery"]
+        == ext_by_uri[INTERRUPT_RECOVERY_EXTENSION_URI].params
     )
-    assert post_contract["wire_contract"] == ext_by_uri[WIRE_CONTRACT_EXTENSION_URI].params
+    assert extension_contract["turn_control"] == ext_by_uri[TURN_CONTROL_EXTENSION_URI].params
+    assert extension_contract["review_control"] == ext_by_uri[REVIEW_CONTROL_EXTENSION_URI].params
+    assert extension_contract["exec_control"] == ext_by_uri[EXEC_CONTROL_EXTENSION_URI].params
     assert (
-        post_contract["compatibility_profile"]
+        extension_contract["interrupt_callback"]
+        == ext_by_uri[INTERRUPT_CALLBACK_EXTENSION_URI].params
+    )
+    assert extension_contract["wire_contract"] == ext_by_uri[WIRE_CONTRACT_EXTENSION_URI].params
+    assert (
+        extension_contract["compatibility_profile"]
         == ext_by_uri[COMPATIBILITY_PROFILE_EXTENSION_URI].params
     )
 
@@ -504,7 +517,7 @@ def test_guide_environment_variables_match_settings_aliases() -> None:
 def test_openapi_jsonrpc_examples_match_declared_extension_contracts() -> None:
     settings = make_settings(a2a_bearer_token="test-token")
     openapi = create_app(settings).openapi()
-    post = openapi["paths"]["/"]["post"]
+    post = openapi["paths"][EXTENSION_JSONRPC_PATH]["post"]
     extension_contracts = post["x-a2a-extension-contracts"]
     session_method_contracts = extension_contracts["session_query"]["method_contracts"]
     discovery_method_contracts = extension_contracts["discovery"]["method_contracts"]
@@ -563,7 +576,7 @@ def test_openapi_jsonrpc_examples_match_declared_extension_contracts() -> None:
 def test_openapi_jsonrpc_examples_drop_removed_session_control_methods() -> None:
     settings = make_settings(a2a_bearer_token="test-token")
     openapi = create_app(settings).openapi()
-    post = openapi["paths"]["/"]["post"]
+    post = openapi["paths"][EXTENSION_JSONRPC_PATH]["post"]
     examples = post["requestBody"]["content"]["application/json"]["examples"]
     methods = {example["value"]["method"] for example in examples.values()}
     session_contracts = post["x-a2a-extension-contracts"]["session_query"]["method_contracts"]
@@ -579,7 +592,7 @@ def test_openapi_jsonrpc_examples_drop_removed_session_control_methods() -> None
 def test_openapi_exec_examples_declare_task_streaming_contract() -> None:
     settings = make_settings(a2a_bearer_token="test-token")
     openapi = create_app(settings).openapi()
-    post = openapi["paths"]["/"]["post"]
+    post = openapi["paths"][EXTENSION_JSONRPC_PATH]["post"]
     examples = post["requestBody"]["content"]["application/json"]["examples"]
     exec_contracts = post["x-a2a-extension-contracts"]["exec_control"]["method_contracts"]
     streaming_contract = post["x-a2a-extension-contracts"]["exec_control"]["task_streaming"]
@@ -598,9 +611,9 @@ def test_openapi_exec_examples_declare_task_streaming_contract() -> None:
 def test_openapi_jsonrpc_examples_use_declared_default_session_limit() -> None:
     settings = make_settings(a2a_bearer_token="test-token")
     openapi = create_app(settings).openapi()
-    examples = openapi["paths"]["/"]["post"]["requestBody"]["content"]["application/json"][
-        "examples"
-    ]
+    examples = openapi["paths"][EXTENSION_JSONRPC_PATH]["post"]["requestBody"]["content"][
+        "application/json"
+    ]["examples"]
 
     assert examples["session_list"]["value"]["params"]["limit"] == SESSION_QUERY_DEFAULT_LIMIT
     assert examples["session_messages"]["value"]["params"]["limit"] == SESSION_QUERY_DEFAULT_LIMIT

@@ -5,10 +5,13 @@ from a2a.types import AgentExtension, AgentSkill
 from codex_a2a.a2a_proto import proto_to_python
 from codex_a2a.contracts.extensions import (
     COMPATIBILITY_PROFILE_EXTENSION_URI,
+    CORE_JSONRPC_PATH,
     DISCOVERY_EXTENSION_URI,
     EXEC_CONTROL_EXTENSION_URI,
+    EXTENSION_JSONRPC_PATH,
     INTERRUPT_CALLBACK_EXTENSION_URI,
     INTERRUPT_RECOVERY_EXTENSION_URI,
+    REST_API_PATH_PREFIX,
     REVIEW_CONTROL_EXTENSION_URI,
     SESSION_BINDING_EXTENSION_URI,
     SESSION_QUERY_DEFAULT_LIMIT,
@@ -434,6 +437,10 @@ def test_authenticated_extended_agent_card_injects_profile_into_extensions() -> 
 
     session_query = ext_by_uri[SESSION_QUERY_EXTENSION_URI]
     session_query_params = _require_params(session_query)
+    assert session_query_params["jsonrpc_endpoint"] == {
+        "protocol_binding": "JSON-RPC",
+        "url_path": EXTENSION_JSONRPC_PATH,
+    }
     assert session_query_params["profile"] == profile
     assert session_query_params["supported_metadata"] == ["codex.directory", "codex.execution"]
     assert session_query_params["provider_private_metadata"] == [
@@ -493,6 +500,7 @@ def test_authenticated_extended_agent_card_injects_profile_into_extensions() -> 
 
     discovery = ext_by_uri[DISCOVERY_EXTENSION_URI]
     discovery_params = _require_params(discovery)
+    assert discovery_params["jsonrpc_endpoint"]["url_path"] == EXTENSION_JSONRPC_PATH
     assert discovery_params["profile"] == profile
     assert discovery_params["methods"]["list_skills"] == "codex.discovery.skills.list"
     assert discovery_params["methods"]["list_apps"] == "codex.discovery.apps.list"
@@ -508,6 +516,7 @@ def test_authenticated_extended_agent_card_injects_profile_into_extensions() -> 
 
     thread_lifecycle = ext_by_uri[THREAD_LIFECYCLE_EXTENSION_URI]
     thread_lifecycle_params = _require_params(thread_lifecycle)
+    assert thread_lifecycle_params["jsonrpc_endpoint"]["url_path"] == EXTENSION_JSONRPC_PATH
     assert thread_lifecycle_params["profile"] == profile
     assert thread_lifecycle_params["methods"]["fork"] == "codex.threads.fork"
     assert thread_lifecycle_params["methods"]["archive"] == "codex.threads.archive"
@@ -544,6 +553,7 @@ def test_authenticated_extended_agent_card_injects_profile_into_extensions() -> 
 
     interrupt_recovery = ext_by_uri[INTERRUPT_RECOVERY_EXTENSION_URI]
     interrupt_recovery_params = _require_params(interrupt_recovery)
+    assert interrupt_recovery_params["jsonrpc_endpoint"]["url_path"] == EXTENSION_JSONRPC_PATH
     assert interrupt_recovery_params["profile"] == profile
     assert interrupt_recovery_params["methods"]["list"] == "codex.interrupts.list"
     assert interrupt_recovery_params["supported_interrupt_types"] == [
@@ -566,6 +576,7 @@ def test_authenticated_extended_agent_card_injects_profile_into_extensions() -> 
 
     turn_control = ext_by_uri[TURN_CONTROL_EXTENSION_URI]
     turn_control_params = _require_params(turn_control)
+    assert turn_control_params["jsonrpc_endpoint"]["url_path"] == EXTENSION_JSONRPC_PATH
     assert turn_control_params["profile"] == profile
     assert turn_control_params["methods"]["steer"] == "codex.turns.steer"
     assert turn_control_params["authorization"]["required_capabilities"] == ["turn_control"]
@@ -585,6 +596,7 @@ def test_authenticated_extended_agent_card_injects_profile_into_extensions() -> 
 
     review_control = ext_by_uri[REVIEW_CONTROL_EXTENSION_URI]
     review_control_params = _require_params(review_control)
+    assert review_control_params["jsonrpc_endpoint"]["url_path"] == EXTENSION_JSONRPC_PATH
     assert review_control_params["profile"] == profile
     assert review_control_params["methods"]["start"] == "codex.review.start"
     assert review_control_params["methods"]["watch"] == "codex.review.watch"
@@ -629,6 +641,7 @@ def test_authenticated_extended_agent_card_injects_profile_into_extensions() -> 
 
     interrupt = ext_by_uri[INTERRUPT_CALLBACK_EXTENSION_URI]
     interrupt_params = _require_params(interrupt)
+    assert interrupt_params["jsonrpc_endpoint"]["url_path"] == EXTENSION_JSONRPC_PATH
     assert interrupt_params["profile"] == profile
     assert interrupt_params["request_id_field"] == "metadata.shared.interrupt.request_id"
     assert interrupt_params["supported_metadata"] == ["codex.directory"]
@@ -650,6 +663,7 @@ def test_authenticated_extended_agent_card_injects_profile_into_extensions() -> 
 
     exec_control = ext_by_uri[EXEC_CONTROL_EXTENSION_URI]
     exec_control_params = _require_params(exec_control)
+    assert exec_control_params["jsonrpc_endpoint"]["url_path"] == EXTENSION_JSONRPC_PATH
     assert exec_control_params["profile"] == profile
     assert exec_control_params["supported_metadata"] == ["codex.directory"]
     assert exec_control_params["provider_private_metadata"] == ["codex.directory"]
@@ -677,18 +691,34 @@ def test_authenticated_extended_agent_card_injects_profile_into_extensions() -> 
     )
     assert "GetExtendedAgentCard" in wire_contract_params["all_jsonrpc_methods"]
     assert "CreateTaskPushNotificationConfig" in wire_contract_params["all_jsonrpc_methods"]
-    assert "POST /v1/message:send" in wire_contract_params["core"]["http_endpoints"]
-    assert "GET /v1/extendedAgentCard" in wire_contract_params["core"]["http_endpoints"]
+    assert (
+        f"POST {REST_API_PATH_PREFIX}/message:send"
+        in wire_contract_params["core"]["http_endpoints"]
+    )
+    assert (
+        f"GET {REST_API_PATH_PREFIX}/extendedAgentCard"
+        in wire_contract_params["core"]["http_endpoints"]
+    )
+    assert wire_contract_params["core"]["jsonrpc_endpoint"] == {
+        "protocol_binding": "JSON-RPC",
+        "protocol_version": "1.0.0",
+        "url_path": CORE_JSONRPC_PATH,
+    }
+    assert wire_contract_params["extensions"]["jsonrpc_endpoint"] == {
+        "protocol_binding": "JSON-RPC",
+        "protocol_version": "1.0.0",
+        "url_path": EXTENSION_JSONRPC_PATH,
+    }
     assert wire_contract_params["transport_interfaces"] == [
         {
             "protocol_binding": "HTTP+JSON",
             "protocol_version": "1.0.0",
-            "url_path_prefix": "/v1",
+            "url_path_prefix": REST_API_PATH_PREFIX,
         },
         {
             "protocol_binding": "JSON-RPC",
             "protocol_version": "1.0.0",
-            "url_path": "/",
+            "url_path": CORE_JSONRPC_PATH,
         },
     ]
 
@@ -704,6 +734,8 @@ def test_authenticated_extended_agent_card_injects_profile_into_extensions() -> 
     )
     assert compatibility_params["deployment"] == profile["deployment"]
     assert compatibility_params["runtime_features"] == profile["runtime_features"]
+    assert compatibility_params["core"]["jsonrpc_endpoint"] == CORE_JSONRPC_PATH
+    assert compatibility_params["extension_transport"]["jsonrpc_endpoint"] == EXTENSION_JSONRPC_PATH
     assert "GetExtendedAgentCard" in compatibility_params["core"]["jsonrpc_methods"]
     assert compatibility_params["extension_taxonomy"]["provider_private_metadata"] == [
         "codex.directory",

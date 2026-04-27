@@ -9,6 +9,7 @@ from codex_a2a.contracts.extensions import (
     COMPATIBILITY_PROFILE_EXTENSION_URI,
     DISCOVERY_EXTENSION_URI,
     EXEC_CONTROL_EXTENSION_URI,
+    EXTENSION_JSONRPC_PATH,
     INTERRUPT_CALLBACK_EXTENSION_URI,
     INTERRUPT_RECOVERY_EXTENSION_URI,
     REVIEW_CONTROL_EXTENSION_URI,
@@ -166,7 +167,7 @@ def build_agent_extensions(
             required=False,
             description=(
                 "Support Codex session list/history queries via custom JSON-RPC methods "
-                "on the agent's A2A JSON-RPC interface."
+                f"on the dedicated provider-private extension endpoint ({EXTENSION_JSONRPC_PATH})."
             ),
             params=session_query_extension_params if include_detailed_contracts else None,
         ),
@@ -194,7 +195,7 @@ def build_agent_extensions(
             required=False,
             description=(
                 "Expose provider-private active-turn steering through the custom "
-                "JSON-RPC method codex.turns.steer."
+                f"JSON-RPC method codex.turns.steer on {EXTENSION_JSONRPC_PATH}."
             ),
             params=turn_control_extension_params if include_detailed_contracts else None,
         ),
@@ -204,7 +205,7 @@ def build_agent_extensions(
             description=(
                 "Expose provider-private reviewer control plus a task-stream "
                 "watch bridge through the custom JSON-RPC methods "
-                "codex.review.start and codex.review.watch."
+                f"codex.review.start and codex.review.watch on {EXTENSION_JSONRPC_PATH}."
             ),
             params=review_control_extension_params if include_detailed_contracts else None,
         ),
@@ -214,7 +215,7 @@ def build_agent_extensions(
             description=(
                 "Expose standalone interactive command execution via custom JSON-RPC "
                 "methods codex.exec.start, codex.exec.write, codex.exec.resize, and "
-                "codex.exec.terminate."
+                f"codex.exec.terminate on {EXTENSION_JSONRPC_PATH}."
             ),
             params=exec_control_extension_params if include_detailed_contracts else None,
         ),

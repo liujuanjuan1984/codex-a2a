@@ -43,13 +43,9 @@ def _data_url_for_image_bytes(*, encoded_bytes: str, mime_type: str) -> str:
 
 def _normalize_prompt_image_part(part: Mapping[str, Any]) -> dict[str, Any]:
     url = _optional_string(part.get("url"))
-    if url is None:
-        url = _optional_string(part.get("image_url"))
-    if url is None:
-        url = _optional_string(part.get("imageUrl"))
 
     encoded_bytes = _optional_string(part.get("bytes"))
-    mime_type = _optional_string(part.get("mimeType")) or _optional_string(part.get("mime_type"))
+    mime_type = _optional_string(part.get("mimeType"))
     name = _optional_string(part.get("name"))
 
     if url:
