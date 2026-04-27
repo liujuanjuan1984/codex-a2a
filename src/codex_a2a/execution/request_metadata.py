@@ -4,13 +4,32 @@ from collections.abc import Mapping
 from typing import Any
 
 from a2a.server.agent_execution import RequestContext
+from google.protobuf.message import Message as ProtoMessage  # type: ignore[import-untyped]
 
+from codex_a2a.a2a_proto import proto_to_python
 from codex_a2a.contracts.runtime_output import SHARED_METADATA_NAMESPACE
 from codex_a2a.execution.request_overrides import (
     RequestExecutionOptions,
     RequestExecutionOptionsValidationError,
     build_request_execution_options,
 )
+
+
+def _metadata_mapping(value: Any) -> Mapping[str, Any] | None:
+    if isinstance(value, ProtoMessage):
+        proto_value = proto_to_python(value)
+        return proto_value if isinstance(proto_value, Mapping) else None
+    if not isinstance(value, Mapping):
+        return None
+    normalized_mapping: dict[str, Any] = {}
+    for key, item in value.items():
+        if not isinstance(key, str):
+            continue
+        if isinstance(item, ProtoMessage):
+            normalized_mapping[key] = proto_to_python(item)
+            continue
+        normalized_mapping[key] = item
+    return normalized_mapping
 
 
 def extract_namespaced_string_metadata(
@@ -21,15 +40,15 @@ def extract_namespaced_string_metadata(
 ) -> str | None:
     candidates: list[Mapping[str, Any]] = []
     try:
-        meta = context.metadata
-        if isinstance(meta, Mapping):
+        meta = _metadata_mapping(context.metadata)
+        if meta is not None:
             candidates.append(meta)
     except Exception:
         pass
 
     if context.message is not None:
-        message_metadata = getattr(context.message, "metadata", None) or {}
-        if isinstance(message_metadata, Mapping):
+        message_metadata = _metadata_mapping(getattr(context.message, "metadata", None) or {})
+        if message_metadata is not None:
             candidates.append(message_metadata)
 
     for candidate in candidates:
@@ -68,15 +87,15 @@ def extract_codex_directory(context: RequestContext) -> str | None:
 def extract_codex_execution_options(context: RequestContext) -> RequestExecutionOptions:
     candidates: list[Mapping[str, Any]] = []
     try:
-        meta = context.metadata
-        if isinstance(meta, Mapping):
+        meta = _metadata_mapping(context.metadata)
+        if meta is not None:
             candidates.append(meta)
     except Exception:
         pass
 
     if context.message is not None:
-        message_metadata = getattr(context.message, "metadata", None) or {}
-        if isinstance(message_metadata, Mapping):
+        message_metadata = _metadata_mapping(getattr(context.message, "metadata", None) or {})
+        if message_metadata is not None:
             candidates.append(message_metadata)
 
     merged: dict[str, Any] = {}

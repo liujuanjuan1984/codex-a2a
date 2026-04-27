@@ -5,14 +5,13 @@ from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
 import httpx
-from a2a.utils.constants import (
-    AGENT_CARD_WELL_KNOWN_PATH,
-    EXTENDED_AGENT_CARD_PATH,
-    PREV_AGENT_CARD_WELL_KNOWN_PATH,
-)
+from a2a.utils.constants import AGENT_CARD_WELL_KNOWN_PATH
 
 from .config import A2AClientConfig
 from .errors import A2AClientConfigError
+
+PREV_AGENT_CARD_WELL_KNOWN_PATH = "/.well-known/agent.json"
+EXTENDED_AGENT_CARD_PATH = "/v1/extendedAgentCard"
 
 
 @dataclass(frozen=True)

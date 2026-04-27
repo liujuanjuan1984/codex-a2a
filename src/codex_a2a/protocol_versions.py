@@ -12,11 +12,10 @@ _CURRENT_PROTOCOL_VERSION: ContextVar[str | None] = ContextVar(
     default=None,
 )
 
-V1_COMPATIBILITY_GAPS: tuple[str, ...] = (
-    (
-        "Transport payloads, enums, pagination, and push-notification surfaces still "
-        "follow the SDK-owned 0.3 baseline."
-    ),
+V1_SUPPORTED_FEATURES: tuple[str, ...] = (
+    "A2A-Version request-time negotiation and response header echo.",
+    "Official A2A 1.0 JSON-RPC methods and /v1 HTTP endpoints.",
+    "Unified Part(text|data|url|raw) payloads, task streaming, and protocol-aware error shaping.",
 )
 
 
@@ -71,8 +70,6 @@ def normalize_protocol_versions(values: Iterable[str]) -> tuple[str, ...]:
 
 def default_supported_protocol_versions(protocol_version: str) -> tuple[str, ...]:
     normalized = normalize_protocol_version(protocol_version)
-    if normalized == "0.3":
-        return ("0.3", "1.0")
     return (normalized,)
 
 
@@ -136,38 +133,19 @@ def build_protocol_compatibility_summary(
 ) -> dict[str, Any]:
     normalized_default = normalize_protocol_version(default_protocol_version)
     normalized_supported = normalize_protocol_versions(supported_protocol_versions)
-    versions: dict[str, dict[str, Any]] = {
-        "0.3": {
-            "enabled": "0.3" in normalized_supported,
-            "default": normalized_default == "0.3",
-            "status": "supported",
-            "supported_features": [
-                "Default compatibility line for the current SDK baseline.",
-                "SDK-owned JSON-RPC and HTTP+JSON method surface.",
-                "SDK-owned transport payloads, enums, pagination, and push-notification surfaces.",
-            ],
-            "known_gaps": [],
-        },
-        "1.0": {
-            "enabled": "1.0" in normalized_supported,
-            "default": normalized_default == "1.0",
-            "status": "future" if "1.0" not in normalized_supported else "partial",
-            "supported_features": (
-                [
-                    "A2A-Version request-time negotiation and response header echo.",
-                    "PascalCase JSON-RPC method aliases for the current SDK-backed method surface.",
-                    "Protocol-aware JSON-RPC and HTTP error shaping.",
-                ]
-                if "1.0" in normalized_supported
-                else []
-            ),
-            "known_gaps": list(V1_COMPATIBILITY_GAPS),
-        },
-    }
+    versions: dict[str, dict[str, Any]] = {}
 
     for version in normalized_supported:
-        if version in versions:
+        if version == "1.0":
+            versions[version] = {
+                "enabled": True,
+                "default": normalized_default == version,
+                "status": "supported",
+                "supported_features": list(V1_SUPPORTED_FEATURES),
+                "known_gaps": [],
+            }
             continue
+
         versions[version] = {
             "enabled": True,
             "default": normalized_default == version,

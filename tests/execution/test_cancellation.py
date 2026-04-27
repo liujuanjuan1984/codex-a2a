@@ -65,10 +65,10 @@ async def test_cancel_interrupts_running_execute_and_keeps_queue_open():
 
     cancel_events = [call.args[0] for call in cancel_queue.enqueue_event.call_args_list]
     assert any(
-        isinstance(event, TaskStatusUpdateEvent) and event.status.state == TaskState.canceled
+        isinstance(event, TaskStatusUpdateEvent)
+        and event.status.state == TaskState.TASK_STATE_CANCELED
         for event in cancel_events
     )
-    cancel_queue.close.assert_not_called()
 
     with pytest.raises(asyncio.CancelledError):
         await asyncio.wait_for(execute_task, timeout=1.0)

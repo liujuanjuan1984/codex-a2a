@@ -20,7 +20,7 @@ from codex_a2a.metrics import (
     get_metrics_registry,
 )
 from codex_a2a.server.request_handler import CodexRequestHandler
-from tests.server.test_request_handler import _make_message_send_params
+from tests.server.test_request_handler import _make_agent_card, _make_message_send_params
 from tests.support.context import DummyEventQueue
 
 
@@ -43,7 +43,7 @@ async def test_stream_request_metrics_track_total_and_active() -> None:
             task = Task(
                 id="task-1",
                 context_id="ctx-1",
-                status=TaskStatus(state=TaskState.working),
+                status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
             )
             yield task
             await asyncio.sleep(10)
@@ -64,7 +64,11 @@ async def test_stream_request_metrics_track_total_and_active() -> None:
             except asyncio.CancelledError:
                 pass
 
-    handler = _TestHandler(agent_executor=MagicMock(), task_store=InMemoryTaskStore())
+    handler = _TestHandler(
+        agent_executor=MagicMock(),
+        task_store=InMemoryTaskStore(),
+        agent_card=_make_agent_card(),
+    )
 
     stream = handler.on_message_send_stream(_make_message_send_params())
     first_event = await stream.__anext__()

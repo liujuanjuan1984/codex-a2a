@@ -4,8 +4,9 @@ import logging
 from collections.abc import Mapping
 from typing import Any
 
-from a2a.types import DataPart, TextPart
+from a2a.types import Part
 
+from codex_a2a.a2a_proto import new_data_part, new_text_part
 from codex_a2a.execution.stream_state import (
     BlockType,
     NormalizedStreamChunk,
@@ -205,7 +206,7 @@ def classify_stream_block_type(
 
 def new_chunk(
     *,
-    part: TextPart | DataPart,
+    part: Part,
     content_key: str,
     append: bool,
     block_type: BlockType,
@@ -272,7 +273,7 @@ def delta_chunks(
     state.saw_delta = True
     return [
         new_chunk(
-            part=TextPart(text=delta_text),
+            part=new_text_part(delta_text),
             content_key=delta_text,
             append=True,
             block_type=state.block_type,
@@ -304,7 +305,7 @@ def snapshot_chunks(
             return []
         return [
             new_chunk(
-                part=TextPart(text=delta_text),
+                part=new_text_part(delta_text),
                 content_key=delta_text,
                 append=True,
                 block_type=state.block_type,
@@ -346,7 +347,7 @@ def emit_tool_payload_chunk(
     content_key = tool_chunk if not append else f"\n{tool_chunk}"
     return [
         new_chunk(
-            part=DataPart(data=as_tool_call_payload(payload)),
+            part=new_data_part(as_tool_call_payload(payload)),
             content_key=content_key,
             append=append,
             block_type=state.block_type,

@@ -4,7 +4,7 @@ import logging
 from typing import TYPE_CHECKING, cast
 
 import httpx
-from a2a.types import A2AError, InternalError, JSONRPCRequest
+from a2a.server.jsonrpc_models import InternalError
 from starlette.requests import Request
 from starlette.responses import Response
 
@@ -35,6 +35,7 @@ from codex_a2a.jsonrpc.interrupt_params import (
     parse_question_reply_params,
 )
 from codex_a2a.jsonrpc.params_common import JsonRpcParamsValidationError
+from codex_a2a.jsonrpc.request_models import JSONRPCRequestModel as JSONRPCRequest
 from codex_a2a.upstream.interrupts import InterruptRequestError
 
 if TYPE_CHECKING:
@@ -193,7 +194,7 @@ async def handle_interrupt_callback_request(
         logger.exception("Codex interrupt callback JSON-RPC method failed")
         return app._generate_error_response(
             base_request.id,
-            A2AError(root=InternalError(message=str(exc))),
+            InternalError(message=str(exc)),
         )
 
     if base_request.id is None:

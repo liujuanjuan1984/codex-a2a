@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from a2a.server.apps.jsonrpc.jsonrpc_app import DefaultCallContextBuilder
+from a2a.server.routes.common import DefaultServerCallContextBuilder
 from fastapi import Request
 
 if TYPE_CHECKING:
@@ -23,9 +23,16 @@ def _is_stream_request(request: Request) -> bool:
     )
 
 
-class IdentityAwareCallContextBuilder(DefaultCallContextBuilder):
+class IdentityAwareCallContextBuilder(DefaultServerCallContextBuilder):
     def build(self, request: Request) -> ServerCallContext:
         context = super().build(request)
+        headers = context.state.get("headers")
+        if isinstance(headers, dict):
+            sanitized_headers = dict(headers)
+            for key in list(sanitized_headers):
+                if isinstance(key, str) and key.lower() == "authorization":
+                    sanitized_headers[key] = "[redacted]"
+            context.state["headers"] = sanitized_headers
         if _is_stream_request(request):
             context.state["a2a_streaming_request"] = True
 

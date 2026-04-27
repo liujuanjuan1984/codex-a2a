@@ -11,15 +11,14 @@ from typing import TYPE_CHECKING, Any
 
 from a2a.types import (
     Message,
-    Part,
     Role,
     Task,
     TaskState,
     TaskStatus,
     TaskStatusUpdateEvent,
-    TextPart,
 )
 
+from codex_a2a.a2a_proto import new_text_part
 from codex_a2a.contracts.runtime_output import build_status_stream_metadata
 from codex_a2a.execution.output_mapping import enqueue_artifact_update
 from codex_a2a.execution.stream_state import BlockType, build_stream_artifact_metadata
@@ -87,7 +86,7 @@ class CodexExecRuntime:
             id=task_id,
             context_id=context_id,
             status=TaskStatus(
-                state=TaskState.working,
+                state=TaskState.TASK_STATE_WORKING,
                 message=self._build_status_message(
                     task_id=task_id,
                     context_id=context_id,
@@ -257,7 +256,7 @@ class CodexExecRuntime:
                     task_id=handle.task_id,
                     context_id=handle.context_id,
                     status=TaskStatus(
-                        state=TaskState.failed,
+                        state=TaskState.TASK_STATE_FAILED,
                         message=self._build_status_message(
                             task_id=handle.task_id,
                             context_id=handle.context_id,
@@ -265,7 +264,6 @@ class CodexExecRuntime:
                             message_id=f"{handle.task_id}:status:failed",
                         ),
                     ),
-                    final=True,
                     metadata=self._build_exec_metadata(
                         process_id=handle.process_id,
                         command_text=handle.command_text,
@@ -303,7 +301,7 @@ class CodexExecRuntime:
             task_id=task_id,
             context_id=context_id,
             artifact_id=artifact_id,
-            part=TextPart(text=self._decode_delta_text(delta_base64)),
+            part=new_text_part(self._decode_delta_text(delta_base64)),
             append=append.get(stream, False),
             last_chunk=bool(props.get("cap_reached", False)),
             artifact_metadata=build_stream_artifact_metadata(
@@ -333,13 +331,13 @@ class CodexExecRuntime:
         result: dict[str, Any],
     ) -> None:
         exit_code = result.get("exitCode")
-        final_state = TaskState.completed
+        final_state = TaskState.TASK_STATE_COMPLETED
         phase = "completed"
         if handle.terminate_requested:
-            final_state = TaskState.canceled
+            final_state = TaskState.TASK_STATE_CANCELED
             phase = "terminated"
         elif exit_code not in {0, None}:
-            final_state = TaskState.failed
+            final_state = TaskState.TASK_STATE_FAILED
             phase = "failed"
         summary = format_exec_result_text(result)
         await enqueue_artifact_update(
@@ -347,7 +345,7 @@ class CodexExecRuntime:
             task_id=handle.task_id,
             context_id=handle.context_id,
             artifact_id=f"{handle.task_id}:exec:result",
-            part=TextPart(text=summary),
+            part=new_text_part(summary),
             append=False,
             last_chunk=True,
             artifact_metadata=build_stream_artifact_metadata(
@@ -380,7 +378,6 @@ class CodexExecRuntime:
                         message_id=f"{handle.task_id}:status:{phase}",
                     ),
                 ),
-                final=True,
                 metadata=self._build_exec_metadata(
                     process_id=handle.process_id,
                     command_text=handle.command_text,
@@ -452,8 +449,8 @@ class CodexExecRuntime:
     ) -> Message:
         return Message(
             message_id=message_id,
-            role=Role.agent,
-            parts=[Part(root=TextPart(text=text))],
+            role=Role.ROLE_AGENT,
+            parts=[new_text_part(text)],
             task_id=task_id,
             context_id=context_id,
         )

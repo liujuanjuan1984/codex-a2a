@@ -3,25 +3,30 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
+from a2a.client import ClientCallContext
 from a2a.client.auth.interceptor import AuthInterceptor
+from a2a.client.interceptors import BeforeArgs
 from a2a.types import (
     AgentCapabilities,
     AgentCard,
+    AgentInterface,
     Artifact,
+    CancelTaskRequest,
+    GetTaskRequest,
     HTTPAuthSecurityScheme,
     Message,
-    Part,
     Role,
+    SecurityRequirement,
     SecurityScheme,
+    SendMessageRequest,
     Task,
     TaskArtifactUpdateEvent,
-    TaskIdParams,
-    TaskQueryParams,
     TaskState,
     TaskStatus,
-    TextPart,
 )
+from a2a.utils.constants import TransportProtocol
 
+from codex_a2a.a2a_proto import new_text_part, proto_to_python
 from codex_a2a.client import (
     A2AClient,
     A2AClientConfig,
@@ -50,64 +55,64 @@ class _MockAgentCardResolver:
         return AgentCard(
             name="mock",
             description="mock agent",
-            url="https://example.org",
             version="1.0.0",
             capabilities=AgentCapabilities(),
             default_input_modes=["text/plain"],
             default_output_modes=["text/plain"],
             skills=[],
+            supported_interfaces=[
+                AgentInterface(
+                    url="https://example.org",
+                    protocol_binding=TransportProtocol.HTTP_JSON,
+                    protocol_version="1.0",
+                )
+            ],
         )
 
 
 class _MockSDKClient:
     def __init__(self) -> None:
         self.send_calls: list[dict[str, Any]] = []
-        self.get_task_calls: list[TaskQueryParams] = []
+        self.get_task_calls: list[GetTaskRequest] = []
         self.get_task_contexts: list[Any] = []
-        self.cancel_calls: list[TaskIdParams] = []
+        self.cancel_calls: list[CancelTaskRequest] = []
         self.cancel_contexts: list[Any] = []
 
     async def send_message(
         self,
-        request: Message,
+        request: SendMessageRequest,
         *,
-        configuration=None,
         context=None,
-        request_metadata=None,
-        extensions=None,
     ):
         self.send_calls.append(
             {
                 "request": request,
-                "configuration": configuration,
                 "context": context,
-                "request_metadata": request_metadata,
-                "extensions": extensions,
             }
         )
         task = Task(
             id="task-1",
             context_id="ctx-1",
-            status=TaskStatus(state=TaskState.working),
+            status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
         )
         yield task
 
-    async def get_task(self, request: TaskQueryParams, *, context=None, extensions=None) -> Task:
+    async def get_task(self, request: GetTaskRequest, *, context=None) -> Task:
         self.get_task_calls.append(request)
         self.get_task_contexts.append(context)
         return Task(
             id=request.id,
             context_id="ctx-1",
-            status=TaskStatus(state=TaskState.completed),
+            status=TaskStatus(state=TaskState.TASK_STATE_COMPLETED),
         )
 
-    async def cancel_task(self, request: TaskIdParams, *, context=None, extensions=None) -> Task:
+    async def cancel_task(self, request: CancelTaskRequest, *, context=None) -> Task:
         self.cancel_calls.append(request)
         self.cancel_contexts.append(context)
         return Task(
             id=request.id,
             context_id="ctx-1",
-            status=TaskStatus(state=TaskState.canceled),
+            status=TaskStatus(state=TaskState.TASK_STATE_CANCELED),
         )
 
     async def close(self) -> None:
@@ -135,11 +140,11 @@ async def test_send_get_task_and_cancel_use_sdk_methods() -> None:
     )
     assert send_result.id == "task-1"
     send_call = sdk_client.send_calls[0]
-    assert send_call["request_metadata"] == {"trace_id": "trace-1"}
-    assert send_call["context"].state["headers"] == {"Authorization": "Bearer token"}
-    assert send_call["configuration"].accepted_output_modes == ["text/plain"]
-    assert send_call["configuration"].history_length == 3
-    assert send_call["configuration"].blocking is False
+    assert proto_to_python(send_call["request"].metadata) == {"trace_id": "trace-1"}
+    assert send_call["context"].service_parameters == {"Authorization": "Bearer token"}
+    assert send_call["request"].configuration.accepted_output_modes == ["text/plain"]
+    assert send_call["request"].configuration.history_length == 3
+    assert send_call["request"].configuration.return_immediately is True
 
     task_result = await client.get_task(
         A2AGetTaskRequest(
@@ -149,12 +154,11 @@ async def test_send_get_task_and_cancel_use_sdk_methods() -> None:
         )
     )
     assert task_result.id == "task-1"
-    assert sdk_client.get_task_calls[0].model_dump(by_alias=False) == {
+    assert proto_to_python(sdk_client.get_task_calls[0]) == {
         "id": "task-1",
         "history_length": 2,
-        "metadata": {"trace_id": "trace-2"},
     }
-    assert sdk_client.get_task_contexts[0].state["headers"] == {"Authorization": "Bearer token"}
+    assert sdk_client.get_task_contexts[0].service_parameters == {"Authorization": "Bearer token"}
 
     cancel_result = await client.cancel(
         A2ACancelTaskRequest(
@@ -162,12 +166,12 @@ async def test_send_get_task_and_cancel_use_sdk_methods() -> None:
             metadata={"authorization": "Bearer token", "trace_id": "trace-3"},
         )
     )
-    assert cancel_result.status.state == TaskState.canceled
-    assert sdk_client.cancel_calls[0].model_dump(by_alias=False) == {
+    assert cancel_result.status.state == TaskState.TASK_STATE_CANCELED
+    assert proto_to_python(sdk_client.cancel_calls[0]) == {
         "id": "task-1",
         "metadata": {"trace_id": "trace-3"},
     }
-    assert sdk_client.cancel_contexts[0].state["headers"] == {"Authorization": "Bearer token"}
+    assert sdk_client.cancel_contexts[0].service_parameters == {"Authorization": "Bearer token"}
 
 
 @pytest.mark.asyncio
@@ -182,8 +186,8 @@ async def test_get_agent_card_uses_resolver_and_cached() -> None:
     card = await client.get_agent_card()
     card_second = await client.get_agent_card()
 
-    assert card.url == "https://example.org"
-    assert card_second.url == "https://example.org"
+    assert card.supported_interfaces[0].url == "https://example.org"
+    assert card_second.supported_interfaces[0].url == "https://example.org"
     assert _MockAgentCardResolver.calls == 1
 
 
@@ -224,43 +228,53 @@ def test_build_interceptors_adds_sdk_auth_interceptor_for_config_credentials() -
 
 @pytest.mark.asyncio
 async def test_static_credential_service_works_with_sdk_auth_interceptor() -> None:
+    security_requirement = SecurityRequirement()
+    security_requirement.schemes["bearerAuth"].list.extend([])
     card = AgentCard(
         name="mock",
         description="mock agent",
-        url="https://example.org",
         version="1.0.0",
         capabilities=AgentCapabilities(),
         default_input_modes=["text/plain"],
         default_output_modes=["text/plain"],
         skills=[],
+        supported_interfaces=[
+            AgentInterface(
+                url="https://example.org",
+                protocol_binding=TransportProtocol.HTTP_JSON,
+                protocol_version="1.0",
+            )
+        ],
         security_schemes={
             "bearerAuth": SecurityScheme(
-                root=HTTPAuthSecurityScheme(
+                http_auth_security_scheme=HTTPAuthSecurityScheme(
                     scheme="bearer",
                     bearer_format="opaque",
                 )
             )
         },
-        security=[{"bearerAuth": []}],
+        security_requirements=[security_requirement],
     )
     interceptor = AuthInterceptor(StaticCredentialService({"bearerAuth": "peer-token"}))
 
-    _payload, http_kwargs = await interceptor.intercept(
-        "message/send",
-        {},
-        {},
-        card,
-        None,
+    before_args = BeforeArgs(
+        input={},
+        method="message/send",
+        agent_card=card,
+        context=ClientCallContext(service_parameters={}),
     )
+    await interceptor.before(before_args)
 
-    assert http_kwargs["headers"]["Authorization"] == "Bearer peer-token"
+    assert before_args.context is not None
+    assert before_args.context.service_parameters["Authorization"] == "Bearer peer-token"
+    assert before_args.input == {}
 
 
 def test_extract_text_prefers_stream_artifact_payload() -> None:
     task = Task(
         id="remote-task",
         context_id="remote-context",
-        status=TaskStatus(state=TaskState.working),
+        status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
     )
     update = TaskArtifactUpdateEvent(
         task_id="remote-task",
@@ -268,7 +282,7 @@ def test_extract_text_prefers_stream_artifact_payload() -> None:
         artifact=Artifact(
             artifact_id="artifact-1",
             name="response",
-            parts=[Part(root=TextPart(text="streamed remote text"))],
+            parts=[new_text_part("streamed remote text")],
         ),
     )
 
@@ -280,11 +294,11 @@ def test_extract_text_reads_task_status_message() -> None:
         id="remote-task",
         context_id="remote-context",
         status=TaskStatus(
-            state=TaskState.completed,
+            state=TaskState.TASK_STATE_COMPLETED,
             message=Message(
-                role=Role.agent,
+                role=Role.ROLE_AGENT,
                 message_id="m1",
-                parts=[Part(root=TextPart(text="status message text"))],
+                parts=[new_text_part("status message text")],
             ),
         ),
     )

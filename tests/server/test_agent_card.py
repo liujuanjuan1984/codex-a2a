@@ -2,6 +2,7 @@ from typing import Any
 
 from a2a.types import AgentExtension, AgentSkill
 
+from codex_a2a.a2a_proto import proto_to_python
 from codex_a2a.contracts.extensions import (
     COMPATIBILITY_PROFILE_EXTENSION_URI,
     DISCOVERY_EXTENSION_URI,
@@ -36,7 +37,22 @@ from tests.support.settings import make_settings
 
 def _require_params(extension: AgentExtension) -> dict[str, Any]:
     assert extension.params is not None
-    return extension.params
+    params = proto_to_python(extension.params)
+    assert isinstance(params, dict)
+    return params
+
+
+def _extension_params(extension: AgentExtension) -> dict[str, Any]:
+    params = proto_to_python(extension.params)
+    if not isinstance(params, dict):
+        return {}
+    return params
+
+
+def _security_requirements(card) -> list[dict[str, Any]]:  # noqa: ANN001
+    requirements = proto_to_python(card.security_requirements)
+    assert isinstance(requirements, list)
+    return requirements
 
 
 def _require_examples(skill: AgentSkill) -> list[str]:
@@ -51,15 +67,15 @@ def test_public_agent_card_description_reflects_discovery_surface() -> None:
     assert "authenticated extended Agent Card discovery" in card.description
     assert "single-tenant deployment" in card.description.lower()
     assert "machine-readable wire contract" not in card.description
-    assert card.supports_authenticated_extended_card is True
+    assert card.capabilities.extended_agent_card is True
 
 
 def test_authenticated_extended_agent_card_description_reflects_detailed_contracts() -> None:
     card = build_authenticated_extended_agent_card(make_settings(a2a_bearer_token="test-token"))
 
-    assert "message/send, message/stream" in card.description
-    assert "tasks/get, tasks/cancel, tasks/resubscribe" in card.description
-    assert "agent/getAuthenticatedExtendedCard" in card.description
+    assert "SendMessage, SendStreamingMessage" in card.description
+    assert "GetTask, ListTasks, CancelTask, SubscribeToTask" in card.description
+    assert "GetExtendedAgentCard" in card.description
     assert "interactive exec extensions" in card.description
     assert "active-turn control" in card.description
     assert "review control" in card.description
@@ -72,7 +88,7 @@ def test_agent_card_declares_bearer_only_security() -> None:
     card = build_agent_card(make_settings(a2a_bearer_token="test-token"))
 
     assert set((card.security_schemes or {}).keys()) == {"bearerAuth"}
-    assert card.security == [{"bearerAuth": []}]
+    assert _security_requirements(card) == [{"schemes": {"bearerAuth": {}}}]
 
 
 def test_agent_card_declares_bearer_and_basic_security_when_configured() -> None:
@@ -85,7 +101,10 @@ def test_agent_card_declares_bearer_and_basic_security_when_configured() -> None
     )
 
     assert set((card.security_schemes or {}).keys()) == {"bearerAuth", "basicAuth"}
-    assert card.security == [{"bearerAuth": []}, {"basicAuth": []}]
+    assert _security_requirements(card) == [
+        {"schemes": {"bearerAuth": {}}},
+        {"schemes": {"basicAuth": {}}},
+    ]
 
 
 def test_agent_card_declares_basic_only_security_when_configured_without_bearer() -> None:
@@ -98,7 +117,7 @@ def test_agent_card_declares_basic_only_security_when_configured_without_bearer(
     )
 
     assert set((card.security_schemes or {}).keys()) == {"basicAuth"}
-    assert card.security == [{"basicAuth": []}]
+    assert _security_requirements(card) == [{"schemes": {"basicAuth": {}}}]
 
 
 def test_agent_card_declares_registry_auth_schemes() -> None:
@@ -121,7 +140,10 @@ def test_agent_card_declares_registry_auth_schemes() -> None:
     )
 
     assert set((card.security_schemes or {}).keys()) == {"bearerAuth", "basicAuth"}
-    assert card.security == [{"bearerAuth": []}, {"basicAuth": []}]
+    assert _security_requirements(card) == [
+        {"schemes": {"bearerAuth": {}}},
+        {"schemes": {"basicAuth": {}}},
+    ]
 
 
 def test_agent_card_declares_media_modes_that_match_runtime_contract() -> None:
@@ -219,14 +241,14 @@ def test_public_agent_card_minimizes_provider_private_contracts() -> None:
     assert streaming_params["usage_fields"]["total_tokens"] == "metadata.shared.usage.total_tokens"
     assert "tool_call_payload_contract" not in streaming_params
 
-    assert ext_by_uri[SESSION_QUERY_EXTENSION_URI].params is None
-    assert ext_by_uri[DISCOVERY_EXTENSION_URI].params is None
-    assert ext_by_uri[THREAD_LIFECYCLE_EXTENSION_URI].params is None
-    assert ext_by_uri[TURN_CONTROL_EXTENSION_URI].params is None
-    assert ext_by_uri[REVIEW_CONTROL_EXTENSION_URI].params is None
-    assert ext_by_uri[EXEC_CONTROL_EXTENSION_URI].params is None
-    assert ext_by_uri[COMPATIBILITY_PROFILE_EXTENSION_URI].params is None
-    assert ext_by_uri[WIRE_CONTRACT_EXTENSION_URI].params is None
+    assert _extension_params(ext_by_uri[SESSION_QUERY_EXTENSION_URI]) == {}
+    assert _extension_params(ext_by_uri[DISCOVERY_EXTENSION_URI]) == {}
+    assert _extension_params(ext_by_uri[THREAD_LIFECYCLE_EXTENSION_URI]) == {}
+    assert _extension_params(ext_by_uri[TURN_CONTROL_EXTENSION_URI]) == {}
+    assert _extension_params(ext_by_uri[REVIEW_CONTROL_EXTENSION_URI]) == {}
+    assert _extension_params(ext_by_uri[EXEC_CONTROL_EXTENSION_URI]) == {}
+    assert _extension_params(ext_by_uri[COMPATIBILITY_PROFILE_EXTENSION_URI]) == {}
+    assert _extension_params(ext_by_uri[WIRE_CONTRACT_EXTENSION_URI]) == {}
 
     interrupt_recovery = ext_by_uri[INTERRUPT_RECOVERY_EXTENSION_URI]
     interrupt_recovery_params = _require_params(interrupt_recovery)
@@ -375,9 +397,9 @@ def test_authenticated_extended_agent_card_injects_profile_into_extensions() -> 
     assert streaming_params["session_metadata_field"] == "metadata.shared.session"
     assert streaming_params["usage_metadata_field"] == "metadata.shared.usage"
     assert streaming_params["block_part_types"] == {
-        "text": "TextPart",
-        "reasoning": "TextPart",
-        "tool_call": "DataPart",
+        "text": "Part(text)",
+        "reasoning": "Part(text)",
+        "tool_call": "Part(data)",
     }
     assert streaming_params["stream_fields"]["sequence"] == "metadata.shared.stream.sequence"
     assert streaming_params["status_stream_fields"]["event_id"] == "metadata.shared.stream.event_id"
@@ -407,7 +429,7 @@ def test_authenticated_extended_agent_card_injects_profile_into_extensions() -> 
         "optional_fields": ["read_tokens", "write_tokens"],
     }
     tool_call_contract = streaming_params["tool_call_payload_contract"]
-    assert tool_call_contract["a2a_part_type"] == "DataPart"
+    assert tool_call_contract["a2a_part_type"] == "Part(data)"
     assert tool_call_contract["discriminator"] == {
         "field": "kind",
         "allowed_values": ["state", "output_delta"],
@@ -446,9 +468,9 @@ def test_authenticated_extended_agent_card_injects_profile_into_extensions() -> 
         "skill",
     ]
     assert session_query_params["rich_input"]["core_message_part_mapping"] == {
-        "TextPart": "text",
-        "FilePart(image only)": "input_image",
-        "DataPart(type=mention|skill)": "mention|skill",
+        "Part(text)": "text",
+        "Part(url|raw image only)": "input_image",
+        "Part(data mention|skill payloads)": "mention|skill",
     }
     assert (
         session_query_params["rich_input"]["prompt_async_part_contracts"]["image"]["maps_to"]
@@ -510,7 +532,7 @@ def test_authenticated_extended_agent_card_injects_profile_into_extensions() -> 
     assert thread_lifecycle_params["notification_bridge"]["current_delivery"] == (
         "codex.threads.watch task stream"
     )
-    assert thread_lifecycle_params["task_streaming"]["task_stream_method"] == "tasks/resubscribe"
+    assert thread_lifecycle_params["task_streaming"]["task_stream_method"] == "SubscribeToTask"
     assert thread_lifecycle_params["stable_thread_fields"] == [
         "id",
         "title",
@@ -609,7 +631,7 @@ def test_authenticated_extended_agent_card_injects_profile_into_extensions() -> 
     ]
     assert watch_contract["params"]["optional"] == ["request.events"]
     assert watch_contract["result"]["fields"] == ["ok", "task_id", "context_id"]
-    assert review_control_params["task_streaming"]["task_stream_method"] == "tasks/resubscribe"
+    assert review_control_params["task_streaming"]["task_stream_method"] == "SubscribeToTask"
     assert review_control_params["task_streaming"]["watch_method"] == "codex.review.watch"
     assert review_control_params["task_streaming"]["supported_events"] == [
         "review.started",
@@ -645,7 +667,7 @@ def test_authenticated_extended_agent_card_injects_profile_into_extensions() -> 
     assert exec_control_params["profile"] == profile
     assert exec_control_params["supported_metadata"] == ["codex.directory"]
     assert exec_control_params["provider_private_metadata"] == ["codex.directory"]
-    assert exec_control_params["task_streaming"]["task_stream_method"] == "tasks/resubscribe"
+    assert exec_control_params["task_streaming"]["task_stream_method"] == "SubscribeToTask"
     assert exec_control_params["errors"]["business_codes"]["EXEC_FORBIDDEN"] == -32018
     start_contract = exec_control_params["method_contracts"]["codex.exec.start"]
     assert start_contract["execution_binding"] == "standalone_interactive_command_exec"
@@ -654,49 +676,47 @@ def test_authenticated_extended_agent_card_injects_profile_into_extensions() -> 
 
     wire_contract = ext_by_uri[WIRE_CONTRACT_EXTENSION_URI]
     wire_contract_params = _require_params(wire_contract)
-    assert wire_contract_params["protocol_version"] == "0.3.0"
-    assert wire_contract_params["default_protocol_version"] == "0.3"
-    assert wire_contract_params["supported_protocol_versions"] == ["0.3", "1.0"]
-    assert wire_contract_params["protocol_compatibility"]["versions"]["0.3"]["status"] == (
-        "supported"
+    assert wire_contract_params["protocol_version"] == "1.0.0"
+    assert wire_contract_params["default_protocol_version"] == "1.0"
+    assert wire_contract_params["supported_protocol_versions"] == ["1.0"]
+    assert set(wire_contract_params["protocol_compatibility"]["versions"]) == {"1.0"}
+    assert (
+        wire_contract_params["protocol_compatibility"]["versions"]["1.0"]["status"] == "supported"
     )
-    assert wire_contract_params["protocol_compatibility"]["versions"]["1.0"]["status"] == "partial"
     assert (
         "A2A-Version"
-        in (
-            wire_contract_params["protocol_compatibility"]["versions"]["1.0"]["supported_features"][
-                0
-            ]
-        )
+        in wire_contract_params["protocol_compatibility"]["versions"]["1.0"]["supported_features"][
+            0
+        ]
     )
-    assert "agent/getAuthenticatedExtendedCard" in wire_contract_params["all_jsonrpc_methods"]
-    assert "tasks/pushNotificationConfig/set" in wire_contract_params["all_jsonrpc_methods"]
+    assert "GetExtendedAgentCard" in wire_contract_params["all_jsonrpc_methods"]
+    assert "CreateTaskPushNotificationConfig" in wire_contract_params["all_jsonrpc_methods"]
     assert "POST /v1/message:send" in wire_contract_params["core"]["http_endpoints"]
-    assert "GET /v1/card" in wire_contract_params["core"]["http_endpoints"]
+    assert "GET /v1/extendedAgentCard" in wire_contract_params["core"]["http_endpoints"]
 
     compatibility = ext_by_uri[COMPATIBILITY_PROFILE_EXTENSION_URI]
     compatibility_params = _require_params(compatibility)
     assert compatibility_params["profile_id"] == "codex-a2a-single-tenant-coding-v1"
-    assert compatibility_params["protocol_version"] == "0.3.0"
-    assert compatibility_params["default_protocol_version"] == "0.3"
-    assert compatibility_params["supported_protocol_versions"] == ["0.3", "1.0"]
+    assert compatibility_params["protocol_version"] == "1.0.0"
+    assert compatibility_params["default_protocol_version"] == "1.0"
+    assert compatibility_params["supported_protocol_versions"] == ["1.0"]
     assert (
         compatibility_params["protocol_compatibility"]
         == wire_contract_params["protocol_compatibility"]
     )
     assert compatibility_params["deployment"] == profile["deployment"]
     assert compatibility_params["runtime_features"] == profile["runtime_features"]
-    assert "agent/getAuthenticatedExtendedCard" in compatibility_params["core"]["jsonrpc_methods"]
+    assert "GetExtendedAgentCard" in compatibility_params["core"]["jsonrpc_methods"]
     assert compatibility_params["extension_taxonomy"]["provider_private_metadata"] == [
         "codex.directory",
         "codex.execution",
     ]
-    assert compatibility_params["method_retention"]["agent/getAuthenticatedExtendedCard"] == {
+    assert compatibility_params["method_retention"]["GetExtendedAgentCard"] == {
         "surface": "core",
         "availability": "always",
         "retention": "required",
     }
-    assert compatibility_params["method_retention"]["tasks/pushNotificationConfig/set"] == {
+    assert compatibility_params["method_retention"]["CreateTaskPushNotificationConfig"] == {
         "surface": "core",
         "availability": "always",
         "retention": "required",
@@ -710,7 +730,7 @@ def test_authenticated_extended_agent_card_injects_profile_into_extensions() -> 
         "execution_environment" in note for note in compatibility_params["consumer_guidance"]
     )
     assert any(
-        "terminal tasks/resubscribe replay-once behavior" in note
+        "terminal SubscribeToTask replay-once behavior" in note
         for note in compatibility_params["consumer_guidance"]
     )
     assert any(
@@ -786,21 +806,21 @@ def test_public_agent_card_skills_are_minimal() -> None:
     )
     review_watch_skill = next(skill for skill in card.skills if skill.id == "codex.review.watch")
 
-    assert session_skill.examples is None
+    assert list(session_skill.examples) == []
     assert "provider-private" in session_skill.tags
-    assert session_control_skill.examples is None
+    assert list(session_control_skill.examples) == []
     assert "provider-private" in session_control_skill.tags
-    assert thread_control_skill.examples is None
+    assert list(thread_control_skill.examples) == []
     assert "provider-private" in thread_control_skill.tags
-    assert thread_watch_skill.examples is None
+    assert list(thread_watch_skill.examples) == []
     assert "provider-private" in thread_watch_skill.tags
-    assert interrupt_recovery_skill.examples is None
+    assert list(interrupt_recovery_skill.examples) == []
     assert "provider-private" in interrupt_recovery_skill.tags
-    assert turn_control_skill.examples is None
+    assert list(turn_control_skill.examples) == []
     assert "provider-private" in turn_control_skill.tags
-    assert review_control_skill.examples is None
+    assert list(review_control_skill.examples) == []
     assert "provider-private" in review_control_skill.tags
-    assert review_watch_skill.examples is None
+    assert list(review_watch_skill.examples) == []
     assert "provider-private" in review_watch_skill.tags
 
 

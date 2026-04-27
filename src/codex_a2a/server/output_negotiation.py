@@ -9,17 +9,24 @@ from a2a.server.events import EventConsumer
 from a2a.server.tasks import ResultAggregator, TaskManager
 from a2a.types import (
     Artifact,
-    DataPart,
-    FilePart,
     Message,
     Part,
     Task,
     TaskArtifactUpdateEvent,
     TaskState,
     TaskStatusUpdateEvent,
-    TextPart,
 )
 
+from codex_a2a.a2a_proto import (
+    is_data_part,
+    is_file_part,
+    is_text_part,
+    new_text_part,
+    part_data,
+    part_text,
+    proto_to_python,
+    proto_with_updates,
+)
 from codex_a2a.media_modes import (
     APPLICATION_JSON_MEDIA_MODE,
     TEXT_PLAIN_MEDIA_MODE,
@@ -85,9 +92,10 @@ def merge_output_negotiation_metadata(
 def extract_accepted_output_modes_from_metadata(
     metadata: dict[str, Any] | None,
 ) -> frozenset[str] | None:
-    if not isinstance(metadata, dict):
+    metadata_map = _metadata_to_python(metadata)
+    if metadata_map is None:
         return None
-    codex_metadata = metadata.get("codex")
+    codex_metadata = metadata_map.get("codex")
     if not isinstance(codex_metadata, dict):
         return None
     negotiation_metadata = codex_metadata.get(OUTPUT_NEGOTIATION_METADATA_KEY)
@@ -106,21 +114,19 @@ def annotate_output_negotiation_metadata(
     normalized = normalize_accepted_output_modes(accepted_output_modes)
     if normalized is None:
         return payload
+    merged_metadata = merge_output_negotiation_metadata(
+        _metadata_to_python(getattr(payload, "metadata", None)),
+        normalized,
+    )
 
     if isinstance(payload, Task):
-        return payload.model_copy(
-            update={"metadata": merge_output_negotiation_metadata(payload.metadata, normalized)}
-        )
+        return proto_with_updates(payload, metadata=merged_metadata)
 
     if isinstance(payload, TaskStatusUpdateEvent):
-        return payload.model_copy(
-            update={"metadata": merge_output_negotiation_metadata(payload.metadata, normalized)}
-        )
+        return proto_with_updates(payload, metadata=merged_metadata)
 
     if isinstance(payload, TaskArtifactUpdateEvent):
-        return payload.model_copy(
-            update={"metadata": merge_output_negotiation_metadata(payload.metadata, normalized)}
-        )
+        return proto_with_updates(payload, metadata=merged_metadata)
 
     return payload
 
@@ -137,12 +143,12 @@ def apply_accepted_output_modes(
         artifact = _filter_artifact(payload.artifact, accepted_modes)
         if artifact is None:
             return None
-        return payload.model_copy(update={"artifact": artifact})
+        return proto_with_updates(payload, artifact=artifact)
 
     if isinstance(payload, TaskStatusUpdateEvent):
         status = payload.status
         message = _filter_optional_message(status.message, accepted_modes)
-        return payload.model_copy(update={"status": status.model_copy(update={"message": message})})
+        return proto_with_updates(payload, status=proto_with_updates(status, message=message))
 
     if isinstance(payload, Task):
         return _filter_task(payload, accepted_modes)
@@ -151,7 +157,7 @@ def apply_accepted_output_modes(
         filtered = _filter_message(payload, accepted_modes)
         if filtered is not None:
             return filtered
-        return payload.model_copy(update={"parts": []})
+        return proto_with_updates(payload, parts=[])
 
     return payload
 
@@ -229,7 +235,7 @@ class NegotiatingResultAggregator(ResultAggregator):
             should_interrupt = False
             is_auth_required = (
                 isinstance(transformed_event, Task | TaskStatusUpdateEvent)
-                and transformed_event.status.state == TaskState.auth_required
+                and transformed_event.status.state == TaskState.TASK_STATE_AUTH_REQUIRED
             )
             if is_auth_required:
                 should_interrupt = True
@@ -273,12 +279,11 @@ def _filter_task(task: Task, accepted_modes: frozenset[str]) -> Task:
             filtered_artifacts.append(filtered_artifact)
 
     filtered_status_message = _filter_optional_message(task.status.message, accepted_modes)
-    return task.model_copy(
-        update={
-            "history": filtered_history,
-            "artifacts": filtered_artifacts,
-            "status": task.status.model_copy(update={"message": filtered_status_message}),
-        }
+    return proto_with_updates(
+        task,
+        history=filtered_history,
+        artifacts=filtered_artifacts,
+        status=proto_with_updates(task.status, message=filtered_status_message),
     )
 
 
@@ -298,7 +303,7 @@ def _filter_message(
     filtered_parts = _filter_parts(message.parts or [], accepted_modes)
     if not filtered_parts:
         return None
-    return message.model_copy(update={"parts": filtered_parts})
+    return proto_with_updates(message, parts=filtered_parts)
 
 
 def _filter_artifact(
@@ -308,38 +313,34 @@ def _filter_artifact(
     filtered_parts = _filter_parts(artifact.parts or [], accepted_modes)
     if not filtered_parts:
         return None
-    return artifact.model_copy(update={"parts": filtered_parts})
+    return proto_with_updates(artifact, parts=filtered_parts)
 
 
 def _filter_parts(parts: list[Part], accepted_modes: frozenset[str]) -> list[Part]:
     filtered_parts: list[Part] = []
     for part in parts:
-        root = getattr(part, "root", None)
-        media_mode = _part_media_mode(root)
+        media_mode = _part_media_mode(part)
         if media_mode is not None and media_mode_is_accepted(media_mode, accepted_modes):
             filtered_parts.append(part)
             continue
 
         if media_mode_is_accepted(TEXT_PLAIN_MEDIA_MODE, accepted_modes):
-            fallback_text = _part_text_fallback(root)
+            fallback_text = _part_text_fallback(part)
             if fallback_text is not None:
-                filtered_parts.append(Part(root=TextPart(text=fallback_text)))
+                filtered_parts.append(new_text_part(fallback_text))
     return filtered_parts
 
 
 def _part_media_mode(part: Any) -> str | None:
-    if isinstance(part, TextPart):
+    if isinstance(part, Part) and is_text_part(part):
         return TEXT_PLAIN_MEDIA_MODE
-    if isinstance(part, DataPart):
+    if isinstance(part, Part) and is_data_part(part):
         return APPLICATION_JSON_MEDIA_MODE
-    if isinstance(part, FilePart):
-        payload = part.file
-        mime_type = _file_payload_value(payload, "mimeType", "mime_type")
-        if isinstance(mime_type, str) and mime_type.strip():
-            return mime_type.strip()
-        uri = _file_payload_value(payload, "uri")
-        if isinstance(uri, str) and uri.startswith("data:image/"):
-            return uri.removeprefix("data:").split(";", 1)[0]
+    if isinstance(part, Part) and is_file_part(part):
+        if part.media_type:
+            return part.media_type.strip()
+        if part.url and part.url.startswith("data:image/"):
+            return part.url.removeprefix("data:").split(";", 1)[0]
     return None
 
 
@@ -357,32 +358,28 @@ def media_mode_is_accepted(media_mode: str, accepted_modes: frozenset[str]) -> b
 
 
 def _part_text_fallback(part: Any) -> str | None:
-    if isinstance(part, TextPart):
-        return part.text
-    if isinstance(part, DataPart):
-        return json.dumps(part.data, ensure_ascii=True, separators=(",", ":"), sort_keys=True)
-    if isinstance(part, FilePart):
-        payload = part.file
-        mime_type = _file_payload_value(payload, "mimeType", "mime_type")
-        name = _file_payload_value(payload, "name")
-        uri = _file_payload_value(payload, "uri")
-        details = [value for value in (name, mime_type, uri) if isinstance(value, str) and value]
+    if isinstance(part, Part) and is_text_part(part):
+        return part_text(part)
+    if isinstance(part, Part) and is_data_part(part):
+        return json.dumps(part_data(part), ensure_ascii=True, separators=(",", ":"), sort_keys=True)
+    if isinstance(part, Part) and is_file_part(part):
+        details = [
+            value
+            for value in (part.filename, part.media_type, part.url)
+            if isinstance(value, str) and value
+        ]
         if details:
             return f"[file omitted: {' | '.join(details)}]"
         return "[file omitted]"
     return None
 
 
-def _file_payload_value(payload: Any, *field_names: str) -> Any:
-    for field_name in field_names:
-        value = getattr(payload, field_name, None)
-        if value is not None:
-            return value
-
-    if hasattr(payload, "model_dump"):
-        dumped = payload.model_dump(by_alias=True, exclude_none=True)
-        if isinstance(dumped, dict):
-            for field_name in field_names:
-                if field_name in dumped:
-                    return dumped[field_name]
-    return None
+def _metadata_to_python(metadata: Any) -> dict[str, Any] | None:
+    if metadata is None:
+        return None
+    if isinstance(metadata, dict):
+        return dict(metadata)
+    if not metadata:
+        return None
+    converted = proto_to_python(metadata)
+    return converted if isinstance(converted, dict) else None

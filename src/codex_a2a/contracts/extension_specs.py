@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from a2a.server.apps.jsonrpc.jsonrpc_app import JSONRPCApplication
+from a2a.server.routes.jsonrpc_dispatcher import JsonRpcDispatcher
 
 from codex_a2a.execution.request_overrides import request_execution_options_fields
 from codex_a2a.profile.runtime import RuntimeProfile
@@ -21,7 +21,7 @@ REVIEW_CONTROL_EXTENSION_URI = "urn:codex-a2a:codex-review/v1"
 EXEC_CONTROL_EXTENSION_URI = "urn:codex-a2a:codex-exec/v1"
 INTERRUPT_CALLBACK_EXTENSION_URI = "urn:a2a:interactive-interrupt/v1"
 
-TASKS_RESUBSCRIBE_METHOD = "tasks/resubscribe"
+TASKS_RESUBSCRIBE_METHOD = "SubscribeToTask"
 TASKS_SUBSCRIBE_HTTP_ENDPOINT = "/v1/tasks/{id}:subscribe"
 
 SHARED_SESSION_BINDING_FIELD = "metadata.shared.session.id"
@@ -291,7 +291,7 @@ DISCOVERY_METHOD_CONTRACTS: dict[str, DiscoveryMethodContract] = {
             ),
             (
                 "Use item.skills[].path directly when constructing rich-input skill items "
-                "for codex.sessions.prompt_async or core A2A DataPart payloads."
+                "for codex.sessions.prompt_async or core A2A Part(data) payloads."
             ),
         ),
     ),
@@ -355,7 +355,7 @@ DISCOVERY_METHOD_CONTRACTS: dict[str, DiscoveryMethodContract] = {
                 "notifications into the normal A2A task stream."
             ),
             (
-                "Watch results are delivered through tasks/resubscribe as DataPart payloads "
+                "Watch results are delivered through SubscribeToTask as Part(data) payloads "
                 "with kind=skills_changed or kind=apps_updated."
             ),
         ),
@@ -456,7 +456,7 @@ THREAD_LIFECYCLE_METHOD_CONTRACTS: dict[str, ThreadLifecycleMethodContract] = {
         notification_response_status=204,
         notes=(
             (
-                "Use tasks/resubscribe to consume lifecycle events emitted through the watch "
+                "Use SubscribeToTask to consume lifecycle events emitted through the watch "
                 "task stream."
             ),
             ("request.thread_ids narrows the watch to specific upstream thread ids when provided."),
@@ -772,7 +772,7 @@ EXEC_CONTROL_METHOD_CONTRACTS: dict[str, ExecMethodContract] = {
             ),
             (
                 "Output is delivered through the normal A2A task stream and "
-                "tasks/resubscribe surfaces rather than the JSON-RPC response body."
+                "SubscribeToTask rather than the JSON-RPC response body."
             ),
             (
                 "This surface is intentionally separate from codex.sessions.shell, which "
@@ -859,7 +859,7 @@ INTERRUPT_INVALID_PARAMS_DATA_FIELDS: tuple[str, ...] = (
     "request_id",
 )
 
-CORE_JSONRPC_METHODS: tuple[str, ...] = tuple(JSONRPCApplication.METHOD_TO_MODEL)
+CORE_JSONRPC_METHODS: tuple[str, ...] = tuple(JsonRpcDispatcher.METHOD_TO_MODEL)
 CORE_HTTP_ENDPOINTS: tuple[str, ...] = (
     "POST /v1/message:send",
     "POST /v1/message:stream",
@@ -870,13 +870,12 @@ CORE_HTTP_ENDPOINTS: tuple[str, ...] = (
     "GET /v1/tasks/{id}/pushNotificationConfigs",
     "POST /v1/tasks/{id}/pushNotificationConfigs",
     "GET /v1/tasks/{id}/pushNotificationConfigs/{push_id}",
-    "GET /v1/card",
+    "GET /v1/extendedAgentCard",
 )
 WIRE_CONTRACT_UNSUPPORTED_METHOD_DATA_FIELDS: tuple[str, ...] = (
-    "type",
     "method",
-    "supported_methods",
-    "protocol_version",
+    "supportedMethods",
+    "protocolVersion",
 )
 
 

@@ -10,20 +10,18 @@ This guide covers runtime configuration, transport contracts, streaming/session/
 - Agent Card keeps `preferredTransport=HTTP+JSON` and also exposes JSON-RPC in `additional_interfaces`.
 - The public Agent Card at `/.well-known/agent-card.json` is intentionally slimmed to the minimum discovery surface.
 - Detailed provider-private contracts are available through the authenticated extended card:
-  - preferred: JSON-RPC `agent/getAuthenticatedExtendedCard`
-  - HTTP core route: `GET /v1/card`
-  - compatibility route: `GET /agent/authenticatedExtendedCard`
+  - preferred: JSON-RPC `GetExtendedAgentCard`
+  - HTTP core route: `GET /v1/extendedAgentCard`
 - Agent Card responses publish `ETag` and `Cache-Control`; clients should revalidate instead of repeatedly fetching full payloads.
 - Larger discovery documents support gzip compression on these HTTP GET routes:
   - `/.well-known/agent-card.json`
   - `/.well-known/agent.json`
-  - `GET /v1/card`
-  - `GET /agent/authenticatedExtendedCard`
+  - `GET /v1/extendedAgentCard`
   - `GET /openapi.json`
 - Streaming and task routes do not rely on this gzip behavior.
 - Payload schema is transport-specific and should not be mixed:
-  - REST send payload usually uses `message.content` and role values like `ROLE_USER`
-  - JSON-RPC `message/send` payload uses `params.message.parts` and role values `user` / `agent`
+  - REST send payload uses `message.parts` and role values like `ROLE_USER`
+  - JSON-RPC `SendMessage` payload uses `params.message.parts` and role values like `ROLE_USER`
 - The JSON-RPC entrypoint and authenticated extended card publish the explicit wire contract for the supported method set and unsupported-method error shape.
 
 ## Wire Contract
@@ -40,11 +38,11 @@ Use it to answer:
 Current behavior:
 
 - core JSON-RPC methods:
-  - `message/send`
-  - `message/stream`
-  - `tasks/get`
-  - `tasks/cancel`
-  - `tasks/resubscribe`
+  - `SendMessage`
+  - `SendStreamingMessage`
+  - `GetTask`
+  - `CancelTask`
+  - `SubscribeToTask`
 - core HTTP endpoints:
   - `/v1/message:send`
   - `/v1/message:stream`
@@ -120,11 +118,11 @@ Current profile shape:
   - `agent=<optional>`
   - `variant=<optional>`
 - core JSON-RPC methods:
-  - `message/send`
-  - `message/stream`
-  - `tasks/get`
-  - `tasks/cancel`
-  - `tasks/resubscribe`
+  - `SendMessage`
+  - `SendStreamingMessage`
+  - `GetTask`
+  - `CancelTask`
+  - `SubscribeToTask`
 - core HTTP endpoints:
   - `/v1/message:send`
   - `/v1/message:stream`
@@ -198,8 +196,8 @@ Use the grouped sections below as the deployment-first reading order:
 - `A2A_DESCRIPTION`: agent description exposed on Agent Card and docs surfaces
 - `A2A_VERSION`: agent version string
 - `A2A_PROJECT`: optional project label injected into examples and discovery metadata
-- `A2A_PROTOCOL_VERSION`: advertised A2A protocol version, default `0.3.0`
-- `A2A_SUPPORTED_PROTOCOL_VERSIONS`: comma-separated request negotiation lines, default `0.3,1.0`
+- `A2A_PROTOCOL_VERSION`: advertised A2A protocol version, default `1.0.0`
+- `A2A_SUPPORTED_PROTOCOL_VERSIONS`: comma-separated request negotiation lines, default `1.0`
 - `A2A_DOCUMENTATION_URL`: optional external documentation URL exposed on Agent Card
 - `A2A_STATIC_AUTH_CREDENTIALS`: JSON array of static inbound credentials. Supports multiple `bearer` and `basic` entries, each with a stable `principal`; `bearer` entries must declare `principal`, while `basic` entries derive `principal` from `username`.
 
@@ -420,20 +418,20 @@ This path is for contributors. End users should prefer the released CLI path des
 
 ### Session and Task Behavior
 
-- The service forwards A2A `message:send` to Codex session/message calls.
-- Streaming is always enabled for this service surface. `/v1/message:stream` and JSON-RPC `message/stream` are compatibility-sensitive core capabilities rather than deployment-time toggles.
+- The service forwards A2A `message:send` requests and `SendMessage` JSON-RPC calls to Codex session/message flows.
+- Streaming is always enabled for this service surface. `/v1/message:stream` and JSON-RPC `SendStreamingMessage` are compatibility-sensitive core capabilities rather than deployment-time toggles.
 - `codex.sessions.shell` is a session-scoped shell helper for ownership, attribution, and traceability in internal deployments. It keeps `session_id` in the A2A contract, but the underlying execution still uses Codex `command/exec` rather than resuming or creating an upstream Codex thread.
 - `codex.sessions.shell` returns a one-shot shell snapshot only. It does not expose PTY lifecycle methods such as stdin write, resize, or terminate, and should be treated as a bounded helper rather than a general session shell.
-- `codex.exec.start`, `codex.exec.write`, `codex.exec.resize`, and `codex.exec.terminate` expose a standalone interactive `command/exec` runtime when `A2A_ENABLE_EXEC_CONTROL=true`. This surface is intended for internal or tightly controlled deployments where interactive terminal control is an explicit part of the adapter contract. `codex.exec.start` returns process/task handles immediately, while stdout/stderr deltas and the final result flow through normal A2A task streaming and `tasks/resubscribe`.
+- `codex.exec.start`, `codex.exec.write`, `codex.exec.resize`, and `codex.exec.terminate` expose a standalone interactive `command/exec` runtime when `A2A_ENABLE_EXEC_CONTROL=true`. This surface is intended for internal or tightly controlled deployments where interactive terminal control is an explicit part of the adapter contract. `codex.exec.start` returns process/task handles immediately, while stdout/stderr deltas and the final result flow through normal A2A task streaming and `SubscribeToTask`.
 - Rich input is supported on two surfaces:
   - `codex.sessions.prompt_async.request.parts[]` accepts `text`, `image`, `mention`, and `skill`
-  - core A2A `message/send` and `message/stream` keep standard A2A parts and map `TextPart`, image `FilePart`, and `DataPart(data={"type":"mention"|"skill", ...})` into Codex turn input
+  - core A2A `SendMessage` and `SendStreamingMessage` keep standard A2A parts and map `Part(text)`, image `Part(url|raw)`, and `Part(data={"type":"mention"|"skill", ...})` into Codex turn input
 - Agent Card media modes reflect that stable core message surface: default input modes are `text/plain`, `image/*`, and `application/json`; default output modes are `text/plain` and `application/json`.
 - The authenticated extended Agent Card also decomposes provider-private JSON-RPC surfaces into narrower skills: `codex.sessions.query`, `codex.sessions.control`, `codex.discovery.query`, `codex.discovery.watch`, `codex.threads.control`, `codex.threads.watch`, `codex.turns.control`, `codex.review.control`, `codex.exec.control`, `codex.exec.stream`, and `codex.interrupt.callback`.
 - `codex.sessions.shell`, `codex.turns.control`, `codex.review.*`, and `codex.exec.*` only appear in the authenticated extended card when their deployment toggles are enabled.
-- Those provider-private skills use narrower `output_modes` where practical: query/control/watch handle surfaces declare `application/json` when their primary contract is a structured JSON-RPC result or `DataPart` watch payload, while `codex.exec.stream` declares `text/plain` because stdout/stderr deltas and terminal summaries are emitted as `TextPart`.
-- `codex.sessions.control` intentionally remains mixed: `codex.sessions.prompt_async` returns a structured handle, while `codex.sessions.command` and `codex.sessions.shell` return A2A message items that contain `TextPart`.
-- On the core chat surface, the `application/json` input mode is intentionally narrower than arbitrary JSON: only `DataPart(type=mention|skill)` is part of the declared stable contract.
+- Those provider-private skills use narrower `output_modes` where practical: query/control/watch handle surfaces declare `application/json` when their primary contract is a structured JSON-RPC result or `Part(data)` watch payload, while `codex.exec.stream` declares `text/plain` because stdout/stderr deltas and terminal summaries are emitted as `Part(text)`.
+- `codex.sessions.control` intentionally remains mixed: `codex.sessions.prompt_async` returns a structured handle, while `codex.sessions.command` and `codex.sessions.shell` return A2A message items that contain `Part(text)`.
+- On the core chat surface, the `application/json` input mode is intentionally narrower than arbitrary JSON: only `Part(data={"type":"mention"|"skill", ...})` is part of the declared stable contract.
 - Image input maps to upstream `turn/start.input[].type=input_image`.
 - `mention.path` and `skill.path` are forwarded verbatim. The service does not guess app or plugin identifiers from display names.
 - `local_image` is not part of the current declared stable rich-input contract.
@@ -441,28 +439,28 @@ This path is for contributors. End users should prefer the released CLI path des
 - Completed chat turns are persisted as `completed`; `input-required` is reserved for active interrupt asks that still need a reply.
 - Non-streaming requests return a `Task` directly.
 - Non-streaming `message:send` responses may include normalized token usage at `Task.metadata.shared.usage` with the same field schema.
-- `tasks/resubscribe` remains part of the core A2A method baseline, but this deployment's terminal-task replay-once policy is a declared service-level behavior rather than a generic A2A guarantee.
+- `SubscribeToTask` remains part of the core A2A method baseline, but this deployment's terminal-task replay-once policy is a declared service-level behavior rather than a generic A2A guarantee.
 - Task persistence also applies a service-level resilience policy: once a task has been durably stored in a terminal state, later conflicting writes are dropped instead of overwriting that terminal snapshot.
 
 ### Streaming and Interrupt Contract
 
-- Streaming (`/v1/message:stream`) emits incremental `TaskArtifactUpdateEvent` and then `TaskStatusUpdateEvent(final=true)`.
+- Streaming (`/v1/message:stream`) emits an initial working `Task`, then incremental `TaskArtifactUpdateEvent` / `TaskStatusUpdateEvent` updates, and finally a terminal `Task`.
 - If task persistence fails while processing a request, the service maps that failure to a stable failed task or failed final status instead of leaking raw task-store exceptions.
 - Those task-store failure surfaces use `metadata.codex.error` with `type=TASK_STORE_UNAVAILABLE` and an `operation` field such as `get` or `save`.
 - Stream artifacts carry `artifact.metadata.shared.stream.block_type` with values `text`, `reasoning`, and `tool_call`.
-- The published `urn:a2a:stream-hints/v1` contract also declares the emitted A2A part type per block: `text` and `reasoning` use `TextPart`, while `tool_call` uses `DataPart`.
+- The published `urn:a2a:stream-hints/v1` contract also declares the emitted A2A part type per block: `text` and `reasoning` use `Part(text)`, while `tool_call` uses `Part(data)`.
 - All chunks share one stream artifact ID and preserve original timeline via `artifact.metadata.shared.stream.sequence`. Timeline identity fields such as `message_id`, `event_id`, and `source` are emitted under `metadata.shared.stream`.
 - Session projections are normalized under `metadata.shared.session`, with `id` as the canonical field and optional `title` when the upstream surface provides one. The corresponding leaf fields are `metadata.shared.session.id` and `metadata.shared.session.title`.
 - A final snapshot is emitted only when stream chunks did not already produce the same final text.
 - Stream routing is schema-first: the service classifies chunks primarily by Codex `part.type` plus `part_id` state rather than inline text markers.
 - `message.part.delta` and `message.part.updated` are merged per `part_id`; out-of-order deltas are buffered and replayed when the corresponding `part.updated` arrives.
-- `text` and `reasoning` chunks are emitted as `TextPart`, while `tool_call` chunks are emitted as `DataPart` with a normalized structured payload.
-- Legacy stringified JSON tool payloads are rejected; the stream contract only accepts structured `DataPart(data={...})` payloads.
-- Core `message/send` and `message/stream` honor `configuration.acceptedOutputModes` for emitted A2A parts. When a client accepts `text/plain` but not `application/json`, structured `DataPart` payloads are downgraded to compact text instead of being emitted as raw `DataPart`.
+- `text` and `reasoning` chunks are emitted as `Part(text)`, while `tool_call` chunks are emitted as `Part(data)` with a normalized structured payload.
+- Legacy stringified JSON tool payloads are rejected; the stream contract only accepts structured `Part(data={...})` payloads.
+- Core `SendMessage` and `SendStreamingMessage` honor `configuration.acceptedOutputModes` for emitted A2A parts. When a client accepts `text/plain` but not `application/json`, structured `Part(data)` payloads are downgraded to compact text instead of being emitted as raw `Part(data)`.
 - Core chat also validates explicit `acceptedOutputModes` up front. Requests that do not accept any declared chat output mode are rejected, and current chat requests must still accept `text/plain`.
-- `application/json` is additive structured-output support, not a promise that every natural-language reply can be losslessly re-encoded as a JSON `DataPart`. Clients that expect ordinary assistant prose should continue accepting `text/plain`.
+- `application/json` is additive structured-output support, not a promise that every natural-language reply can be losslessly re-encoded as a JSON `Part(data)`. Clients that expect ordinary assistant prose should continue accepting `text/plain`.
 - Negotiated output modes are persisted with the task as soon as the task state is materialized, including artifact-first streams before any later status update arrives.
-- That negotiated output surface is treated as part of the task lifecycle: `tasks/get`, `tasks/resubscribe`, and push notifications continue using the task's negotiated output modes instead of reverting to raw stored `DataPart`.
+- That negotiated output surface is treated as part of the task lifecycle: `GetTask`, `SubscribeToTask`, and push notifications continue using the task's negotiated output modes instead of reverting to raw stored `Part(data)`.
 - To avoid character-level event floods, the service performs light server-side aggregation before emitting `text` and `reasoning` updates: `text` flushes at `120 chars or 200ms`, `reasoning` flushes at `240 chars or 350ms`, and both flush immediately on block switches, `tool_call`, and request completion boundaries.
 - Final status event metadata may include normalized token usage at `metadata.shared.usage` with fields like `input_tokens`, `output_tokens`, `total_tokens`, optional `metadata.shared.usage.reasoning_tokens`, `metadata.shared.usage.cache_tokens.read_tokens`, `metadata.shared.usage.cache_tokens.write_tokens`, `metadata.shared.usage.raw`, and optional `cost`.
 - Interrupt lifecycle is explicit:
@@ -695,8 +693,8 @@ curl -sS http://127.0.0.1:8000/ \
 Upstream Codex emits `skills/changed` and `app/list/updated` as server-side notifications. This service does not expose a standalone server-push JSON-RPC transport, so it bridges those signals through a background A2A task stream.
 
 - start a watch with `codex.discovery.watch`
-- subscribe or re-subscribe through `tasks/resubscribe`
-- consume `DataPart` payloads with:
+- subscribe or re-subscribe through `SubscribeToTask`
+- consume `Part(data)` payloads with:
   - `kind=skills_changed`
   - `kind=apps_updated`
 
@@ -821,9 +819,9 @@ curl -sS http://127.0.0.1:8000/ \
 Upstream Codex emits `thread/started`, `thread/status/changed`, `thread/archived`, `thread/unarchived`, and `thread/closed` as server-side notifications. This service bridges those signals through a background A2A task stream rather than exposing standalone server-push JSON-RPC notifications.
 
 - start a watch with `codex.threads.watch`
-- subscribe or re-subscribe through `tasks/resubscribe`
+- subscribe or re-subscribe through `SubscribeToTask`
 - supported watch event filters are `thread.started`, `thread.status.changed`, `thread.archived`, `thread.unarchived`, and `thread.closed`
-- consume `DataPart` payloads with:
+- consume `Part(data)` payloads with:
   - `kind=thread_started`
   - `kind=thread_status_changed`
   - `kind=thread_archived`
@@ -952,7 +950,7 @@ Review-control guidance:
 - supported target types are `uncommittedChanges`, `baseBranch`, `commit`, and `custom`
 - `delivery` supports `inline` and `detached`
 - `codex.review.start` remains control-only and returns the review handle (`turn_id`, `review_thread_id`)
-- use `codex.review.watch` when you need a stable review watch task bridge over `tasks/resubscribe`
+- use `codex.review.watch` when you need a stable review watch task bridge over `SubscribeToTask`
 
 ### Review Start (`codex.review.start`)
 
@@ -1028,7 +1026,7 @@ curl -sS http://127.0.0.1:8000/ \
   }'
 ```
 
-`codex.review.watch` returns `ok`, `task_id`, and `context_id`. Consume the lifecycle stream through `tasks/resubscribe`.
+`codex.review.watch` returns `ok`, `task_id`, and `context_id`. Consume the lifecycle stream through `SubscribeToTask`.
 
 Supported review watch events:
 
@@ -1152,12 +1150,12 @@ curl -sS http://127.0.0.1:8000/ \
   -d '{
     "jsonrpc": "2.0",
     "id": 101,
-    "method": "message/send",
+    "method": "SendMessage",
     "params": {
       "message": {
         "messageId": "msg-1",
-        "role": "user",
-        "parts": [{"kind": "text", "text": "Explain what this repository does."}]
+        "role": "ROLE_USER",
+        "parts": [{"text": "Explain what this repository does."}]
       }
     }
   }'

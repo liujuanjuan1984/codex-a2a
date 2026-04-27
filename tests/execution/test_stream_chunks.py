@@ -1,7 +1,8 @@
 import logging
 
-from a2a.types import DataPart, TextPart
+from a2a.types import Part
 
+from codex_a2a.a2a_proto import is_data_part, is_text_part, part_data, part_text
 from codex_a2a.execution.stream_chunks import (
     delta_chunks,
     snapshot_chunks,
@@ -64,8 +65,9 @@ def test_snapshot_chunks_emits_prefix_delta_and_suppresses_non_prefix_rewrite(
     )
 
     assert len(chunks) == 1
-    assert isinstance(chunks[0].part, TextPart)
-    assert chunks[0].part.text == " world"
+    assert isinstance(chunks[0].part, Part)
+    assert is_text_part(chunks[0].part)
+    assert part_text(chunks[0].part) == " world"
     assert chunks[0].source == "part_text_diff"
     assert state.buffer == "hello world"
     assert state.message_id == "msg-2"
@@ -100,8 +102,9 @@ def test_delta_chunks_appends_text_and_marks_state_as_delta() -> None:
     )
 
     assert len(chunks) == 1
-    assert isinstance(chunks[0].part, TextPart)
-    assert chunks[0].part.text == "answer"
+    assert isinstance(chunks[0].part, Part)
+    assert is_text_part(chunks[0].part)
+    assert part_text(chunks[0].part) == "answer"
     assert chunks[0].append is True
     assert state.buffer == "answer"
     assert state.saw_delta is True
@@ -126,8 +129,9 @@ def test_tool_delta_chunks_normalizes_payload_and_rejects_unstructured_payload(c
     )
 
     assert len(chunks) == 1
-    assert isinstance(chunks[0].part, DataPart)
-    assert chunks[0].part.data == {"kind": "state", "tool": "bash", "status": "running"}
+    assert isinstance(chunks[0].part, Part)
+    assert is_data_part(chunks[0].part)
+    assert part_data(chunks[0].part) == {"kind": "state", "tool": "bash", "status": "running"}
     assert state.message_id == "msg-2"
 
     with caplog.at_level(logging.WARNING):

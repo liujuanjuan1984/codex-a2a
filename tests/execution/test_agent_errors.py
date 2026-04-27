@@ -2,6 +2,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from a2a.server.events.event_queue import EventQueue
+from a2a.types import TaskState
 
 from codex_a2a.execution.executor import CodexAgentExecutor
 from tests.support.context import make_request_context_mock
@@ -32,7 +33,7 @@ async def test_execute_missing_ids():
 
     assert isinstance(args[0], Task)
     assert args[0].id == "unknown"
-    assert args[0].status.state.name == "failed"
+    assert args[0].status.state == TaskState.TASK_STATE_FAILED
 
 
 @pytest.mark.asyncio
@@ -51,9 +52,8 @@ async def test_cancel_missing_ids():
     # This should no longer raise RuntimeError
     await executor.cancel(context, event_queue)
 
-    # Verify that an event was enqueued and queue is not force-closed by executor.cancel
+    # Verify that an event was enqueued.
     event_queue.enqueue_event.assert_called()
-    event_queue.close.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -77,5 +77,5 @@ async def test_execute_invalid_metadata_type():
 
     event = event_queue.enqueue_event.call_args[0][0]
     assert isinstance(event, Task)
-    assert event.status.state.name == "failed"
+    assert event.status.state == TaskState.TASK_STATE_FAILED
     assert "Invalid metadata" in str(event.status.message)

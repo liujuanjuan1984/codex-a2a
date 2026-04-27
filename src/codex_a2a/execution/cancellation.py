@@ -22,8 +22,7 @@ async def emit_canceled_status(
         TaskStatusUpdateEvent(
             task_id=task_id,
             context_id=context_id,
-            status=TaskStatus(state=TaskState.canceled),
-            final=True,
+            status=TaskStatus(state=TaskState.TASK_STATE_CANCELED),
         )
     )
 

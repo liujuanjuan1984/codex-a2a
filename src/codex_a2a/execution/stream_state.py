@@ -4,8 +4,9 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
-from a2a.types import DataPart, TextPart
+from a2a.types import Part
 
+from codex_a2a.a2a_proto import is_text_part, new_text_part, part_text
 from codex_a2a.contracts.runtime_output import (
     build_stream_artifact_metadata as build_runtime_stream_metadata,
 )
@@ -37,7 +38,7 @@ def flush_time_limit(block_type: BlockType) -> float:
 
 @dataclass(frozen=True)
 class NormalizedStreamChunk:
-    part: TextPart | DataPart
+    part: Part
     content_key: str
     append: bool
     block_type: BlockType
@@ -79,7 +80,7 @@ class BufferedTextChunk:
 
     @classmethod
     def from_chunk(cls, chunk: NormalizedStreamChunk, *, now: float) -> BufferedTextChunk:
-        text = chunk.part.text if isinstance(chunk.part, TextPart) else ""
+        text = part_text(chunk.part) or ""
         return cls(
             block_type=chunk.block_type,
             part_id=chunk.part_id,
@@ -92,7 +93,7 @@ class BufferedTextChunk:
         )
 
     def can_merge(self, chunk: NormalizedStreamChunk) -> bool:
-        if not isinstance(chunk.part, TextPart):
+        if not is_text_part(chunk.part):
             return False
         if chunk.block_type not in {BlockType.TEXT, BlockType.REASONING}:
             return False
@@ -106,9 +107,9 @@ class BufferedTextChunk:
         )
 
     def append_chunk(self, chunk: NormalizedStreamChunk) -> None:
-        if not isinstance(chunk.part, TextPart):
+        if not is_text_part(chunk.part):
             return
-        self.text = f"{self.text}{chunk.part.text}"
+        self.text = f"{self.text}{part_text(chunk.part) or ''}"
 
     def should_flush(self, *, now: float) -> bool:
         return len(self.text) >= flush_char_limit(self.block_type) or (
@@ -117,7 +118,7 @@ class BufferedTextChunk:
 
     def to_chunk(self) -> NormalizedStreamChunk:
         return NormalizedStreamChunk(
-            part=TextPart(text=self.text),
+            part=new_text_part(self.text),
             content_key=self.text,
             append=self.append,
             block_type=self.block_type,

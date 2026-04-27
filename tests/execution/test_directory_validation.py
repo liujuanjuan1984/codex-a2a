@@ -3,7 +3,9 @@ from unittest.mock import AsyncMock
 
 import pytest
 from a2a.server.events.event_queue import EventQueue
+from a2a.types import Task, TaskState
 
+from codex_a2a.a2a_proto import part_text
 from codex_a2a.execution.executor import CodexAgentExecutor
 from codex_a2a.upstream.client import CodexClient
 from tests.support.context import make_request_context_mock
@@ -86,12 +88,15 @@ async def test_execute_with_invalid_directory(mock_client):
 
     # Verify error emission
     event_queue.enqueue_event.assert_called()
-    from a2a.types import Task
 
     found_error = False
     for call in event_queue.enqueue_event.call_args_list:
         event = call[0][0]
-        if isinstance(event, Task) and event.status.state.name == "failed":
-            if "outside the allowed workspace" in str(event.status.message):
+        if isinstance(event, Task) and event.status.state == TaskState.TASK_STATE_FAILED:
+            if (
+                event.status.message is not None
+                and part_text(event.status.message.parts[0]) is not None
+                and "outside the allowed workspace" in part_text(event.status.message.parts[0])
+            ):
                 found_error = True
     assert found_error

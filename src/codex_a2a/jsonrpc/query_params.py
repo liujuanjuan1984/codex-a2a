@@ -8,9 +8,9 @@ from codex_a2a.jsonrpc.params_common import (
     JsonRpcParamsValidationError,
     _PermissiveModel,
     format_loc,
-    normalize_non_empty_string,
     normalize_session_query_limit,
-    parse_positive_int,
+    validate_limit_param,
+    validate_required_session_id,
 )
 
 
@@ -20,10 +20,7 @@ class SessionQueryQueryParams(_PermissiveModel):
     page: Any | None = None
     size: Any | None = None
 
-    @field_validator("limit", mode="before")
-    @classmethod
-    def _validate_limit(cls, value: Any) -> int | None:
-        return parse_positive_int(value, field="limit")
+    _validate_limit = field_validator("limit", mode="before")(validate_limit_param)
 
 
 class SessionListParams(_PermissiveModel):
@@ -33,19 +30,15 @@ class SessionListParams(_PermissiveModel):
     page: Any | None = None
     size: Any | None = None
 
-    @field_validator("limit", mode="before")
-    @classmethod
-    def _validate_limit(cls, value: Any) -> int | None:
-        return parse_positive_int(value, field="limit")
+    _validate_limit = field_validator("limit", mode="before")(validate_limit_param)
 
 
 class SessionMessagesParams(SessionListParams):
     session_id: str
 
-    @field_validator("session_id", mode="before")
-    @classmethod
-    def _validate_session_id(cls, value: Any) -> str:
-        return normalize_non_empty_string(value, message="Missing required params.session_id")
+    _validate_session_id = field_validator("session_id", mode="before")(
+        validate_required_session_id
+    )
 
 
 def _raise_query_validation_error(exc: ValidationError) -> None:

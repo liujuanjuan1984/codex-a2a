@@ -29,7 +29,7 @@ def test_build_call_context_returns_header_state() -> None:
     context = build_call_context({"Authorization": "Bearer explicit-token"})
 
     assert context is not None
-    assert context.state["headers"] == {"Authorization": "Bearer explicit-token"}
+    assert context.service_parameters == {"Authorization": "Bearer explicit-token"}
 
 
 def test_build_call_context_returns_none_without_headers() -> None:

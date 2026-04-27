@@ -12,6 +12,7 @@ from codex_a2a.jsonrpc.params_common import (
     map_extra_forbidden,
     normalize_non_empty_string,
     strip_optional_string,
+    validate_required_thread_id,
 )
 
 
@@ -72,10 +73,7 @@ class ReviewStartControlParams(_StrictModel):
     delivery: Literal["inline", "detached"] | None = None
     target: ReviewTarget
 
-    @field_validator("thread_id", mode="before")
-    @classmethod
-    def _validate_thread_id(cls, value: Any) -> str:
-        return normalize_non_empty_string(value, message="Missing required params.thread_id")
+    _validate_thread_id = field_validator("thread_id", mode="before")(validate_required_thread_id)
 
 
 class ReviewWatchRequestParams(_StrictModel):

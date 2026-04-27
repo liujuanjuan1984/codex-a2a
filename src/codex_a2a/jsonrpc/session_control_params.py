@@ -14,6 +14,9 @@ from codex_a2a.jsonrpc.params_common import (
     metadata_validation_error,
     normalize_non_empty_string,
     strip_optional_string,
+    validate_non_empty_parts,
+    validate_request_command,
+    validate_required_session_id,
 )
 
 
@@ -96,12 +99,7 @@ class PromptAsyncRequestParams(_StrictModel):
     system: str | None = None
     variant: str | None = None
 
-    @field_validator("parts", mode="before")
-    @classmethod
-    def _validate_parts(cls, value: Any) -> Any:
-        if not isinstance(value, list) or not value:
-            raise ValueError("request.parts must be a non-empty array")
-        return value
+    _validate_parts = field_validator("parts", mode="before")(validate_non_empty_parts)
 
     @field_validator("message_id", "agent", "system", "variant", mode="before")
     @classmethod
@@ -118,12 +116,7 @@ class CommandRequestParams(_StrictModel):
         serialization_alias="messageID",
     )
 
-    @field_validator("command", mode="before")
-    @classmethod
-    def _validate_command(cls, value: Any) -> str:
-        return normalize_non_empty_string(
-            value, message="request.command must be a non-empty string"
-        )
+    _validate_command = field_validator("command", mode="before")(validate_request_command)
 
     @field_validator("arguments", "message_id", mode="before")
     @classmethod
@@ -134,12 +127,7 @@ class CommandRequestParams(_StrictModel):
 class ShellRequestParams(_StrictModel):
     command: str
 
-    @field_validator("command", mode="before")
-    @classmethod
-    def _validate_command(cls, value: Any) -> str:
-        return normalize_non_empty_string(
-            value, message="request.command must be a non-empty string"
-        )
+    _validate_command = field_validator("command", mode="before")(validate_request_command)
 
 
 class PromptAsyncControlParams(_StrictModel):
@@ -147,10 +135,9 @@ class PromptAsyncControlParams(_StrictModel):
     request: PromptAsyncRequestParams
     metadata: MetadataParams | None = None
 
-    @field_validator("session_id", mode="before")
-    @classmethod
-    def _validate_session_id(cls, value: Any) -> str:
-        return normalize_non_empty_string(value, message="Missing required params.session_id")
+    _validate_session_id = field_validator("session_id", mode="before")(
+        validate_required_session_id
+    )
 
 
 class CommandControlParams(_StrictModel):
@@ -158,10 +145,9 @@ class CommandControlParams(_StrictModel):
     request: CommandRequestParams
     metadata: MetadataParams | None = None
 
-    @field_validator("session_id", mode="before")
-    @classmethod
-    def _validate_session_id(cls, value: Any) -> str:
-        return normalize_non_empty_string(value, message="Missing required params.session_id")
+    _validate_session_id = field_validator("session_id", mode="before")(
+        validate_required_session_id
+    )
 
 
 class ShellControlParams(_StrictModel):
@@ -169,10 +155,9 @@ class ShellControlParams(_StrictModel):
     request: ShellRequestParams
     metadata: MetadataParams | None = None
 
-    @field_validator("session_id", mode="before")
-    @classmethod
-    def _validate_session_id(cls, value: Any) -> str:
-        return normalize_non_empty_string(value, message="Missing required params.session_id")
+    _validate_session_id = field_validator("session_id", mode="before")(
+        validate_required_session_id
+    )
 
 
 def _raise_control_validation_error(exc: ValidationError) -> None:

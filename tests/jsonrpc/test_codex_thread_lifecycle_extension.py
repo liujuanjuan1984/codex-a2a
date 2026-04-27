@@ -4,6 +4,12 @@ import httpx
 import pytest
 
 from tests.support.dummy_clients import DummySessionQueryCodexClient as DummyCodexClient
+from tests.support.jsonrpc_errors import (
+    error_context as _error_context,
+)
+from tests.support.jsonrpc_errors import (
+    error_reason as _error_reason,
+)
 from tests.support.settings import make_settings
 
 _BASE_SETTINGS = {
@@ -297,13 +303,12 @@ async def test_thread_lifecycle_watch_release_maps_not_found_and_forbidden(monke
             },
         )
 
-    assert not_found_response.json()["error"]["code"] == -32014
-    assert not_found_response.json()["error"]["data"] == {
-        "type": "WATCH_NOT_FOUND",
-        "task_id": "task-404",
-    }
-    assert forbidden_response.json()["error"]["code"] == -32015
-    assert forbidden_response.json()["error"]["data"] == {
-        "type": "WATCH_FORBIDDEN",
-        "task_id": "task-403",
-    }
+    not_found_payload = not_found_response.json()
+    assert not_found_payload["error"]["code"] == -32014
+    assert _error_reason(not_found_payload) == "WATCH_NOT_FOUND"
+    assert _error_context(not_found_payload)["taskId"] == "task-404"
+
+    forbidden_payload = forbidden_response.json()
+    assert forbidden_payload["error"]["code"] == -32015
+    assert _error_reason(forbidden_payload) == "WATCH_FORBIDDEN"
+    assert _error_context(forbidden_payload)["taskId"] == "task-403"

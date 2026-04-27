@@ -1,21 +1,22 @@
-from base64 import b64encode
 from unittest.mock import ANY, AsyncMock
 
 import httpx
 import pytest
 
 from tests.support.dummy_clients import DummySessionQueryCodexClient as DummyCodexClient
+from tests.support.http_auth import basic_auth_header as _basic_auth_header
+from tests.support.jsonrpc_errors import (
+    error_context as _error_context,
+)
+from tests.support.jsonrpc_errors import (
+    error_reason as _error_reason,
+)
 from tests.support.settings import make_settings
 
 _BASE_SETTINGS = {
     "codex_timeout": 1.0,
     "a2a_log_level": "DEBUG",
 }
-
-
-def _basic_auth_header(username: str, password: str) -> dict[str, str]:
-    token = b64encode(f"{username}:{password}".encode()).decode("ascii")
-    return {"Authorization": f"Basic {token}"}
 
 
 @pytest.mark.asyncio
@@ -293,8 +294,8 @@ async def test_exec_control_maps_missing_session_lookup_to_business_error(monkey
 
     payload = response.json()
     assert payload["error"]["code"] == -32009
-    assert payload["error"]["data"]["type"] == "EXEC_SESSION_NOT_FOUND"
-    assert payload["error"]["data"]["process_id"] == "exec-missing"
+    assert _error_reason(payload) == "EXEC_SESSION_NOT_FOUND"
+    assert _error_context(payload)["processId"] == "exec-missing"
 
 
 @pytest.mark.asyncio
@@ -338,8 +339,8 @@ async def test_exec_control_maps_forbidden_session_access_to_business_error(monk
 
     payload = response.json()
     assert payload["error"]["code"] == -32018
-    assert payload["error"]["data"]["type"] == "EXEC_FORBIDDEN"
-    assert payload["error"]["data"]["process_id"] == "exec-1"
+    assert _error_reason(payload) == "EXEC_FORBIDDEN"
+    assert _error_context(payload)["processId"] == "exec-1"
 
 
 @pytest.mark.asyncio
@@ -369,7 +370,8 @@ async def test_exec_control_requires_exec_capability(monkeypatch) -> None:
 
     payload = response.json()
     assert payload["error"]["code"] == -32007
-    assert payload["error"]["data"]["type"] == "AUTHORIZATION_FORBIDDEN"
-    assert payload["error"]["data"]["method"] == "codex.exec.start"
-    assert payload["error"]["data"]["capability"] == "exec_control"
-    assert payload["error"]["data"]["credential_id"] == "test-bearer"
+    assert _error_reason(payload) == "AUTHORIZATION_FORBIDDEN"
+    context = _error_context(payload)
+    assert context["method"] == "codex.exec.start"
+    assert context["capability"] == "exec_control"
+    assert context["credentialId"] == "test-bearer"

@@ -288,7 +288,7 @@ def as_tool_call_payload(payload: ToolCallPayload) -> dict[str, Any]:
 
 def build_tool_call_payload_contract_params() -> dict[str, Any]:
     return {
-        "a2a_part_type": "DataPart",
+        "a2a_part_type": "Part(data)",
         "payload_type": "object",
         "discriminator": {
             "field": "kind",

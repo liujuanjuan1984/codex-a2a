@@ -84,9 +84,10 @@ def build_jsonrpc_extension_openapi_description(*, runtime_profile: RuntimeProfi
     interrupt_methods = ", ".join(sorted(INTERRUPT_CALLBACK_METHODS.values()))
     return (
         "A2A JSON-RPC entrypoint. Supports core A2A methods "
-        "(message/send, message/stream, tasks/get, tasks/cancel, "
-        "tasks/pushNotificationConfig/*, tasks/resubscribe, "
-        "agent/getAuthenticatedExtendedCard) plus Codex session extensions, "
+        "(SendMessage, SendStreamingMessage, GetTask, CancelTask, "
+        "ListTasks, CreateTaskPushNotificationConfig, GetTaskPushNotificationConfig, "
+        "ListTaskPushNotificationConfigs, DeleteTaskPushNotificationConfig, "
+        "SubscribeToTask, GetExtendedAgentCard) plus Codex session extensions, "
         "Codex thread lifecycle extensions, interrupt recovery extensions, "
         "active-turn control extensions, review "
         "control extensions, Codex discovery extensions, interactive exec "
@@ -100,8 +101,8 @@ def build_jsonrpc_extension_openapi_description(*, runtime_profile: RuntimeProfi
         f"Codex interactive exec methods: {exec_methods}.\n"
         f"Shared interrupt callback methods: {interrupt_methods}.\n\n"
         "Notification semantics: extension requests without JSON-RPC id return HTTP 204. "
-        "Unsupported methods return JSON-RPC -32601 with supported_methods and "
-        "protocol_version in error.data."
+        "Unsupported methods return JSON-RPC -32601 with supportedMethods and "
+        "protocolVersion in error.data."
     )
 
 
@@ -115,12 +116,12 @@ def build_jsonrpc_extension_openapi_examples(
             "value": {
                 "jsonrpc": "2.0",
                 "id": 101,
-                "method": "message/send",
+                "method": "SendMessage",
                 "params": {
                     "message": {
                         "messageId": "msg-1",
-                        "role": "user",
-                        "parts": [{"kind": "text", "text": "Explain what this repository does."}],
+                        "role": "ROLE_USER",
+                        "parts": [{"text": "Explain what this repository does."}],
                     }
                 },
             },
@@ -130,12 +131,12 @@ def build_jsonrpc_extension_openapi_examples(
             "value": {
                 "jsonrpc": "2.0",
                 "id": 102,
-                "method": "message/stream",
+                "method": "SendStreamingMessage",
                 "params": {
                     "message": {
                         "messageId": "msg-stream-1",
-                        "role": "user",
-                        "parts": [{"kind": "text", "text": "Stream the answer and summarize."}],
+                        "role": "ROLE_USER",
+                        "parts": [{"text": "Stream the answer and summarize."}],
                     }
                 },
             },
@@ -145,7 +146,7 @@ def build_jsonrpc_extension_openapi_examples(
             "value": {
                 "jsonrpc": "2.0",
                 "id": 103,
-                "method": "agent/getAuthenticatedExtendedCard",
+                "method": "GetExtendedAgentCard",
                 "params": {},
             },
         },
@@ -485,7 +486,7 @@ def build_rest_message_openapi_examples() -> dict[str, Any]:
                 "message": {
                     "messageId": "msg-rest-1",
                     "role": "ROLE_USER",
-                    "content": [{"text": "Explain what this repository does."}],
+                    "parts": [{"text": "Explain what this repository does."}],
                 }
             },
         },
@@ -495,7 +496,7 @@ def build_rest_message_openapi_examples() -> dict[str, Any]:
                 "message": {
                     "messageId": "msg-rest-continue-1",
                     "role": "ROLE_USER",
-                    "content": [{"text": "Continue previous work and summarize next steps."}],
+                    "parts": [{"text": "Continue previous work and summarize next steps."}],
                 },
                 "metadata": {"shared": {"session": {"id": "s-1"}}},
             },

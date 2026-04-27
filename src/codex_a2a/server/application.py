@@ -5,9 +5,10 @@ from contextlib import asynccontextmanager
 from typing import Any
 
 import uvicorn
-from a2a.server.apps.jsonrpc.fastapi_app import A2AFastAPI
-from a2a.server.apps.rest.rest_adapter import RESTAdapter
+from a2a.server.routes.agent_card_routes import create_agent_card_routes
+from a2a.server.routes.rest_routes import create_rest_routes
 from fastapi import FastAPI
+from starlette.routing import Route
 
 from codex_a2a.client.manager import A2AClientManager
 from codex_a2a.config import Settings
@@ -74,9 +75,18 @@ def create_app(settings: Settings) -> FastAPI:
     )
     task_store_runtime = build_task_store_runtime(settings, engine=shared_database_engine)
     task_store = task_store_runtime.task_store
+    runtime_profile = build_runtime_profile(settings)
+    capability_snapshot = build_capability_snapshot(runtime_profile=runtime_profile)
+    agent_card = build_agent_card(settings, runtime_profile=runtime_profile)
+    extended_agent_card = build_authenticated_extended_agent_card(
+        settings,
+        runtime_profile=runtime_profile,
+    )
     handler = CodexRequestHandler(
         agent_executor=executor,
         task_store=task_store,
+        agent_card=agent_card,
+        extended_agent_card=extended_agent_card,
     )
     exec_runtime = CodexExecRuntime(
         client=client,
@@ -113,13 +123,6 @@ def create_app(settings: Settings) -> FastAPI:
             if shared_database_engine is not None:
                 await shared_database_engine.dispose()
 
-    runtime_profile = build_runtime_profile(settings)
-    capability_snapshot = build_capability_snapshot(runtime_profile=runtime_profile)
-    agent_card = build_agent_card(settings, runtime_profile=runtime_profile)
-    extended_agent_card = build_authenticated_extended_agent_card(
-        settings,
-        runtime_profile=runtime_profile,
-    )
     context_builder = IdentityAwareCallContextBuilder()
     jsonrpc_methods = {
         **SESSION_QUERY_METHODS,
@@ -152,11 +155,8 @@ def create_app(settings: Settings) -> FastAPI:
         session_owner_matcher=bindings.session_owner_matcher,
     )
 
-    # Compose the shared FastAPI app from the SDK JSON-RPC and REST application wrappers.
     jsonrpc_app = CodexSessionQueryJSONRPCApplication(
-        agent_card=agent_card,
-        http_handler=handler,
-        extended_agent_card=extended_agent_card,
+        request_handler=handler,
         context_builder=context_builder,
         codex_client=client,
         exec_runtime=exec_runtime,
@@ -168,7 +168,7 @@ def create_app(settings: Settings) -> FastAPI:
         supported_methods=list(capability_snapshot.supported_jsonrpc_methods),
         guard_hooks=session_guard_hooks,
     )
-    app = A2AFastAPI(
+    app = FastAPI(
         title=settings.a2a_title,
         version=settings.a2a_version,
         lifespan=lifespan,
@@ -177,7 +177,20 @@ def create_app(settings: Settings) -> FastAPI:
         PathScopedGZipMiddleware,
         paths=GZIP_COMPRESSIBLE_PATHS,
     )
-    jsonrpc_app.add_routes_to_app(app)
+    app.router.routes.extend(create_agent_card_routes(agent_card))
+    app.router.routes.extend(
+        create_agent_card_routes(agent_card, card_url="/.well-known/agent.json")
+    )
+    app.router.routes.append(
+        Route(path="/", endpoint=jsonrpc_app.handle_requests, methods=["POST"])
+    )
+    app.router.routes.extend(
+        create_rest_routes(
+            request_handler=handler,
+            context_builder=context_builder,
+            path_prefix="/v1",
+        )
+    )
     app.state.codex_client = client
     app.state.codex_executor = executor
     app.state.codex_exec_runtime = exec_runtime
@@ -186,15 +199,6 @@ def create_app(settings: Settings) -> FastAPI:
     app.state.codex_thread_lifecycle_runtime = thread_lifecycle_runtime
     app.state.a2a_client_manager = a2a_client_manager
     app.state.task_store = task_store
-
-    rest_adapter = RESTAdapter(
-        agent_card=agent_card,
-        http_handler=handler,
-        extended_agent_card=extended_agent_card,
-        context_builder=context_builder,
-    )
-    for route, callback in rest_adapter.routes().items():
-        app.add_api_route(route[0], callback, methods=[route[1]])
 
     if settings.a2a_enable_health_endpoint:
 

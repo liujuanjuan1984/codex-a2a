@@ -16,6 +16,124 @@ from .openapi_contract_fragments import (
 )
 
 
+def _ensure_object_schema(
+    schemas: dict[str, Any],
+    name: str,
+    schema: dict[str, Any],
+) -> None:
+    if name not in schemas:
+        schemas[name] = schema
+
+
+def _ensure_minimal_a2a_schemas(schema: dict[str, Any]) -> None:
+    components = schema.setdefault("components", {})
+    if not isinstance(components, dict):
+        return
+    schemas = components.setdefault("schemas", {})
+    if not isinstance(schemas, dict):
+        return
+
+    _ensure_object_schema(
+        schemas,
+        "A2APart",
+        {
+            "type": "object",
+            "description": (
+                "A2A 1.0 part payload. Text parts use {'text': '...'}; "
+                "file and data parts use the matching protobuf JSON field names."
+            ),
+            "additionalProperties": True,
+        },
+    )
+    _ensure_object_schema(
+        schemas,
+        "A2AMessage",
+        {
+            "type": "object",
+            "required": ["messageId", "role", "parts"],
+            "properties": {
+                "messageId": {"type": "string"},
+                "role": {"type": "string", "enum": ["ROLE_USER", "ROLE_AGENT"]},
+                "parts": {
+                    "type": "array",
+                    "items": {"$ref": "#/components/schemas/A2APart"},
+                },
+                "metadata": {
+                    "type": "object",
+                    "additionalProperties": True,
+                },
+            },
+            "additionalProperties": True,
+        },
+    )
+    _ensure_object_schema(
+        schemas,
+        "SendMessageRequest",
+        {
+            "type": "object",
+            "required": ["message"],
+            "properties": {
+                "message": {"$ref": "#/components/schemas/A2AMessage"},
+                "configuration": {
+                    "type": "object",
+                    "additionalProperties": True,
+                },
+                "metadata": {
+                    "type": "object",
+                    "additionalProperties": True,
+                },
+            },
+            "additionalProperties": True,
+        },
+    )
+    _ensure_object_schema(
+        schemas,
+        "SendStreamingMessageRequest",
+        {
+            "$ref": "#/components/schemas/SendMessageRequest",
+        },
+    )
+    _ensure_object_schema(
+        schemas,
+        "A2AJsonRpcRequest",
+        {
+            "type": "object",
+            "required": ["jsonrpc", "method"],
+            "properties": {
+                "jsonrpc": {"type": "string", "enum": ["2.0"]},
+                "id": {
+                    "oneOf": [
+                        {"type": "string"},
+                        {"type": "integer"},
+                    ]
+                },
+                "method": {"type": "string"},
+                "params": {
+                    "type": "object",
+                    "additionalProperties": True,
+                },
+            },
+            "additionalProperties": True,
+        },
+    )
+
+
+def _ensure_path_item(
+    paths: dict[str, Any],
+    path: str,
+    method: str,
+) -> dict[str, Any]:
+    path_item = paths.setdefault(path, {})
+    if not isinstance(path_item, dict):
+        path_item = {}
+        paths[path] = path_item
+    operation = path_item.setdefault(method, {})
+    if not isinstance(operation, dict):
+        operation = {}
+        path_item[method] = operation
+    return operation
+
+
 def patch_openapi_contract(
     app: FastAPI,
     *,
@@ -35,6 +153,7 @@ def patch_openapi_contract(
             return app.openapi_schema
 
         schema = original_openapi()
+        _ensure_minimal_a2a_schemas(schema)
         components = schema.setdefault("components", {})
         if isinstance(components, dict):
             security_schemes, security = build_openapi_security(settings)
@@ -42,38 +161,39 @@ def patch_openapi_contract(
                 components["securitySchemes"] = security_schemes
             if security:
                 schema["security"] = security
-        paths = schema.get("paths")
+        paths = schema.setdefault("paths", {})
         if isinstance(paths, dict):
-            root_path = paths.get("/")
-            if isinstance(root_path, dict):
-                post = root_path.get("post")
-                if isinstance(post, dict):
-                    if "security" in schema:
-                        post["security"] = list(
-                            cast(list[dict[str, list[str]]], schema["security"])
-                        )
-                    post["summary"] = "Handle A2A JSON-RPC Requests"
-                    post["description"] = build_jsonrpc_extension_openapi_description(
-                        runtime_profile=runtime_profile
-                    )
-                    post["x-a2a-extension-contracts"] = dict(extension_contracts)
+            post = _ensure_path_item(paths, "/", "post")
+            if "security" in schema:
+                post["security"] = list(cast(list[dict[str, list[str]]], schema["security"]))
+            post["summary"] = "Handle A2A JSON-RPC Requests"
+            post["description"] = build_jsonrpc_extension_openapi_description(
+                runtime_profile=runtime_profile
+            )
+            post["x-a2a-extension-contracts"] = dict(extension_contracts)
+            post.setdefault("responses", {"200": {"description": "JSON-RPC response"}})
 
-                    request_body = post.setdefault("requestBody", {})
-                    if isinstance(request_body, dict):
-                        content = request_body.setdefault("content", {})
-                        if isinstance(content, dict):
-                            app_json = content.setdefault("application/json", {})
-                            if isinstance(app_json, dict):
-                                app_json["examples"] = build_jsonrpc_extension_openapi_examples(
-                                    runtime_profile=runtime_profile
-                                )
+            request_body = post.setdefault("requestBody", {})
+            if isinstance(request_body, dict):
+                request_body.setdefault("required", True)
+                content = request_body.setdefault("content", {})
+                if isinstance(content, dict):
+                    app_json = content.setdefault("application/json", {})
+                    if isinstance(app_json, dict):
+                        app_json.setdefault(
+                            "schema",
+                            {"$ref": "#/components/schemas/A2AJsonRpcRequest"},
+                        )
+                        app_json["examples"] = build_jsonrpc_extension_openapi_examples(
+                            runtime_profile=runtime_profile
+                        )
 
             rest_post_contracts: dict[str, dict[str, Any]] = {
                 "/v1/message:send": {
                     "summary": "Send Message (HTTP+JSON)",
                     "description": (
                         "A2A HTTP+JSON message send endpoint. "
-                        "Use REST payload shape with message.content and ROLE_* roles."
+                        "Use the A2A 1.0 request body with message.parts."
                     ),
                     "schema_ref": "#/components/schemas/SendMessageRequest",
                     "contracts": {
@@ -84,7 +204,7 @@ def patch_openapi_contract(
                     "summary": "Stream Message (HTTP+JSON)",
                     "description": (
                         "A2A HTTP+JSON streaming endpoint. "
-                        "Use REST payload shape with message.content and ROLE_* roles."
+                        "Use the A2A 1.0 request body with message.parts."
                     ),
                     "schema_ref": "#/components/schemas/SendStreamingMessageRequest",
                     "contracts": {
@@ -96,12 +216,7 @@ def patch_openapi_contract(
             }
             rest_examples = build_rest_message_openapi_examples()
             for rest_path, contract in rest_post_contracts.items():
-                rest_path_item = paths.get(rest_path)
-                if not isinstance(rest_path_item, dict):
-                    continue
-                rest_post = rest_path_item.get("post")
-                if not isinstance(rest_post, dict):
-                    continue
+                rest_post = _ensure_path_item(paths, rest_path, "post")
 
                 if "security" in schema:
                     rest_post["security"] = list(
@@ -110,6 +225,7 @@ def patch_openapi_contract(
                 rest_post["summary"] = contract["summary"]
                 rest_post["description"] = contract["description"]
                 rest_post["x-a2a-extension-contracts"] = contract["contracts"]
+                rest_post.setdefault("responses", {"200": {"description": "A2A response"}})
                 if rest_path == "/v1/message:stream":
                     rest_post["x-a2a-streaming"] = extension_contracts["streaming"]
 

@@ -3,7 +3,9 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from a2a.server.events.event_queue import EventQueue
+from a2a.types import Task, TaskState
 
+from codex_a2a.a2a_proto import part_text
 from codex_a2a.execution.executor import CodexAgentExecutor
 from codex_a2a.execution.session_runtime import SessionRuntime, TTLCache
 from codex_a2a.upstream.client import CodexClient
@@ -125,16 +127,15 @@ async def test_session_hijack_prevention(mock_client):
 
     # Verify error emission
     # Note: we check call_args_list to find the Task
-    from a2a.types import Task
-
     found_error_task = False
     for call in event_queue.enqueue_event.call_args_list:
         event = call[0][0]
-        if isinstance(event, Task) and event.status.state.name == "failed":
-            # Handle a2a types where parts contain root models
-            part = event.status.message.parts[0]
-            text = getattr(part, "text", None) or getattr(part.root, "text", "")
-            if "not owned by you" in text:
+        if isinstance(event, Task) and event.status.state == TaskState.TASK_STATE_FAILED:
+            if (
+                event.status.message is not None
+                and part_text(event.status.message.parts[0]) is not None
+                and "not owned by you" in part_text(event.status.message.parts[0])
+            ):
                 found_error_task = True
                 break
     assert found_error_task

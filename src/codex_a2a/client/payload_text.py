@@ -3,9 +3,11 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-from a2a.types import Message, Part, TextPart
-from a2a.utils.message import get_message_text
-from a2a.utils.parts import get_text_parts
+from a2a.helpers import get_message_text
+from a2a.types import Message, Part
+from google.protobuf.message import Message as ProtoMessage  # type: ignore[import-untyped]
+
+from codex_a2a.a2a_proto import is_text_part, part_text, proto_to_python
 
 
 def _extract_from_iterable(items: Any) -> str | None:
@@ -22,34 +24,26 @@ def _extract_from_parts(parts: Any) -> str | None:
     if not isinstance(parts, (list, tuple)):
         return None
     if all(isinstance(part, Part) for part in parts):
-        sdk_text = "\n".join(text for text in get_text_parts(list(parts)) if text.strip())
+        sdk_text = "\n".join(text for part in parts if (text := part_text(part)) and text.strip())
         if sdk_text:
             return sdk_text
 
     collected: list[str] = []
     for part in parts:
-        text_part = None
-        if isinstance(part, TextPart):
-            text_part = part
-        else:
-            root = getattr(part, "root", None)
-            if isinstance(root, TextPart):
-                text_part = root
-            elif isinstance(part, Mapping):
-                text_value = part.get("text")
-                if isinstance(text_value, str) and text_value.strip():
-                    collected.append(text_value)
+        if isinstance(part, Part) and is_text_part(part):
+            if part.text:
+                collected.append(part.text)
+            continue
+        if isinstance(part, Mapping):
+            text_value = part.get("text")
+            if isinstance(text_value, str) and text_value.strip():
+                collected.append(text_value)
+                continue
+            if isinstance(part.get("role"), str):
+                nested = extract_text_from_payload(part)
+                if nested:
+                    collected.append(nested)
                     continue
-                mapped_root = part.get("root")
-                if isinstance(mapped_root, TextPart):
-                    text_part = mapped_root
-                elif isinstance(part.get("role"), str):
-                    nested = extract_text_from_payload(part)
-                    if nested:
-                        collected.append(nested)
-                        continue
-        if text_part and getattr(text_part, "text", None):
-            collected.append(text_part.text)
     if collected:
         return "\n".join(collected)
     return None
@@ -169,7 +163,11 @@ def extract_text_from_payload(payload: Any) -> str | None:
             return mapped_text
 
     mapping_payload = None
-    if hasattr(payload, "model_dump") and callable(payload.model_dump):
+    if isinstance(payload, ProtoMessage):
+        payload_dict = proto_to_python(payload)
+        if isinstance(payload_dict, Mapping):
+            mapping_payload = payload_dict
+    elif hasattr(payload, "model_dump") and callable(payload.model_dump):
         payload_dict = payload.model_dump()
         if isinstance(payload_dict, Mapping):
             mapping_payload = payload_dict

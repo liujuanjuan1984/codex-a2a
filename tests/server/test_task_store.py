@@ -9,6 +9,7 @@ from a2a.server.tasks.inmemory_task_store import InMemoryTaskStore
 from a2a.server.tasks.task_store import TaskStore
 from a2a.types import Task, TaskState, TaskStatus
 
+from codex_a2a.a2a_proto import proto_to_python
 from codex_a2a.server.database import build_database_engine
 from codex_a2a.server.task_store import (
     GuardedTaskStore,
@@ -61,7 +62,7 @@ async def test_database_task_store_persists_tasks_across_runtime_rebuilds(tmp_pa
         task = Task(
             id="task-1",
             context_id="ctx-1",
-            status=TaskStatus(state=TaskState.working),
+            status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
         )
         await first_runtime.task_store.save(task)
     finally:
@@ -77,7 +78,7 @@ async def test_database_task_store_persists_tasks_across_runtime_rebuilds(tmp_pa
     assert restored is not None
     assert restored.id == "task-1"
     assert restored.context_id == "ctx-1"
-    assert restored.status.state == TaskState.working
+    assert restored.status.state == TaskState.TASK_STATE_WORKING
 
 
 @pytest.mark.asyncio
@@ -108,28 +109,28 @@ async def test_guarded_task_store_allows_input_required_to_resume_working() -> N
         Task(
             id="task-1",
             context_id="ctx-1",
-            status=TaskStatus(state=TaskState.working),
+            status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
         )
     )
     await task_store.save(
         Task(
             id="task-1",
             context_id="ctx-1",
-            status=TaskStatus(state=TaskState.input_required),
+            status=TaskStatus(state=TaskState.TASK_STATE_INPUT_REQUIRED),
         )
     )
     await task_store.save(
         Task(
             id="task-1",
             context_id="ctx-1",
-            status=TaskStatus(state=TaskState.working),
+            status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
         )
     )
 
     restored = await task_store.get("task-1")
 
     assert restored is not None
-    assert restored.status.state == TaskState.working
+    assert restored.status.state == TaskState.TASK_STATE_WORKING
 
 
 @pytest.mark.asyncio
@@ -138,12 +139,12 @@ async def test_guarded_task_store_drops_late_terminal_mutation() -> None:
     authoritative = Task(
         id="task-1",
         context_id="ctx-1",
-        status=TaskStatus(state=TaskState.completed),
+        status=TaskStatus(state=TaskState.TASK_STATE_COMPLETED),
     )
     mutated = Task(
         id="task-1",
         context_id="ctx-1",
-        status=TaskStatus(state=TaskState.completed),
+        status=TaskStatus(state=TaskState.TASK_STATE_COMPLETED),
         metadata={"codex": {"late_mutation": True}},
     )
 
@@ -153,7 +154,7 @@ async def test_guarded_task_store_drops_late_terminal_mutation() -> None:
     restored = await task_store.get("task-1")
 
     assert restored is not None
-    assert restored.metadata is None
+    assert proto_to_python(restored.metadata) == {}
 
 
 @pytest.mark.asyncio
@@ -174,21 +175,21 @@ async def test_guarded_database_task_store_resumes_from_input_required(
             Task(
                 id="task-1",
                 context_id="ctx-1",
-                status=TaskStatus(state=TaskState.working),
+                status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
             )
         )
         await first_runtime.task_store.save(
             Task(
                 id="task-1",
                 context_id="ctx-1",
-                status=TaskStatus(state=TaskState.input_required),
+                status=TaskStatus(state=TaskState.TASK_STATE_INPUT_REQUIRED),
             )
         )
         await second_runtime.task_store.save(
             Task(
                 id="task-1",
                 context_id="ctx-1",
-                status=TaskStatus(state=TaskState.working),
+                status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
             )
         )
 
@@ -198,7 +199,7 @@ async def test_guarded_database_task_store_resumes_from_input_required(
         await second_runtime.shutdown()
 
     assert restored is not None
-    assert restored.status.state == TaskState.working
+    assert restored.status.state == TaskState.TASK_STATE_WORKING
 
 
 @pytest.mark.asyncio
@@ -214,18 +215,18 @@ async def test_guarded_database_task_store_does_not_depend_on_stale_read_before_
     authoritative = Task(
         id="task-1",
         context_id="ctx-1",
-        status=TaskStatus(state=TaskState.completed),
+        status=TaskStatus(state=TaskState.TASK_STATE_COMPLETED),
     )
     late_mutation = Task(
         id="task-1",
         context_id="ctx-1",
-        status=TaskStatus(state=TaskState.completed),
+        status=TaskStatus(state=TaskState.TASK_STATE_COMPLETED),
         metadata={"codex": {"late_mutation": True}},
     )
     stale_snapshot = Task(
         id="task-1",
         context_id="ctx-1",
-        status=TaskStatus(state=TaskState.working),
+        status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
     )
 
     first_runtime = build_task_store_runtime(settings)
@@ -256,14 +257,18 @@ async def test_guarded_database_task_store_does_not_depend_on_stale_read_before_
         await second_runtime.shutdown()
 
     assert restored is not None
-    assert restored.status.state == TaskState.completed
-    assert restored.metadata is None
+    assert restored.status.state == TaskState.TASK_STATE_COMPLETED
+    assert proto_to_python(restored.metadata) == {}
 
 
 class _BrokenTaskStore(TaskStore):
     async def save(self, task: Task, context=None) -> None:  # noqa: ANN001
         del task, context
         raise RuntimeError("broken save")
+
+    async def list(self, params, context=None):  # noqa: ANN001
+        del params, context
+        raise RuntimeError("broken list")
 
     async def get(self, task_id: str, context=None) -> Task | None:  # noqa: ANN001
         del task_id, context
@@ -279,7 +284,7 @@ async def test_guarded_task_store_wraps_operation_failures() -> None:
     task = Task(
         id="task-1",
         context_id="ctx-1",
-        status=TaskStatus(state=TaskState.working),
+        status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
     )
 
     task_store = GuardedTaskStore(_BrokenTaskStore())
@@ -291,12 +296,16 @@ async def test_guarded_task_store_wraps_operation_failures() -> None:
             del task, context
             raise RuntimeError("broken save")
 
+        async def list(self, params, context=None):  # noqa: ANN001
+            del params, context
+            raise RuntimeError("broken list")
+
         async def get(self, task_id: str, context=None) -> Task | None:  # noqa: ANN001
             del context
             return Task(
                 id=task_id,
                 context_id="ctx-1",
-                status=TaskStatus(state=TaskState.working),
+                status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
             )
 
         async def delete(self, task_id: str, context=None) -> None:  # noqa: ANN001

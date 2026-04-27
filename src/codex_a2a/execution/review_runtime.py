@@ -6,8 +6,9 @@ import uuid
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
-from a2a.types import DataPart, Task, TaskState, TaskStatus, TaskStatusUpdateEvent
+from a2a.types import Task, TaskState, TaskStatus, TaskStatusUpdateEvent
 
+from codex_a2a.a2a_proto import new_data_part
 from codex_a2a.contracts.extensions import REVIEW_CONTROL_SUPPORTED_EVENTS
 from codex_a2a.execution.output_mapping import build_assistant_message, enqueue_artifact_update
 from codex_a2a.execution.watch_events import normalize_watch_event_filter
@@ -83,12 +84,12 @@ class CodexReviewRuntime:
             id=task_id,
             context_id=context_id,
             status=TaskStatus(
-                state=TaskState.working,
+                state=TaskState.TASK_STATE_WORKING,
                 message=build_assistant_message(
                     task_id,
                     context_id,
                     (
-                        "Started Codex review watch. Subscribe with tasks/resubscribe "
+                        "Started Codex review watch. Subscribe with SubscribeToTask "
                         "to receive review lifecycle signals."
                     ),
                     message_id=f"{task_id}:status:started",
@@ -123,7 +124,7 @@ class CodexReviewRuntime:
                 task_id=handle.task_id,
                 context_id=handle.context_id,
                 artifact_id=f"{handle.task_id}:review-watch",
-                part=DataPart(data=started_payload),
+                part=new_data_part(started_payload),
                 append=False,
                 last_chunk=None,
                 artifact_metadata=metadata,
@@ -141,7 +142,7 @@ class CodexReviewRuntime:
                 task_id=handle.task_id,
                 context_id=handle.context_id,
                 artifact_id=f"{handle.task_id}:review-watch",
-                part=DataPart(data=payload),
+                part=new_data_part(payload),
                 append=append,
                 last_chunk=is_terminal,
                 artifact_metadata=metadata,
@@ -155,9 +156,9 @@ class CodexReviewRuntime:
                         context_id=handle.context_id,
                         status=TaskStatus(
                             state=(
-                                TaskState.completed
+                                TaskState.TASK_STATE_COMPLETED
                                 if payload["event"] == "review.completed"
-                                else TaskState.failed
+                                else TaskState.TASK_STATE_FAILED
                             ),
                             message=build_assistant_message(
                                 handle.task_id,
@@ -174,7 +175,6 @@ class CodexReviewRuntime:
                                 ),
                             ),
                         ),
-                        final=True,
                         metadata=metadata,
                     )
                 )

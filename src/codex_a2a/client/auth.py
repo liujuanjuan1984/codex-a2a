@@ -4,8 +4,8 @@ from base64 import b64decode, b64encode
 from binascii import Error as BinasciiError
 from collections.abc import Mapping
 
+from a2a.client import ClientCallContext
 from a2a.client.auth.credentials import CredentialService
-from a2a.client.middleware import ClientCallContext
 
 BASIC_AUTH_FORMAT_ERROR = (
     "A2A_CLIENT_BASIC_AUTH must be 'username:password' or a base64-encoded "

@@ -5,8 +5,9 @@ from typing import Any
 
 from a2a.server.agent_execution import RequestContext
 from a2a.server.events.event_queue import EventQueue
-from a2a.types import Artifact, Part, Task, TaskState, TaskStatus, TaskStatusUpdateEvent, TextPart
+from a2a.types import Artifact, Task, TaskState, TaskStatus, TaskStatusUpdateEvent
 
+from codex_a2a.a2a_proto import new_text_part
 from codex_a2a.contracts.runtime_output import (
     build_output_metadata,
     build_status_stream_metadata,
@@ -21,6 +22,21 @@ from codex_a2a.execution.stream_state import (
     StreamOutputState,
     build_stream_artifact_metadata,
 )
+
+
+async def emit_initial_task(
+    *,
+    event_queue: EventQueue,
+    task_id: str,
+    context_id: str,
+) -> None:
+    await event_queue.enqueue_event(
+        Task(
+            id=task_id,
+            context_id=context_id,
+            status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
+        )
+    )
 
 
 async def emit_streaming_completion(
@@ -42,7 +58,7 @@ async def emit_streaming_completion(
             task_id=task_id,
             context_id=context_id,
             artifact_id=stream_artifact_id,
-            part=TextPart(text=response_text),
+            part=new_text_part(response_text),
             append=stream_state.emitted_stream_chunk,
             last_chunk=True,
             artifact_metadata=build_stream_artifact_metadata(
@@ -57,8 +73,7 @@ async def emit_streaming_completion(
         TaskStatusUpdateEvent(
             task_id=task_id,
             context_id=context_id,
-            status=TaskStatus(state=TaskState.completed),
-            final=True,
+            status=TaskStatus(state=TaskState.TASK_STATE_COMPLETED),
             metadata=build_output_metadata(
                 session_id=session_id,
                 usage=resolved_token_usage,
@@ -93,12 +108,15 @@ async def emit_non_stream_completion(
     artifact = Artifact(
         artifact_id=str(uuid.uuid4()),
         name="response",
-        parts=[Part(root=TextPart(text=normalized_text))],
+        parts=[new_text_part(normalized_text)],
     )
     task = Task(
         id=task_id,
         context_id=context_id,
-        status=TaskStatus(state=TaskState.completed),
+        status=TaskStatus(
+            state=TaskState.TASK_STATE_COMPLETED,
+            message=assistant_message,
+        ),
         history=build_history(context),
         artifacts=[artifact],
         metadata=build_output_metadata(
@@ -106,5 +124,4 @@ async def emit_non_stream_completion(
             usage=resolved_token_usage,
         ),
     )
-    task.status.message = assistant_message
     await event_queue.enqueue_event(task)

@@ -12,15 +12,13 @@ from a2a.server.agent_execution import AgentExecutor, RequestContext
 from a2a.server.events.event_queue import EventQueue
 from a2a.types import (
     Message,
-    Part,
     Role,
     Task,
     TaskState,
     TaskStatus,
-    TaskStatusUpdateEvent,
-    TextPart,
 )
 
+from codex_a2a.a2a_proto import new_text_part
 from codex_a2a.client.client import A2AClient
 from codex_a2a.execution.cancellation import (
     await_cancel_cleanup,
@@ -35,6 +33,7 @@ from codex_a2a.execution.request_metadata import (
 )
 from codex_a2a.execution.request_overrides import RequestExecutionOptionsValidationError
 from codex_a2a.execution.response_emitter import (
+    emit_initial_task,
     emit_non_stream_completion,
     emit_streaming_completion,
 )
@@ -50,7 +49,7 @@ from codex_a2a.input_mapping import (
 )
 from codex_a2a.upstream.client import CodexClient
 
-from .output_mapping import enqueue_artifact_update, extract_token_usage, merge_token_usage
+from .output_mapping import extract_token_usage, merge_token_usage
 
 if TYPE_CHECKING:
     from codex_a2a.server.runtime_state import SessionStateRepository
@@ -256,13 +255,10 @@ class CodexAgentExecutor(AgentExecutor):
                     task_id=task_id,
                     context_id=context_id,
                 )
-            await event_queue.enqueue_event(
-                TaskStatusUpdateEvent(
-                    task_id=task_id,
-                    context_id=context_id,
-                    status=TaskStatus(state=TaskState.working),
-                    final=False,
-                )
+            await emit_initial_task(
+                event_queue=event_queue,
+                task_id=task_id,
+                context_id=context_id,
             )
 
             next_turn_text = user_text
@@ -559,34 +555,28 @@ class CodexAgentExecutor(AgentExecutor):
     ) -> None:
         error_message = Message(
             message_id=str(uuid.uuid4()),
-            role=Role.agent,
-            parts=[Part(root=TextPart(text=message))],
+            role=Role.ROLE_AGENT,
+            parts=[new_text_part(message)],
             task_id=task_id,
             context_id=context_id,
         )
         if streaming_request:
-            await enqueue_artifact_update(
-                event_queue=event_queue,
-                task_id=task_id,
-                context_id=context_id,
-                artifact_id=f"{task_id}:error",
-                part=TextPart(text=message),
-                append=False,
-                last_chunk=True,
-            )
             await event_queue.enqueue_event(
-                TaskStatusUpdateEvent(
-                    task_id=task_id,
+                Task(
+                    id=task_id,
                     context_id=context_id,
-                    status=TaskStatus(state=TaskState.failed),
-                    final=True,
+                    status=TaskStatus(
+                        state=TaskState.TASK_STATE_FAILED,
+                        message=error_message,
+                    ),
+                    history=[error_message],
                 )
             )
             return
         task = Task(
             id=task_id,
             context_id=context_id,
-            status=TaskStatus(state=TaskState.failed, message=error_message),
+            status=TaskStatus(state=TaskState.TASK_STATE_FAILED, message=error_message),
             history=[error_message],
         )
         await event_queue.enqueue_event(task)
@@ -601,4 +591,4 @@ class CodexAgentExecutor(AgentExecutor):
             return True
         # JSON-RPC transport sets method in call context state.
         method = call_context.state.get("method")
-        return method == "message/stream"
+        return method == "SendStreamingMessage"

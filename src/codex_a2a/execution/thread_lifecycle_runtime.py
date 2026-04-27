@@ -9,16 +9,15 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, TypeGuard
 
 from a2a.types import (
-    DataPart,
+    CancelTaskRequest,
     Task,
-    TaskIdParams,
     TaskNotCancelableError,
     TaskNotFoundError,
     TaskState,
     TaskStatus,
 )
-from a2a.utils.errors import ServerError
 
+from codex_a2a.a2a_proto import new_data_part
 from codex_a2a.contracts.extensions import THREAD_LIFECYCLE_SUPPORTED_EVENTS
 from codex_a2a.execution.output_mapping import build_assistant_message, enqueue_artifact_update
 from codex_a2a.execution.watch_events import normalize_watch_event_filter
@@ -121,13 +120,13 @@ class CodexThreadLifecycleRuntime:
             id=task_id,
             context_id=context_id,
             status=TaskStatus(
-                state=TaskState.working,
+                state=TaskState.TASK_STATE_WORKING,
                 message=build_assistant_message(
                     task_id,
                     context_id,
                     (
                         "Started Codex thread lifecycle watch. Subscribe with "
-                        "tasks/resubscribe to receive lifecycle signals."
+                        "SubscribeToTask to receive lifecycle signals."
                     ),
                     message_id=f"{task_id}:status:started",
                 ),
@@ -222,7 +221,7 @@ class CodexThreadLifecycleRuntime:
                     task_id=handle.task_id,
                     context_id=handle.context_id,
                     artifact_id=f"{handle.task_id}:thread-lifecycle",
-                    part=DataPart(data=payload),
+                    part=new_data_part(payload),
                     append=append,
                     last_chunk=None,
                     artifact_metadata=metadata,
@@ -306,9 +305,14 @@ class CodexThreadLifecycleRuntime:
         if handle is not None:
             handle.stop_event.set()
         try:
-            await self._request_handler.on_cancel_task(TaskIdParams(id=task_id), context=context)
-        except ServerError as exc:
-            if not isinstance(exc.error, (TaskNotFoundError, TaskNotCancelableError)):
+            await self._request_handler.on_cancel_task(
+                CancelTaskRequest(id=task_id),
+                context=context,
+            )
+        except (TaskNotFoundError, TaskNotCancelableError):
+            pass
+        except Exception as exc:
+            if not isinstance(exc, (TaskNotFoundError, TaskNotCancelableError)):
                 raise
         if (
             handle is not None

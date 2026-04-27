@@ -4,7 +4,7 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 import httpx
-from a2a.types import A2AError, InternalError, JSONRPCError, JSONRPCRequest
+from a2a.server.jsonrpc_models import InternalError, JSONRPCError
 from starlette.responses import Response
 
 from codex_a2a.jsonrpc.discovery_params import (
@@ -26,6 +26,7 @@ from codex_a2a.jsonrpc.errors import (
     upstream_unreachable_response,
 )
 from codex_a2a.jsonrpc.params_common import JsonRpcParamsValidationError
+from codex_a2a.jsonrpc.request_models import JSONRPCRequestModel as JSONRPCRequest
 
 if TYPE_CHECKING:
     from codex_a2a.jsonrpc.application import CodexSessionQueryJSONRPCApplication
@@ -89,7 +90,7 @@ async def handle_discovery_query_request(
         logger.exception("Codex discovery JSON-RPC method failed")
         return app._generate_error_response(
             base_request.id,
-            A2AError(root=InternalError(message=str(exc))),
+            InternalError(message=str(exc)),
         )
 
     if base_request.id is None:
