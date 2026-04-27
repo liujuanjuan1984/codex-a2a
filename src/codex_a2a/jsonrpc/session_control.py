@@ -4,7 +4,7 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 import httpx
-from a2a.types import A2AError, InternalError, JSONRPCError, JSONRPCRequest
+from a2a.server.jsonrpc_models import InternalError, JSONRPCError
 from starlette.requests import Request
 from starlette.responses import Response
 
@@ -27,6 +27,7 @@ from codex_a2a.jsonrpc.payload_mapping import (
     as_a2a_message,
     message_to_item,
 )
+from codex_a2a.jsonrpc.request_models import JSONRPCRequestModel as JSONRPCRequest
 from codex_a2a.jsonrpc.session_control_params import (
     CommandControlParams,
     PromptAsyncControlParams,
@@ -188,13 +189,13 @@ async def handle_session_control_request(
         logger.exception("Codex session control JSON-RPC method failed")
         return app._generate_error_response(
             base_request.id,
-            A2AError(root=InternalError(message=str(exc))),
+            InternalError(message=str(exc)),
         )
     except Exception as exc:
         logger.exception("Codex session control JSON-RPC method failed")
         return app._generate_error_response(
             base_request.id,
-            A2AError(root=InternalError(message=str(exc))),
+            InternalError(message=str(exc)),
         )
     finally:
         if (

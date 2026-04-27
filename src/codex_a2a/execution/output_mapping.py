@@ -3,18 +3,13 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
+from a2a.helpers import new_text_message
 from a2a.server.agent_execution import RequestContext
 from a2a.server.events.event_queue import EventQueue
 from a2a.server.tasks import TaskUpdater
-from a2a.types import (
-    Artifact,
-    DataPart,
-    Message,
-    Part,
-    TaskArtifactUpdateEvent,
-    TextPart,
-)
-from a2a.utils.message import new_agent_text_message
+from a2a.types import Artifact, Message, Part, TaskArtifactUpdateEvent
+
+from codex_a2a.a2a_proto import ROLE_AGENT
 
 
 def build_assistant_message(
@@ -24,10 +19,10 @@ def build_assistant_message(
     *,
     message_id: str | None = None,
 ) -> Message:
-    message = new_agent_text_message(text, context_id=context_id, task_id=task_id)
-    if message_id is None:
-        return message
-    return message.model_copy(update={"message_id": message_id})
+    message = new_text_message(text, context_id=context_id, task_id=task_id, role=ROLE_AGENT)
+    if message_id is not None:
+        message.message_id = message_id
+    return message
 
 
 async def enqueue_artifact_update(
@@ -36,7 +31,7 @@ async def enqueue_artifact_update(
     task_id: str,
     context_id: str,
     artifact_id: str,
-    part: TextPart | DataPart,
+    part: Part,
     append: bool | None,
     last_chunk: bool | None,
     artifact_metadata: Mapping[str, Any] | None = None,
@@ -46,7 +41,7 @@ async def enqueue_artifact_update(
     if event_metadata is None:
         updater = TaskUpdater(event_queue, task_id, context_id)
         await updater.add_artifact(
-            parts=[Part(root=part)],
+            parts=[part],
             artifact_id=artifact_id,
             metadata=dict(artifact_metadata) if artifact_metadata else None,
             append=append,
@@ -56,7 +51,7 @@ async def enqueue_artifact_update(
 
     artifact = Artifact(
         artifact_id=artifact_id,
-        parts=[Part(root=part)],
+        parts=[part],
         metadata=dict(artifact_metadata) if artifact_metadata else None,
     )
     await event_queue.enqueue_event(

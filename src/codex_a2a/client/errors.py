@@ -1,12 +1,8 @@
 from __future__ import annotations
 
+import httpx
 from a2a.client import A2AClientError as SDKA2AClientError
-from a2a.client.errors import (
-    A2AClientHTTPError,
-    A2AClientJSONError,
-    A2AClientJSONRPCError,
-    A2AClientTimeoutError,
-)
+from a2a.client.errors import A2AClientTimeoutError, AgentCardResolutionError
 
 
 class A2AClientError(RuntimeError):
@@ -77,26 +73,13 @@ class A2APeerProtocolError(A2AClientProtocolError):
         self.data = data
 
 
-def _extract_jsonrpc_error_payload(
-    exc: A2AClientJSONRPCError,
-) -> tuple[str, int | None, object | None]:
-    error = getattr(exc, "error", None)
-    if error is None:
-        return str(exc), None, None
-    return (
-        str(getattr(error, "message", str(exc))),
-        getattr(error, "code", None),
-        getattr(error, "data", None),
-    )
-
-
 def map_a2a_sdk_error(
     exc: Exception,
     *,
     operation: str | None = None,
 ) -> A2AClientError:
     """Convert SDK exceptions into local facade exceptions."""
-    if isinstance(exc, A2AClientHTTPError):
+    if isinstance(exc, AgentCardResolutionError):
         status_code = getattr(exc, "status_code", None)
         if status_code in {404, 405, 409, 501}:
             message = (
@@ -117,35 +100,29 @@ def map_a2a_sdk_error(
         availability_error.status_code = status_code
         return availability_error
 
-    if isinstance(exc, A2AClientJSONRPCError):
-        message, code, data = _extract_jsonrpc_error_payload(exc)
-        if code == -32601:
-            parsed_error = A2AUnsupportedOperationError(
-                f"{message} ({operation})" if operation else message
+    if isinstance(exc, httpx.HTTPStatusError):
+        status_code = exc.response.status_code
+        if status_code in {404, 405, 409, 501}:
+            unsupported_error = A2AUnsupportedOperationError(
+                f"{operation} is not supported by peer"
+                if operation
+                else f"Request failed with status={status_code}"
             )
-            parsed_error.code = code
-            parsed_error.data = data
-            return parsed_error
-        if code == -32602:
-            return A2APeerProtocolError(
-                message,
-                error_code="invalid_params",
-                rpc_code=code,
-                data=data,
+            unsupported_error.code = status_code
+            unsupported_error.status_code = status_code
+            return unsupported_error
+        if status_code in {502, 503, 504}:
+            reset_error = A2AClientResetRequiredError(
+                f"{operation} failed with upstream instability" if operation else str(exc)
             )
-        if code == -32603:
-            return A2AClientResetRequiredError(message)
-        if code is not None:
-            return A2APeerProtocolError(
-                message,
-                error_code="peer_protocol_error",
-                rpc_code=code,
-                data=data,
-            )
-        return A2APeerProtocolError(message)
+            reset_error.status_code = status_code
+            return reset_error
+        availability_error = A2AAgentUnavailableError(str(exc))
+        availability_error.status_code = status_code
+        return availability_error
 
-    if isinstance(exc, A2AClientJSONError):
-        return A2APeerProtocolError(str(exc))
+    if isinstance(exc, httpx.HTTPError):
+        return A2AAgentUnavailableError(str(exc))
 
     if isinstance(exc, A2AClientTimeoutError):
         return A2AAgentUnavailableError(str(exc))

@@ -4,6 +4,12 @@ import httpx
 import pytest
 
 from tests.support.dummy_clients import DummySessionQueryCodexClient as DummyCodexClient
+from tests.support.jsonrpc_errors import (
+    error_context as _error_context,
+)
+from tests.support.jsonrpc_errors import (
+    error_reason as _error_reason,
+)
 from tests.support.settings import make_settings
 
 _BASE_SETTINGS = {
@@ -297,7 +303,8 @@ async def test_turn_control_requires_turn_control_capability(monkeypatch) -> Non
 
     payload = resp.json()
     assert payload["error"]["code"] == -32007
-    assert payload["error"]["data"]["type"] == "AUTHORIZATION_FORBIDDEN"
-    assert payload["error"]["data"]["method"] == "codex.turns.steer"
-    assert payload["error"]["data"]["capability"] == "turn_control"
-    assert payload["error"]["data"]["credential_id"] == "test-bearer"
+    assert _error_reason(payload) == "AUTHORIZATION_FORBIDDEN"
+    context = _error_context(payload)
+    assert context["method"] == "codex.turns.steer"
+    assert context["capability"] == "turn_control"
+    assert context["credentialId"] == "test-bearer"

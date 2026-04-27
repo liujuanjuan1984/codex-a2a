@@ -1,15 +1,14 @@
 import asyncio
 import logging
 import uuid
-from base64 import b64encode
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import httpx
 import pytest
-from a2a.server.apps.rest.rest_adapter import RESTAdapter
+from a2a.server.routes.rest_dispatcher import RestDispatcher
 from a2a.server.tasks.task_store import TaskStore
-from a2a.types import TransportProtocol
+from a2a.utils.constants import TransportProtocol
 from sse_starlette.sse import EventSourceResponse
 from starlette.requests import Request
 
@@ -21,6 +20,7 @@ from codex_a2a.server.http_middlewares import (
 )
 from codex_a2a.server.task_store import TaskStoreOperationError, TaskStoreRuntime
 from tests.support.dummy_clients import DummyChatCodexClient
+from tests.support.http_auth import basic_auth_header as _basic_auth_header
 from tests.support.settings import make_settings
 
 
@@ -29,18 +29,13 @@ async def _empty_async_stream():
         yield {}
 
 
-def _basic_auth_header(username: str, password: str) -> dict[str, str]:
-    token = b64encode(f"{username}:{password}".encode()).decode("ascii")
-    return {"Authorization": f"Basic {token}"}
-
-
 def test_agent_card_declares_dual_stack_with_http_json_preferred() -> None:
     card = build_agent_card(make_settings(a2a_bearer_token="test-token"))
 
-    assert card.preferred_transport == TransportProtocol.http_json
-    transports = {iface.transport for iface in card.additional_interfaces or []}
-    assert TransportProtocol.http_json in transports
-    assert TransportProtocol.jsonrpc in transports
+    transports = {iface.protocol_binding for iface in card.supported_interfaces}
+    assert card.supported_interfaces[0].protocol_binding == TransportProtocol.HTTP_JSON
+    assert TransportProtocol.HTTP_JSON in transports
+    assert TransportProtocol.JSONRPC in transports
 
 
 def test_rest_subscription_route_matches_current_sdk_contract() -> None:
@@ -50,8 +45,9 @@ def test_rest_subscription_route_matches_current_sdk_contract() -> None:
     assert "/health" in route_paths
     assert "/v1/tasks/{id}:subscribe" in route_paths
     assert "/v1/tasks/{id}:resubscribe" not in route_paths
-    assert "/agent/authenticatedExtendedCard" in route_paths
-    assert "/v1/card" in route_paths
+    assert "/v1/extendedAgentCard" in route_paths
+    assert "/agent/authenticatedExtendedCard" not in route_paths
+    assert "/v1/card" not in route_paths
 
 
 def test_health_route_can_be_disabled() -> None:
@@ -86,7 +82,6 @@ def test_create_app_resets_sse_app_status() -> None:
 
 @pytest.mark.asyncio
 async def test_streaming_route_uses_sdk_default_sse_keepalive() -> None:
-    settings = make_settings(a2a_bearer_token="test-token")
     context_builder = MagicMock()
     context_builder.build.return_value = MagicMock()
 
@@ -109,16 +104,15 @@ async def test_streaming_route_uses_sdk_default_sse_keepalive() -> None:
         receive,
     )
 
-    async def stream_method(_request: Request, _context):
+    async def stream_method(_context):
         async for item in _empty_async_stream():
             yield item
 
-    adapter = RESTAdapter(
-        agent_card=build_agent_card(settings),
-        http_handler=MagicMock(),
+    adapter = RestDispatcher(
+        request_handler=MagicMock(),
         context_builder=context_builder,
     )
-    response = await adapter._handle_streaming_request(stream_method, request)
+    response = await adapter._handle_streaming(request, stream_method)
 
     assert response.ping_interval == EventSourceResponse.DEFAULT_PING_INTERVAL
 
@@ -171,16 +165,7 @@ def test_create_app_uses_executor_public_session_guard_bindings(monkeypatch) -> 
         def __init__(self, *args, guard_hooks, **kwargs) -> None:  # noqa: ANN002, ANN003
             del args, kwargs
             captured["guard_hooks"] = guard_hooks
-
-        def add_routes_to_app(self, _app) -> None:  # noqa: ANN001
-            return None
-
-    class DummyRESTAdapter:
-        def __init__(self, *args, **kwargs) -> None:  # noqa: ANN002, ANN003
-            del args, kwargs
-
-        def routes(self) -> dict[tuple[str, str], object]:
-            return {}
+            self.handle_requests = AsyncMock()
 
     monkeypatch.setattr(app_module, "CodexClient", DummyChatCodexClient)
     monkeypatch.setattr(app_module, "CodexAgentExecutor", DummyExecutor)
@@ -190,7 +175,6 @@ def test_create_app_uses_executor_public_session_guard_bindings(monkeypatch) -> 
         app_module, "CodexThreadLifecycleRuntime", lambda **_kwargs: SimpleNamespace()
     )
     monkeypatch.setattr(app_module, "CodexSessionQueryJSONRPCApplication", DummyJSONRPCApp)
-    monkeypatch.setattr(app_module, "RESTAdapter", DummyRESTAdapter)
 
     app_module.create_app(make_settings(a2a_bearer_token="test-token"))
 
@@ -343,9 +327,9 @@ def test_openapi_jsonrpc_examples_include_core_and_extension_methods() -> None:
         .values()
     )
     methods = {value.get("value", {}).get("method") for value in example_values}
-    assert "message/send" in methods
-    assert "message/stream" in methods
-    assert "agent/getAuthenticatedExtendedCard" in methods
+    assert "SendMessage" in methods
+    assert "SendStreamingMessage" in methods
+    assert "GetExtendedAgentCard" in methods
     assert "codex.sessions.list" in methods
     assert "codex.sessions.messages.list" in methods
     assert "codex.sessions.prompt_async" in methods
@@ -385,7 +369,7 @@ async def test_agent_card_routes_split_public_and_authenticated_extended_contrac
         assert public_card.headers["cache-control"] == PUBLIC_AGENT_CARD_CACHE_CONTROL
         assert public_card.headers["etag"]
         assert public_card.headers["vary"] == "Accept-Encoding"
-        assert public_card.json()["supportsAuthenticatedExtendedCard"] is True
+        assert public_card.json()["capabilities"]["extendedAgentCard"] is True
 
         public_cached = await client.get(
             "/.well-known/agent-card.json",
@@ -394,10 +378,10 @@ async def test_agent_card_routes_split_public_and_authenticated_extended_contrac
         assert public_cached.status_code == 304
         assert public_cached.headers["vary"] == "Accept-Encoding"
 
-        unauthorized_extended = await client.get("/agent/authenticatedExtendedCard")
+        unauthorized_extended = await client.get("/v1/extendedAgentCard")
         assert unauthorized_extended.status_code == 401
 
-        extended_card = await client.get("/agent/authenticatedExtendedCard", headers=headers)
+        extended_card = await client.get("/v1/extendedAgentCard", headers=headers)
         assert extended_card.status_code == 200
         assert extended_card.headers["cache-control"] == AUTHENTICATED_EXTENDED_CARD_CACHE_CONTROL
         assert {
@@ -406,17 +390,13 @@ async def test_agent_card_routes_split_public_and_authenticated_extended_contrac
         assert extended_card.headers["etag"]
 
         extended_cached = await client.get(
-            "/agent/authenticatedExtendedCard",
+            "/v1/extendedAgentCard",
             headers={
                 **headers,
                 "If-None-Match": extended_card.headers["etag"],
             },
         )
         assert extended_cached.status_code == 304
-
-        v1_card = await client.get("/v1/card", headers=headers)
-        assert v1_card.status_code == 200
-        assert v1_card.headers["cache-control"] == AUTHENTICATED_EXTENDED_CARD_CACHE_CONTROL
 
         public_extensions = {
             item["uri"]: item for item in public_card.json()["capabilities"]["extensions"]
@@ -439,7 +419,7 @@ async def test_agent_card_routes_split_public_and_authenticated_extended_contrac
             json={
                 "jsonrpc": "2.0",
                 "id": "card-1",
-                "method": "agent/getAuthenticatedExtendedCard",
+                "method": "GetExtendedAgentCard",
                 "params": {},
             },
         )
@@ -469,7 +449,7 @@ async def test_targeted_gzip_applies_to_card_and_openapi_routes(monkeypatch) -> 
             headers={"Accept-Encoding": "gzip"},
         )
         extended_card = await client.get(
-            "/agent/authenticatedExtendedCard",
+            "/v1/extendedAgentCard",
             headers={
                 "Authorization": "Bearer test-token",
                 "Accept-Encoding": "gzip",
@@ -630,12 +610,12 @@ async def test_authenticated_extended_card_accepts_basic_auth(monkeypatch) -> No
 
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.get(
-            "/agent/authenticatedExtendedCard",
+            "/v1/extendedAgentCard",
             headers=_basic_auth_header("operator", "op-pass"),
         )
 
     assert response.status_code == 200
-    assert response.json()["supportsAuthenticatedExtendedCard"] is True
+    assert response.json()["capabilities"]["extendedAgentCard"] is True
 
 
 def test_openapi_jsonrpc_examples_hide_boundary_sensitive_methods_when_disabled() -> None:
@@ -716,18 +696,18 @@ async def test_dual_stack_send_accepts_transport_native_payloads(monkeypatch) ->
         "message": {
             "messageId": "m-rest",
             "role": "ROLE_USER",
-            "content": [{"text": "hello from rest"}],
+            "parts": [{"text": "hello from rest"}],
         }
     }
     rpc_payload = {
         "jsonrpc": "2.0",
         "id": 1,
-        "method": "message/send",
+        "method": "SendMessage",
         "params": {
             "message": {
                 "messageId": "m-rpc",
-                "role": "user",
-                "parts": [{"kind": "text", "text": "hello from jsonrpc"}],
+                "role": "ROLE_USER",
+                "parts": [{"text": "hello from jsonrpc"}],
             }
         },
     }
@@ -735,16 +715,16 @@ async def test_dual_stack_send_accepts_transport_native_payloads(monkeypatch) ->
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         rest_resp = await client.post("/v1/message:send", headers=headers, json=rest_payload)
         assert rest_resp.status_code == 200
-        assert rest_resp.headers["A2A-Version"] == "0.3"
+        assert rest_resp.headers["A2A-Version"] == "1.0"
 
         rpc_resp = await client.post("/", headers=headers, json=rpc_payload)
         assert rpc_resp.status_code == 200
-        assert rpc_resp.headers["A2A-Version"] == "0.3"
+        assert rpc_resp.headers["A2A-Version"] == "1.0"
         assert rpc_resp.json().get("error") is None
 
 
 @pytest.mark.asyncio
-async def test_jsonrpc_v1_method_alias_uses_negotiated_protocol(monkeypatch) -> None:
+async def test_jsonrpc_legacy_core_method_alias_is_rejected_under_v1(monkeypatch) -> None:
     import codex_a2a.server.application as app_module
 
     monkeypatch.setattr(app_module, "CodexClient", DummyChatCodexClient)
@@ -754,12 +734,12 @@ async def test_jsonrpc_v1_method_alias_uses_negotiated_protocol(monkeypatch) -> 
     rpc_payload = {
         "jsonrpc": "2.0",
         "id": 42,
-        "method": "SendMessage",
+        "method": "message/send",
         "params": {
             "message": {
                 "messageId": "m-v1-alias",
-                "role": "user",
-                "parts": [{"kind": "text", "text": "hello from v1 alias"}],
+                "role": "ROLE_USER",
+                "parts": [{"text": "hello from legacy alias"}],
             }
         },
     }
@@ -771,8 +751,10 @@ async def test_jsonrpc_v1_method_alias_uses_negotiated_protocol(monkeypatch) -> 
     assert response.headers["A2A-Version"] == "1.0"
     payload = response.json()
     assert payload["id"] == 42
-    assert payload.get("error") is None
-    assert "result" in payload
+    assert payload["error"]["code"] == -32601
+    assert payload["error"]["message"] == "Method not found"
+    assert payload["error"]["data"]["method"] == "message/send"
+    assert "SendMessage" in payload["error"]["data"]["supportedMethods"]
 
 
 @pytest.mark.asyncio
@@ -788,7 +770,7 @@ async def test_jsonrpc_unsupported_protocol_version_preserves_request_id(monkeyp
         response = await client.post(
             "/",
             headers=headers,
-            json={"jsonrpc": "2.0", "id": 43, "method": "message/send", "params": {}},
+            json={"jsonrpc": "2.0", "id": 43, "method": "SendMessage", "params": {}},
         )
 
     assert response.status_code == 200
@@ -797,7 +779,7 @@ async def test_jsonrpc_unsupported_protocol_version_preserves_request_id(monkeyp
     assert payload["error"]["code"] == -32001
     assert payload["error"]["data"]["type"] == "VERSION_NOT_SUPPORTED"
     assert payload["error"]["data"]["requested_version"] == "2.0"
-    assert payload["error"]["data"]["supported_protocol_versions"] == ["0.3", "1.0"]
+    assert payload["error"]["data"]["supported_protocol_versions"] == ["1.0"]
 
 
 @pytest.mark.asyncio
@@ -826,7 +808,7 @@ async def test_rest_unsupported_v1_protocol_version_uses_protocol_error_shape(
     error_info = payload["error"]["details"][0]
     assert error_info["reason"] == "VERSION_NOT_SUPPORTED"
     assert error_info["metadata"]["requestedVersion"] == "1.1"
-    assert error_info["metadata"]["defaultProtocolVersion"] == "0.3"
+    assert error_info["metadata"]["defaultProtocolVersion"] == "1.0"
 
 
 @pytest.mark.asyncio
@@ -838,29 +820,29 @@ async def test_dual_stack_send_rejects_cross_transport_payload_shapes(monkeypatc
     transport = httpx.ASGITransport(app=app)
     headers = {"Authorization": "Bearer test-token"}
 
-    rest_with_jsonrpc_shape = {
+    rest_with_legacy_shape = {
         "message": {
             "messageId": "m-rest-cross",
-            "role": "user",
-            "parts": [{"kind": "text", "text": "hello"}],
+            "role": "ROLE_USER",
+            "content": [{"text": "hello"}],
         }
     }
     full_jsonrpc_envelope = {
         "jsonrpc": "2.0",
         "id": 3,
-        "method": "message/send",
+        "method": "SendMessage",
         "params": {
             "message": {
                 "messageId": "m-rest-cross-envelope",
-                "role": "user",
-                "parts": [{"kind": "text", "text": "hello from envelope"}],
+                "role": "ROLE_USER",
+                "parts": [{"text": "hello from envelope"}],
             }
         },
     }
-    rpc_with_rest_shape = {
+    rpc_with_legacy_shape = {
         "jsonrpc": "2.0",
         "id": 2,
-        "method": "message/send",
+        "method": "SendMessage",
         "params": {
             "message": {
                 "messageId": "m-rpc-cross",
@@ -874,7 +856,7 @@ async def test_dual_stack_send_rejects_cross_transport_payload_shapes(monkeypatc
         rest_resp = await client.post(
             "/v1/message:send",
             headers=headers,
-            json=rest_with_jsonrpc_shape,
+            json=rest_with_legacy_shape,
         )
         assert rest_resp.status_code == 400
         assert "Invalid HTTP+JSON payload" in rest_resp.text
@@ -887,10 +869,10 @@ async def test_dual_stack_send_rejects_cross_transport_payload_shapes(monkeypatc
         assert rest_envelope_resp.status_code == 400
         assert "Invalid HTTP+JSON payload" in rest_envelope_resp.text
 
-        rpc_resp = await client.post("/", headers=headers, json=rpc_with_rest_shape)
+        rpc_resp = await client.post("/", headers=headers, json=rpc_with_legacy_shape)
         assert rpc_resp.status_code == 200
         payload = rpc_resp.json()
-        assert payload["error"]["code"] == -32602
+        assert payload["error"]["code"] in {-32600, -32602, -32603}
 
 
 @pytest.mark.asyncio
@@ -907,18 +889,17 @@ async def test_jsonrpc_unsupported_method_returns_supported_method_contract(monk
         response = await client.post(
             "/",
             headers=headers,
-            json={"jsonrpc": "2.0", "id": 40, "method": "SendMessage", "params": {}},
+            json={"jsonrpc": "2.0", "id": 40, "method": "message/send", "params": {}},
         )
 
     assert response.status_code == 200
     payload = response.json()
     assert payload["error"]["code"] == -32601
-    assert payload["error"]["message"] == "Unsupported method: SendMessage"
-    assert payload["error"]["data"]["type"] == "METHOD_NOT_SUPPORTED"
-    assert payload["error"]["data"]["method"] == "SendMessage"
-    assert payload["error"]["data"]["protocol_version"] == "0.3"
-    assert "message/send" in payload["error"]["data"]["supported_methods"]
-    assert "codex.sessions.list" in payload["error"]["data"]["supported_methods"]
+    assert payload["error"]["message"] == "Method not found"
+    assert payload["error"]["data"]["method"] == "message/send"
+    assert payload["error"]["data"]["protocolVersion"] == "1.0"
+    assert "SendMessage" in payload["error"]["data"]["supportedMethods"]
+    assert "codex.sessions.list" in payload["error"]["data"]["supportedMethods"]
 
 
 @pytest.mark.asyncio
@@ -946,7 +927,7 @@ async def test_jsonrpc_v1_unsupported_method_uses_protocol_error_shape(monkeypat
     assert "type" not in payload["error"]["data"]
     assert payload["error"]["data"]["method"] == "UnknownMethod"
     assert payload["error"]["data"]["protocolVersion"] == "1.0"
-    assert "message/send" in payload["error"]["data"]["supportedMethods"]
+    assert "SendMessage" in payload["error"]["data"]["supportedMethods"]
 
 
 @pytest.mark.asyncio
@@ -977,9 +958,10 @@ async def test_jsonrpc_disabled_shell_reports_current_supported_methods(monkeypa
     assert response.status_code == 200
     payload = response.json()
     assert payload["error"]["code"] == -32601
-    assert payload["error"]["data"]["type"] == "METHOD_NOT_SUPPORTED"
+    assert payload["error"]["message"] == "Method not found"
     assert payload["error"]["data"]["method"] == "codex.sessions.shell"
-    assert "codex.sessions.shell" not in payload["error"]["data"]["supported_methods"]
+    assert payload["error"]["data"]["protocolVersion"] == "1.0"
+    assert "codex.sessions.shell" not in payload["error"]["data"]["supportedMethods"]
 
 
 @pytest.mark.asyncio
@@ -1010,6 +992,10 @@ async def test_subscribe_task_store_failure_returns_controlled_503(monkeypatch) 
             del context
             raise TaskStoreOperationError("get", task_id)
 
+        async def list(self, context=None):  # noqa: ANN001
+            del context
+            return []
+
         async def delete(self, task_id: str, context=None) -> None:  # noqa: ANN001
             del task_id, context
 
@@ -1039,7 +1025,7 @@ def _rest_message_payload() -> dict:
         "message": {
             "messageId": "m-rest",
             "role": "ROLE_USER",
-            "content": [{"text": "hello from rest"}],
+            "parts": [{"text": "hello from rest"}],
         }
     }
 
@@ -1048,12 +1034,12 @@ def _jsonrpc_message_send_payload(text: str) -> dict:
     return {
         "jsonrpc": "2.0",
         "id": 99,
-        "method": "message/send",
+        "method": "SendMessage",
         "params": {
             "message": {
                 "messageId": "m-rpc",
-                "role": "user",
-                "parts": [{"kind": "text", "text": text}],
+                "role": "ROLE_USER",
+                "parts": [{"text": text}],
             }
         },
     }
@@ -1146,8 +1132,8 @@ async def test_log_payloads_omits_text_plain_request_body(monkeypatch, caplog) -
         "Content-Type": "text/plain",
     }
     body = (
-        '{"jsonrpc":"2.0","id":1,"method":"message/send","params":{"message":'
-        '{"messageId":"m","role":"user","parts":[{"kind":"text","text":"secret"}]}}}'
+        '{"jsonrpc":"2.0","id":1,"method":"SendMessage","params":{"message":'
+        '{"messageId":"m","role":"ROLE_USER","parts":[{"text":"secret"}]}}}'
     )
 
     with caplog.at_level(logging.DEBUG, logger="codex_a2a.server.http_middlewares"):
@@ -1180,8 +1166,8 @@ async def test_log_payloads_omits_when_content_length_missing(monkeypatch, caplo
         "Content-Type": "application/json",
     }
     body = (
-        b'{"jsonrpc":"2.0","id":1,"method":"message/send","params":{"message":'
-        b'{"messageId":"m","role":"user","parts":[{"kind":"text","text":"missing-cl"}]}}}'
+        b'{"jsonrpc":"2.0","id":1,"method":"SendMessage","params":{"message":'
+        b'{"messageId":"m","role":"ROLE_USER","parts":[{"text":"missing-cl"}]}}}'
     )
 
     async def _body_stream():

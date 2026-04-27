@@ -4,7 +4,7 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 import httpx
-from a2a.types import A2AError, InternalError, JSONRPCError, JSONRPCRequest
+from a2a.server.jsonrpc_models import InternalError, JSONRPCError
 from starlette.requests import Request
 from starlette.responses import Response
 
@@ -31,6 +31,7 @@ from codex_a2a.jsonrpc.exec_control_params import (
     parse_exec_write_params,
 )
 from codex_a2a.jsonrpc.params_common import JsonRpcParamsValidationError
+from codex_a2a.jsonrpc.request_models import JSONRPCRequestModel as JSONRPCRequest
 
 if TYPE_CHECKING:
     from codex_a2a.jsonrpc.application import CodexSessionQueryJSONRPCApplication
@@ -161,7 +162,7 @@ async def handle_exec_control_request(
             )
         return app._generate_error_response(
             base_request.id,
-            A2AError(root=InternalError(message=str(exc))),
+            InternalError(message=str(exc)),
         )
     except httpx.HTTPStatusError as exc:
         process_id = str(request_payload.get("processId", "")).strip()
@@ -182,7 +183,7 @@ async def handle_exec_control_request(
         logger.exception("Codex exec JSON-RPC method failed")
         return app._generate_error_response(
             base_request.id,
-            A2AError(root=InternalError(message=str(exc))),
+            InternalError(message=str(exc)),
         )
 
     if base_request.id is None:

@@ -68,11 +68,11 @@ Each run keeps the following artifacts in the selected output directory:
 When a TCK run fails, inspect the raw report before changing the runtime:
 
 - Some failures may point to real runtime gaps.
-- Some failures may come from TCK assumptions that do not match `a2a-sdk==0.3.26`.
-- Some failures may come from A2A v0.3 versus v1.0 naming or schema drift.
+- Some failures may come from TCK assumptions that do not match `a2a-sdk==1.0.1`.
+- Some failures may come from older A2A naming or schema expectations that no longer match the repository's `1.0` contract.
 - Some failures may be local experiment artifacts from the dummy-backed runtime.
 
 The experiment is useful only if those categories stay separate during triage.
-Use the authenticated compatibility profile and wire contract `protocol_compatibility` fields as the repository-owned declaration of which protocol lines are supported today, partially supported for compatibility, or reserved for future work.
+Use the authenticated compatibility profile and wire contract `protocol_compatibility` fields as the repository-owned declaration of which protocol lines are supported today.
 
 Record first-pass classifications in [conformance-triage.md](./conformance-triage.md).

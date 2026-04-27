@@ -5,23 +5,23 @@ import logging
 from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
+from a2a.server.context import ServerCallContext
 from a2a.server.tasks.database_task_store import DatabaseTaskStore
 from a2a.server.tasks.inmemory_task_store import InMemoryTaskStore
 from a2a.server.tasks.task_store import TaskStore
-from a2a.types import Task, TaskState
+from a2a.types import ListTasksRequest, ListTasksResponse, Task, TaskState, a2a_pb2
 from sqlalchemy import or_, select
 from sqlalchemy.dialects.postgresql import insert as postgresql_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncEngine
+from sqlalchemy.orm import class_mapper
 
+from codex_a2a.a2a_proto import proto_to_python
 from codex_a2a.config import Settings
 
 from .database import build_database_engine
-
-if TYPE_CHECKING:
-    from a2a.server.context import ServerCallContext
 
 logger = logging.getLogger(__name__)
 
@@ -29,15 +29,21 @@ TASK_STORE_ERROR_TYPE = "TASK_STORE_UNAVAILABLE"
 
 _TERMINAL_TASK_STATES = frozenset(
     {
-        TaskState.completed,
-        TaskState.canceled,
-        TaskState.failed,
-        TaskState.rejected,
-        TaskState.unknown,
+        TaskState.TASK_STATE_COMPLETED,
+        TaskState.TASK_STATE_CANCELED,
+        TaskState.TASK_STATE_FAILED,
+        TaskState.TASK_STATE_REJECTED,
+        TaskState.TASK_STATE_UNSPECIFIED,
     }
 )
-_TERMINAL_TASK_STATE_VALUES = tuple(state.value for state in _TERMINAL_TASK_STATES)
+_TERMINAL_TASK_STATE_VALUES = tuple(
+    a2a_pb2.TaskState.Name(state) for state in _TERMINAL_TASK_STATES
+)
 _ATOMIC_TERMINAL_GUARD_DIALECTS = frozenset({"postgresql", "sqlite"})
+
+
+def _normalize_context(context: ServerCallContext | None) -> ServerCallContext:
+    return context if isinstance(context, ServerCallContext) else ServerCallContext()
 
 
 class TaskStoreOperationError(RuntimeError):
@@ -78,7 +84,7 @@ class FirstTerminalStateWinsPolicy(TaskWritePolicy):
                 persist=False,
                 reason="state_overwrite_after_terminal_persistence",
             )
-        if incoming.model_dump(mode="json") != existing.model_dump(mode="json"):
+        if proto_to_python(incoming) != proto_to_python(existing):
             return TaskPersistenceDecision(
                 persist=False,
                 reason="late_mutation_after_terminal_persistence",
@@ -101,21 +107,28 @@ class TaskStoreDecorator(TaskStore):
         task: Task,
         context: ServerCallContext | None = None,
     ) -> None:
-        await self._inner.save(task, context)
+        await self._inner.save(task, _normalize_context(context))
+
+    async def list(
+        self,
+        params: ListTasksRequest,
+        context: ServerCallContext | None = None,
+    ) -> ListTasksResponse:
+        return await self._inner.list(params, _normalize_context(context))
 
     async def get(
         self,
         task_id: str,
         context: ServerCallContext | None = None,
     ) -> Task | None:
-        return await self._inner.get(task_id, context)
+        return await self._inner.get(task_id, _normalize_context(context))
 
     async def delete(
         self,
         task_id: str,
         context: ServerCallContext | None = None,
     ) -> None:
-        await self._inner.delete(task_id, context)
+        await self._inner.delete(task_id, _normalize_context(context))
 
 
 class TaskStoreOperationWrappingDecorator(TaskStoreDecorator):
@@ -125,11 +138,23 @@ class TaskStoreOperationWrappingDecorator(TaskStoreDecorator):
         context: ServerCallContext | None = None,
     ) -> None:
         try:
-            await self._inner.save(task, context)
+            await self._inner.save(task, _normalize_context(context))
         except TaskStoreOperationError:
             raise
         except Exception as exc:
             raise TaskStoreOperationError("save", task.id) from exc
+
+    async def list(
+        self,
+        params: ListTasksRequest,
+        context: ServerCallContext | None = None,
+    ) -> ListTasksResponse:
+        try:
+            return await self._inner.list(params, _normalize_context(context))
+        except TaskStoreOperationError:
+            raise
+        except Exception as exc:
+            raise TaskStoreOperationError("list", None) from exc
 
     async def get(
         self,
@@ -137,7 +162,7 @@ class TaskStoreOperationWrappingDecorator(TaskStoreDecorator):
         context: ServerCallContext | None = None,
     ) -> Task | None:
         try:
-            return await self._inner.get(task_id, context)
+            return await self._inner.get(task_id, _normalize_context(context))
         except TaskStoreOperationError:
             raise
         except Exception as exc:
@@ -149,7 +174,7 @@ class TaskStoreOperationWrappingDecorator(TaskStoreDecorator):
         context: ServerCallContext | None = None,
     ) -> None:
         try:
-            await self._inner.delete(task_id, context)
+            await self._inner.delete(task_id, _normalize_context(context))
         except TaskStoreOperationError:
             raise
         except Exception as exc:
@@ -173,6 +198,7 @@ class PolicyAwareTaskStore(TaskStoreDecorator):
         task: Task,
         context: ServerCallContext | None = None,
     ) -> None:
+        context = _normalize_context(context)
         raw_task_store = unwrap_task_store(self._inner)
         if isinstance(raw_task_store, DatabaseTaskStore):
             await self._save_database_task(raw_task_store, task, context)
@@ -183,7 +209,7 @@ class PolicyAwareTaskStore(TaskStoreDecorator):
     async def _save_with_read_before_write(
         self,
         task: Task,
-        context: ServerCallContext | None = None,
+        context: ServerCallContext,
     ) -> None:
         async with self._save_lock:
             existing = await self._inner.get(task.id, context)
@@ -199,7 +225,7 @@ class PolicyAwareTaskStore(TaskStoreDecorator):
         self,
         task_store: DatabaseTaskStore,
         task: Task,
-        context: ServerCallContext | None = None,
+        context: ServerCallContext,
     ) -> None:
         dialect_name = task_store.engine.dialect.name
         if dialect_name not in _ATOMIC_TERMINAL_GUARD_DIALECTS:
@@ -214,9 +240,9 @@ class PolicyAwareTaskStore(TaskStoreDecorator):
             return
 
         try:
-            if await self._persist_with_atomic_terminal_guard(task_store, task):
+            if await self._persist_with_atomic_terminal_guard(task_store, task, context):
                 return
-            existing = await self._load_task_from_database(task_store, task.id)
+            existing = await self._load_task_from_database(task_store, task.id, context)
             decision = self._write_policy.evaluate(existing=existing, incoming=task)
             self._log_terminal_persistence_decision(
                 existing=existing, incoming=task, decision=decision
@@ -235,10 +261,16 @@ class PolicyAwareTaskStore(TaskStoreDecorator):
         self,
         task_store: DatabaseTaskStore,
         task: Task,
+        context: ServerCallContext | None = None,
     ) -> bool:
         await task_store._ensure_initialized()
+        owner = task_store.owner_resolver(
+            context if isinstance(context, ServerCallContext) else ServerCallContext()
+        )
         statement = _build_atomic_task_save_statement(
+            task_store=task_store,
             task=task,
+            owner=owner,
             task_table=task_store.task_model.__table__,
             dialect_name=task_store.engine.dialect.name,
         )
@@ -250,10 +282,17 @@ class PolicyAwareTaskStore(TaskStoreDecorator):
         self,
         task_store: DatabaseTaskStore,
         task_id: str,
+        context: ServerCallContext | None = None,
     ) -> Task | None:
         await task_store._ensure_initialized()
+        owner = task_store.owner_resolver(
+            context if isinstance(context, ServerCallContext) else ServerCallContext()
+        )
         async with task_store.async_session_maker() as session:
-            stmt = select(task_store.task_model).where(task_store.task_model.id == task_id)
+            stmt = select(task_store.task_model).where(
+                task_store.task_model.id == task_id,
+                task_store.task_model.owner == owner,
+            )
             result = await session.execute(stmt)
             task_model = result.scalar_one_or_none()
         if task_model is None:
@@ -316,12 +355,14 @@ def unwrap_task_store(task_store: TaskStore) -> TaskStore:
 
 def _build_atomic_task_save_statement(
     *,
+    task_store: DatabaseTaskStore,
     task: Task,
+    owner: str,
     task_table: Any,
     dialect_name: str,
 ):
     insert = _resolve_atomic_insert_factory(dialect_name)
-    values = _task_row_values(task)
+    values = _task_row_values(task_store, task, owner)
     status_state = task_table.c.status["state"].as_string()
     persist_guard = or_(
         task_table.c.status.is_(None),
@@ -348,16 +389,12 @@ def _resolve_atomic_insert_factory(dialect_name: str):
     raise ValueError(f"Unsupported atomic task persistence dialect: {dialect_name}")
 
 
-def _task_row_values(task: Task) -> dict[str, Any]:
-    return {
-        "id": task.id,
-        "context_id": task.context_id,
-        "kind": task.kind,
-        "status": task.status,
-        "artifacts": task.artifacts,
-        "history": task.history,
-        "metadata": task.metadata,
-    }
+def _task_row_values(task_store: DatabaseTaskStore, task: Task, owner: str) -> dict[str, Any]:
+    db_task = task_store._to_orm(task, owner)
+    values: dict[str, Any] = {}
+    for column_attr in class_mapper(task_store.task_model).column_attrs:
+        values[column_attr.columns[0].name] = getattr(db_task, column_attr.key)
+    return values
 
 
 @dataclass(slots=True)

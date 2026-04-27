@@ -1,9 +1,9 @@
-from base64 import b64encode
 from pathlib import Path
 
 import httpx
 import pytest
 
+from codex_a2a.a2a_proto import proto_to_python
 from codex_a2a.contracts.extensions import (
     COMPATIBILITY_PROFILE_EXTENSION_URI,
     DISCOVERY_EXTENSION_URI,
@@ -37,6 +37,7 @@ from codex_a2a.profile.runtime import build_runtime_profile
 from codex_a2a.server.agent_card import build_authenticated_extended_agent_card
 from codex_a2a.server.application import create_app
 from tests.support.dummy_clients import DummySessionQueryCodexClient as DummyCodexClient
+from tests.support.http_auth import basic_auth_header as _basic_auth_header
 from tests.support.settings import make_settings
 
 
@@ -53,11 +54,6 @@ def _extract_heading_section(markdown: str, heading: str) -> str:
     return markdown[start:end]
 
 
-def _basic_auth_header(username: str, password: str) -> dict[str, str]:
-    token = b64encode(f"{username}:{password}".encode()).decode("ascii")
-    return {"Authorization": f"Basic {token}"}
-
-
 def _example_params_include_field(payload: object, dotted_field: str) -> bool:
     current = payload
     for segment in dotted_field.split("."):
@@ -65,6 +61,10 @@ def _example_params_include_field(payload: object, dotted_field: str) -> bool:
             return False
         current = current[segment]
     return True
+
+
+def _params(extension) -> dict[str, object]:  # noqa: ANN001
+    return proto_to_python(extension.params)
 
 
 def test_capability_snapshot_tracks_conditional_shell_surface() -> None:
@@ -103,12 +103,12 @@ def test_session_query_extension_ssot_matches_agent_card_contract() -> None:
         runtime_profile=runtime_profile,
     )
 
-    assert session_query.params == expected, (
+    assert _params(session_query) == expected, (
         "Session query extension drifted from extension_contracts SSOT."
     )
-    assert session_query.params["pagination"]["default_limit"] == SESSION_QUERY_DEFAULT_LIMIT
-    assert session_query.params["pagination"]["max_limit"] == SESSION_QUERY_MAX_LIMIT
-    assert session_query.params["pagination"]["behavior"] == "mixed"
+    assert _params(session_query)["pagination"]["default_limit"] == SESSION_QUERY_DEFAULT_LIMIT
+    assert _params(session_query)["pagination"]["max_limit"] == SESSION_QUERY_MAX_LIMIT
+    assert _params(session_query)["pagination"]["behavior"] == "mixed"
 
 
 def test_session_query_extension_ssot_matches_agent_card_contract_when_shell_disabled() -> None:
@@ -125,12 +125,12 @@ def test_session_query_extension_ssot_matches_agent_card_contract_when_shell_dis
         runtime_profile=runtime_profile,
     )
 
-    assert session_query.params == expected, (
+    assert _params(session_query) == expected, (
         "Disabled shell session query contract drifted from extension_contracts SSOT."
     )
-    assert session_query.params["pagination"]["default_limit"] == SESSION_QUERY_DEFAULT_LIMIT
-    assert session_query.params["pagination"]["max_limit"] == SESSION_QUERY_MAX_LIMIT
-    assert session_query.params["pagination"]["behavior"] == "mixed"
+    assert _params(session_query)["pagination"]["default_limit"] == SESSION_QUERY_DEFAULT_LIMIT
+    assert _params(session_query)["pagination"]["max_limit"] == SESSION_QUERY_MAX_LIMIT
+    assert _params(session_query)["pagination"]["behavior"] == "mixed"
 
 
 def test_discovery_extension_ssot_matches_agent_card_contract() -> None:
@@ -142,7 +142,7 @@ def test_discovery_extension_ssot_matches_agent_card_contract() -> None:
     discovery = ext_by_uri[DISCOVERY_EXTENSION_URI]
     expected = build_discovery_extension_params(runtime_profile=runtime_profile)
 
-    assert discovery.params == expected, (
+    assert _params(discovery) == expected, (
         "Discovery extension drifted from extension_contracts SSOT."
     )
 
@@ -156,7 +156,7 @@ def test_thread_lifecycle_extension_ssot_matches_agent_card_contract() -> None:
     thread_lifecycle = ext_by_uri[THREAD_LIFECYCLE_EXTENSION_URI]
     expected = build_thread_lifecycle_extension_params(runtime_profile=runtime_profile)
 
-    assert thread_lifecycle.params == expected, (
+    assert _params(thread_lifecycle) == expected, (
         "Thread lifecycle extension drifted from extension_contracts SSOT."
     )
 
@@ -170,7 +170,7 @@ def test_interrupt_recovery_extension_ssot_matches_agent_card_contract() -> None
     interrupt_recovery = ext_by_uri[INTERRUPT_RECOVERY_EXTENSION_URI]
     expected = build_interrupt_recovery_extension_params(runtime_profile=runtime_profile)
 
-    assert interrupt_recovery.params == expected, (
+    assert _params(interrupt_recovery) == expected, (
         "Interrupt recovery extension drifted from extension_contracts SSOT."
     )
 
@@ -184,7 +184,7 @@ def test_turn_control_extension_ssot_matches_agent_card_contract() -> None:
     turn_control = ext_by_uri[TURN_CONTROL_EXTENSION_URI]
     expected = build_turn_control_extension_params(runtime_profile=runtime_profile)
 
-    assert turn_control.params == expected, (
+    assert _params(turn_control) == expected, (
         "Turn control extension drifted from extension_contracts SSOT."
     )
 
@@ -198,7 +198,7 @@ def test_review_control_extension_ssot_matches_agent_card_contract() -> None:
     review_control = ext_by_uri[REVIEW_CONTROL_EXTENSION_URI]
     expected = build_review_control_extension_params(runtime_profile=runtime_profile)
 
-    assert review_control.params == expected, (
+    assert _params(review_control) == expected, (
         "Review control extension drifted from extension_contracts SSOT."
     )
 
@@ -248,7 +248,7 @@ async def test_session_query_runtime_result_envelope_matches_declared_contract(
     )
     card = build_authenticated_extended_agent_card(settings)
     ext_by_uri = {ext.uri: ext for ext in card.capabilities.extensions or []}
-    method_contracts = ext_by_uri[SESSION_QUERY_EXTENSION_URI].params["method_contracts"]
+    method_contracts = _params(ext_by_uri[SESSION_QUERY_EXTENSION_URI])["method_contracts"]
     expected_result = method_contracts[method]["result"]
 
     dummy = DummyCodexClient(settings)
@@ -282,7 +282,7 @@ def test_session_query_result_envelope_omits_method_level_contracts() -> None:
     ext_by_uri = {ext.uri: ext for ext in card.capabilities.extensions or []}
     session_query = ext_by_uri[SESSION_QUERY_EXTENSION_URI]
 
-    assert session_query.params["result_envelope"] == {}
+    assert _params(session_query)["result_envelope"] == {}
 
 
 def test_openapi_jsonrpc_contract_extension_matches_ssot() -> None:
@@ -441,15 +441,17 @@ def test_guide_mentions_resubscribe_service_level_behavior() -> None:
     guide_text = Path("docs/guide.md").read_text()
     compatibility_text = Path("docs/compatibility.md").read_text()
     wire_contract = build_wire_contract_extension_params(
-        protocol_version="0.3.0",
+        protocol_version="1.0.0",
         runtime_profile=build_runtime_profile(make_settings(a2a_bearer_token="test-token")),
+        supported_protocol_versions=["1.0"],
+        default_protocol_version="1.0",
     )
-    assert "tasks/resubscribe" in wire_contract["service_behaviors"]
+    assert "SubscribeToTask" in wire_contract["service_behaviors"]
 
     assert "replay-once" in guide_text
     assert "one final task snapshot" in guide_text
     assert "service-level" in guide_text
-    assert "terminal `tasks/resubscribe` replay-once behavior" in compatibility_text
+    assert "terminal `SubscribeToTask` replay-once behavior" in compatibility_text
 
 
 def test_guide_mentions_declared_rich_input_contract() -> None:
@@ -460,7 +462,7 @@ def test_guide_mentions_declared_rich_input_contract() -> None:
     )["rich_input"]
 
     assert "codex.sessions.prompt_async.request.parts[]" in guide_text
-    assert 'DataPart(data={"type":"mention"|"skill", ...})' in guide_text
+    assert 'Part(data={"type":"mention"|"skill", ...})' in guide_text
     assert "turn/start.input[].type=input_image" in guide_text
     assert "local_image" in guide_text
 
@@ -590,9 +592,9 @@ def test_openapi_jsonrpc_examples_match_declared_extension_contracts() -> None:
         payload = example["value"]
         method = payload["method"]
         if method in {
-            "message/send",
-            "message/stream",
-            "agent/getAuthenticatedExtendedCard",
+            "SendMessage",
+            "SendStreamingMessage",
+            "GetExtendedAgentCard",
         }:
             continue
 
@@ -665,7 +667,7 @@ def test_openapi_exec_examples_declare_task_streaming_contract() -> None:
     assert exec_contracts["codex.exec.start"]["execution_binding"] == (
         "standalone_interactive_command_exec"
     )
-    assert streaming_contract["task_stream_method"] == "tasks/resubscribe"
+    assert streaming_contract["task_stream_method"] == "SubscribeToTask"
     assert "process_id" in exec_contracts["codex.exec.start"]["result"]["fields"]
 
 

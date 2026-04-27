@@ -11,8 +11,8 @@ from codex_a2a.jsonrpc.params_common import (
     format_loc,
     map_extra_forbidden,
     metadata_validation_error,
-    normalize_non_empty_string,
     strip_optional_string,
+    validate_required_request_id,
 )
 
 
@@ -22,10 +22,9 @@ class PermissionReplyParams(_StrictModel):
     message: str | None = None
     metadata: MetadataParams | None = None
 
-    @field_validator("request_id", mode="before")
-    @classmethod
-    def _validate_request_id(cls, value: Any) -> str:
-        return normalize_non_empty_string(value, message="Missing required params.request_id")
+    _validate_request_id = field_validator("request_id", mode="before")(
+        validate_required_request_id
+    )
 
     @field_validator("reply", mode="before")
     @classmethod
@@ -48,10 +47,9 @@ class QuestionReplyParams(_StrictModel):
     answers: list[list[str]]
     metadata: MetadataParams | None = None
 
-    @field_validator("request_id", mode="before")
-    @classmethod
-    def _validate_request_id(cls, value: Any) -> str:
-        return normalize_non_empty_string(value, message="Missing required params.request_id")
+    _validate_request_id = field_validator("request_id", mode="before")(
+        validate_required_request_id
+    )
 
     @field_validator("answers", mode="before")
     @classmethod
@@ -77,10 +75,9 @@ class QuestionRejectParams(_StrictModel):
     request_id: str
     metadata: MetadataParams | None = None
 
-    @field_validator("request_id", mode="before")
-    @classmethod
-    def _validate_request_id(cls, value: Any) -> str:
-        return normalize_non_empty_string(value, message="Missing required params.request_id")
+    _validate_request_id = field_validator("request_id", mode="before")(
+        validate_required_request_id
+    )
 
 
 class PermissionsReplyParams(_StrictModel):
@@ -89,10 +86,9 @@ class PermissionsReplyParams(_StrictModel):
     scope: Literal["turn", "session"] | None = None
     metadata: MetadataParams | None = None
 
-    @field_validator("request_id", mode="before")
-    @classmethod
-    def _validate_request_id(cls, value: Any) -> str:
-        return normalize_non_empty_string(value, message="Missing required params.request_id")
+    _validate_request_id = field_validator("request_id", mode="before")(
+        validate_required_request_id
+    )
 
     @field_validator("permissions", mode="before")
     @classmethod
@@ -120,10 +116,9 @@ class ElicitationReplyParams(_StrictModel):
     content: Any = None
     metadata: MetadataParams | None = None
 
-    @field_validator("request_id", mode="before")
-    @classmethod
-    def _validate_request_id(cls, value: Any) -> str:
-        return normalize_non_empty_string(value, message="Missing required params.request_id")
+    _validate_request_id = field_validator("request_id", mode="before")(
+        validate_required_request_id
+    )
 
     @field_validator("action", mode="before")
     @classmethod

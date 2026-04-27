@@ -3,9 +3,10 @@ from collections.abc import AsyncIterator
 from typing import Any
 
 import pytest
-from a2a.types import TaskArtifactUpdateEvent, TaskIdParams, TaskNotFoundError
-from a2a.utils.errors import ServerError
+from a2a.types import CancelTaskRequest, TaskArtifactUpdateEvent
+from a2a.utils.errors import TaskNotFoundError
 
+from codex_a2a.a2a_proto import part_data
 from codex_a2a.execution.thread_lifecycle_runtime import CodexThreadLifecycleRuntime
 from codex_a2a.server.runtime_state import build_runtime_state_runtime
 from tests.execution.test_discovery_exec_runtime import RecordingRequestHandler
@@ -18,8 +19,7 @@ def _artifact_updates(queue: DummyEventQueue) -> list[TaskArtifactUpdateEvent]:
 
 
 def _part_data(event: TaskArtifactUpdateEvent) -> dict[str, Any]:
-    part = event.artifact.parts[0]
-    data = getattr(part, "data", None) or getattr(getattr(part, "root", None), "data", None)
+    data = part_data(event.artifact.parts[0])
     return data if isinstance(data, dict) else {}
 
 
@@ -82,11 +82,11 @@ class BackgroundThreadWatchRequestHandler:
         self.producer_tasks[task.id] = producer_task
         return producer_task
 
-    async def on_cancel_task(self, params: TaskIdParams, context=None):  # noqa: ANN001
+    async def on_cancel_task(self, params: CancelTaskRequest, context=None):  # noqa: ANN001
         self.cancel_requests.append({"task_id": params.id, "context": context})
         producer_task = self.producer_tasks.get(params.id)
         if producer_task is None:
-            raise ServerError(error=TaskNotFoundError())
+            raise TaskNotFoundError()
         producer_task.cancel()
         return None
 

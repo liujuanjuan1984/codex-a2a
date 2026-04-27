@@ -5,8 +5,9 @@ from unittest.mock import MagicMock, PropertyMock
 
 from a2a.server.agent_execution import RequestContext
 from a2a.server.context import ServerCallContext
-from a2a.types import Message, MessageSendParams, Part, Role, TextPart
+from a2a.types import Message, Part, Role, SendMessageRequest
 
+from codex_a2a.a2a_proto import new_text_part, to_struct
 from tests.support.settings import make_settings
 
 
@@ -78,8 +79,16 @@ def make_request_context(
 ) -> RequestContext:
     message = Message(
         message_id=message_id,
-        role=Role.user,
-        parts=parts if parts is not None else [Part(root=TextPart(text=text))],
+        role=Role.ROLE_USER,
+        parts=parts if parts is not None else [new_text_part(text)],
     )
-    params = MessageSendParams(message=message, metadata=metadata)
-    return RequestContext(request=params, task_id=task_id, context_id=context_id)
+    params = SendMessageRequest(message=message)
+    metadata_struct = to_struct(metadata)
+    if metadata_struct is not None:
+        params.metadata.CopyFrom(metadata_struct)
+    return RequestContext(
+        call_context=ServerCallContext(),
+        request=params,
+        task_id=task_id,
+        context_id=context_id,
+    )

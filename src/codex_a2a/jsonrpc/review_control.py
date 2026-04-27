@@ -3,13 +3,14 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
-from a2a.types import A2AError, InternalError, InvalidParamsError, JSONRPCError, JSONRPCRequest
+from a2a.server.jsonrpc_models import InternalError, InvalidParamsError, JSONRPCError
 from starlette.requests import Request
 from starlette.responses import Response
 
 from codex_a2a.jsonrpc.errors import invalid_params_response
 from codex_a2a.jsonrpc.owner_guard import validate_thread_owner
 from codex_a2a.jsonrpc.params_common import JsonRpcParamsValidationError
+from codex_a2a.jsonrpc.request_models import JSONRPCRequestModel as JSONRPCRequest
 from codex_a2a.jsonrpc.review_control_params import (
     ReviewStartControlParams,
     ReviewWatchControlParams,
@@ -111,18 +112,16 @@ async def handle_review_control_request(
     except ValueError as exc:
         return app._generate_error_response(
             base_request.id,
-            A2AError(
-                root=InvalidParamsError(
-                    message=str(exc),
-                    data={"type": "INVALID_FIELD", "field": "request.events"},
-                ),
+            InvalidParamsError(
+                message=str(exc),
+                data={"type": "INVALID_FIELD", "field": "request.events"},
             ),
         )
     except Exception as exc:
         logger.exception("Codex review control JSON-RPC method failed")
         return app._generate_error_response(
             base_request.id,
-            A2AError(root=InternalError(message=str(exc))),
+            InternalError(message=str(exc)),
         )
 
     if base_request.id is None:

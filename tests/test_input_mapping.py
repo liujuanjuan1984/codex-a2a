@@ -3,8 +3,8 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 import pytest
-from a2a.types import TextPart
 
+from codex_a2a.a2a_proto import new_text_part
 from codex_a2a.input_mapping import (
     UnsupportedInputError,
     convert_request_parts_to_turn_input,
@@ -73,7 +73,7 @@ def test_convert_request_parts_to_turn_input_rejects_invalid_shapes(
 
 def test_map_a2a_message_parts_supports_root_wrappers_and_image_variants() -> None:
     parts = [
-        SimpleNamespace(root=TextPart(text="hello")),
+        SimpleNamespace(root=new_text_part("hello")),
         {"file": {"uri": "https://example.com/demo.png", "name": "demo.png"}},
         {"file": {"uri": "data:image/png;base64,AAAA"}},
         {"file": {"bytes": "AAAA", "mimeType": "image/jpeg"}},

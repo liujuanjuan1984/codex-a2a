@@ -4,11 +4,13 @@ import hashlib
 import json
 import logging
 import time
-from typing import cast
+from typing import Any, cast
 from urllib.parse import unquote
 
+from a2a.server.context import ServerCallContext
+from a2a.server.jsonrpc_models import JSONRPCError
+from a2a.server.request_handlers.response_helpers import agent_card_to_dict
 from a2a.server.tasks.task_store import TaskStore
-from a2a.types import JSONRPCError
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from starlette.datastructures import Headers
@@ -45,8 +47,7 @@ _PUBLIC_AGENT_CARD_PATHS = {
     "/.well-known/agent.json",
 }
 _AUTHENTICATED_EXTENDED_CARD_PATHS = {
-    "/agent/authenticatedExtendedCard",
-    "/v1/card",
+    "/v1/extendedAgentCard",
 }
 _OPENAPI_PATHS = {
     "/openapi.json",
@@ -54,13 +55,6 @@ _OPENAPI_PATHS = {
 _REST_MESSAGE_PATHS = {
     "/v1/message:send",
     "/v1/message:stream",
-}
-_V1_JSONRPC_METHOD_ALIASES = {
-    "CancelTask": "tasks/cancel",
-    "GetExtendedAgentCard": "agent/getAuthenticatedExtendedCard",
-    "GetTask": "tasks/get",
-    "SendMessage": "message/send",
-    "SendStreamingMessage": "message/stream",
 }
 GZIP_COMPRESSIBLE_PATHS = (
     _PUBLIC_AGENT_CARD_PATHS | _AUTHENTICATED_EXTENDED_CARD_PATHS | _OPENAPI_PATHS
@@ -119,15 +113,8 @@ def _decode_payload_preview(body: bytes, *, limit: int) -> str:
 
 
 def _agent_card_response_bytes(card: object) -> bytes:
-    model_dump = getattr(card, "model_dump", None)
-    if not callable(model_dump):  # pragma: no cover - defensive
-        raise TypeError("card must provide model_dump()")
     return json.dumps(
-        model_dump(
-            mode="json",
-            exclude_none=True,
-            by_alias=True,
-        ),
+        agent_card_to_dict(cast(Any, card)),
         ensure_ascii=False,
         separators=(",", ":"),
         sort_keys=True,
@@ -205,13 +192,13 @@ async def _get_request_body(request: Request) -> bytes:
     return body
 
 
-def _looks_like_jsonrpc_message_payload(payload: dict | None) -> bool:
+def _looks_like_legacy_message_payload(payload: dict | None) -> bool:
     if payload is None:
         return False
     message = payload.get("message")
     if not isinstance(message, dict):
         return False
-    if "parts" in message:
+    if "content" in message:
         return True
     role = message.get("role")
     return isinstance(role, str) and role in {"user", "agent"}
@@ -227,7 +214,9 @@ def _looks_like_jsonrpc_envelope(payload: dict | None) -> bool:
 
 def _requires_protocol_negotiation(request: Request) -> bool:
     path = request.url.path
-    return request.method == "POST" and (path == "/" or path.startswith("/v1/"))
+    if request.method == "OPTIONS":
+        return False
+    return path == "/" or path.startswith("/v1/")
 
 
 def _jsonrpc_request_id(payload: dict | None) -> str | int | None:
@@ -263,13 +252,16 @@ def _jsonrpc_error_response(
     error: JSONRPCError,
 ) -> JSONResponse:
     adapted_error = adapt_jsonrpc_error_for_protocol(protocol_version, error)
-    if not isinstance(adapted_error, JSONRPCError):  # pragma: no cover - defensive
-        adapted_error = cast(JSONRPCError, adapted_error.root)
+    error_payload = (
+        adapted_error.model_dump(mode="json", exclude_none=True)
+        if isinstance(adapted_error, JSONRPCError)
+        else {"code": -32603, "message": str(adapted_error)}
+    )
     return JSONResponse(
         {
             "jsonrpc": "2.0",
             "id": request_id,
-            "error": adapted_error.model_dump(mode="json", exclude_none=True),
+            "error": error_payload,
         },
         status_code=200,
     )
@@ -322,30 +314,17 @@ def _unsupported_protocol_http_response(exc: UnsupportedProtocolVersionError) ->
     )
 
 
-async def _normalize_v1_jsonrpc_method_alias(
+def _inject_context_protocol_header(
     request: Request,
     *,
     protocol_version: str,
 ) -> None:
-    if protocol_version != "1.0" or request.method != "POST" or request.url.path != "/":
+    if request.headers.get("A2A-Version"):
         return
-    body = await _get_request_body(request)
-    payload = _parse_json_body(body)
-    if payload is None:
-        return
-    method = payload.get("method")
-    if not isinstance(method, str):
-        return
-    normalized_method = _V1_JSONRPC_METHOD_ALIASES.get(method)
-    if normalized_method is None:
-        return
-    payload = dict(payload)
-    payload["method"] = normalized_method
-    request._body = json.dumps(
-        payload,
-        ensure_ascii=False,
-        separators=(",", ":"),
-    ).encode("utf-8")
+    headers = list(request.scope.get("headers", []))
+    headers.append((b"a2a-version", protocol_version.encode("utf-8")))
+    request.scope["headers"] = headers
+    request._headers = Headers(raw=headers)
 
 
 def install_http_middlewares(
@@ -399,7 +378,7 @@ def install_http_middlewares(
         request.state.a2a_requested_protocol_version = negotiated.requested_version
         request.state.a2a_protocol_version = negotiated.negotiated_version
         request.state.a2a_protocol_version_explicit = negotiated.explicit
-        await _normalize_v1_jsonrpc_method_alias(
+        _inject_context_protocol_header(
             request,
             protocol_version=negotiated.negotiated_version,
         )
@@ -464,13 +443,14 @@ def install_http_middlewares(
 
         body = await _get_request_body(request)
         payload = _parse_json_body(body)
-        if _looks_like_jsonrpc_envelope(payload) or _looks_like_jsonrpc_message_payload(payload):
+        if _looks_like_jsonrpc_envelope(payload) or _looks_like_legacy_message_payload(payload):
             return JSONResponse(
                 {
                     "error": (
                         "Invalid HTTP+JSON payload for REST endpoint. "
-                        "Use message.content with ROLE_* role values, or call "
-                        "POST / with method=message/send or method=message/stream."
+                        "Use an A2A 1.0 request body with message.parts, or call "
+                        "POST / with JSON-RPC method=SendMessage or "
+                        "method=SendStreamingMessage."
                     )
                 },
                 status_code=400,
@@ -489,7 +469,7 @@ def install_http_middlewares(
             return JSONResponse({"error": "Task not found"}, status_code=404)
 
         try:
-            task = await task_store.get(task_id)
+            task = await task_store.get(task_id, ServerCallContext())
         except TaskStoreOperationError as exc:
             logger.exception(
                 "Task store operation failed while guarding subscribe path task_id=%s operation=%s",

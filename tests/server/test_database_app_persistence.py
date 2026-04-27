@@ -15,7 +15,7 @@ def _task(task_id: str, *, context_id: str = "ctx-1") -> Task:
     return Task(
         id=task_id,
         context_id=context_id,
-        status=TaskStatus(state=TaskState.working),
+        status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
     )
 
 

@@ -1,5 +1,4 @@
 import logging
-from base64 import b64encode
 from typing import Any
 from unittest.mock import MagicMock
 
@@ -24,20 +23,21 @@ from codex_a2a.contracts.extensions import (
 from codex_a2a.jsonrpc.application import CodexSessionQueryJSONRPCApplication
 from codex_a2a.jsonrpc.hooks import SessionGuardHooks
 from codex_a2a.profile.runtime import build_runtime_profile
-from codex_a2a.server.agent_card import build_agent_card
 from codex_a2a.upstream.models import CodexRPCError
 from tests.support.dummy_clients import DummySessionQueryCodexClient as DummyCodexClient
+from tests.support.http_auth import basic_auth_header as _basic_auth_header
+from tests.support.jsonrpc_errors import (
+    error_context as _error_context,
+)
+from tests.support.jsonrpc_errors import (
+    error_reason as _error_reason,
+)
 from tests.support.settings import make_settings
 
 _BASE_SETTINGS = {
     "codex_timeout": 1.0,
     "a2a_log_level": "DEBUG",
 }
-
-
-def _basic_auth_header(username: str, password: str) -> dict[str, str]:
-    token = b64encode(f"{username}:{password}".encode()).decode("ascii")
-    return {"Authorization": f"Basic {token}"}
 
 
 def _build_extension_app(
@@ -72,8 +72,7 @@ def _build_extension_app(
         session_owner_matcher=session_owner_matcher,
     )
     return CodexSessionQueryJSONRPCApplication(
-        agent_card=build_agent_card(settings),
-        http_handler=MagicMock(),
+        request_handler=MagicMock(),
         codex_client=DummyCodexClient(settings),
         exec_runtime=MagicMock(),
         discovery_runtime=MagicMock(),
@@ -179,8 +178,8 @@ async def test_session_query_extension_returns_jsonrpc_result(monkeypatch):
         assert "raw" not in payload["result"]
         session = payload["result"]["items"][0]
         assert session["id"] == "s-1"
-        assert session["contextId"] == "s-1"
-        assert session["contextId"] == session["metadata"]["shared"]["session"]["id"]
+        assert session["context_id"] == "s-1"
+        assert session["context_id"] == session["metadata"]["shared"]["session"]["id"]
         assert session["metadata"]["shared"]["session"]["id"] == "s-1"
         assert session["metadata"]["shared"]["session"]["title"] == "Session s-1"
         assert session["metadata"]["codex"]["raw"]["id"] == "s-1"
@@ -203,8 +202,8 @@ async def test_session_query_extension_returns_jsonrpc_result(monkeypatch):
         assert payload["id"] == 2
         assert "raw" not in payload["result"]
         message = payload["result"]["items"][0]
-        assert message["contextId"] == "s-1"
-        assert message["contextId"] == message["metadata"]["shared"]["session"]["id"]
+        assert message["context_id"] == "s-1"
+        assert message["context_id"] == message["metadata"]["shared"]["session"]["id"]
         assert message["parts"][0]["text"] == "SECRET_HISTORY"
         assert message["metadata"]["shared"]["session"]["id"] == "s-1"
         assert dummy.last_messages_params is not None
@@ -278,7 +277,7 @@ async def test_session_query_extension_rejects_non_array_upstream_payload(monkey
         assert resp.status_code == 200
         payload = resp.json()
         assert payload["error"]["code"] == -32005
-        assert payload["error"]["data"]["type"] == "UPSTREAM_PAYLOAD_ERROR"
+        assert _error_reason(payload) == "UPSTREAM_PAYLOAD_ERROR"
 
 
 @pytest.mark.asyncio
@@ -343,8 +342,8 @@ async def test_session_query_extension_message_role_and_id_from_info(monkeypatch
         )
         payload = resp.json()
         message = payload["result"]["items"][0]
-        assert message["messageId"] == "msg-1"
-        assert message["role"] == "user"
+        assert message["message_id"] == "msg-1"
+        assert message["role"] == "ROLE_USER"
         assert message["parts"][0]["text"] == "hello"
 
 
@@ -390,7 +389,7 @@ async def test_session_query_extension_accepts_top_level_list_payload(monkeypatc
             },
         )
         payload = resp.json()
-        assert payload["result"]["items"][0]["contextId"] == "s-1"
+        assert payload["result"]["items"][0]["context_id"] == "s-1"
         assert payload["result"]["items"][0]["parts"][0]["text"] == "SECRET_HISTORY"
 
 
@@ -419,7 +418,7 @@ async def test_session_query_extension_rejects_non_list_wrapped_payload(monkeypa
         )
         payload = resp.json()
         assert payload["error"]["code"] == -32005
-        assert payload["error"]["data"]["type"] == "UPSTREAM_PAYLOAD_ERROR"
+        assert _error_reason(payload) == "UPSTREAM_PAYLOAD_ERROR"
 
         resp = await client.post(
             "/",
@@ -433,7 +432,7 @@ async def test_session_query_extension_rejects_non_list_wrapped_payload(monkeypa
         )
         payload = resp.json()
         assert payload["error"]["code"] == -32005
-        assert payload["error"]["data"]["type"] == "UPSTREAM_PAYLOAD_ERROR"
+        assert _error_reason(payload) == "UPSTREAM_PAYLOAD_ERROR"
 
 
 @pytest.mark.asyncio
@@ -528,7 +527,8 @@ async def test_session_query_extension_rejects_limit_above_declared_max(monkeypa
         assert payload["jsonrpc"] == "2.0"
         assert payload["id"] == 1
         assert payload["error"]["code"] == -32602
-        assert payload["error"]["message"] == f"limit must be <= {SESSION_QUERY_MAX_LIMIT}"
+        assert payload["error"]["message"] == "Invalid parameters"
+        assert payload["error"]["data"]["field"] == "limit"
 
 
 @pytest.mark.asyncio
@@ -563,7 +563,8 @@ async def test_session_query_extension_maps_404_to_session_not_found(monkeypatch
         assert payload["jsonrpc"] == "2.0"
         assert payload["id"] == 2
         assert payload["error"]["code"] == -32001
-        assert payload["error"]["data"]["type"] == "SESSION_NOT_FOUND"
+        assert _error_reason(payload) == "SESSION_NOT_FOUND"
+        assert _error_context(payload)["sessionId"] == "s-404"
 
 
 @pytest.mark.asyncio
@@ -596,7 +597,8 @@ async def test_session_query_extension_maps_thread_not_found_to_session_not_foun
         assert payload["jsonrpc"] == "2.0"
         assert payload["id"] == 3
         assert payload["error"]["code"] == -32001
-        assert payload["error"]["data"]["type"] == "SESSION_NOT_FOUND"
+        assert _error_reason(payload) == "SESSION_NOT_FOUND"
+        assert _error_context(payload)["sessionId"] == "s-rpc-404"
 
 
 @pytest.mark.asyncio
@@ -714,7 +716,8 @@ async def test_session_control_prompt_async_maps_thread_not_found_to_session_not
         )
         payload = resp.json()
         assert payload["error"]["code"] == -32001
-        assert payload["error"]["data"]["type"] == "SESSION_NOT_FOUND"
+        assert _error_reason(payload) == "SESSION_NOT_FOUND"
+        assert _error_context(payload)["sessionId"] == "s-rpc-404"
 
 
 @pytest.mark.asyncio
@@ -875,8 +878,8 @@ async def test_session_control_command_maps_response_to_a2a_message(monkeypatch)
         )
         payload = resp.json()
         item = payload["result"]["item"]
-        assert item["contextId"] == "s-1"
-        assert item["messageId"] == "cmd-msg-1"
+        assert item["context_id"] == "s-1"
+        assert item["message_id"] == "cmd-msg-1"
         assert item["parts"][0]["text"] == "command:plan show current work"
         assert dummy.last_command == {
             "session_id": "s-1",
@@ -923,8 +926,8 @@ async def test_session_control_command_accepts_missing_arguments(monkeypatch):
         )
         payload = resp.json()
         item = payload["result"]["item"]
-        assert item["contextId"] == "s-1"
-        assert item["messageId"] == "cmd-msg-2"
+        assert item["context_id"] == "s-1"
+        assert item["message_id"] == "cmd-msg-2"
         assert item["parts"][0]["text"] == "command:plan"
         assert dummy.last_command == {
             "session_id": "s-1",
@@ -979,8 +982,8 @@ async def test_session_control_shell_maps_response_to_a2a_message(monkeypatch):
         )
         payload = resp.json()
         item = payload["result"]["item"]
-        assert item["contextId"] == "s-1"
-        assert item["messageId"] == "shell-1"
+        assert item["context_id"] == "s-1"
+        assert item["message_id"] == "shell-1"
         assert item["parts"][0]["text"] == "stdout\n$ pwd"
         assert dummy.last_shell == {
             "session_id": "s-1",
@@ -1092,9 +1095,8 @@ async def test_session_control_shell_method_is_not_exposed_when_disabled(monkeyp
         )
         payload = resp.json()
         assert payload["error"]["code"] == -32601
-        assert payload["error"]["data"]["type"] == "METHOD_NOT_SUPPORTED"
         assert payload["error"]["data"]["method"] == "codex.sessions.shell"
-        assert "codex.sessions.shell" not in payload["error"]["data"]["supported_methods"]
+        assert "codex.sessions.shell" not in payload["error"]["data"]["supportedMethods"]
         assert dummy.last_shell is None
 
 
@@ -1172,10 +1174,11 @@ async def test_session_control_shell_requires_session_shell_capability(monkeypat
 
     payload = resp.json()
     assert payload["error"]["code"] == -32007
-    assert payload["error"]["data"]["type"] == "AUTHORIZATION_FORBIDDEN"
-    assert payload["error"]["data"]["method"] == "codex.sessions.shell"
-    assert payload["error"]["data"]["capability"] == "session_shell"
-    assert payload["error"]["data"]["credential_id"] == "test-bearer"
+    assert _error_reason(payload) == "AUTHORIZATION_FORBIDDEN"
+    context = _error_context(payload)
+    assert context["method"] == "codex.sessions.shell"
+    assert context["capability"] == "session_shell"
+    assert context["credentialId"] == "test-bearer"
 
 
 @pytest.mark.asyncio
@@ -1534,7 +1537,8 @@ async def test_interrupt_callback_extension_maps_404_to_interrupt_not_found(monk
         )
         payload = resp.json()
         assert payload["error"]["code"] == -32004
-        assert payload["error"]["data"]["type"] == "INTERRUPT_REQUEST_NOT_FOUND"
+        assert _error_reason(payload) == "INTERRUPT_REQUEST_NOT_FOUND"
+        assert _error_context(payload)["requestId"] == "perm-404"
         assert (await dummy.resolve_interrupt_request("perm-404"))[0] == "missing"
 
 
@@ -1567,7 +1571,8 @@ async def test_interrupt_callback_extension_returns_not_found_for_missing_local_
         )
         payload = resp.json()
         assert payload["error"]["code"] == -32004
-        assert payload["error"]["data"]["type"] == "INTERRUPT_REQUEST_NOT_FOUND"
+        assert _error_reason(payload) == "INTERRUPT_REQUEST_NOT_FOUND"
+        assert _error_context(payload)["requestId"] == "perm-missing"
         assert dummy.permission_reply_calls == []
 
 
@@ -1599,7 +1604,8 @@ async def test_interrupt_callback_extension_returns_expired_for_stale_request(mo
         )
         payload = resp.json()
         assert payload["error"]["code"] == -32007
-        assert payload["error"]["data"]["type"] == "INTERRUPT_REQUEST_EXPIRED"
+        assert _error_reason(payload) == "INTERRUPT_REQUEST_EXPIRED"
+        assert _error_context(payload)["requestId"] == "perm-expired"
         assert (await dummy.resolve_interrupt_request("perm-expired"))[0] == "expired"
 
 
@@ -1631,9 +1637,11 @@ async def test_interrupt_callback_extension_rejects_interrupt_type_mismatch(monk
         )
         payload = resp.json()
         assert payload["error"]["code"] == -32008
-        assert payload["error"]["data"]["type"] == "INTERRUPT_TYPE_MISMATCH"
-        assert payload["error"]["data"]["expected_interrupt_type"] == "question"
-        assert payload["error"]["data"]["actual_interrupt_type"] == "permission"
+        assert _error_reason(payload) == "INTERRUPT_TYPE_MISMATCH"
+        context = _error_context(payload)
+        assert context["requestId"] == "perm-type"
+        assert context["expectedInterruptType"] == "question"
+        assert context["actualInterruptType"] == "permission"
         assert dummy.question_reply_calls == []
         assert (await dummy.resolve_interrupt_request("perm-type"))[0] == "active"
 
@@ -1676,6 +1684,7 @@ async def test_interrupt_callback_extension_masks_owner_mismatch_as_not_found(mo
         )
         payload = resp.json()
         assert payload["error"]["code"] == -32004
-        assert payload["error"]["data"]["type"] == "INTERRUPT_REQUEST_NOT_FOUND"
+        assert _error_reason(payload) == "INTERRUPT_REQUEST_NOT_FOUND"
+        assert _error_context(payload)["requestId"] == "perm-owned"
         assert dummy.permission_reply_calls == []
         assert (await dummy.resolve_interrupt_request("perm-owned"))[0] == "active"

@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import base64
 import mimetypes
 from collections.abc import Mapping
 from typing import Any
 
-from a2a.types import DataPart, FilePart, TextPart
+from a2a.types import Part
+
+from codex_a2a.a2a_proto import is_data_part, is_file_part, is_text_part, part_data, part_text
 
 
 class UnsupportedInputError(ValueError):
@@ -29,20 +32,23 @@ def _guess_mime_type(*candidates: Any) -> str | None:
 
 
 def _resolve_file_payload(part: Any) -> Mapping[str, Any] | None:
-    if isinstance(part, FilePart):
-        payload = part.file
-        if hasattr(payload, "model_dump"):
-            dumped = payload.model_dump(by_alias=True, exclude_none=True)
-            if isinstance(dumped, Mapping):
-                return dumped
-        if isinstance(payload, Mapping):
-            return payload
+    if isinstance(part, Part) and is_file_part(part):
+        payload: dict[str, Any] = {}
+        if part.url:
+            payload["uri"] = part.url
+        if part.raw:
+            payload["bytes"] = part.raw
+        if part.filename:
+            payload["name"] = part.filename
+        if part.media_type:
+            payload["mimeType"] = part.media_type
+        return payload
 
     if isinstance(part, Mapping) and "file" in part and isinstance(part["file"], Mapping):
         return part["file"]
 
     root = getattr(part, "root", None)
-    if isinstance(root, FilePart):
+    if isinstance(root, Part):
         return _resolve_file_payload(root)
     if isinstance(root, Mapping) and "file" in root and isinstance(root["file"], Mapping):
         return root["file"]
@@ -50,28 +56,30 @@ def _resolve_file_payload(part: Any) -> Mapping[str, Any] | None:
 
 
 def _resolve_data_payload(part: Any) -> Mapping[str, Any] | None:
-    if isinstance(part, DataPart):
-        return part.data
+    if isinstance(part, Part) and is_data_part(part):
+        payload = part_data(part)
+        if isinstance(payload, Mapping):
+            return payload
     if isinstance(part, Mapping) and "data" in part and isinstance(part["data"], Mapping):
         return part["data"]
 
     root = getattr(part, "root", None)
-    if isinstance(root, DataPart):
-        return root.data
+    if isinstance(root, Part):
+        return _resolve_data_payload(root)
     if isinstance(root, Mapping) and "data" in root and isinstance(root["data"], Mapping):
         return root["data"]
     return None
 
 
 def _resolve_text_payload(part: Any) -> str | None:
-    if isinstance(part, TextPart):
-        return part.text
+    if isinstance(part, Part) and is_text_part(part):
+        return part_text(part)
     if isinstance(part, Mapping) and isinstance(part.get("text"), str):
         return part["text"]
 
     root = getattr(part, "root", None)
-    if isinstance(root, TextPart):
-        return root.text
+    if isinstance(root, Part):
+        return _resolve_text_payload(root)
     if isinstance(root, Mapping) and isinstance(root.get("text"), str):
         return root["text"]
     return None
@@ -165,8 +173,13 @@ def convert_request_parts_to_turn_input(request: dict[str, Any]) -> list[dict[st
 
 
 def map_a2a_message_parts_to_normalized_items(parts: Any) -> list[dict[str, Any]]:
-    if not isinstance(parts, list):
+    if parts is None:
         return []
+    if not isinstance(parts, list):
+        try:
+            parts = list(parts)
+        except TypeError:
+            return []
 
     normalized: list[dict[str, Any]] = []
     for part in parts:
@@ -190,7 +203,11 @@ def map_a2a_message_parts_to_normalized_items(parts: Any) -> list[dict[str, Any]
                 if file_uri.startswith("data:image/"):
                     normalized.append({"type": "image", "url": file_uri})
                     continue
-            file_bytes = _optional_string(file_payload.get("bytes"))
+            file_bytes = file_payload.get("bytes")
+            if isinstance(file_bytes, bytes):
+                file_bytes = base64.b64encode(file_bytes).decode("ascii")
+            else:
+                file_bytes = _optional_string(file_bytes)
             if file_bytes and mime_type and mime_type.startswith("image/"):
                 normalized.append(
                     {

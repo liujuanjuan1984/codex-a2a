@@ -1,5 +1,6 @@
-from a2a.types import Message, TaskIdParams, TaskQueryParams
+from a2a.types import CancelTaskRequest, GetTaskRequest, Message
 
+from codex_a2a.a2a_proto import proto_to_python
 from codex_a2a.client.types import A2ACancelTaskRequest, A2AGetTaskRequest, A2ASendRequest
 
 
@@ -18,8 +19,8 @@ def test_send_request_builds_a2a_message() -> None:
 
     assert isinstance(message, Message)
     assert message.context_id == "ctx-1"
-    assert message.metadata == {"lang": "zh"}
-    assert config.blocking is False
+    assert proto_to_python(message.metadata) == {"lang": "zh"}
+    assert config.return_immediately is True
     assert config.accepted_output_modes == ["text/plain"]
     assert config.history_length == 5
 
@@ -29,10 +30,9 @@ def test_get_task_request_maps_to_query() -> None:
 
     params = request.to_task_query()
 
-    assert isinstance(params, TaskQueryParams)
+    assert isinstance(params, GetTaskRequest)
     assert params.id == "task-1"
     assert params.history_length == 10
-    assert params.metadata == {"k": "v"}
 
 
 def test_cancel_task_request_maps_to_task_id() -> None:
@@ -40,6 +40,6 @@ def test_cancel_task_request_maps_to_task_id() -> None:
 
     params = request.to_task_id()
 
-    assert isinstance(params, TaskIdParams)
+    assert isinstance(params, CancelTaskRequest)
     assert params.id == "task-1"
-    assert params.metadata == {"reason": "manual"}
+    assert proto_to_python(params.metadata) == {"reason": "manual"}

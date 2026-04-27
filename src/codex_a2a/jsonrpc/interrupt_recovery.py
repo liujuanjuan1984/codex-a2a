@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from a2a.types import JSONRPCRequest
 from starlette.requests import Request
 from starlette.responses import Response
 
@@ -12,6 +11,7 @@ from codex_a2a.jsonrpc.interrupt_recovery_params import (
     parse_interrupt_recovery_list_params,
 )
 from codex_a2a.jsonrpc.params_common import JsonRpcParamsValidationError
+from codex_a2a.jsonrpc.request_models import JSONRPCRequestModel as JSONRPCRequest
 
 if TYPE_CHECKING:
     from codex_a2a.jsonrpc.application import CodexSessionQueryJSONRPCApplication

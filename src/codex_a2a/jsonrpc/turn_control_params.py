@@ -10,6 +10,8 @@ from codex_a2a.jsonrpc.params_common import (
     format_loc,
     map_extra_forbidden,
     normalize_non_empty_string,
+    validate_non_empty_parts,
+    validate_required_thread_id,
 )
 from codex_a2a.jsonrpc.session_control_params import PromptAsyncPart
 
@@ -17,12 +19,7 @@ from codex_a2a.jsonrpc.session_control_params import PromptAsyncPart
 class TurnSteerRequestParams(_StrictModel):
     parts: list[PromptAsyncPart]
 
-    @field_validator("parts", mode="before")
-    @classmethod
-    def _validate_parts(cls, value: Any) -> Any:
-        if not isinstance(value, list) or not value:
-            raise ValueError("request.parts must be a non-empty array")
-        return value
+    _validate_parts = field_validator("parts", mode="before")(validate_non_empty_parts)
 
 
 class TurnSteerControlParams(_StrictModel):
@@ -33,10 +30,7 @@ class TurnSteerControlParams(_StrictModel):
     )
     request: TurnSteerRequestParams
 
-    @field_validator("thread_id", mode="before")
-    @classmethod
-    def _validate_thread_id(cls, value: Any) -> str:
-        return normalize_non_empty_string(value, message="Missing required params.thread_id")
+    _validate_thread_id = field_validator("thread_id", mode="before")(validate_required_thread_id)
 
     @field_validator("expected_turn_id", mode="before")
     @classmethod

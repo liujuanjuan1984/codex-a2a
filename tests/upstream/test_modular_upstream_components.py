@@ -777,7 +777,7 @@ def test_startup_helpers_cover_optional_strings_cli_args_and_resolution(
     )
     monkeypatch.setattr(
         "codex_a2a.upstream.startup.os.access",
-        lambda path, mode: path == os.path.expanduser("~/.npm-global/bin/codex"),
+        lambda path, _mode: path == os.path.expanduser("~/.npm-global/bin/codex"),
     )
     assert resolve_cli_bin("codex") == os.path.expanduser("~/.npm-global/bin/codex")
 

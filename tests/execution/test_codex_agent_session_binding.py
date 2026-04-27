@@ -4,22 +4,33 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from a2a.types import (
     Artifact,
-    DataPart,
-    FilePart,
-    FileWithUri,
-    Part,
     Task,
     TaskArtifactUpdateEvent,
     TaskState,
     TaskStatus,
-    TextPart,
 )
 
+from codex_a2a.a2a_proto import new_data_part, new_file_url_part, new_text_part, part_text
 from codex_a2a.client import A2AClient
 from codex_a2a.execution.executor import CodexAgentExecutor
 from codex_a2a.upstream.client import CodexMessage
 from tests.support.context import DummyEventQueue, make_request_context
 from tests.support.dummy_clients import DummyChatCodexClient
+
+
+def _terminal_task(queue: DummyEventQueue) -> Task:
+    return [
+        event
+        for event in queue.events
+        if isinstance(event, Task)
+        and event.status.state
+        in {
+            TaskState.TASK_STATE_COMPLETED,
+            TaskState.TASK_STATE_FAILED,
+            TaskState.TASK_STATE_CANCELED,
+            TaskState.TASK_STATE_REJECTED,
+        }
+    ][-1]
 
 
 @pytest.mark.asyncio
@@ -64,23 +75,17 @@ async def test_agent_maps_rich_input_parts_to_structured_codex_input() -> None:
         context_id="c-rich",
         text="",
         parts=[
-            Part(
-                root=FilePart(
-                    file=FileWithUri(
-                        uri="https://example.com/screenshot.png",
-                        mimeType="image/png",
-                        name="screenshot.png",
-                    )
-                )
+            new_file_url_part(
+                "https://example.com/screenshot.png",
+                media_type="image/png",
+                filename="screenshot.png",
             ),
-            Part(
-                root=DataPart(
-                    data={
-                        "type": "mention",
-                        "name": "Demo App",
-                        "path": "app://demo-app",
-                    }
-                )
+            new_data_part(
+                {
+                    "type": "mention",
+                    "name": "Demo App",
+                    "path": "app://demo-app",
+                }
             ),
         ],
     )
@@ -140,11 +145,11 @@ async def test_agent_rejects_invalid_request_execution_options_metadata() -> Non
     )
     await executor.execute(ctx, q)
 
-    task = next(event for event in q.events if isinstance(event, Task))
-    assert task.status.state == TaskState.failed
+    task = _terminal_task(q)
+    assert task.status.state == TaskState.TASK_STATE_FAILED
     assert task.status.message is not None
     assert (
-        task.status.message.parts[0].root.text
+        part_text(task.status.message.parts[0])
         == "metadata.codex.execution.effort must be one of: high, low, medium, minimal, none, xhigh"
     )
 
@@ -160,24 +165,20 @@ async def test_agent_rejects_non_image_file_parts() -> None:
         context_id="c-bad-file",
         text="",
         parts=[
-            Part(
-                root=FilePart(
-                    file=FileWithUri(
-                        uri="https://example.com/report.pdf",
-                        mimeType="application/pdf",
-                        name="report.pdf",
-                    )
-                )
+            new_file_url_part(
+                "https://example.com/report.pdf",
+                media_type="application/pdf",
+                filename="report.pdf",
             )
         ],
     )
     await executor.execute(ctx, q)
 
-    task = next(event for event in q.events if isinstance(event, Task))
-    assert task.status.state == TaskState.failed
+    task = _terminal_task(q)
+    assert task.status.state == TaskState.TASK_STATE_FAILED
     assert task.status.message is not None
     assert (
-        task.status.message.parts[0].root.text
+        part_text(task.status.message.parts[0])
         == "Only text, image file, and codex rich input data parts are supported."
     )
 
@@ -278,8 +279,8 @@ async def test_agent_uses_stable_fallback_message_id_when_upstream_missing_messa
         q,
     )
 
-    task = next(event for event in q.events if isinstance(event, Task))
-    assert task.status.state == TaskState.completed
+    task = _terminal_task(q)
+    assert task.status.state == TaskState.TASK_STATE_COMPLETED
     assert task.metadata is not None
     assert task.status.message is not None
     assert "message_id" not in task.metadata["shared"]["session"]
@@ -326,8 +327,8 @@ async def test_agent_includes_usage_in_non_stream_task_metadata() -> None:
         q,
     )
 
-    task = next(event for event in q.events if isinstance(event, Task))
-    assert task.status.state == TaskState.completed
+    task = _terminal_task(q)
+    assert task.status.state == TaskState.TASK_STATE_COMPLETED
     assert task.metadata is not None
     usage = task.metadata["shared"]["usage"]
     assert usage["input_tokens"] == 7
@@ -344,7 +345,7 @@ async def test_agent_handles_a2a_call_tool() -> None:
             task = Task(
                 id="remote-task",
                 context_id="remote-ctx",
-                status=TaskStatus(state=TaskState.working),
+                status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
             )
             yield (
                 task,
@@ -354,7 +355,7 @@ async def test_agent_handles_a2a_call_tool() -> None:
                     artifact=Artifact(
                         artifact_id="a1",
                         name="response",
-                        parts=[Part(root=TextPart(text=f"remote response to {text}"))],
+                        parts=[new_text_part(f"remote response to {text}")],
                     ),
                 ),
             )
@@ -432,11 +433,11 @@ async def test_agent_supports_tool_loop_and_merges_stream_output() -> None:
 
     class _MockManager:
         async def get_client(self, _agent_url: str):
-            async def _send_message(_text: str):
+            async def _send_message(_text: str, **_kwargs):
                 task = Task(
                     id="remote-task",
                     context_id="remote-ctx",
-                    status=TaskStatus(state=TaskState.working),
+                    status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
                 )
                 yield (
                     task,
@@ -446,7 +447,7 @@ async def test_agent_supports_tool_loop_and_merges_stream_output() -> None:
                         artifact=Artifact(
                             artifact_id="a1",
                             name="response",
-                            parts=[Part(root=TextPart(text="streamed tool output"))],
+                            parts=[new_text_part("streamed tool output")],
                         ),
                     ),
                 )
@@ -471,9 +472,9 @@ async def test_agent_supports_tool_loop_and_merges_stream_output() -> None:
     )
 
     assert client.call_count == 2
-    task = next(event for event in queue.events if isinstance(event, Task))
+    task = _terminal_task(queue)
     assert task.status.message is not None
-    assert task.status.message.parts[0].root.text == "done"
+    assert part_text(task.status.message.parts[0]) == "done"
 
 
 def test_executor_merge_streamed_a2a_tool_output() -> None:

@@ -5,13 +5,13 @@ This document explains the compatibility promises this repository currently trie
 ## Runtime Support
 
 - Python versions: 3.11, 3.12, 3.13
-- A2A SDK line: `0.3.x`
-- A2A protocol version advertised by default: `0.3.0`
-- Normalized protocol compatibility lines declared today: `0.3`, `1.0`
+- A2A SDK line: `1.0.x`
+- A2A protocol version advertised by default: `1.0.0`
+- Normalized protocol compatibility lines declared today: `1.0`
 
 The repository pins the SDK version in `pyproject.toml` and validates the published CLI build in CI. Upgrade the SDK deliberately rather than relying on floating dependency resolution.
 
-The authenticated compatibility profile and wire contract publish `default_protocol_version`, `supported_protocol_versions`, and `protocol_compatibility`. Request-time `A2A-Version` negotiation currently supports the default `0.3` line plus a partial `1.0` compatibility line for response header echo, PascalCase JSON-RPC method aliases, and protocol-aware error shaping. Transport payload schemas, enums, pagination, and push-notification behavior remain SDK-owned `0.3` behavior until separately implemented.
+The authenticated compatibility profile and wire contract publish `default_protocol_version`, `supported_protocol_versions`, and `protocol_compatibility`. Request-time `A2A-Version` negotiation now targets the repository's `1.0` baseline only, and the published contracts should describe the implemented `1.0` transport surface rather than any legacy compatibility line.
 
 ## Contract Honesty
 
@@ -54,7 +54,7 @@ This repository still ships as an alpha project. Within that alpha line, these d
 
 Changes to those surfaces should be treated as compatibility-sensitive and should include corresponding test updates.
 
-Service-level behavior layered on top of those core methods should also be declared explicitly when this repository depends on it for interoperability. Current example: terminal `tasks/resubscribe` replay-once behavior is published as a service-level contract, not as a claim about generic A2A runtime semantics.
+Service-level behavior layered on top of those core methods should also be declared explicitly when this repository depends on it for interoperability. Current example: terminal `SubscribeToTask` replay-once behavior is published as a service-level contract, not as a claim about generic A2A runtime semantics.
 
 Task-store resilience is also service-level behavior in this deployment:
 
@@ -94,7 +94,7 @@ Execution-environment boundary fields are also published through the runtime pro
 - Product-specific extensions should remain stable within the current major line unless explicitly documented otherwise.
 - Deployment-conditional methods must be declared as conditional rather than silently disappearing.
 - `codex.sessions.shell` is compatibility-sensitive as a one-shot shell snapshot contract. Future interactive exec support must use a separate extension family rather than silently widening this method's behavior.
-- Rich input mapping is compatibility-sensitive across both `codex.sessions.prompt_async` and the core A2A message surface. Changes to supported part types, FilePart image handling, or DataPart mention/skill mapping should be treated as wire-level behavior changes.
+- Rich input mapping is compatibility-sensitive across both `codex.sessions.prompt_async` and the core A2A message surface. Changes to supported part types, `Part(url|raw)` image handling, or `Part(data)` mention/skill mapping should be treated as wire-level behavior changes.
 - `codex.exec.*` is compatibility-sensitive as the standalone interactive exec contract. Changes to handle shapes, task-stream delivery, or lifecycle method names should be treated as wire-level changes.
 - `codex.discovery.*` is compatibility-sensitive as the stable discovery contract for `skill.path` and `mention_path` identifiers. Changes to normalized item fields, plugin marketplace mapping, or discovery watch task payload kinds should be treated as wire-level changes.
 - `codex.threads.*` is compatibility-sensitive as the provider-private thread lifecycle contract. Changes to lifecycle method names, watch payload kinds, or watch-task bridge event names should be treated as wire-level changes.
@@ -102,7 +102,7 @@ Execution-environment boundary fields are also published through the runtime pro
 - `codex.review.*` is compatibility-sensitive as the review control and watch contract. Changes to supported target types, `delivery` semantics, review watch payload kinds, or review watch event names should be treated as wire-level changes.
 - Provider-private Agent Card skill decomposition is also compatibility-sensitive. Renaming or re-merging `codex.sessions.query/control`, `codex.discovery.query/watch`, `codex.threads.control/watch`, `codex.turns.control`, `codex.review.control`, `codex.exec.control/stream`, or narrowing `codex.interrupt.callback` output modes should be treated as discoverability contract changes.
 - Agent Card media modes and `acceptedOutputModes` handling are compatibility-sensitive. Changes to declared default modes, to task-scoped persistence of negotiated modes, or to structured-output downgrade behavior should be treated as wire-level changes.
-- For core chat tasks, negotiated output modes are lifecycle-scoped. `message/send`, `message/stream`, `tasks/get`, `tasks/resubscribe`, and push notifications should not drift apart for the same task.
+- For core chat tasks, negotiated output modes are lifecycle-scoped. `SendMessage`, `SendStreamingMessage`, `GetTask`, `SubscribeToTask`, and push notifications should not drift apart for the same task.
 - For core chat requests, explicit `acceptedOutputModes` are also a compatibility-sensitive fail-fast boundary: requests must remain compatible with declared chat output modes, and current chat turns require `text/plain`.
 
 ## Extension Boundary Governance
@@ -162,7 +162,7 @@ Discovery note:
 - `codex.turns.steer` is the declared active-turn control method for appending additional input to an already-running regular turn.
 - `codex.review.start` is the declared review-start control method for `uncommittedChanges`, `baseBranch`, `commit`, and `custom` review targets.
 - `codex.review.watch` is the declared review lifecycle watch-task bridge for `review.started`, `review.status.changed`, `review.completed`, and `review.failed`.
-- `codex.review.start` remains a control-handle surface; clients should use `codex.review.watch` plus `tasks/resubscribe` for review lifecycle observation.
+- `codex.review.start` remains a control-handle surface; clients should use `codex.review.watch` plus `SubscribeToTask` for review lifecycle observation.
 - `codex.interrupts.list` is always-on but adapter-local and identity-scoped. `codex.sessions.shell`, `codex.turns.steer`, `codex.review.*`, and `codex.exec.*` remain deployment-conditional surfaces and should be discovered from machine-readable contracts before use.
 - `thread/unsubscribe` is intentionally excluded from the stable public contract until this service exposes connection-safe subscription ownership.
 - This repository does not claim a generic standalone server-push JSON-RPC transport for those notifications; the compatibility contract is the watch-task bridge published through Agent Card and OpenAPI.

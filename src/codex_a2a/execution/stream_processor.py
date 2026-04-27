@@ -7,8 +7,14 @@ from dataclasses import dataclass
 from typing import Any
 
 from a2a.server.events.event_queue import EventQueue
-from a2a.types import TaskState, TaskStatus, TaskStatusUpdateEvent, TextPart
+from a2a.types import TaskState, TaskStatus, TaskStatusUpdateEvent
 
+from codex_a2a.a2a_proto import (
+    TASK_STATE_INPUT_REQUIRED,
+    TASK_STATE_WORKING,
+    is_text_part,
+    part_text,
+)
 from codex_a2a.contracts.runtime_output import (
     build_interrupt_metadata,
     build_output_metadata,
@@ -216,8 +222,9 @@ class StreamEventProcessor:
 
     async def _emit_chunk_now(self, chunk: NormalizedStreamChunk) -> None:
         resolved_message_id = self._stream_state.resolve_message_id(chunk.message_id)
-        if isinstance(chunk.part, TextPart) and self._stream_state.should_drop_initial_user_echo(
-            chunk.part.text,
+        chunk_text = part_text(chunk.part)
+        if chunk_text is not None and self._stream_state.should_drop_initial_user_echo(
+            chunk_text,
             block_type=chunk.block_type,
             role=chunk.role,
         ):
@@ -256,7 +263,7 @@ class StreamEventProcessor:
 
     async def emit_chunks(self, chunks: list[NormalizedStreamChunk]) -> None:
         for chunk in chunks:
-            if isinstance(chunk.part, TextPart) and chunk.block_type in {
+            if is_text_part(chunk.part) and chunk.block_type in {
                 BlockType.TEXT,
                 BlockType.REASONING,
             }:
@@ -294,7 +301,6 @@ class StreamEventProcessor:
                 task_id=self._task_id,
                 context_id=self._context_id,
                 status=TaskStatus(state=state),
-                final=False,
                 metadata=build_output_metadata(
                     session_id=self._session_id,
                     stream=build_status_stream_metadata(
@@ -339,7 +345,7 @@ class StreamEventProcessor:
                 request_id = asked["request_id"]
                 if self._stream_state.mark_interrupt_pending(request_id):
                     await self._emit_interrupt_status(
-                        state=TaskState.input_required,
+                        state=TASK_STATE_INPUT_REQUIRED,
                         request_id=request_id,
                         interrupt_type=asked["interrupt_type"],
                         details=asked["details"],
@@ -349,7 +355,7 @@ class StreamEventProcessor:
             if resolved is not None:
                 if self._stream_state.clear_interrupt_pending(resolved["request_id"]):
                     await self._emit_interrupt_status(
-                        state=TaskState.working,
+                        state=TASK_STATE_WORKING,
                         request_id=resolved["request_id"],
                         interrupt_type=resolved["interrupt_type"],
                         details={},

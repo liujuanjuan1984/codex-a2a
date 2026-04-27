@@ -7,8 +7,9 @@ from pydantic import AliasChoices, Field, ValidationError, field_validator, mode
 from codex_a2a.jsonrpc.params_common import (
     MetadataParams,
     _StrictModel,
-    normalize_non_empty_string,
     strip_optional_string,
+    validate_request_command,
+    validate_required_process_id,
 )
 
 from .session_control_params import _raise_control_validation_error
@@ -46,12 +47,7 @@ class ExecStartRequestParams(_StrictModel):
         serialization_alias="disableTimeout",
     )
 
-    @field_validator("command", mode="before")
-    @classmethod
-    def _validate_command(cls, value: Any) -> str:
-        return normalize_non_empty_string(
-            value, message="request.command must be a non-empty string"
-        )
+    _validate_command = field_validator("command", mode="before")(validate_request_command)
 
     @field_validator("arguments", "process_id", mode="before")
     @classmethod
@@ -99,12 +95,9 @@ class ExecWriteRequestParams(_StrictModel):
         serialization_alias="closeStdin",
     )
 
-    @field_validator("process_id", mode="before")
-    @classmethod
-    def _validate_process_id(cls, value: Any) -> str:
-        return normalize_non_empty_string(
-            value, message="Missing required params.request.process_id"
-        )
+    _validate_process_id = field_validator("process_id", mode="before")(
+        validate_required_process_id
+    )
 
     @field_validator("delta_base64", mode="before")
     @classmethod
@@ -135,12 +128,9 @@ class ExecResizeRequestParams(_StrictModel):
     rows: int
     cols: int
 
-    @field_validator("process_id", mode="before")
-    @classmethod
-    def _validate_process_id(cls, value: Any) -> str:
-        return normalize_non_empty_string(
-            value, message="Missing required params.request.process_id"
-        )
+    _validate_process_id = field_validator("process_id", mode="before")(
+        validate_required_process_id
+    )
 
     @field_validator("rows", "cols", mode="before")
     @classmethod
@@ -156,12 +146,9 @@ class ExecTerminateRequestParams(_StrictModel):
         serialization_alias="processId",
     )
 
-    @field_validator("process_id", mode="before")
-    @classmethod
-    def _validate_process_id(cls, value: Any) -> str:
-        return normalize_non_empty_string(
-            value, message="Missing required params.request.process_id"
-        )
+    _validate_process_id = field_validator("process_id", mode="before")(
+        validate_required_process_id
+    )
 
 
 class ExecStartControlParams(_StrictModel):

@@ -6,6 +6,7 @@ import pytest
 from a2a.types import Task, TaskArtifactUpdateEvent, TaskState, TaskStatusUpdateEvent
 
 import codex_a2a.execution.streaming as streaming_module
+from codex_a2a.a2a_proto import part_data, part_kind, proto_to_python
 from codex_a2a.contracts.extensions import build_streaming_extension_params
 from codex_a2a.execution.executor import CodexAgentExecutor
 from codex_a2a.execution.streaming import (
@@ -277,26 +278,74 @@ def _part_text(event: TaskArtifactUpdateEvent) -> str:
 
 def _part_data(event: TaskArtifactUpdateEvent) -> dict:
     part = event.artifact.parts[0]
-    data = getattr(part, "data", None) or getattr(getattr(part, "root", None), "data", None)
+    data = part_data(part)
     return data if isinstance(data, dict) else {}
 
 
 def _part_kind(event: TaskArtifactUpdateEvent) -> str:
     part = event.artifact.parts[0]
-    return getattr(part, "kind", None) or getattr(getattr(part, "root", None), "kind", "") or ""
+    return part_kind(part) or ""
 
 
 def _artifact_stream_meta(event: TaskArtifactUpdateEvent) -> dict[str, Any]:
-    assert event.artifact.metadata is not None
-    return event.artifact.metadata["shared"]["stream"]
+    metadata = proto_to_python(event.artifact.metadata)
+    assert isinstance(metadata, dict)
+    return metadata["shared"]["stream"]
 
 
 def _status_shared_meta(event: TaskStatusUpdateEvent) -> dict:
-    return (event.metadata or {})["shared"]
+    metadata = proto_to_python(event.metadata)
+    assert isinstance(metadata, dict)
+    return metadata["shared"]
 
 
 def _interrupt_meta(event: TaskStatusUpdateEvent) -> dict:
     return _status_shared_meta(event)["interrupt"]
+
+
+def _status_metadata(event: TaskStatusUpdateEvent) -> dict[str, Any]:
+    metadata = proto_to_python(event.metadata)
+    assert isinstance(metadata, dict)
+    return metadata
+
+
+def _task_metadata(task: Task) -> dict[str, Any]:
+    metadata = proto_to_python(task.metadata)
+    assert isinstance(metadata, dict)
+    return metadata
+
+
+def _is_terminal_state(state: TaskState) -> bool:
+    return state in {
+        TaskState.TASK_STATE_COMPLETED,
+        TaskState.TASK_STATE_FAILED,
+        TaskState.TASK_STATE_CANCELED,
+        TaskState.TASK_STATE_REJECTED,
+    }
+
+
+def _terminal_status_updates(queue: DummyEventQueue) -> list[TaskStatusUpdateEvent]:
+    return [
+        event
+        for event in queue.events
+        if isinstance(event, TaskStatusUpdateEvent) and _is_terminal_state(event.status.state)
+    ]
+
+
+def _non_terminal_status_updates(queue: DummyEventQueue) -> list[TaskStatusUpdateEvent]:
+    return [
+        event
+        for event in queue.events
+        if isinstance(event, TaskStatusUpdateEvent) and not _is_terminal_state(event.status.state)
+    ]
+
+
+def _terminal_task(queue: DummyEventQueue) -> Task:
+    return [
+        event
+        for event in queue.events
+        if isinstance(event, Task) and _is_terminal_state(event.status.state)
+    ][-1]
 
 
 def _assert_contract_shape(payload: dict[str, Any], contract: dict[str, Any]) -> None:
@@ -327,8 +376,10 @@ def _assert_tool_call_payload_contract(payload: dict[str, Any], contract: dict[s
     _assert_contract_shape(payload, contract["variants"][kind])
 
 
-def _assert_shared_metadata_matches_streaming_contract(metadata: dict[str, Any]) -> None:
+def _assert_shared_metadata_matches_streaming_contract(metadata: Any) -> None:
     streaming_contract = build_streaming_extension_params()
+    metadata = proto_to_python(metadata)
+    assert isinstance(metadata, dict)
     shared = metadata["shared"]
 
     if "session" in shared:
@@ -386,7 +437,7 @@ async def test_streaming_filters_user_echo_and_emits_single_artifact_block_types
     sequences = [_artifact_stream_meta(event)["sequence"] for event in updates]
     assert sequences == list(range(1, len(updates) + 1))
     event_ids = [_artifact_stream_meta(event)["event_id"] for event in updates]
-    assert event_ids == [f"task-1:ctx-1:task-1:stream:{seq}" for seq in sequences]
+    assert event_ids == [f"task-1:ctx-1:task-1:stream:{int(seq)}" for seq in sequences]
 
 
 @pytest.mark.asyncio
@@ -510,10 +561,8 @@ async def test_streaming_emits_events_without_message_id_using_stable_fallback()
     assert _artifact_stream_meta(update)["block_type"] == "text"
     assert _artifact_stream_meta(update)["message_id"] == "task-6:ctx-6:assistant"
     assert _artifact_stream_meta(update)["event_id"] == "task-6:ctx-6:task-6:stream:1"
-    final_status = [
-        event for event in queue.events if isinstance(event, TaskStatusUpdateEvent) and event.final
-    ][-1]
-    assert final_status.status.state == TaskState.completed
+    final_status = _terminal_status_updates(queue)[-1]
+    assert final_status.status.state == TaskState.TASK_STATE_COMPLETED
     assert _status_shared_meta(final_status)["stream"]["message_id"] == "task-6:ctx-6:assistant"
     assert (
         _status_shared_meta(final_status)["stream"]["event_id"]
@@ -556,10 +605,8 @@ async def test_streaming_includes_usage_in_final_status_metadata() -> None:
         queue,
     )
 
-    final_status = [
-        event for event in queue.events if isinstance(event, TaskStatusUpdateEvent) and event.final
-    ][-1]
-    assert final_status.status.state == TaskState.completed
+    final_status = _terminal_status_updates(queue)[-1]
+    assert final_status.status.state == TaskState.TASK_STATE_COMPLETED
     usage = _status_shared_meta(final_status)["usage"]
     assert usage["input_tokens"] == 12
     assert usage["output_tokens"] == 4
@@ -588,11 +635,8 @@ async def test_streaming_emits_interrupt_status_for_permission_asked_event() -> 
 
     interrupt_statuses = [
         event
-        for event in queue.events
-        if isinstance(event, TaskStatusUpdateEvent)
-        and event.final is False
-        and (event.metadata or {}).get("shared", {}).get("interrupt", {}).get("type")
-        == "permission"
+        for event in _non_terminal_status_updates(queue)
+        if _status_shared_meta(event).get("interrupt", {}).get("type") == "permission"
     ]
     assert len(interrupt_statuses) == 1
     interrupt = _interrupt_meta(interrupt_statuses[0])
@@ -601,8 +645,8 @@ async def test_streaming_emits_interrupt_status_for_permission_asked_event() -> 
     assert interrupt["phase"] == "asked"
     assert "resolution" not in interrupt
     assert "/data/project/.env.secret" in interrupt["details"]["patterns"]
-    assert "codex" not in (interrupt_statuses[0].metadata or {})
-    assert interrupt_statuses[0].status.state == TaskState.input_required
+    assert "codex" not in _status_metadata(interrupt_statuses[0])
+    assert interrupt_statuses[0].status.state == TaskState.TASK_STATE_INPUT_REQUIRED
 
 
 @pytest.mark.asyncio
@@ -640,10 +684,8 @@ async def test_streaming_emits_interrupt_status_for_protocol_question_details() 
 
     question_interrupts = [
         event
-        for event in queue.events
-        if isinstance(event, TaskStatusUpdateEvent)
-        and event.final is False
-        and (event.metadata or {}).get("shared", {}).get("interrupt", {}).get("type") == "question"
+        for event in _non_terminal_status_updates(queue)
+        if _status_shared_meta(event).get("interrupt", {}).get("type") == "question"
     ]
     assert len(question_interrupts) == 1
     interrupt = _interrupt_meta(question_interrupts[0])
@@ -654,8 +696,8 @@ async def test_streaming_emits_interrupt_status_for_protocol_question_details() 
     assert (
         interrupt["details"]["display_message"] == "Please confirm how the agent should continue."
     )
-    assert "codex" not in (question_interrupts[0].metadata or {})
-    assert question_interrupts[0].status.state == TaskState.input_required
+    assert "codex" not in _status_metadata(question_interrupts[0])
+    assert question_interrupts[0].status.state == TaskState.TASK_STATE_INPUT_REQUIRED
 
 
 @pytest.mark.asyncio
@@ -751,22 +793,19 @@ async def test_streaming_emits_interrupt_resolved_status_once_per_pending_reques
 
     interrupt_statuses = [
         event
-        for event in queue.events
-        if isinstance(event, TaskStatusUpdateEvent)
-        and event.final is False
-        and (event.metadata or {}).get("shared", {}).get("interrupt", {}).get("request_id")
-        == "perm-req-2"
+        for event in _non_terminal_status_updates(queue)
+        if _status_shared_meta(event).get("interrupt", {}).get("request_id") == "perm-req-2"
     ]
     assert len(interrupt_statuses) == 2
     asked = _interrupt_meta(interrupt_statuses[0])
     resolved = _interrupt_meta(interrupt_statuses[1])
     assert asked["phase"] == "asked"
-    assert interrupt_statuses[0].status.state == TaskState.input_required
+    assert interrupt_statuses[0].status.state == TaskState.TASK_STATE_INPUT_REQUIRED
     assert resolved["phase"] == "resolved"
     assert resolved["resolution"] == "replied"
     assert resolved["type"] == "permission"
     assert resolved["details"] == {}
-    assert interrupt_statuses[1].status.state == TaskState.working
+    assert interrupt_statuses[1].status.state == TaskState.TASK_STATE_WORKING
 
 
 @pytest.mark.asyncio
@@ -802,10 +841,8 @@ async def test_streaming_emits_question_rejected_resolution_and_suppresses_unkno
 
     question_interrupts = [
         event
-        for event in queue.events
-        if isinstance(event, TaskStatusUpdateEvent)
-        and event.final is False
-        and (event.metadata or {}).get("shared", {}).get("interrupt", {}).get("type") == "question"
+        for event in _non_terminal_status_updates(queue)
+        if _status_shared_meta(event).get("interrupt", {}).get("type") == "question"
     ]
     assert len(question_interrupts) == 2
     assert _interrupt_meta(question_interrupts[0])["phase"] == "asked"
@@ -2041,6 +2078,6 @@ async def test_non_streaming_task_metadata_matches_declared_output_contract() ->
         queue,
     )
 
-    task = next(event for event in queue.events if isinstance(event, Task))
+    task = _terminal_task(queue)
     assert task.metadata is not None
-    _assert_shared_metadata_matches_streaming_contract(task.metadata)
+    _assert_shared_metadata_matches_streaming_contract(_task_metadata(task))

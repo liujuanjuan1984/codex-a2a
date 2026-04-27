@@ -17,7 +17,6 @@ from codex_a2a.contracts.extensions import (
 from codex_a2a.jsonrpc.application import CodexSessionQueryJSONRPCApplication
 from codex_a2a.jsonrpc.hooks import SessionGuardHooks
 from codex_a2a.profile.runtime import build_runtime_profile
-from codex_a2a.server.agent_card import build_agent_card
 from tests.support.dummy_clients import DummySessionQueryCodexClient as DummyCodexClient
 from tests.support.settings import make_settings
 
@@ -45,8 +44,7 @@ def _build_extension_app(
         **INTERRUPT_CALLBACK_METHODS,
     }
     return CodexSessionQueryJSONRPCApplication(
-        agent_card=build_agent_card(settings),
-        http_handler=MagicMock(),
+        request_handler=MagicMock(),
         codex_client=DummyCodexClient(settings),
         exec_runtime=MagicMock(),
         discovery_runtime=MagicMock(),

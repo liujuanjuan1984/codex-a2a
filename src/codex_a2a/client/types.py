@@ -3,18 +3,19 @@ from __future__ import annotations
 import uuid
 
 from a2a.types import (
+    CancelTaskRequest,
+    GetTaskRequest,
     Message,
-    MessageSendConfiguration,
-    Part,
     Role,
+    SendMessageConfiguration,
+    StreamResponse,
     Task,
     TaskArtifactUpdateEvent,
-    TaskIdParams,
-    TaskQueryParams,
     TaskStatusUpdateEvent,
-    TextPart,
 )
 from pydantic import BaseModel, Field
+
+from codex_a2a.a2a_proto import new_text_part, to_struct
 
 
 class A2ASendRequest(BaseModel):
@@ -32,15 +33,15 @@ class A2ASendRequest(BaseModel):
     def to_message(self) -> Message:
         return Message(
             message_id=self.message_id or f"msg-{uuid.uuid4().hex[:12]}",
-            role=Role.user,
+            role=Role.ROLE_USER,
             context_id=self.context_id,
             metadata=self.metadata,
-            parts=[Part(root=TextPart(text=self.text))],
+            parts=[new_text_part(self.text)],
         )
 
-    def to_send_configuration(self) -> MessageSendConfiguration:
-        return MessageSendConfiguration(
-            blocking=self.blocking,
+    def to_send_configuration(self) -> SendMessageConfiguration:
+        return SendMessageConfiguration(
+            return_immediately=not self.blocking,
             accepted_output_modes=self.accepted_output_modes,
             history_length=self.history_length,
         )
@@ -53,11 +54,10 @@ class A2AGetTaskRequest(BaseModel):
     history_length: int | None = None
     metadata: dict[str, object] | None = None
 
-    def to_task_query(self) -> TaskQueryParams:
-        return TaskQueryParams(
+    def to_task_query(self) -> GetTaskRequest:
+        return GetTaskRequest(
             id=self.task_id,
             history_length=self.history_length,
-            metadata=self.metadata,
         )
 
 
@@ -67,10 +67,17 @@ class A2ACancelTaskRequest(BaseModel):
     task_id: str = Field(min_length=1)
     metadata: dict[str, object] | None = None
 
-    def to_task_id(self) -> TaskIdParams:
-        return TaskIdParams(id=self.task_id, metadata=self.metadata)
+    def to_task_id(self) -> CancelTaskRequest:
+        request = CancelTaskRequest(id=self.task_id)
+        metadata = to_struct(self.metadata)
+        if metadata is not None:
+            request.metadata.CopyFrom(metadata)
+        return request
 
 
 A2AClientEvent = (
-    Task | Message | tuple[Task, TaskStatusUpdateEvent | TaskArtifactUpdateEvent | None]
+    StreamResponse
+    | Task
+    | Message
+    | tuple[Task, TaskStatusUpdateEvent | TaskArtifactUpdateEvent | None]
 )

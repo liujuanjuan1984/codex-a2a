@@ -6,9 +6,10 @@ from a2a.types import (
     AgentInterface,
     AgentSkill,
     HTTPAuthSecurityScheme,
+    SecurityRequirement,
     SecurityScheme,
-    TransportProtocol,
 )
+from a2a.utils.constants import TransportProtocol
 
 from codex_a2a.auth import has_configured_auth_scheme
 from codex_a2a.config import Settings
@@ -63,9 +64,9 @@ def _build_agent_card_description(
     codex_surface_summary = ", ".join(codex_surfaces)
     summary = (
         "Supports HTTP+JSON and JSON-RPC transports, standard A2A messaging "
-        "(message/send, message/stream), authenticated extended Agent Card "
-        "(agent/getAuthenticatedExtendedCard), task APIs (tasks/get, tasks/cancel, "
-        "tasks/resubscribe), shared session-binding and streaming contracts, "
+        "(SendMessage, SendStreamingMessage), authenticated extended Agent Card "
+        "(GetExtendedAgentCard), task APIs (GetTask, ListTasks, CancelTask, "
+        "SubscribeToTask), shared session-binding and streaming contracts, "
         f"{codex_surface_summary} extensions, shared interrupt callback "
         "extensions, a machine-readable compatibility profile, and a "
         "machine-readable wire contract."
@@ -80,7 +81,7 @@ def _build_agent_card_description(
         "credentials from the deployment auth registry."
     )
     parts.append(
-        "Terminal tasks/resubscribe replay-once behavior is declared as a "
+        "Terminal task-subscription replay-once behavior is declared as a "
         "service-level contract for this deployment."
     )
     parts.append("This server profile is intended for single-tenant, self-hosted coding workflows.")
@@ -311,8 +312,8 @@ def _build_agent_skills(
             id="codex.chat",
             name="Codex Chat",
             description=(
-                "Handle message/send and message/stream requests by routing user text, "
-                "image FilePart inputs, and codex rich-input DataPart payloads to "
+                "Handle SendMessage and SendStreamingMessage requests by routing text, "
+                "file, and structured data parts to "
                 "Codex sessions."
             ),
             tags=["assistant", "coding", "codex"],
@@ -369,7 +370,7 @@ def _build_agent_skills(
             tags=["codex", "discovery", "watch", "tasks"],
             examples=[
                 "Start a discovery watch stream (method codex.discovery.watch).",
-                "Resume a discovery watch task with tasks/resubscribe.",
+                "Resume a discovery watch task with SubscribeToTask.",
             ],
             input_modes=list(JSON_RPC_INPUT_MEDIA_MODES),
             output_modes=list(JSON_OUTPUT_MEDIA_MODES),
@@ -401,7 +402,7 @@ def _build_agent_skills(
             examples=[
                 "Start a lifecycle watch stream (method codex.threads.watch).",
                 "Release a lifecycle watch stream (method codex.threads.watch.release).",
-                "Resume a lifecycle watch task with tasks/resubscribe.",
+                "Resume a lifecycle watch task with SubscribeToTask.",
             ],
             input_modes=list(JSON_RPC_INPUT_MEDIA_MODES),
             output_modes=list(JSON_OUTPUT_MEDIA_MODES),
@@ -493,7 +494,7 @@ def _build_agent_skills(
                     tags=["codex", "review", "watch"],
                     examples=[
                         "Start a review watch stream after codex.review.start.",
-                        "Resume a review watch task with tasks/resubscribe.",
+                        "Resume a review watch task with SubscribeToTask.",
                     ],
                     input_modes=list(JSON_RPC_INPUT_MEDIA_MODES),
                     output_modes=list(JSON_OUTPUT_MEDIA_MODES),
@@ -527,7 +528,7 @@ def _build_agent_skills(
                     ),
                     tags=["codex", "exec", "terminal", "stream"],
                     examples=[
-                        "Resume an exec task stream with tasks/resubscribe after codex.exec.start.",
+                        "Resume an exec task stream with SubscribeToTask after codex.exec.start.",
                         (
                             "Read final exec result text from the completed task artifact "
                             "or status message."
@@ -553,21 +554,38 @@ def _build_agent_card(
     security: list[dict[str, list[str]]] = []
     if has_configured_auth_scheme(settings, "bearer"):
         security_schemes["bearerAuth"] = SecurityScheme(
-            root=HTTPAuthSecurityScheme(
+            http_auth_security_scheme=HTTPAuthSecurityScheme(
                 description="Bearer token authentication",
                 scheme="bearer",
                 bearer_format="opaque",
             )
         )
-        security.append({"bearerAuth": []})
+        requirement = SecurityRequirement()
+        requirement.schemes["bearerAuth"].list.extend([])
+        security.append(requirement)
     if has_configured_auth_scheme(settings, "basic"):
         security_schemes["basicAuth"] = SecurityScheme(
-            root=HTTPAuthSecurityScheme(
+            http_auth_security_scheme=HTTPAuthSecurityScheme(
                 description="Basic authentication",
                 scheme="basic",
             )
         )
-        security.append({"basicAuth": []})
+        requirement = SecurityRequirement()
+        requirement.schemes["basicAuth"].list.extend([])
+        security.append(requirement)
+
+    supported_interfaces = [
+        AgentInterface(
+            url=f"{public_url}/v1",
+            protocol_binding=TransportProtocol.HTTP_JSON,
+            protocol_version=settings.a2a_protocol_version,
+        ),
+        AgentInterface(
+            url=public_url,
+            protocol_binding=TransportProtocol.JSONRPC,
+            protocol_version=settings.a2a_protocol_version,
+        ),
+    ]
 
     return AgentCard(
         name=settings.a2a_title,
@@ -576,15 +594,14 @@ def _build_agent_card(
             runtime_profile,
             include_detailed_contracts=include_detailed_contracts,
         ),
-        url=public_url,
+        supported_interfaces=supported_interfaces,
         documentation_url=settings.a2a_documentation_url,
         version=settings.a2a_version,
-        protocol_version=settings.a2a_protocol_version,
-        preferred_transport=TransportProtocol.http_json,
         default_input_modes=list(DEFAULT_INPUT_MEDIA_MODES),
         default_output_modes=list(DEFAULT_OUTPUT_MEDIA_MODES),
         capabilities=AgentCapabilities(
             streaming=True,
+            extended_agent_card=True,
             extensions=build_agent_extensions(
                 settings=settings,
                 runtime_profile=runtime_profile,
@@ -596,13 +613,8 @@ def _build_agent_card(
             runtime_profile=runtime_profile,
             include_detailed_contracts=include_detailed_contracts,
         ),
-        supports_authenticated_extended_card=True,
-        additional_interfaces=[
-            AgentInterface(transport=TransportProtocol.http_json, url=public_url),
-            AgentInterface(transport=TransportProtocol.jsonrpc, url=public_url),
-        ],
         security_schemes=security_schemes,
-        security=security,
+        security_requirements=security,
     )
 
 

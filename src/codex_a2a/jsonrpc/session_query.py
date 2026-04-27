@@ -4,7 +4,7 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 import httpx
-from a2a.types import A2AError, InternalError, JSONRPCError, JSONRPCRequest
+from a2a.server.jsonrpc_models import InternalError, JSONRPCError
 from starlette.responses import Response
 
 from codex_a2a.jsonrpc.errors import (
@@ -24,6 +24,7 @@ from codex_a2a.jsonrpc.query_params import (
     parse_get_session_messages_params,
     parse_list_sessions_params,
 )
+from codex_a2a.jsonrpc.request_models import JSONRPCRequestModel as JSONRPCRequest
 from codex_a2a.upstream.models import CodexRPCError, is_thread_not_found_error
 
 if TYPE_CHECKING:
@@ -85,13 +86,13 @@ async def handle_session_query_request(
         logger.exception("Codex session query JSON-RPC method failed")
         return app._generate_error_response(
             base_request.id,
-            A2AError(root=InternalError(message=str(exc))),
+            InternalError(message=str(exc)),
         )
     except Exception as exc:
         logger.exception("Codex session query JSON-RPC method failed")
         return app._generate_error_response(
             base_request.id,
-            A2AError(root=InternalError(message=str(exc))),
+            InternalError(message=str(exc)),
         )
 
     try:

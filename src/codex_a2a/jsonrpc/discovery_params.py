@@ -10,8 +10,9 @@ from codex_a2a.jsonrpc.params_common import (
     format_loc,
     map_extra_forbidden,
     normalize_non_empty_string,
-    parse_positive_int,
     strip_optional_string,
+    validate_cwds,
+    validate_limit_param,
 )
 
 
@@ -53,19 +54,7 @@ class DiscoverySkillsListParams(_StrictModel):
         serialization_alias="perCwdExtraUserRoots",
     )
 
-    @field_validator("cwds", mode="before")
-    @classmethod
-    def _validate_cwds(cls, value: Any) -> list[str] | None:
-        if value is None:
-            return None
-        if not isinstance(value, list):
-            raise ValueError("cwds must be an array")
-        result: list[str] = []
-        for item in value:
-            if not isinstance(item, str) or not item.strip():
-                raise ValueError("cwds entries must be non-empty strings")
-            result.append(item.strip())
-        return result
+    _validate_cwds = field_validator("cwds", mode="before")(validate_cwds)
 
 
 class DiscoveryAppsListParams(_StrictModel):
@@ -87,10 +76,7 @@ class DiscoveryAppsListParams(_StrictModel):
     def _validate_optional_string(cls, value: Any) -> str | None:
         return strip_optional_string(value)
 
-    @field_validator("limit", mode="before")
-    @classmethod
-    def _validate_limit(cls, value: Any) -> int | None:
-        return parse_positive_int(value, field="limit")
+    _validate_limit = field_validator("limit", mode="before")(validate_limit_param)
 
 
 class DiscoveryPluginsListParams(_StrictModel):
@@ -101,19 +87,7 @@ class DiscoveryPluginsListParams(_StrictModel):
         serialization_alias="forceRemoteSync",
     )
 
-    @field_validator("cwds", mode="before")
-    @classmethod
-    def _validate_cwds(cls, value: Any) -> list[str] | None:
-        if value is None:
-            return None
-        if not isinstance(value, list):
-            raise ValueError("cwds must be an array")
-        result: list[str] = []
-        for item in value:
-            if not isinstance(item, str) or not item.strip():
-                raise ValueError("cwds entries must be non-empty strings")
-            result.append(item.strip())
-        return result
+    _validate_cwds = field_validator("cwds", mode="before")(validate_cwds)
 
 
 class DiscoveryPluginReadParams(_StrictModel):

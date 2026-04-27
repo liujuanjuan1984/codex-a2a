@@ -5,6 +5,7 @@ from typing import Any
 import pytest
 from a2a.types import TaskArtifactUpdateEvent, TaskState, TaskStatusUpdateEvent
 
+from codex_a2a.a2a_proto import part_data
 from codex_a2a.execution.discovery_runtime import CodexDiscoveryRuntime
 from codex_a2a.execution.exec_runtime import CodexExecRuntime, ExecSessionHandle
 from tests.support.context import DummyEventQueue
@@ -25,7 +26,7 @@ def _part_text(event: TaskArtifactUpdateEvent) -> str:
 
 def _part_data(event: TaskArtifactUpdateEvent) -> dict[str, Any]:
     part = event.artifact.parts[0]
-    data = getattr(part, "data", None) or getattr(getattr(part, "root", None), "data", None)
+    data = part_data(part)
     return data if isinstance(data, dict) else {}
 
 
@@ -281,8 +282,7 @@ async def test_exec_runtime_streams_output_and_terminal_status() -> None:
     assert artifacts[2].last_chunk is True
 
     final_status = _status_updates(queue)[-1]
-    assert final_status.status.state == TaskState.completed
-    assert final_status.final is True
+    assert final_status.status.state == TaskState.TASK_STATE_COMPLETED
     assert final_status.metadata == {
         "codex": {
             "exec": {
@@ -361,8 +361,7 @@ async def test_exec_runtime_write_resize_terminate_and_failure_status() -> None:
     )
 
     final_status = _status_updates(queue)[-1]
-    assert final_status.status.state == TaskState.failed
-    assert final_status.final is True
+    assert final_status.status.state == TaskState.TASK_STATE_FAILED
     assert final_status.metadata == {
         "codex": {
             "exec": {

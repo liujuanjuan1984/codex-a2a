@@ -320,9 +320,9 @@ class Settings(BaseSettings):
     a2a_title: str = Field(default="Codex A2A", alias="A2A_TITLE")
     a2a_description: str = Field(default="A2A wrapper service for Codex", alias="A2A_DESCRIPTION")
     a2a_version: str = Field(default=__version__, alias="A2A_VERSION")
-    a2a_protocol_version: str = Field(default="0.3.0", alias="A2A_PROTOCOL_VERSION")
+    a2a_protocol_version: str = Field(default="1.0.0", alias="A2A_PROTOCOL_VERSION")
     a2a_supported_protocol_versions: Annotated[list[str], NoDecode] = Field(
-        default_factory=lambda: ["0.3", "1.0"],
+        default_factory=lambda: ["1.0"],
         alias="A2A_SUPPORTED_PROTOCOL_VERSIONS",
     )
     a2a_enable_health_endpoint: bool = Field(default=True, alias="A2A_ENABLE_HEALTH_ENDPOINT")

@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-from a2a.client.middleware import ClientCallContext
+from a2a.client import ClientCallContext
 
 from .auth import encode_basic_auth
 
@@ -38,4 +38,4 @@ def build_call_context(
 ) -> ClientCallContext | None:
     if not extra_headers:
         return None
-    return ClientCallContext(state={"headers": dict(extra_headers)})
+    return ClientCallContext(service_parameters=dict(extra_headers))

@@ -63,6 +63,52 @@ def parse_positive_int(value: Any, *, field: str) -> int | None:
     return parsed
 
 
+def validate_limit_param(value: Any) -> int | None:
+    return parse_positive_int(value, field="limit")
+
+
+def validate_request_command(value: Any) -> str:
+    return normalize_non_empty_string(value, message="request.command must be a non-empty string")
+
+
+def validate_required_session_id(value: Any) -> str:
+    return normalize_non_empty_string(value, message="Missing required params.session_id")
+
+
+def validate_required_thread_id(value: Any) -> str:
+    return normalize_non_empty_string(value, message="Missing required params.thread_id")
+
+
+def validate_required_request_id(value: Any) -> str:
+    return normalize_non_empty_string(value, message="Missing required params.request_id")
+
+
+def validate_required_process_id(value: Any) -> str:
+    return normalize_non_empty_string(
+        value,
+        message="Missing required params.request.process_id",
+    )
+
+
+def validate_non_empty_parts(value: Any) -> Any:
+    if not isinstance(value, list) or not value:
+        raise ValueError("request.parts must be a non-empty array")
+    return value
+
+
+def validate_cwds(value: Any) -> list[str] | None:
+    if value is None:
+        return None
+    if not isinstance(value, list):
+        raise ValueError("cwds must be an array")
+    result: list[str] = []
+    for item in value:
+        if not isinstance(item, str) or not item.strip():
+            raise ValueError("cwds entries must be non-empty strings")
+        result.append(item.strip())
+    return result
+
+
 def format_loc(parts: tuple[Any, ...]) -> str:
     rendered: list[str] = []
     for part in parts:

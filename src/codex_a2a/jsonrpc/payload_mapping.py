@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from a2a.types import Message, Part, Role, Task, TaskState, TaskStatus, TextPart
+from a2a.types import Message, Role, Task, TaskState, TaskStatus
 
+from codex_a2a.a2a_proto import new_text_part, proto_to_python
 from codex_a2a.parts.text import extract_text_from_parts
 
 
@@ -33,13 +34,13 @@ def as_a2a_session_task(session: Any) -> dict[str, Any] | None:
     task = Task(
         id=session_id,
         context_id=session_context_id(session_id),
-        status=TaskStatus(state=TaskState.completed),
+        status=TaskStatus(state=TaskState.TASK_STATE_COMPLETED),
         metadata={
             "shared": {"session": {"id": session_id, "title": title}},
             "codex": {"raw": session},
         },
     )
-    return task.model_dump(by_alias=True, exclude_none=True)
+    return proto_to_python(task)
 
 
 def as_a2a_message(session_id: str, item: Any) -> dict[str, Any] | None:
@@ -57,23 +58,23 @@ def as_a2a_message(session_id: str, item: Any) -> dict[str, Any] | None:
         return None
 
     role_raw = info.get("role")
-    role = Role.agent
+    role = Role.ROLE_AGENT
     if isinstance(role_raw, str) and role_raw.strip().lower() == "user":
-        role = Role.user
+        role = Role.ROLE_USER
 
     text = extract_text_from_parts(item.get("parts"))
 
     message = Message(
         message_id=message_id,
         role=role,
-        parts=[Part(root=TextPart(text=text))],
+        parts=[new_text_part(text)],
         context_id=session_context_id(session_id),
         metadata={
             "shared": {"session": {"id": session_id}},
             "codex": {"raw": item},
         },
     )
-    return message.model_dump(by_alias=True, exclude_none=True)
+    return proto_to_python(message)
 
 
 def message_to_item(message: Any) -> dict[str, Any]:

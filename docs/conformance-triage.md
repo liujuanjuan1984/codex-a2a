@@ -4,18 +4,18 @@ This document is the standing triage template for local `./scripts/conformance.s
 
 ## Standards Used For Triage
 
-- `a2a-sdk==0.3.26` as installed in this repository.
-- The default A2A protocol version advertised by this repository: `0.3.0`.
+- `a2a-sdk==1.0.1` as installed in this repository.
+- The default A2A protocol version advertised by this repository: `1.0.0`.
 - Repository compatibility policy:
   - machine-readable Agent Card and OpenAPI contracts must reflect implemented runtime behavior;
   - external TCK results are investigation input rather than default merge gates;
-  - unsupported `1.0` behavior should be tracked as future compatibility work, not silently declared as supported.
+  - unsupported behavior should be tracked as implementation work, not silently declared as supported.
 
 ## Classification Labels
 
 - `Runtime issue`: the failure reproduces against the repository's declared runtime behavior and should be fixed here.
-- `TCK mismatch`: the failure appears to conflict with the installed SDK line or this repository's declared v0.3 baseline.
-- `Future protocol gap`: the failure is not a v0.3 regression, but it identifies work needed for stronger v1.0 compatibility.
+- `TCK mismatch`: the failure appears to conflict with the installed SDK line or this repository's declared `1.0` baseline.
+- `Protocol gap`: the failure identifies work needed to complete the repository's declared `1.0` surface.
 - `Local experiment artifact`: the failure comes from the dummy-backed SUT, local auth, local URLs, timing, or other experiment setup details.
 - `Needs repro`: the failure needs a focused local probe before assigning ownership.
 
@@ -44,6 +44,6 @@ Keep the summary short and separate:
 
 - Count clean runtime issues.
 - Count TCK mismatches.
-- Count future protocol gaps.
+- Count protocol gaps.
 - Count local experiment artifacts.
 - List follow-up issue numbers when created.

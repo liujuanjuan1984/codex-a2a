@@ -4,7 +4,8 @@ import json
 from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any
 
-from a2a.types import A2AError, InvalidParamsError, JSONRPCError
+from a2a.server.jsonrpc_models import InvalidParamsError, JSONRPCError
+from a2a.utils.errors import A2AError
 from starlette.responses import Response
 
 from codex_a2a.jsonrpc.params_common import JsonRpcParamsValidationError
@@ -130,10 +131,11 @@ def adapt_jsonrpc_error_for_protocol(
     if not protocol_uses_v1_error_format(protocol_version):
         return error
 
-    root_error = error.root if isinstance(error, A2AError) else error
+    root_error = error
     root_data = getattr(root_error, "data", None)
+    root_code = getattr(root_error, "code", None)
 
-    if root_error.code in STANDARD_JSONRPC_ERROR_CODES:
+    if root_code in STANDARD_JSONRPC_ERROR_CODES:
         adapted_data = None
         if isinstance(root_data, Mapping):
             adapted_data = _camelize(
@@ -142,8 +144,8 @@ def adapt_jsonrpc_error_for_protocol(
         elif root_data is not None:
             adapted_data = root_data
         return JSONRPCError(
-            code=root_error.code,
-            message=STANDARD_JSONRPC_ERROR_MESSAGES[root_error.code],
+            code=root_code,
+            message=STANDARD_JSONRPC_ERROR_MESSAGES[root_code],
             data=adapted_data,
         )
 
@@ -155,12 +157,12 @@ def adapt_jsonrpc_error_for_protocol(
     if metadata:
         details.append(_build_context_detail("ErrorContext", metadata))
 
-    message = root_error.message
+    message = getattr(root_error, "message", None) or str(root_error)
     if message is None:
-        message = STANDARD_JSONRPC_ERROR_MESSAGES.get(root_error.code, "Internal error")
+        message = STANDARD_JSONRPC_ERROR_MESSAGES.get(root_code or -32603, "Internal error")
 
     return JSONRPCError(
-        code=root_error.code,
+        code=root_code or -32603,
         message=message,
         data=details or None,
     )
@@ -231,7 +233,7 @@ def invalid_params_response(
 ) -> Response:
     return app._generate_error_response(
         request_id,
-        A2AError(root=InvalidParamsError(message=str(exc), data=exc.data)),
+        InvalidParamsError(message=str(exc), data=exc.data),
     )
 
 
@@ -335,11 +337,9 @@ def extract_directory_from_metadata(
     except ValueError as exc:
         return None, app._generate_error_response(
             request_id,
-            A2AError(
-                root=InvalidParamsError(
-                    message=str(exc),
-                    data={"type": "INVALID_FIELD", "field": "metadata.codex.directory"},
-                )
+            InvalidParamsError(
+                message=str(exc),
+                data={"type": "INVALID_FIELD", "field": "metadata.codex.directory"},
             ),
         )
 

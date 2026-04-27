@@ -6,21 +6,28 @@ from typing import Any, Protocol, cast
 from uuid import uuid4
 
 import httpx
-from a2a.client import A2ACardResolver, ClientConfig, ClientFactory
+from a2a.client import (
+    A2ACardResolver,
+    ClientCallContext,
+    ClientConfig,
+    ClientFactory,
+)
 from a2a.client.auth.credentials import CredentialService
 from a2a.client.auth.interceptor import AuthInterceptor
-from a2a.client.middleware import ClientCallContext, ClientCallInterceptor
+from a2a.client.interceptors import ClientCallInterceptor
 from a2a.types import (
     AgentCard,
+    CancelTaskRequest,
+    GetTaskRequest,
     Message,
-    MessageSendConfiguration,
-    Part,
     Role,
+    SendMessageConfiguration,
+    SendMessageRequest,
+    StreamResponse,
     Task,
-    TaskIdParams,
-    TaskQueryParams,
-    TextPart,
 )
+
+from codex_a2a.a2a_proto import new_text_part, to_struct
 
 from .agent_card import build_agent_card_request_kwargs, resolve_agent_card_endpoint
 from .auth import StaticCredentialService
@@ -40,60 +47,24 @@ from .types import A2ACancelTaskRequest, A2AClientEvent, A2AGetTaskRequest, A2AS
 class _SDKClientProtocol(Protocol):
     def send_message(
         self,
-        request: Message,
+        request: SendMessageRequest,
         *,
-        configuration: MessageSendConfiguration | None = None,
         context: ClientCallContext | None = None,
-        request_metadata: dict[str, Any] | None = None,
-        extensions: list[str] | None = None,
-    ) -> AsyncIterator[A2AClientEvent]: ...
+    ) -> AsyncIterator[StreamResponse]: ...
 
     async def get_task(
         self,
-        request: TaskQueryParams,
+        request: GetTaskRequest,
         *,
         context: ClientCallContext | None = None,
-        extensions: list[str] | None = None,
     ) -> Task: ...
 
     async def cancel_task(
         self,
-        request: TaskIdParams,
+        request: CancelTaskRequest,
         *,
         context: ClientCallContext | None = None,
-        extensions: list[str] | None = None,
     ) -> Task: ...
-
-
-class _HeaderInterceptor(ClientCallInterceptor):
-    def __init__(self, default_headers: Mapping[str, str] | None = None) -> None:
-        self._default_headers = {
-            key: value for key, value in dict(default_headers or {}).items() if value is not None
-        }
-
-    async def intercept(
-        self,
-        _method_name: str,
-        _request_payload: dict[str, Any],
-        http_kwargs: dict[str, Any],
-        _agent_card: object | None,
-        context: ClientCallContext | None,
-    ) -> tuple[dict[str, Any], dict[str, Any]]:
-        headers = dict(http_kwargs.get("headers") or {})
-        headers.update(self._default_headers)
-
-        if context is not None:
-            dynamic_headers = getattr(context.state, "headers", None)
-            if dynamic_headers is None and isinstance(context.state, Mapping):
-                dynamic_headers = context.state.get("headers")
-            if isinstance(dynamic_headers, Mapping):
-                for key, value in dynamic_headers.items():
-                    if isinstance(key, str) and value is not None:
-                        headers[key] = str(value)
-
-        if headers:
-            http_kwargs["headers"] = headers
-        return _request_payload, http_kwargs
 
 
 class A2AClient:
@@ -125,11 +96,10 @@ class A2AClient:
         self._credential_service = credential_service
         self._client_config = ClientConfig(
             streaming=True,
-            supported_transports=list(config.supported_transports),
+            supported_protocol_bindings=list(config.supported_transports),
             use_client_preference=config.use_client_preference,
             httpx_client=self._httpx_client,
             accepted_output_modes=config.accepted_output_modes,
-            extensions=config.extensions,
         )
         self._lock = asyncio.Lock()
 
@@ -175,7 +145,6 @@ class A2AClient:
         task_id: str | None = None,
         message_id: str | None = None,
         metadata: Mapping[str, Any] | None = None,
-        extensions: list[str] | None = None,
         accepted_output_modes: list[str] | None = None,
         history_length: int | None = None,
         blocking: bool = True,
@@ -190,23 +159,27 @@ class A2AClient:
         )
         request_metadata, extra_headers = split_request_metadata(metadata)
 
-        configuration_kwargs: dict[str, Any] = {"blocking": blocking}
+        configuration_kwargs: dict[str, Any] = {"return_immediately": not blocking}
         if accepted_output_modes is not None:
-            configuration_kwargs["acceptedOutputModes"] = accepted_output_modes
+            configuration_kwargs["accepted_output_modes"] = accepted_output_modes
         if history_length is not None:
-            configuration_kwargs["historyLength"] = history_length
-        request_configuration = MessageSendConfiguration(**configuration_kwargs)
+            configuration_kwargs["history_length"] = history_length
+        request_configuration = SendMessageConfiguration(**configuration_kwargs)
+        send_request = SendMessageRequest(
+            message=request,
+            configuration=request_configuration,
+        )
+        request_metadata_struct = to_struct(request_metadata or None)
+        if request_metadata_struct is not None:
+            send_request.metadata.CopyFrom(request_metadata_struct)
         try:
             async for item in sdk_client.send_message(
-                request,
-                configuration=request_configuration,
-                request_metadata=request_metadata or {},
+                send_request,
                 context=build_call_context(extra_headers),
-                extensions=extensions,
             ):
                 yield item
         except Exception as exc:
-            raise map_a2a_sdk_error(exc, operation="message/send") from exc
+            raise map_a2a_sdk_error(exc, operation="SendMessage") from exc
 
     async def send(self, request: A2ASendRequest) -> A2AClientEvent:
         last_event: A2AClientEvent | None = None
@@ -228,14 +201,14 @@ class A2AClient:
     async def get_task(self, request: A2AGetTaskRequest) -> Task:
         client = await self._get_client()
         sdk_client = client
-        request_metadata, extra_headers = split_request_metadata(request.metadata)
+        _request_metadata, extra_headers = split_request_metadata(request.metadata)
         try:
+            task_request = GetTaskRequest(
+                id=request.task_id,
+                history_length=request.history_length,
+            )
             return await sdk_client.get_task(
-                TaskQueryParams(
-                    id=request.task_id,
-                    history_length=request.history_length,
-                    metadata=request_metadata or {},
-                ),
+                task_request,
                 context=build_call_context(extra_headers),
             )
         except Exception as exc:
@@ -259,8 +232,12 @@ class A2AClient:
         sdk_client = client
         request_metadata, extra_headers = split_request_metadata(request.metadata)
         try:
+            cancel_request = CancelTaskRequest(id=request.task_id)
+            metadata_struct = to_struct(request_metadata or None)
+            if metadata_struct is not None:
+                cancel_request.metadata.CopyFrom(metadata_struct)
             return await sdk_client.cancel_task(
-                TaskIdParams(id=request.task_id, metadata=request_metadata or {}),
+                cancel_request,
                 context=build_call_context(extra_headers),
             )
         except Exception as exc:
@@ -333,9 +310,7 @@ class A2AClient:
         return self._sdk_client
 
     def _build_interceptors(self) -> list[ClientCallInterceptor]:
-        interceptors: list[ClientCallInterceptor] = [
-            _HeaderInterceptor(self._config.default_headers)
-        ]
+        interceptors: list[ClientCallInterceptor] = []
         credential_service = self._credential_service
         if credential_service is None and self._config.auth_credentials:
             credential_service = StaticCredentialService(self._config.auth_credentials)
@@ -353,9 +328,9 @@ class A2AClient:
     ) -> Message:
         return Message(
             message_id=message_id or f"msg-{uuid4().hex[:12]}",
-            role=Role.user,
+            role=Role.ROLE_USER,
             context_id=context_id,
             task_id=task_id,
-            parts=[Part(root=TextPart(text=text))],
+            parts=[new_text_part(text)],
             metadata=None,
         )

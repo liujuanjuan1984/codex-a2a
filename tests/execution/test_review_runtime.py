@@ -4,6 +4,7 @@ from typing import Any
 import pytest
 from a2a.types import TaskArtifactUpdateEvent, TaskState, TaskStatusUpdateEvent
 
+from codex_a2a.a2a_proto import part_data
 from codex_a2a.execution.review_runtime import CodexReviewRuntime
 from tests.execution.test_discovery_exec_runtime import RecordingRequestHandler
 from tests.support.context import DummyEventQueue
@@ -19,7 +20,7 @@ def _status_updates(queue: DummyEventQueue) -> list[TaskStatusUpdateEvent]:
 
 def _part_data(event: TaskArtifactUpdateEvent) -> dict[str, Any]:
     part = event.artifact.parts[0]
-    data = getattr(part, "data", None) or getattr(getattr(part, "root", None), "data", None)
+    data = part_data(part)
     return data if isinstance(data, dict) else {}
 
 
@@ -112,8 +113,7 @@ async def test_review_runtime_start_bridges_lifecycle_notifications() -> None:
 
     statuses = _status_updates(queue)
     assert len(statuses) == 1
-    assert statuses[0].status.state == TaskState.completed
-    assert statuses[0].final is True
+    assert statuses[0].status.state == TaskState.TASK_STATE_COMPLETED
 
 
 @pytest.mark.asyncio
@@ -157,8 +157,7 @@ async def test_review_runtime_maps_failed_turns_to_failed_terminal_status() -> N
     ]
     statuses = _status_updates(queue)
     assert len(statuses) == 1
-    assert statuses[0].status.state == TaskState.failed
-    assert statuses[0].final is True
+    assert statuses[0].status.state == TaskState.TASK_STATE_FAILED
 
 
 @pytest.mark.asyncio

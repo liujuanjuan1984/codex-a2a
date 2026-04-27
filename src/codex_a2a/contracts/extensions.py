@@ -52,7 +52,7 @@ def build_wire_contract_extension_params(
         "terminal_behavior": "replay_once_then_close",
         "notes": [
             (
-                "tasks/resubscribe remains part of the core A2A method baseline, but this "
+                "SubscribeToTask remains part of the core A2A method baseline, but this "
                 "deployment's terminal-task replay behavior is a service-level contract."
             ),
             (
@@ -126,7 +126,7 @@ def build_compatibility_profile_params(
         "terminal_behavior": "replay_once_then_close",
         "notes": [
             (
-                "tasks/resubscribe itself is part of the core interoperability baseline, but "
+                "SubscribeToTask itself is part of the core interoperability baseline, but "
                 "the terminal replay-once policy is deployment-specific service behavior."
             ),
             (
@@ -393,7 +393,7 @@ def build_compatibility_profile_params(
                 "runtime escalations."
             ),
             (
-                "Treat this service's terminal tasks/resubscribe replay-once behavior as a "
+                "Treat this service's terminal SubscribeToTask replay-once behavior as a "
                 "declared service-level contract rather than a generic A2A baseline promise."
             ),
             (
@@ -461,9 +461,9 @@ def build_streaming_extension_params() -> dict[str, Any]:
         "usage_metadata_field": SHARED_USAGE_METADATA_FIELD,
         "block_types": ["text", "reasoning", "tool_call"],
         "block_part_types": {
-            "text": "TextPart",
-            "reasoning": "TextPart",
-            "tool_call": "DataPart",
+            "text": "Part(text)",
+            "reasoning": "Part(text)",
+            "tool_call": "Part(data)",
         },
         "stream_fields": dict(artifact_stream_contract["field_paths"]),
         "status_stream_fields": dict(status_stream_contract["field_paths"]),
@@ -567,15 +567,15 @@ def build_session_query_extension_params(
                 },
             },
             "core_message_part_mapping": {
-                "TextPart": "text",
-                "FilePart(image only)": "input_image",
-                "DataPart(type=mention|skill)": "mention|skill",
+                "Part(text)": "text",
+                "Part(url|raw image only)": "input_image",
+                "Part(data mention|skill payloads)": "mention|skill",
             },
             "notes": [
                 (
-                    "Core A2A message/send and message/stream keep the standard A2A part "
-                    "surface and map only image FilePart plus mention/skill DataPart "
-                    "payloads into Codex rich input items."
+                    "Core A2A SendMessage and SendStreamingMessage keep the standard A2A part "
+                    "surface and map only image file parts plus mention/skill data payloads "
+                    "into Codex rich input items."
                 ),
                 (
                     "mention.path values are forwarded verbatim. The server does not infer "
@@ -715,7 +715,7 @@ def build_discovery_extension_params(
             "notes": [
                 (
                     "This service does not expose a standalone server-push JSON-RPC transport. "
-                    "Use codex.discovery.watch plus tasks/resubscribe to receive invalidation "
+                    "Use codex.discovery.watch plus SubscribeToTask to receive invalidation "
                     "and refresh signals."
                 )
             ],
@@ -801,7 +801,7 @@ def build_thread_lifecycle_extension_params(
             "notes": [
                 (
                     "This service does not expose standalone server-push JSON-RPC "
-                    "notifications. Use codex.threads.watch plus tasks/resubscribe to "
+                    "notifications. Use codex.threads.watch plus SubscribeToTask to "
                     "consume lifecycle events."
                 ),
                 (
@@ -1020,7 +1020,7 @@ def build_review_control_extension_params(
             "notes": [
                 (
                     "This service does not expose standalone server-push JSON-RPC "
-                    "review notifications. Use codex.review.watch plus tasks/resubscribe "
+                    "review notifications. Use codex.review.watch plus SubscribeToTask "
                     "to consume review lifecycle events."
                 ),
                 (

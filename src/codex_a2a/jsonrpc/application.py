@@ -2,14 +2,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from a2a.server.apps.jsonrpc.fastapi_app import A2AFastAPIApplication
-from a2a.types import (
-    A2AError,
-    InvalidParamsError,
-    InvalidRequestError,
-    JSONRPCError,
-    JSONRPCRequest,
-)
+from a2a.server.jsonrpc_models import InvalidParamsError, JSONRPCError
+from a2a.server.routes.jsonrpc_dispatcher import JsonRpcDispatcher
+from a2a.utils.errors import A2AError
 from fastapi.responses import JSONResponse
 from starlette.requests import Request
 from starlette.responses import Response
@@ -26,6 +21,7 @@ from codex_a2a.jsonrpc.exec_control import handle_exec_control_request
 from codex_a2a.jsonrpc.hooks import SessionGuardHooks
 from codex_a2a.jsonrpc.interrupt_recovery import handle_interrupt_recovery_request
 from codex_a2a.jsonrpc.interrupts import handle_interrupt_callback_request
+from codex_a2a.jsonrpc.request_models import JSONRPCRequestModel
 from codex_a2a.jsonrpc.review_control import handle_review_control_request
 from codex_a2a.jsonrpc.session_control import handle_session_control_request
 from codex_a2a.jsonrpc.session_query import handle_session_query_request
@@ -35,12 +31,8 @@ from codex_a2a.protocol_versions import get_current_protocol_version
 from codex_a2a.upstream.client import CodexClient
 
 
-class CodexSessionQueryJSONRPCApplication(A2AFastAPIApplication):
-    """Extend A2A JSON-RPC endpoint with Codex session query methods.
-
-    These methods are optional (declared via AgentCard.capabilities.extensions) and do
-    not require additional private REST endpoints.
-    """
+class CodexSessionQueryJSONRPCApplication(JsonRpcDispatcher):
+    """Extend the SDK JSON-RPC dispatcher with Codex-specific extension methods."""
 
     def __init__(
         self,
@@ -55,7 +47,7 @@ class CodexSessionQueryJSONRPCApplication(A2AFastAPIApplication):
         supported_methods: list[str],
         guard_hooks: SessionGuardHooks,
         **kwargs: Any,
-    ):
+    ) -> None:
         super().__init__(*args, **kwargs)
         self._codex_client = codex_client
         self._exec_runtime = exec_runtime
@@ -119,7 +111,7 @@ class CodexSessionQueryJSONRPCApplication(A2AFastAPIApplication):
                 "hook: session_owner_matcher"
             )
 
-    async def _handle_requests(self, request: Request) -> Response:
+    async def handle_requests(self, request: Request) -> Response:
         request_id: str | int | None = None
         try:
             body = await request.json()
@@ -127,16 +119,9 @@ class CodexSessionQueryJSONRPCApplication(A2AFastAPIApplication):
                 request_id = body.get("id")
                 if request_id is not None and not isinstance(request_id, str | int):
                     request_id = None
-
-            if not self._allowed_content_length(request):
-                return self._generate_error_response(
-                    request_id,
-                    A2AError(root=InvalidRequestError(message="Payload too large")),
-                )
-
-            base_request = JSONRPCRequest.model_validate(body)
+            base_request = JSONRPCRequestModel.model_validate(body)
         except Exception:
-            return await super()._handle_requests(request)
+            return await super().handle_requests(request)
 
         if base_request.method not in self._supported_method_set:
             if base_request.id is None:
@@ -144,13 +129,13 @@ class CodexSessionQueryJSONRPCApplication(A2AFastAPIApplication):
             return self._unsupported_method_response(base_request.id, base_request.method)
 
         if not self._method_registry.is_extension_method(base_request.method):
-            return await super()._handle_requests(request)
+            return await super().handle_requests(request)
 
         params = base_request.params or {}
         if not isinstance(params, dict):
             return self._generate_error_response(
                 base_request.id,
-                A2AError(root=InvalidParamsError(message="params must be an object")),
+                InvalidParamsError(message="params must be an object"),
             )
 
         if base_request.method in self._method_registry.session_query_methods:
@@ -236,12 +221,18 @@ class CodexSessionQueryJSONRPCApplication(A2AFastAPIApplication):
     def _generate_error_response(
         self,
         request_id: str | int | None,
-        error: JSONRPCError | A2AError,
+        error: Exception | JSONRPCError | A2AError,
     ) -> JSONResponse:
         protocol_version = get_current_protocol_version(self._protocol_version)
+        if isinstance(error, JSONRPCError | A2AError):
+            adapted_error: Exception | JSONRPCError | A2AError = adapt_jsonrpc_error_for_protocol(
+                protocol_version, error
+            )
+        else:
+            adapted_error = error
         return super()._generate_error_response(
             request_id,
-            adapt_jsonrpc_error_for_protocol(protocol_version, error),
+            adapted_error,
         )
 
     def _jsonrpc_success_response(self, request_id: str | int, result: Any) -> JSONResponse:
