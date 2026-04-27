@@ -8,6 +8,7 @@ from a2a.utils.errors import A2AError
 from fastapi.responses import JSONResponse
 from starlette.requests import Request
 from starlette.responses import Response
+from starlette.routing import Route
 
 from codex_a2a.execution.discovery_runtime import CodexDiscoveryRuntime
 from codex_a2a.execution.exec_runtime import CodexExecRuntime
@@ -29,6 +30,45 @@ from codex_a2a.jsonrpc.thread_lifecycle_control import handle_thread_lifecycle_c
 from codex_a2a.jsonrpc.turn_control import handle_turn_control_request
 from codex_a2a.protocol_versions import get_current_protocol_version
 from codex_a2a.upstream.client import CodexClient
+
+
+def create_codex_jsonrpc_routes(
+    *,
+    request_handler,
+    context_builder,
+    codex_client: CodexClient,
+    exec_runtime: CodexExecRuntime,
+    discovery_runtime: CodexDiscoveryRuntime,
+    review_runtime: CodexReviewRuntime,
+    thread_lifecycle_runtime: CodexThreadLifecycleRuntime,
+    methods: dict[str, str],
+    protocol_version: str,
+    supported_methods: list[str],
+    guard_hooks: SessionGuardHooks,
+    rpc_url: str,
+    dispatcher_factory=None,
+) -> list[Route]:
+    factory = dispatcher_factory or CodexSessionQueryJSONRPCApplication
+    dispatcher = factory(
+        request_handler=request_handler,
+        context_builder=context_builder,
+        codex_client=codex_client,
+        exec_runtime=exec_runtime,
+        discovery_runtime=discovery_runtime,
+        review_runtime=review_runtime,
+        thread_lifecycle_runtime=thread_lifecycle_runtime,
+        methods=methods,
+        protocol_version=protocol_version,
+        supported_methods=supported_methods,
+        guard_hooks=guard_hooks,
+    )
+    return [
+        Route(
+            path=rpc_url,
+            endpoint=dispatcher.handle_requests,
+            methods=["POST"],
+        )
+    ]
 
 
 class CodexSessionQueryJSONRPCApplication(JsonRpcDispatcher):

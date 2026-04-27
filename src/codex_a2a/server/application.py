@@ -8,7 +8,6 @@ import uvicorn
 from a2a.server.routes.agent_card_routes import create_agent_card_routes
 from a2a.server.routes.rest_routes import create_rest_routes
 from fastapi import FastAPI
-from starlette.routing import Route
 
 from codex_a2a.client.manager import A2AClientManager
 from codex_a2a.config import Settings
@@ -29,7 +28,10 @@ from codex_a2a.execution.exec_runtime import CodexExecRuntime
 from codex_a2a.execution.executor import CodexAgentExecutor
 from codex_a2a.execution.review_runtime import CodexReviewRuntime
 from codex_a2a.execution.thread_lifecycle_runtime import CodexThreadLifecycleRuntime
-from codex_a2a.jsonrpc.application import CodexSessionQueryJSONRPCApplication
+from codex_a2a.jsonrpc.application import (
+    CodexSessionQueryJSONRPCApplication,
+    create_codex_jsonrpc_routes,
+)
 from codex_a2a.jsonrpc.hooks import SessionGuardHooks
 from codex_a2a.logging_context import install_log_record_factory
 from codex_a2a.profile.runtime import build_runtime_profile
@@ -155,19 +157,7 @@ def create_app(settings: Settings) -> FastAPI:
         session_owner_matcher=bindings.session_owner_matcher,
     )
 
-    jsonrpc_app = CodexSessionQueryJSONRPCApplication(
-        request_handler=handler,
-        context_builder=context_builder,
-        codex_client=client,
-        exec_runtime=exec_runtime,
-        discovery_runtime=discovery_runtime,
-        review_runtime=review_runtime,
-        thread_lifecycle_runtime=thread_lifecycle_runtime,
-        methods=jsonrpc_methods,
-        protocol_version=settings.a2a_protocol_version,
-        supported_methods=list(capability_snapshot.supported_jsonrpc_methods),
-        guard_hooks=session_guard_hooks,
-    )
+    supported_jsonrpc_methods = list(capability_snapshot.supported_jsonrpc_methods)
     app = FastAPI(
         title=settings.a2a_title,
         version=settings.a2a_version,
@@ -178,8 +168,22 @@ def create_app(settings: Settings) -> FastAPI:
         paths=GZIP_COMPRESSIBLE_PATHS,
     )
     app.router.routes.extend(create_agent_card_routes(agent_card))
-    app.router.routes.append(
-        Route(path="/", endpoint=jsonrpc_app.handle_requests, methods=["POST"])
+    app.router.routes.extend(
+        create_codex_jsonrpc_routes(
+            request_handler=handler,
+            context_builder=context_builder,
+            codex_client=client,
+            exec_runtime=exec_runtime,
+            discovery_runtime=discovery_runtime,
+            review_runtime=review_runtime,
+            thread_lifecycle_runtime=thread_lifecycle_runtime,
+            methods=jsonrpc_methods,
+            protocol_version=settings.a2a_protocol_version,
+            supported_methods=supported_jsonrpc_methods,
+            guard_hooks=session_guard_hooks,
+            rpc_url="/",
+            dispatcher_factory=CodexSessionQueryJSONRPCApplication,
+        )
     )
     app.router.routes.extend(
         create_rest_routes(
