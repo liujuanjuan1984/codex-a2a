@@ -3,11 +3,10 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping
 from typing import Any
 
+from a2a.types import Part, Role, TaskState
 from google.protobuf.json_format import MessageToDict, ParseDict  # type: ignore[import-untyped]
 from google.protobuf.message import Message as ProtoMessage  # type: ignore[import-untyped]
 from google.protobuf.struct_pb2 import Struct, Value  # type: ignore[import-untyped]
-
-from a2a.types import Part, Role, TaskState
 
 ROLE_AGENT = Role.ROLE_AGENT
 ROLE_USER = Role.ROLE_USER
