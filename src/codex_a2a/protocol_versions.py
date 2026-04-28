@@ -13,7 +13,7 @@ _CURRENT_PROTOCOL_VERSION: ContextVar[str | None] = ContextVar(
 )
 SUPPORTED_PROTOCOL_VERSION = "1.0"
 SUPPORTED_PROTOCOL_VERSIONS: tuple[str, ...] = (SUPPORTED_PROTOCOL_VERSION,)
-ADVERTISED_PROTOCOL_VERSION = "1.0.0"
+ADVERTISED_PROTOCOL_VERSION = "1.0"
 
 V1_SUPPORTED_FEATURES: tuple[str, ...] = (
     "A2A-Version request-time negotiation and response header echo.",

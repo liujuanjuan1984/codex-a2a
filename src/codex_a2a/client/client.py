@@ -40,6 +40,13 @@ from .errors import (
     A2AUnsupportedBindingError,
     map_a2a_sdk_error,
 )
+from .extension_negotiation import (
+    filter_negotiated_extensions_from_stream_response,
+    filter_negotiated_extensions_from_task,
+    merge_requested_extensions,
+    missing_extension_requirements,
+    required_extensions_for_send_message,
+)
 from .payload_text import extract_text_from_payload
 from .request_context import build_call_context, split_request_metadata
 from .types import A2ACancelTaskRequest, A2AGetTaskRequest, A2ASendRequest
@@ -162,7 +169,16 @@ class A2AClient:
             task_id=task_id,
             message_id=message_id,
         )
-        request_metadata, extra_headers = split_request_metadata(metadata)
+        request_metadata, extra_headers, metadata_extensions = split_request_metadata(metadata)
+        requested_extensions = merge_requested_extensions(
+            self._config.extensions,
+            metadata_extensions,
+        )
+        self._validate_extension_requirements(
+            request_metadata=request_metadata,
+            message=outbound_message,
+            requested_extensions=requested_extensions,
+        )
 
         configuration_kwargs: dict[str, Any] = {"return_immediately": not blocking}
         if accepted_output_modes is not None:
@@ -180,9 +196,12 @@ class A2AClient:
         try:
             async for item in sdk_client.send_message(
                 send_request,
-                context=build_call_context(extra_headers),
+                context=build_call_context(extra_headers, requested_extensions),
             ):
-                yield item
+                yield filter_negotiated_extensions_from_stream_response(
+                    item,
+                    requested_extensions,
+                )
         except Exception as exc:
             raise map_a2a_sdk_error(exc, operation="SendMessage") from exc
 
@@ -208,16 +227,23 @@ class A2AClient:
     async def get_task(self, request: A2AGetTaskRequest) -> Task:
         client = await self._get_client()
         sdk_client = client
-        _request_metadata, extra_headers = split_request_metadata(request.metadata)
+        _request_metadata, extra_headers, metadata_extensions = split_request_metadata(
+            request.metadata
+        )
+        requested_extensions = merge_requested_extensions(
+            self._config.extensions,
+            metadata_extensions,
+        )
         try:
             task_request = GetTaskRequest(
                 id=request.task_id,
                 history_length=request.history_length,
             )
-            return await sdk_client.get_task(
+            task = await sdk_client.get_task(
                 task_request,
-                context=build_call_context(extra_headers),
+                context=build_call_context(extra_headers, requested_extensions),
             )
+            return filter_negotiated_extensions_from_task(task, requested_extensions)
         except Exception as exc:
             raise map_a2a_sdk_error(exc, operation="tasks/get") from exc
 
@@ -237,16 +263,23 @@ class A2AClient:
     async def cancel(self, request: A2ACancelTaskRequest) -> Task:
         client = await self._get_client()
         sdk_client = client
-        request_metadata, extra_headers = split_request_metadata(request.metadata)
+        request_metadata, extra_headers, metadata_extensions = split_request_metadata(
+            request.metadata
+        )
+        requested_extensions = merge_requested_extensions(
+            self._config.extensions,
+            metadata_extensions,
+        )
         try:
             cancel_request = CancelTaskRequest(id=request.task_id)
             metadata_struct = to_struct(request_metadata or None)
             if metadata_struct is not None:
                 cancel_request.metadata.CopyFrom(metadata_struct)
-            return await sdk_client.cancel_task(
+            task = await sdk_client.cancel_task(
                 cancel_request,
-                context=build_call_context(extra_headers),
+                context=build_call_context(extra_headers, requested_extensions),
             )
+            return filter_negotiated_extensions_from_task(task, requested_extensions)
         except Exception as exc:
             raise map_a2a_sdk_error(exc, operation="tasks/cancel") from exc
 
@@ -387,4 +420,25 @@ class A2AClient:
             task_id=task_id,
             parts=outbound_parts,
             metadata=None,
+        )
+
+    def _validate_extension_requirements(
+        self,
+        *,
+        request_metadata: Mapping[str, Any] | None,
+        message: Message,
+        requested_extensions: tuple[str, ...] | None,
+    ) -> None:
+        missing_requirements = missing_extension_requirements(
+            required_extensions_for_send_message(
+                request_metadata=request_metadata,
+                message=message,
+            ),
+            requested_extensions,
+        )
+        if not missing_requirements:
+            return
+        raise A2AClientConfigError(
+            "Request metadata requires explicit A2A extension negotiation via A2A-Extensions: "
+            + ", ".join(requirement.field for requirement in missing_requirements)
         )

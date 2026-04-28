@@ -639,7 +639,7 @@ def test_authenticated_extended_agent_card_injects_profile_into_extensions() -> 
     assert any("interactive command/exec session" in note for note in start_contract["notes"])
 
     wire_contract_params = codex_contracts["wire_contract"]
-    assert wire_contract_params["protocol_version"] == "1.0.0"
+    assert wire_contract_params["protocol_version"] == "1.0"
     assert wire_contract_params["default_protocol_version"] == "1.0"
     assert wire_contract_params["supported_protocol_versions"] == ["1.0"]
     assert set(wire_contract_params["protocol_compatibility"]["versions"]) == {"1.0"}
@@ -664,30 +664,30 @@ def test_authenticated_extended_agent_card_injects_profile_into_extensions() -> 
     )
     assert wire_contract_params["core"]["jsonrpc_endpoint"] == {
         "protocol_binding": "JSON-RPC",
-        "protocol_version": "1.0.0",
+        "protocol_version": "1.0",
         "url_path": CORE_JSONRPC_PATH,
     }
     assert wire_contract_params["extensions"]["jsonrpc_endpoint"] == {
         "protocol_binding": "JSON-RPC",
-        "protocol_version": "1.0.0",
+        "protocol_version": "1.0",
         "url_path": EXTENSION_JSONRPC_PATH,
     }
     assert wire_contract_params["transport_interfaces"] == [
         {
             "protocol_binding": "HTTP+JSON",
-            "protocol_version": "1.0.0",
+            "protocol_version": "1.0",
             "url_path_prefix": REST_API_PATH_PREFIX,
         },
         {
             "protocol_binding": "JSON-RPC",
-            "protocol_version": "1.0.0",
+            "protocol_version": "1.0",
             "url_path": CORE_JSONRPC_PATH,
         },
     ]
 
     compatibility_params = codex_contracts["compatibility_profile"]
     assert compatibility_params["profile_id"] == "codex-a2a-single-tenant-coding-v1"
-    assert compatibility_params["protocol_version"] == "1.0.0"
+    assert compatibility_params["protocol_version"] == "1.0"
     assert compatibility_params["default_protocol_version"] == "1.0"
     assert compatibility_params["supported_protocol_versions"] == ["1.0"]
     assert (

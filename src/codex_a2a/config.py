@@ -323,7 +323,7 @@ class Settings(BaseSettings):
     a2a_title: str = Field(default="Codex A2A", alias="A2A_TITLE")
     a2a_description: str = Field(default="A2A wrapper service for Codex", alias="A2A_DESCRIPTION")
     a2a_version: str = Field(default=__version__, alias="A2A_VERSION")
-    a2a_protocol_version: str = Field(default="1.0.0", alias="A2A_PROTOCOL_VERSION")
+    a2a_protocol_version: str = Field(default="1.0", alias="A2A_PROTOCOL_VERSION")
     a2a_enable_health_endpoint: bool = Field(default=True, alias="A2A_ENABLE_HEALTH_ENDPOINT")
     a2a_enable_turn_control: bool = Field(default=True, alias="A2A_ENABLE_TURN_CONTROL")
     a2a_enable_review_control: bool = Field(default=False, alias="A2A_ENABLE_REVIEW_CONTROL")
@@ -454,7 +454,7 @@ class Settings(BaseSettings):
         normalized = normalize_protocol_version(value)
         if normalized != SUPPORTED_PROTOCOL_VERSION:
             raise ValueError("A2A_PROTOCOL_VERSION must stay on the 1.0 protocol line")
-        return value
+        return normalized
 
     @field_validator("a2a_execution_sandbox_mode")
     @classmethod

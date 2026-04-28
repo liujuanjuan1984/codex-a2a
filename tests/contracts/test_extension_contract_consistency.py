@@ -345,7 +345,7 @@ def test_guide_mentions_resubscribe_service_level_behavior() -> None:
     guide_text = Path("docs/guide.md").read_text()
     compatibility_text = Path("docs/compatibility.md").read_text()
     wire_contract = build_wire_contract_extension_params(
-        protocol_version="1.0.0",
+        protocol_version="1.0",
         runtime_profile=build_runtime_profile(make_settings(a2a_bearer_token="test-token")),
         supported_protocol_versions=["1.0"],
         default_protocol_version="1.0",

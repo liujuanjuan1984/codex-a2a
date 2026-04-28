@@ -74,7 +74,7 @@ def test_settings_valid():
             == "sqlite+aiosqlite:////tmp/workspace/.codex-a2a/codex-a2a.db"
         )
         assert settings.a2a_version == __version__
-        assert settings.a2a_protocol_version == "1.0.0"
+        assert settings.a2a_protocol_version == "1.0"
         assert settings.a2a_supported_protocol_versions == ["1.0"]
         assert settings.a2a_log_level == "WARNING"
 

@@ -31,10 +31,12 @@ from codex_a2a.a2a_proto import new_data_part, new_text_part, proto_to_python
 from codex_a2a.client import (
     A2AClient,
     A2AClientConfig,
+    A2AClientConfigError,
     A2AUnsupportedBindingError,
     StaticCredentialService,
 )
 from codex_a2a.client.types import A2ACancelTaskRequest, A2AGetTaskRequest, A2ASendRequest
+from codex_a2a.contracts.extensions import SESSION_BINDING_EXTENSION_URI
 
 
 class _MockAsyncHttpClient:
@@ -179,6 +181,100 @@ async def test_send_get_task_and_cancel_use_sdk_methods() -> None:
         "metadata": {"trace_id": "trace-3"},
     }
     assert sdk_client.cancel_contexts[0].service_parameters == {"Authorization": "Bearer token"}
+
+
+@pytest.mark.asyncio
+async def test_send_negotiates_extensions_from_config_and_metadata() -> None:
+    sdk_client = _MockSDKClient()
+    client = A2AClient(
+        A2AClientConfig(
+            agent_url="https://example.org",
+            extensions=[SESSION_BINDING_EXTENSION_URI],
+        ),
+        httpx_client=_MockAsyncHttpClient(),
+        card_resolver_factory=_MockAgentCardResolver,
+    )
+    client._sdk_client = sdk_client  # noqa: SLF001
+
+    await client.send(
+        A2ASendRequest(
+            text="hello",
+            metadata={
+                "authorization": "Bearer token",
+                "shared": {"session": {"id": "session-1"}},
+            },
+        )
+    )
+
+    send_call = sdk_client.send_calls[0]
+    assert send_call["context"].service_parameters == {
+        "Authorization": "Bearer token",
+        "A2A-Extensions": SESSION_BINDING_EXTENSION_URI,
+    }
+
+
+@pytest.mark.asyncio
+async def test_send_fails_fast_when_shared_metadata_lacks_negotiated_extension() -> None:
+    sdk_client = _MockSDKClient()
+    client = A2AClient(
+        A2AClientConfig(agent_url="https://example.org"),
+        httpx_client=_MockAsyncHttpClient(),
+        card_resolver_factory=_MockAgentCardResolver,
+    )
+    client._sdk_client = sdk_client  # noqa: SLF001
+
+    with pytest.raises(A2AClientConfigError, match="metadata.shared.session.id"):
+        await client.send(
+            A2ASendRequest(
+                text="hello",
+                metadata={"shared": {"session": {"id": "session-1"}}},
+            )
+        )
+
+    assert sdk_client.send_calls == []
+
+
+@pytest.mark.asyncio
+async def test_send_filters_unnegotiated_shared_metadata_from_response() -> None:
+    class _ResponseMetadataSDKClient(_MockSDKClient):
+        async def send_message(self, request: SendMessageRequest, *, context=None):
+            self.send_calls.append({"request": request, "context": context})
+            yield StreamResponse(
+                artifact_update=TaskArtifactUpdateEvent(
+                    task_id="task-1",
+                    context_id="ctx-1",
+                    artifact=Artifact(
+                        artifact_id="artifact-1",
+                        metadata={
+                            "shared": {
+                                "session": {"id": "session-1"},
+                                "stream": {"source": "remote"},
+                            }
+                        },
+                        parts=[new_text_part("hello")],
+                    ),
+                )
+            )
+
+    sdk_client = _ResponseMetadataSDKClient()
+    client = A2AClient(
+        A2AClientConfig(agent_url="https://example.org"),
+        httpx_client=_MockAsyncHttpClient(),
+        card_resolver_factory=_MockAgentCardResolver,
+    )
+    client._sdk_client = sdk_client  # noqa: SLF001
+
+    response = await client.send(
+        A2ASendRequest(
+            text="hello",
+            metadata={"a2a-extensions": [SESSION_BINDING_EXTENSION_URI]},
+        )
+    )
+
+    assert response.HasField("artifact_update")
+    assert proto_to_python(response.artifact_update.artifact.metadata) == {
+        "shared": {"session": {"id": "session-1"}}
+    }
 
 
 @pytest.mark.asyncio
