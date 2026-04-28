@@ -388,7 +388,7 @@ def _build_agent_card(
 
     supported_interfaces = [
         AgentInterface(
-            url=f"{public_url}/v1",
+            url=public_url,
             protocol_binding=TransportProtocol.HTTP_JSON,
             protocol_version=settings.a2a_protocol_version,
         ),

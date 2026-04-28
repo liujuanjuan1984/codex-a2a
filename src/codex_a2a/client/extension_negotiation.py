@@ -5,7 +5,6 @@ from dataclasses import dataclass
 from typing import Any, cast
 
 from a2a.client.service_parameters import ServiceParametersFactory, with_a2a_extensions
-from a2a.extensions.common import get_requested_extensions
 from a2a.types import (
     Artifact,
     Message,
@@ -47,10 +46,14 @@ def merge_extension_service_parameters(
 
 
 def parse_requested_extensions(values: Sequence[str]) -> tuple[str, ...] | None:
-    normalized_values = [value for value in values if isinstance(value, str) and value.strip()]
-    if not normalized_values:
-        return None
-    requested = list(get_requested_extensions(normalized_values))
+    requested: list[str] = []
+    for value in values:
+        if not isinstance(value, str):
+            continue
+        for item in value.split(","):
+            normalized = item.strip()
+            if normalized and normalized not in requested:
+                requested.append(normalized)
     return tuple(requested) or None
 
 

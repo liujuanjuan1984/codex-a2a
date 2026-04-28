@@ -8,6 +8,7 @@ This guide covers runtime configuration, transport contracts, streaming/session/
   - HTTP+JSON (REST endpoints such as `/v1/message:send`)
   - Shared JSON-RPC (`POST /`) for both core A2A methods and provider-private extension methods
 - Agent Card publishes both HTTP+JSON and JSON-RPC endpoints through `supported_interfaces[]`.
+- Both supported interfaces now publish the same `public_url`. For HTTP+JSON, that URL is the REST service root; concrete REST methods remain under `/v1/...`.
 - The public Agent Card at `/.well-known/agent-card.json` is intentionally slimmed to the minimum discovery surface.
 - The authenticated extended card exposes the authenticated provider-private skill inventory and deployment-aware examples:
   - preferred: JSON-RPC `GetExtendedAgentCard`

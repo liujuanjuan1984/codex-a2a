@@ -39,6 +39,8 @@ def test_agent_card_declares_dual_stack_with_http_json_preferred() -> None:
 
     transports = {iface.protocol_binding for iface in card.supported_interfaces}
     assert card.supported_interfaces[0].protocol_binding == TransportProtocol.HTTP_JSON
+    assert card.supported_interfaces[0].url == "http://127.0.0.1:8000"
+    assert card.supported_interfaces[1].url == "http://127.0.0.1:8000"
     assert TransportProtocol.HTTP_JSON in transports
     assert TransportProtocol.JSONRPC in transports
 

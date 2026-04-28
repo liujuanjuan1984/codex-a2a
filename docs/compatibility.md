@@ -28,6 +28,7 @@ If runtime support is not implemented, do not expose it as a supported machine-r
 Open-source consumption guidance:
 
 - Treat the core A2A send / stream / task methods as the portable baseline.
+- Treat the Agent Card `supported_interfaces[].url` value as the shared service discovery root. For `HTTP+JSON`, this repository uses that URL as the REST base root rather than as a concrete method path.
 - Treat `POST /` as the shared JSON-RPC surface for both core A2A methods and provider-private extension methods.
 - Treat `urn:a2a:*` entries in this repository as shared repo-family conventions, not as claims that they are part of the A2A core baseline.
 - Treat `a2a.interrupt.*` reply methods as a shared provider-private callback contract on `POST /`, not as core A2A methods or Agent Card-negotiated extensions.
