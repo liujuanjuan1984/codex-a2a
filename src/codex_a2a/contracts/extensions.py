@@ -26,7 +26,7 @@ from .extension_specs import (
 )
 
 CORE_JSONRPC_PATH = "/"
-EXTENSION_JSONRPC_PATH = "/codex/jsonrpc"
+EXTENSION_JSONRPC_PATH = CORE_JSONRPC_PATH
 REST_API_PATH_PREFIX = "/v1"
 
 
@@ -391,13 +391,13 @@ def build_compatibility_profile_params(
             ),
             (
                 "Treat a2a.interrupt.* callback methods as a shared provider-private "
-                "contract exposed on the extension endpoint rather than as core A2A "
-                "behavior or an Agent Card-negotiated extension."
+                "contract exposed on the shared JSON-RPC endpoint rather than as core "
+                "A2A behavior or an Agent Card-negotiated extension."
             ),
             (
-                f"Use {CORE_JSONRPC_PATH} for core A2A JSON-RPC methods and "
-                f"{EXTENSION_JSONRPC_PATH} for provider-private codex.* and "
-                "a2a.interrupt.* extension methods."
+                f"Use {CORE_JSONRPC_PATH} for both core A2A JSON-RPC methods and "
+                "provider-private codex.* / a2a.interrupt.* methods; distinguish them "
+                "by method name and the published compatibility contracts."
             ),
             (
                 "Treat codex.* methods and codex.directory/codex.execution metadata as "

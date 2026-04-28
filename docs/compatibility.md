@@ -6,7 +6,7 @@ This document explains the compatibility promises this repository currently trie
 
 - Python versions: 3.11, 3.12, 3.13
 - A2A SDK line: `1.0.x`
-- A2A protocol version advertised by default: `1.0.0`
+- A2A protocol version advertised by default: `1.0`
 - Normalized protocol compatibility lines declared today: `1.0`
 
 The repository pins the SDK version in `pyproject.toml` and validates the published CLI build in CI. Upgrade the SDK deliberately rather than relying on floating dependency resolution.
@@ -28,9 +28,9 @@ If runtime support is not implemented, do not expose it as a supported machine-r
 Open-source consumption guidance:
 
 - Treat the core A2A send / stream / task methods as the portable baseline.
-- Treat `POST /` as the core A2A JSON-RPC surface and `POST /codex/jsonrpc` as the provider-private extension surface.
+- Treat `POST /` as the shared JSON-RPC surface for both core A2A methods and provider-private extension methods.
 - Treat `urn:a2a:*` entries in this repository as shared repo-family conventions, not as claims that they are part of the A2A core baseline.
-- Treat `a2a.interrupt.*` reply methods as a shared provider-private callback contract on `POST /codex/jsonrpc`, not as core A2A methods or Agent Card-negotiated extensions.
+- Treat `a2a.interrupt.*` reply methods as a shared provider-private callback contract on `POST /`, not as core A2A methods or Agent Card-negotiated extensions.
 - Treat `codex.*` methods plus `metadata.codex.directory` and `metadata.codex.execution` as a Codex-specific control plane layered on top of the portable A2A surface.
 - Treat [extension-specifications.md](./extension-specifications.md) as the stable URI/spec index, not as the main usage guide.
 
@@ -143,7 +143,7 @@ This repository distinguishes between three layers:
 - shared extensions
   - repo-family conventions such as session binding and stream hints
 - provider-private control contracts
-  - `a2a.interrupt.*` reply methods on `POST /codex/jsonrpc`
+  - `a2a.interrupt.*` reply methods on `POST /`
   - `codex.*` JSON-RPC methods plus `metadata.codex.directory` and `metadata.codex.execution`
   - this now includes:
     - session query

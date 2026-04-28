@@ -5,7 +5,7 @@ from typing import Any, cast
 from fastapi import FastAPI
 
 from codex_a2a.config import Settings
-from codex_a2a.contracts.extensions import CORE_JSONRPC_PATH, EXTENSION_JSONRPC_PATH
+from codex_a2a.contracts.extensions import CORE_JSONRPC_PATH
 from codex_a2a.profile.runtime import RuntimeProfile
 
 from .openapi_contract_fragments import (
@@ -173,18 +173,18 @@ def patch_openapi_contract(
                 schema["security"] = security
         paths = schema.setdefault("paths", {})
         if isinstance(paths, dict):
-            core_codex_contracts = {
-                "wire_contract": codex_contracts["wire_contract"],
-                "compatibility_profile": codex_contracts["compatibility_profile"],
-            }
-
             post = _ensure_path_item(paths, CORE_JSONRPC_PATH, "post")
             if "security" in schema:
                 post["security"] = list(cast(list[dict[str, list[str]]], schema["security"]))
-            post["summary"] = "Handle Core A2A JSON-RPC Requests"
-            post["description"] = build_core_jsonrpc_openapi_description()
+            post["summary"] = "Handle Shared A2A and Codex JSON-RPC Requests"
+            post["description"] = "\n\n".join(
+                [
+                    build_core_jsonrpc_openapi_description(),
+                    build_extension_jsonrpc_openapi_description(runtime_profile=runtime_profile),
+                ]
+            )
             post["x-a2a-extension-contracts"] = a2a_extension_contracts
-            post["x-codex-contracts"] = core_codex_contracts
+            post["x-codex-contracts"] = codex_contracts
             post.setdefault("responses", {"200": {"description": "JSON-RPC response"}})
 
             request_body = post.setdefault("requestBody", {})
@@ -198,34 +198,12 @@ def patch_openapi_contract(
                             "schema",
                             {"$ref": "#/components/schemas/A2AJsonRpcRequest"},
                         )
-                        app_json["examples"] = build_core_jsonrpc_openapi_examples()
-
-            extension_post = _ensure_path_item(paths, EXTENSION_JSONRPC_PATH, "post")
-            if "security" in schema:
-                extension_post["security"] = list(
-                    cast(list[dict[str, list[str]]], schema["security"])
-                )
-            extension_post["summary"] = "Handle Codex Extension JSON-RPC Requests"
-            extension_post["description"] = build_extension_jsonrpc_openapi_description(
-                runtime_profile=runtime_profile
-            )
-            extension_post["x-codex-contracts"] = codex_contracts
-            extension_post.setdefault("responses", {"200": {"description": "JSON-RPC response"}})
-
-            extension_request_body = extension_post.setdefault("requestBody", {})
-            if isinstance(extension_request_body, dict):
-                extension_request_body.setdefault("required", True)
-                extension_content = extension_request_body.setdefault("content", {})
-                if isinstance(extension_content, dict):
-                    extension_app_json = extension_content.setdefault("application/json", {})
-                    if isinstance(extension_app_json, dict):
-                        extension_app_json.setdefault(
-                            "schema",
-                            {"$ref": "#/components/schemas/A2AJsonRpcRequest"},
-                        )
-                        extension_app_json["examples"] = build_extension_jsonrpc_openapi_examples(
-                            runtime_profile=runtime_profile
-                        )
+                        app_json["examples"] = {
+                            **build_core_jsonrpc_openapi_examples(),
+                            **build_extension_jsonrpc_openapi_examples(
+                                runtime_profile=runtime_profile
+                            ),
+                        }
 
             rest_post_contracts: dict[str, dict[str, Any]] = {
                 "/v1/message:send": {

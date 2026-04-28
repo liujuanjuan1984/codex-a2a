@@ -6,7 +6,6 @@ from typing import Any
 
 import uvicorn
 from a2a.server.routes.agent_card_routes import create_agent_card_routes
-from a2a.server.routes.jsonrpc_routes import create_jsonrpc_routes
 from a2a.server.routes.rest_routes import create_rest_routes
 from fastapi import FastAPI
 
@@ -16,7 +15,6 @@ from codex_a2a.contracts.extensions import (
     CORE_JSONRPC_PATH,
     DISCOVERY_METHODS,
     EXEC_CONTROL_METHODS,
-    EXTENSION_JSONRPC_PATH,
     INTERRUPT_CALLBACK_METHODS,
     INTERRUPT_RECOVERY_METHODS,
     REST_API_PATH_PREFIX,
@@ -169,13 +167,6 @@ def create_app(settings: Settings) -> FastAPI:
     )
     app.router.routes.extend(create_agent_card_routes(agent_card))
     app.router.routes.extend(
-        create_jsonrpc_routes(
-            request_handler=handler,
-            context_builder=context_builder,
-            rpc_url=CORE_JSONRPC_PATH,
-        )
-    )
-    app.router.routes.extend(
         create_extension_jsonrpc_routes(
             request_handler=handler,
             context_builder=context_builder,
@@ -188,7 +179,7 @@ def create_app(settings: Settings) -> FastAPI:
             protocol_version=settings.a2a_protocol_version,
             supported_methods=supported_extension_jsonrpc_methods,
             guard_hooks=session_guard_hooks,
-            rpc_url=EXTENSION_JSONRPC_PATH,
+            rpc_url=CORE_JSONRPC_PATH,
             dispatcher_factory=CodexSessionQueryJSONRPCApplication,
         )
     )

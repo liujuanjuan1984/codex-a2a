@@ -145,15 +145,12 @@ class CodexSessionQueryJSONRPCApplication(JsonRpcDispatcher):
         except Exception:
             return await super().handle_requests(request)
 
-        if base_request.method not in self._supported_method_set:
-            if base_request.id is None:
-                return Response(status_code=204)
-            return self._unsupported_method_response(base_request.id, base_request.method)
-
         if not self._method_registry.is_extension_method(base_request.method):
-            if base_request.id is None:
-                return Response(status_code=204)
-            return self._unsupported_method_response(base_request.id, base_request.method)
+            if self._looks_like_extension_method(base_request.method):
+                if base_request.id is None:
+                    return Response(status_code=204)
+                return self._unsupported_method_response(base_request.id, base_request.method)
+            return await super().handle_requests(request)
 
         params = base_request.params or {}
         if not isinstance(params, dict):
@@ -214,6 +211,10 @@ class CodexSessionQueryJSONRPCApplication(JsonRpcDispatcher):
             params,
             request=request,
         )
+
+    @staticmethod
+    def _looks_like_extension_method(method: str) -> bool:
+        return method.startswith("codex.") or method.startswith("a2a.interrupt.")
 
     def _unsupported_method_response(
         self,

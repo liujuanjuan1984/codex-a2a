@@ -6,8 +6,7 @@ This guide covers runtime configuration, transport contracts, streaming/session/
 
 - The service supports both transports:
   - HTTP+JSON (REST endpoints such as `/v1/message:send`)
-  - Core JSON-RPC (`POST /`)
-  - Provider-private extension JSON-RPC (`POST /codex/jsonrpc`)
+  - Shared JSON-RPC (`POST /`) for both core A2A methods and provider-private extension methods
 - Agent Card publishes both HTTP+JSON and JSON-RPC endpoints through `supported_interfaces[]`.
 - The public Agent Card at `/.well-known/agent-card.json` is intentionally slimmed to the minimum discovery surface.
 - The authenticated extended card exposes the authenticated provider-private skill inventory and deployment-aware examples:
@@ -26,7 +25,7 @@ This guide covers runtime configuration, transport contracts, streaming/session/
 - Payload schema is transport-specific and should not be mixed:
   - REST send payload uses `message.parts` and role values like `ROLE_USER`
   - JSON-RPC `SendMessage` payload uses `params.message.parts` and role values like `ROLE_USER`
-- OpenAPI metadata on the core JSON-RPC entrypoint and provider-private extension entrypoint publishes the explicit wire contract for the supported method set and unsupported-method error shape.
+- OpenAPI metadata on the shared JSON-RPC entrypoint publishes the explicit wire contract for the supported method set and unsupported-method error shape.
 
 ## Wire Contract
 
@@ -51,19 +50,19 @@ Current behavior:
   - `/v1/message:send`
   - `/v1/message:stream`
   - `/v1/tasks/{id}:subscribe`
-- extension JSON-RPC methods are declared separately from the core baseline
+- extension JSON-RPC methods are declared separately from the core baseline even though they share the same `POST /` endpoint
 - `codex.interrupts.list` is an always-on adapter-local recovery surface for pending interrupt request IDs
 - `codex.turns.steer` becomes deployment-conditional when `A2A_ENABLE_TURN_CONTROL=false`
 - `codex.review.start` and `codex.review.watch` become deployment-conditional when `A2A_ENABLE_REVIEW_CONTROL=false`
 - `codex.exec.*` becomes deployment-conditional when `A2A_ENABLE_EXEC_CONTROL=false`
 
-Unsupported method contract:
+Unsupported method contract on the shared JSON-RPC endpoint (`POST /`):
 
-- Core JSON-RPC (`POST /`):
+- Core A2A methods plus unknown method names:
   - JSON-RPC error code: `-32601`
   - error message: `Method not found`
   - no additional `error.data` contract is declared
-- Extension JSON-RPC (`POST /codex/jsonrpc`):
+- Recognized provider-private extension namespaces (`codex.*`, `a2a.interrupt.*`):
   - JSON-RPC error code: `-32601`
   - error message: `Method not found`
   - error data fields:
@@ -76,7 +75,7 @@ Consumer guidance:
 - Discover the current method set from Agent Card / OpenAPI before calling custom JSON-RPC methods.
 - Fetch the authenticated extended card when you need the authenticated skill inventory or deployment-aware examples.
 - Use OpenAPI when you need the detailed method matrix, provider-private notes, or full provider-private contract payloads.
-- Treat `supported_methods` in extension JSON-RPC `error.data` as the runtime truth for the current deployment, especially when a deployment-conditional method is disabled.
+- Treat `supported_methods` in extension-namespace `error.data` as the runtime truth for the current deployment, especially when a deployment-conditional method is disabled.
 - Treat the core A2A methods as the portable interoperability baseline.
 - Treat `codex.*` methods plus `metadata.codex.directory` and `metadata.codex.execution` as a Codex-specific control plane for Codex-aware clients rather than generic A2A portability claims.
 - See [extension-specifications.md](./extension-specifications.md) for the stable URI/spec index, and [compatibility.md](./compatibility.md) for compatibility promises.
@@ -140,7 +139,7 @@ Retention guidance:
 - Treat this deployment as a single-tenant, shared-workspace coding profile.
 - Treat shared session-binding and streaming metadata contracts as required for the current deployment model; they are not optional documentation-only hints.
 - Treat `urn:a2a:*` extension URIs in this repository as shared extension conventions used across this repo family, not as claims that they are part of the A2A core baseline.
-- Treat `a2a.interrupt.*` methods as a shared provider-private callback contract on `POST /codex/jsonrpc`, not as core A2A methods or Agent Card-negotiated extensions.
+- Treat `a2a.interrupt.*` methods as a shared provider-private callback contract on `POST /`, not as core A2A methods or Agent Card-negotiated extensions.
 - Treat `codex.*` methods plus `metadata.codex.directory` and `metadata.codex.execution` as Codex-specific extensions or provider-private operational surfaces rather than portable A2A baseline capabilities.
 - Treat `codex.interrupts.list` as an adapter-local recovery surface for rediscovering active pending interrupt request IDs after reconnecting.
 - Treat `codex.turns.steer`, `codex.review.*`, and `codex.exec.*` as deployment-aware provider-private controls. Discover them from the authenticated extended card or OpenAPI before calling them.
@@ -548,12 +547,12 @@ curl -sS http://127.0.0.1:8000/v1/message:send \
 
 ## Codex Session Query (A2A Extension)
 
-This service exposes Codex session list and message-history queries via A2A JSON-RPC extension methods on `POST /codex/jsonrpc`. No extra custom REST endpoint is introduced.
+This service exposes Codex session list and message-history queries via A2A JSON-RPC extension methods on `POST /`. No extra custom REST endpoint is introduced.
 
-- Trigger: call extension methods through the dedicated extension JSON-RPC endpoint
+- Trigger: call extension methods on the shared JSON-RPC endpoint
 - Auth: same `Authorization: Bearer <token>`
 - Privacy guard: when `A2A_LOG_PAYLOADS=true`, request/response bodies are still suppressed for `method=codex.sessions.*`
-- Endpoint discovery: use `supported_interfaces[]` for the core A2A JSON-RPC surface, then use the authenticated extended card for provider-private skill discovery and OpenAPI for the provider-private endpoint contract (`/codex/jsonrpc`)
+- Endpoint discovery: use `supported_interfaces[]` for the shared A2A JSON-RPC surface, then use the authenticated extended card and OpenAPI for provider-private method discovery and contract details
 - Result format:
   - `result.items` is always an array of A2A standard objects
   - session list => `Task` with `status.state=completed`
@@ -568,7 +567,7 @@ This service exposes Codex session list and message-history queries via A2A JSON
 ### Session List (`codex.sessions.list`)
 
 ```bash
-curl -sS http://127.0.0.1:8000/codex/jsonrpc \
+curl -sS http://127.0.0.1:8000/ \
   -H 'content-type: application/json' \
   -H "Authorization: Bearer ${DEMO_BEARER_TOKEN}" \
   -d '{
@@ -582,7 +581,7 @@ curl -sS http://127.0.0.1:8000/codex/jsonrpc \
 ### Session Messages (`codex.sessions.messages.list`)
 
 ```bash
-curl -sS http://127.0.0.1:8000/codex/jsonrpc \
+curl -sS http://127.0.0.1:8000/ \
   -H 'content-type: application/json' \
   -H "Authorization: Bearer ${DEMO_BEARER_TOKEN}" \
   -d '{
@@ -620,7 +619,7 @@ Result-shape guidance:
 ### Skills List (`codex.discovery.skills.list`)
 
 ```bash
-curl -sS http://127.0.0.1:8000/codex/jsonrpc \
+curl -sS http://127.0.0.1:8000/ \
   -H 'content-type: application/json' \
   -H "Authorization: Bearer ${DEMO_BEARER_TOKEN}" \
   -d '{
@@ -637,7 +636,7 @@ curl -sS http://127.0.0.1:8000/codex/jsonrpc \
 ### Apps List (`codex.discovery.apps.list`)
 
 ```bash
-curl -sS http://127.0.0.1:8000/codex/jsonrpc \
+curl -sS http://127.0.0.1:8000/ \
   -H 'content-type: application/json' \
   -H "Authorization: Bearer ${DEMO_BEARER_TOKEN}" \
   -d '{
@@ -654,7 +653,7 @@ curl -sS http://127.0.0.1:8000/codex/jsonrpc \
 ### Plugins List (`codex.discovery.plugins.list`)
 
 ```bash
-curl -sS http://127.0.0.1:8000/codex/jsonrpc \
+curl -sS http://127.0.0.1:8000/ \
   -H 'content-type: application/json' \
   -H "Authorization: Bearer ${DEMO_BEARER_TOKEN}" \
   -d '{
@@ -671,7 +670,7 @@ curl -sS http://127.0.0.1:8000/codex/jsonrpc \
 ### Plugin Read (`codex.discovery.plugins.read`)
 
 ```bash
-curl -sS http://127.0.0.1:8000/codex/jsonrpc \
+curl -sS http://127.0.0.1:8000/ \
   -H 'content-type: application/json' \
   -H "Authorization: Bearer ${DEMO_BEARER_TOKEN}" \
   -d '{
@@ -698,7 +697,7 @@ Upstream Codex emits `skills/changed` and `app/list/updated` as server-side noti
 Watch start example:
 
 ```bash
-curl -sS http://127.0.0.1:8000/codex/jsonrpc \
+curl -sS http://127.0.0.1:8000/ \
   -H 'content-type: application/json' \
   -H "Authorization: Bearer ${DEMO_BEARER_TOKEN}" \
   -d '{
@@ -741,7 +740,7 @@ Lifecycle control guidance:
 ### Thread Fork (`codex.threads.fork`)
 
 ```bash
-curl -sS http://127.0.0.1:8000/codex/jsonrpc \
+curl -sS http://127.0.0.1:8000/ \
   -H 'content-type: application/json' \
   -H "Authorization: Bearer ${DEMO_BEARER_TOKEN}" \
   -d '{
@@ -760,7 +759,7 @@ curl -sS http://127.0.0.1:8000/codex/jsonrpc \
 ### Thread Archive (`codex.threads.archive`)
 
 ```bash
-curl -sS http://127.0.0.1:8000/codex/jsonrpc \
+curl -sS http://127.0.0.1:8000/ \
   -H 'content-type: application/json' \
   -H "Authorization: Bearer ${DEMO_BEARER_TOKEN}" \
   -d '{
@@ -776,7 +775,7 @@ curl -sS http://127.0.0.1:8000/codex/jsonrpc \
 ### Thread Unarchive (`codex.threads.unarchive`)
 
 ```bash
-curl -sS http://127.0.0.1:8000/codex/jsonrpc \
+curl -sS http://127.0.0.1:8000/ \
   -H 'content-type: application/json' \
   -H "Authorization: Bearer ${DEMO_BEARER_TOKEN}" \
   -d '{
@@ -792,7 +791,7 @@ curl -sS http://127.0.0.1:8000/codex/jsonrpc \
 ### Thread Metadata Update (`codex.threads.metadata.update`)
 
 ```bash
-curl -sS http://127.0.0.1:8000/codex/jsonrpc \
+curl -sS http://127.0.0.1:8000/ \
   -H 'content-type: application/json' \
   -H "Authorization: Bearer ${DEMO_BEARER_TOKEN}" \
   -d '{
@@ -828,7 +827,7 @@ Upstream Codex emits `thread/started`, `thread/status/changed`, `thread/archived
 Watch start example:
 
 ```bash
-curl -sS http://127.0.0.1:8000/codex/jsonrpc \
+curl -sS http://127.0.0.1:8000/ \
   -H 'content-type: application/json' \
   -H "Authorization: Bearer ${DEMO_BEARER_TOKEN}" \
   -d '{
@@ -854,7 +853,7 @@ curl -sS http://127.0.0.1:8000/v1/tasks/<task_id>:subscribe \
 Watch release example:
 
 ```bash
-curl -sS http://127.0.0.1:8000/codex/jsonrpc \
+curl -sS http://127.0.0.1:8000/ \
   -H 'content-type: application/json' \
   -H "Authorization: Bearer ${DEMO_BEARER_TOKEN}" \
   -d '{
@@ -882,7 +881,7 @@ Interrupt-recovery guidance:
 ### Interrupt Recovery (`codex.interrupts.list`)
 
 ```bash
-curl -sS http://127.0.0.1:8000/codex/jsonrpc \
+curl -sS http://127.0.0.1:8000/ \
   -H 'content-type: application/json' \
   -H "Authorization: Bearer ${DEMO_BEARER_TOKEN}" \
   -d '{
@@ -913,7 +912,7 @@ Turn-control guidance:
 ### Turn Steer (`codex.turns.steer`)
 
 ```bash
-curl -sS http://127.0.0.1:8000/codex/jsonrpc \
+curl -sS http://127.0.0.1:8000/ \
   -H 'content-type: application/json' \
   -H "Authorization: Bearer ${DEMO_BEARER_TOKEN}" \
   -d '{
@@ -954,7 +953,7 @@ Review-control guidance:
 Inline commit review example:
 
 ```bash
-curl -sS http://127.0.0.1:8000/codex/jsonrpc \
+curl -sS http://127.0.0.1:8000/ \
   -H 'content-type: application/json' \
   -H "Authorization: Bearer ${DEMO_BEARER_TOKEN}" \
   -d '{
@@ -976,7 +975,7 @@ curl -sS http://127.0.0.1:8000/codex/jsonrpc \
 Detached review for current uncommitted changes:
 
 ```bash
-curl -sS http://127.0.0.1:8000/codex/jsonrpc \
+curl -sS http://127.0.0.1:8000/ \
   -H 'content-type: application/json' \
   -H "Authorization: Bearer ${DEMO_BEARER_TOKEN}" \
   -d '{
@@ -1000,7 +999,7 @@ The result returns `ok`, `turn_id`, and `review_thread_id`. When `delivery=detac
 Use the handles returned by `codex.review.start` to start a review watch task:
 
 ```bash
-curl -sS http://127.0.0.1:8000/codex/jsonrpc \
+curl -sS http://127.0.0.1:8000/ \
   -H 'content-type: application/json' \
   -H "Authorization: Bearer ${DEMO_BEARER_TOKEN}" \
   -d '{
@@ -1040,7 +1039,7 @@ The bridge is intentionally coarse-grained:
 
 ## Codex Interrupt Callback (A2A Extension)
 
-When stream metadata reports an interrupt request at `metadata.shared.interrupt`, clients can reply through JSON-RPC extension methods on `POST /codex/jsonrpc`:
+When stream metadata reports an interrupt request at `metadata.shared.interrupt`, clients can reply through JSON-RPC extension methods on `POST /`:
 
 - asked lifecycle events expose `phase=asked`
 - resolved lifecycle events expose `phase=resolved`
@@ -1067,7 +1066,7 @@ When stream metadata reports an interrupt request at `metadata.shared.interrupt`
 Permission reply example:
 
 ```bash
-curl -sS http://127.0.0.1:8000/codex/jsonrpc \
+curl -sS http://127.0.0.1:8000/ \
   -H 'content-type: application/json' \
   -H "Authorization: Bearer ${DEMO_BEARER_TOKEN}" \
   -d '{
@@ -1084,7 +1083,7 @@ curl -sS http://127.0.0.1:8000/codex/jsonrpc \
 Permissions reply example:
 
 ```bash
-curl -sS http://127.0.0.1:8000/codex/jsonrpc \
+curl -sS http://127.0.0.1:8000/ \
   -H 'content-type: application/json' \
   -H "Authorization: Bearer ${DEMO_BEARER_TOKEN}" \
   -d '{
@@ -1106,7 +1105,7 @@ curl -sS http://127.0.0.1:8000/codex/jsonrpc \
 Elicitation reply example:
 
 ```bash
-curl -sS http://127.0.0.1:8000/codex/jsonrpc \
+curl -sS http://127.0.0.1:8000/ \
   -H 'content-type: application/json' \
   -H "Authorization: Bearer ${DEMO_BEARER_TOKEN}" \
   -d '{

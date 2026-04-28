@@ -8,7 +8,6 @@ from codex_a2a.contracts.extensions import (
     CORE_JSONRPC_PATH,
     DISCOVERY_METHODS,
     EXEC_CONTROL_METHODS,
-    EXTENSION_JSONRPC_PATH,
     INTERRUPT_CALLBACK_METHODS,
     INTERRUPT_RECOVERY_METHODS,
     REVIEW_CONTROL_METHODS,
@@ -62,8 +61,8 @@ def build_core_jsonrpc_openapi_description() -> str:
         "ListTasks, CreateTaskPushNotificationConfig, GetTaskPushNotificationConfig, "
         "ListTaskPushNotificationConfigs, DeleteTaskPushNotificationConfig, "
         f"SubscribeToTask, GetExtendedAgentCard) on POST {CORE_JSONRPC_PATH}.\n\n"
-        f"Provider-private Codex extension methods are exposed separately on "
-        f"POST {EXTENSION_JSONRPC_PATH}."
+        "Provider-private Codex methods share the same public JSON-RPC endpoint and "
+        "are distinguished by method name plus the published compatibility contracts."
     )
 
 
@@ -92,7 +91,7 @@ def build_extension_jsonrpc_openapi_description(*, runtime_profile: RuntimeProfi
     )
     interrupt_methods = ", ".join(sorted(INTERRUPT_CALLBACK_METHODS.values()))
     return (
-        f"Provider-private Codex JSON-RPC extension entrypoint on POST {EXTENSION_JSONRPC_PATH}. "
+        f"Provider-private Codex JSON-RPC methods also use POST {CORE_JSONRPC_PATH}. "
         "Supports Codex session extensions, Codex thread lifecycle extensions, "
         "interrupt recovery extensions, active-turn control extensions, review "
         "control extensions, Codex discovery extensions, interactive exec "

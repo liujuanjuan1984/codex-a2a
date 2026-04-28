@@ -35,7 +35,9 @@ def merge_extension_service_parameters(
     service_parameters: Mapping[str, str] | None,
     extensions: Sequence[str] | None,
 ) -> dict[str, str] | None:
-    normalized_extensions = [value for value in list(extensions or []) if isinstance(value, str) and value]
+    normalized_extensions = [
+        value for value in list(extensions or []) if isinstance(value, str) and value
+    ]
     base = dict(service_parameters or {})
     if not base and not normalized_extensions:
         return None
@@ -95,7 +97,9 @@ def missing_extension_requirements(
         for value in list(requested_extensions or ())
         if isinstance(value, str) and value.strip()
     }
-    missing = [requirement for requirement in requirements if requirement.extension_uri not in requested]
+    missing = [
+        requirement for requirement in requirements if requirement.extension_uri not in requested
+    ]
     return tuple(missing)
 
 
@@ -115,7 +119,9 @@ def filter_negotiated_extensions_from_stream_response(
     if updated.HasField("status_update"):
         updated.status_update.CopyFrom(_filter_status_update(updated.status_update, requested))
     if updated.HasField("artifact_update"):
-        updated.artifact_update.CopyFrom(_filter_artifact_update(updated.artifact_update, requested))
+        updated.artifact_update.CopyFrom(
+            _filter_artifact_update(updated.artifact_update, requested)
+        )
     return updated
 
 

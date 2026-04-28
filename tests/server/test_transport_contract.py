@@ -914,7 +914,7 @@ async def test_dual_stack_send_rejects_cross_transport_payload_shapes(monkeypatc
 
 
 @pytest.mark.asyncio
-async def test_extension_jsonrpc_unsupported_method_returns_supported_method_contract(
+async def test_shared_jsonrpc_legacy_method_alias_returns_generic_method_not_found(
     monkeypatch,
 ) -> None:
     import codex_a2a.server.application as app_module
@@ -936,13 +936,11 @@ async def test_extension_jsonrpc_unsupported_method_returns_supported_method_con
     payload = response.json()
     assert payload["error"]["code"] == -32601
     assert payload["error"]["message"] == "Method not found"
-    assert payload["error"]["data"]["method"] == "message/send"
-    assert payload["error"]["data"]["protocolVersion"] == "1.0"
-    assert "codex.sessions.list" in payload["error"]["data"]["supportedMethods"]
+    assert "data" not in payload["error"]
 
 
 @pytest.mark.asyncio
-async def test_extension_jsonrpc_v1_unsupported_method_uses_protocol_error_shape(
+async def test_shared_jsonrpc_unknown_method_uses_generic_protocol_error_shape(
     monkeypatch,
 ) -> None:
     import codex_a2a.server.application as app_module
@@ -965,9 +963,7 @@ async def test_extension_jsonrpc_v1_unsupported_method_uses_protocol_error_shape
     payload = response.json()
     assert payload["error"]["code"] == -32601
     assert payload["error"]["message"] == "Method not found"
-    assert payload["error"]["data"]["method"] == "UnknownMethod"
-    assert payload["error"]["data"]["protocolVersion"] == "1.0"
-    assert "codex.sessions.list" in payload["error"]["data"]["supportedMethods"]
+    assert "data" not in payload["error"]
 
 
 @pytest.mark.asyncio
