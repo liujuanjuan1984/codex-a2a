@@ -413,9 +413,7 @@ class CodexAgentExecutor(AgentExecutor):
         return results if results else None
 
     async def _handle_a2a_call_tool(self, part: dict[str, Any]) -> dict[str, Any]:
-        call_id = str(
-            part.get("callID") or part.get("callId") or part.get("call_id") or uuid.uuid4()
-        )
+        call_id = str(part.get("callID") or uuid.uuid4())
         tool_name = str(part.get("tool") or "a2a_call")
         state = part.get("state", {})
         if not isinstance(state, dict):

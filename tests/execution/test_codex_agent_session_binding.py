@@ -483,6 +483,35 @@ def test_executor_merge_streamed_a2a_tool_output() -> None:
 
 
 @pytest.mark.asyncio
+async def test_agent_a2a_call_tool_requires_upstream_call_id(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = DummyChatCodexClient()
+    executor = CodexAgentExecutor(client, streaming_enabled=False)
+    monkeypatch.setattr(
+        "codex_a2a.execution.executor.uuid.uuid4",
+        lambda: "generated-call-id",
+    )
+
+    raw_response = {
+        "parts": [
+            {
+                "type": "tool",
+                "tool": "a2a_call",
+                "callId": "legacy-call-id",
+                "state": {"status": "calling", "input": {"url": "h", "message": "m"}},
+            }
+        ]
+    }
+
+    result = await executor._maybe_handle_tools(raw_response)
+
+    assert result is not None
+    assert result[0]["call_id"] == "generated-call-id"
+    assert result[0]["error"] == "A2A client manager is not available"
+
+
+@pytest.mark.asyncio
 async def test_agent_handles_a2a_call_tool_input_validation_errors() -> None:
     client = DummyChatCodexClient()
     executor = CodexAgentExecutor(client, streaming_enabled=False)
