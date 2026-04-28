@@ -16,7 +16,6 @@ class A2AClientConfig(BaseModel):
     default_headers: dict[str, str] = Field(default_factory=dict)
     auth_credentials: dict[str, str] = Field(default_factory=dict)
     accepted_output_modes: list[str] = Field(default_factory=list)
-    extensions: list[str] = Field(default_factory=list)
 
     @field_validator("card_fetch_timeout_seconds")
     @classmethod

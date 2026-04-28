@@ -53,22 +53,26 @@ class _MockAgentCardResolver:
 
     async def get_agent_card(self, *_, **__) -> AgentCard:
         _MockAgentCardResolver.calls += 1
-        return AgentCard(
-            name="mock",
-            description="mock agent",
-            version="1.0.0",
-            capabilities=AgentCapabilities(),
-            default_input_modes=["text/plain"],
-            default_output_modes=["text/plain"],
-            skills=[],
-            supported_interfaces=[
-                AgentInterface(
-                    url="https://example.org",
-                    protocol_binding=TransportProtocol.HTTP_JSON,
-                    protocol_version="1.0",
-                )
-            ],
-        )
+        return _build_mock_agent_card()
+
+
+def _build_mock_agent_card() -> AgentCard:
+    return AgentCard(
+        name="mock",
+        description="mock agent",
+        version="1.0.0",
+        capabilities=AgentCapabilities(),
+        default_input_modes=["text/plain"],
+        default_output_modes=["text/plain"],
+        skills=[],
+        supported_interfaces=[
+            AgentInterface(
+                url="https://example.org",
+                protocol_binding=TransportProtocol.HTTP_JSON,
+                protocol_version="1.0",
+            )
+        ],
+    )
 
 
 class _MockSDKClient:
@@ -78,6 +82,7 @@ class _MockSDKClient:
         self.get_task_contexts: list[Any] = []
         self.cancel_calls: list[CancelTaskRequest] = []
         self.cancel_contexts: list[Any] = []
+        self._card = _build_mock_agent_card()
 
     async def send_message(
         self,
@@ -253,6 +258,50 @@ async def test_build_client_uses_sdk_url_creation_with_normalized_card_path() ->
     assert observed["agent"] == "https://example.org/tenant"
     assert observed["kwargs"]["relative_card_path"] == "/.well-known/agent-card.json"
     assert observed["kwargs"]["resolver_http_kwargs"]["timeout"].connect == 5.0
+
+
+@pytest.mark.asyncio
+async def test_build_client_reuses_cached_card_after_explicit_card_fetch() -> None:
+    _MockAgentCardResolver.calls = 0
+    observed: dict[str, Any] = {}
+
+    async def _capturing_creator(agent, **kwargs):
+        observed["agent"] = agent
+        observed["kwargs"] = kwargs
+        return _MockSDKClient()
+
+    client = A2AClient(
+        A2AClientConfig(agent_url="https://example.org/tenant/.well-known/agent-card.json"),
+        httpx_client=_MockAsyncHttpClient(),
+        card_resolver_factory=_MockAgentCardResolver,
+        client_creator=_capturing_creator,
+    )
+
+    card = await client.get_agent_card()
+    await client._build_client()
+
+    assert card.name == "mock"
+    assert isinstance(observed["agent"], AgentCard)
+    assert observed["agent"].name == "mock"
+    assert "relative_card_path" not in observed["kwargs"]
+    assert "resolver_http_kwargs" not in observed["kwargs"]
+    assert _MockAgentCardResolver.calls == 1
+
+
+@pytest.mark.asyncio
+async def test_get_agent_card_uses_cached_sdk_card_without_resolver() -> None:
+    _MockAgentCardResolver.calls = 0
+    client = A2AClient(
+        A2AClientConfig(agent_url="https://example.org"),
+        httpx_client=_MockAsyncHttpClient(),
+        card_resolver_factory=_MockAgentCardResolver,
+    )
+    client._sdk_client = _MockSDKClient()  # noqa: SLF001
+
+    card = await client.get_agent_card()
+
+    assert card.name == "mock"
+    assert _MockAgentCardResolver.calls == 0
 
 
 @pytest.mark.asyncio

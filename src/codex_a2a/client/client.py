@@ -267,18 +267,32 @@ class A2AClient:
         if self._closed:
             raise A2AClientLifecycleError("client is closed")
 
-        endpoint = resolve_agent_card_endpoint(self._config)
-        resolver = self._card_resolver_factory(
-            self._httpx_client,
-            endpoint.base_url,
-            endpoint.agent_card_path,
-        )
-        try:
-            self._card = await resolver.get_agent_card(
-                http_kwargs=build_agent_card_request_kwargs(self._config)
+        cached_card = self._extract_sdk_client_card()
+        if cached_card is not None:
+            self._card = cached_card
+            return self._card
+
+        async with self._lock:
+            if self._card is not None:
+                return self._card
+
+            cached_card = self._extract_sdk_client_card()
+            if cached_card is not None:
+                self._card = cached_card
+                return self._card
+
+            endpoint = resolve_agent_card_endpoint(self._config)
+            resolver = self._card_resolver_factory(
+                self._httpx_client,
+                endpoint.base_url,
+                endpoint.agent_card_path,
             )
-        except Exception as exc:
-            raise map_a2a_sdk_error(exc, operation="agent_card") from exc
+            try:
+                self._card = await resolver.get_agent_card(
+                    http_kwargs=build_agent_card_request_kwargs(self._config)
+                )
+            except Exception as exc:
+                raise map_a2a_sdk_error(exc, operation="agent_card") from exc
         return cast(AgentCard, self._card)
 
     async def _get_client(self) -> _SDKClientProtocol:
@@ -292,14 +306,18 @@ class A2AClient:
     async def _build_client(self) -> _SDKClientProtocol:
         endpoint = resolve_agent_card_endpoint(self._config)
         interceptors = self._build_interceptors()
+        agent_or_card: str | AgentCard = endpoint.base_url
+        client_kwargs: dict[str, Any] = {
+            "client_config": self._client_config,
+            "interceptors": interceptors or None,
+        }
+        if self._card is not None:
+            agent_or_card = cast(AgentCard, proto_clone(self._card))
+        else:
+            client_kwargs["relative_card_path"] = endpoint.agent_card_path
+            client_kwargs["resolver_http_kwargs"] = build_agent_card_request_kwargs(self._config)
         try:
-            self._sdk_client = await self._client_creator(
-                endpoint.base_url,
-                client_config=self._client_config,
-                interceptors=interceptors or None,
-                relative_card_path=endpoint.agent_card_path,
-                resolver_http_kwargs=build_agent_card_request_kwargs(self._config),
-            )
+            self._sdk_client = await self._client_creator(agent_or_card, **client_kwargs)
         except ValueError as exc:
             raise A2AUnsupportedBindingError(
                 f"Unable to bind A2A client to peer transport: {exc}"
@@ -311,7 +329,18 @@ class A2AClient:
             raise mapped_error from exc
         if self._sdk_client is None:
             raise A2AClientError("Failed to initialize A2A client")
+        cached_card = self._extract_sdk_client_card()
+        if cached_card is not None:
+            self._card = cached_card
         return self._sdk_client
+
+    def _extract_sdk_client_card(self) -> AgentCard | None:
+        if self._sdk_client is None:
+            return None
+        agent_card = getattr(cast(Any, self._sdk_client), "_card", None)
+        if agent_card is None:
+            return None
+        return cast(AgentCard, proto_clone(cast(AgentCard, agent_card)))
 
     def _build_interceptors(self) -> list[ClientCallInterceptor]:
         interceptors: list[ClientCallInterceptor] = []
