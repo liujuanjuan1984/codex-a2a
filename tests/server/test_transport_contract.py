@@ -309,6 +309,9 @@ def test_openapi_rest_message_routes_include_schema_examples_and_extension_contr
         assert isinstance(contracts, dict)
         assert "session_binding" in contracts
 
+    role_enum = openapi["components"]["schemas"]["A2AMessage"]["properties"]["role"]["enum"]
+    assert role_enum == ["ROLE_UNSPECIFIED", "ROLE_USER", "ROLE_AGENT"]
+
     stream_contract = paths["/v1/message:stream"]["post"].get("x-a2a-streaming")
     assert isinstance(stream_contract, dict)
     stream_codex_contracts = paths["/v1/message:stream"]["post"].get("x-codex-contracts")

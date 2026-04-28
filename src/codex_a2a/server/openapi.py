@@ -57,7 +57,10 @@ def _ensure_minimal_a2a_schemas(schema: dict[str, Any]) -> None:
             "required": ["messageId", "role", "parts"],
             "properties": {
                 "messageId": {"type": "string"},
-                "role": {"type": "string", "enum": ["ROLE_USER", "ROLE_AGENT"]},
+                "role": {
+                    "type": "string",
+                    "enum": ["ROLE_UNSPECIFIED", "ROLE_USER", "ROLE_AGENT"],
+                },
                 "parts": {
                     "type": "array",
                     "items": {"$ref": "#/components/schemas/A2APart"},

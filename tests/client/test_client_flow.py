@@ -27,7 +27,7 @@ from a2a.types import (
 )
 from a2a.utils.constants import TransportProtocol
 
-from codex_a2a.a2a_proto import new_text_part, proto_to_python
+from codex_a2a.a2a_proto import new_data_part, new_text_part, proto_to_python
 from codex_a2a.client import (
     A2AClient,
     A2AClientConfig,
@@ -177,6 +177,45 @@ async def test_send_get_task_and_cancel_use_sdk_methods() -> None:
 
 
 @pytest.mark.asyncio
+async def test_send_supports_v1_parts_and_message_payloads() -> None:
+    sdk_client = _MockSDKClient()
+    client = A2AClient(
+        A2AClientConfig(agent_url="https://example.org"),
+        httpx_client=_MockAsyncHttpClient(),
+        card_resolver_factory=_MockAgentCardResolver,
+    )
+    client._sdk_client = sdk_client  # noqa: SLF001
+
+    await client.send(
+        A2ASendRequest(
+            parts=[
+                new_text_part("hello"),
+                new_data_part({"kind": "mention", "path": "/tmp/skill"}),
+            ],
+            message_id="msg-parts",
+            context_id="ctx-parts",
+        )
+    )
+    parts_request = sdk_client.send_calls[0]["request"]
+    assert parts_request.message.message_id == "msg-parts"
+    assert parts_request.message.context_id == "ctx-parts"
+    assert proto_to_python(parts_request.message.parts[1].data) == {
+        "kind": "mention",
+        "path": "/tmp/skill",
+    }
+
+    outbound_message = Message(
+        message_id="msg-raw",
+        role=Role.ROLE_USER,
+        parts=[new_text_part("direct message")],
+    )
+    await client.send(A2ASendRequest(message=outbound_message))
+    message_request = sdk_client.send_calls[1]["request"]
+    assert message_request.message.message_id == "msg-raw"
+    assert message_request.message.parts[0].text == "direct message"
+
+
+@pytest.mark.asyncio
 async def test_get_agent_card_uses_resolver_and_cached() -> None:
     _MockAgentCardResolver.calls = 0
     client = A2AClient(
@@ -191,6 +230,29 @@ async def test_get_agent_card_uses_resolver_and_cached() -> None:
     assert card.supported_interfaces[0].url == "https://example.org"
     assert card_second.supported_interfaces[0].url == "https://example.org"
     assert _MockAgentCardResolver.calls == 1
+
+
+@pytest.mark.asyncio
+async def test_build_client_uses_sdk_url_creation_with_normalized_card_path() -> None:
+    observed: dict[str, Any] = {}
+
+    async def _capturing_creator(agent, **kwargs):
+        observed["agent"] = agent
+        observed["kwargs"] = kwargs
+        return _MockSDKClient()
+
+    client = A2AClient(
+        A2AClientConfig(agent_url="https://example.org/tenant/.well-known/agent-card.json"),
+        httpx_client=_MockAsyncHttpClient(),
+        card_resolver_factory=_MockAgentCardResolver,
+        client_creator=_capturing_creator,
+    )
+
+    await client._build_client()
+
+    assert observed["agent"] == "https://example.org/tenant"
+    assert observed["kwargs"]["relative_card_path"] == "/.well-known/agent-card.json"
+    assert observed["kwargs"]["resolver_http_kwargs"]["timeout"].connect == 5.0
 
 
 @pytest.mark.asyncio

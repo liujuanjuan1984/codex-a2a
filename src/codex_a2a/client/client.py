@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncIterator, Mapping
+from collections.abc import AsyncIterator, Mapping, Sequence
 from typing import Any, Protocol, cast
 from uuid import uuid4
 
@@ -20,6 +20,7 @@ from a2a.types import (
     CancelTaskRequest,
     GetTaskRequest,
     Message,
+    Part,
     Role,
     SendMessageConfiguration,
     SendMessageRequest,
@@ -27,7 +28,7 @@ from a2a.types import (
     Task,
 )
 
-from codex_a2a.a2a_proto import new_text_part, to_struct
+from codex_a2a.a2a_proto import new_text_part, proto_clone, to_struct
 
 from .agent_card import build_agent_card_request_kwargs, resolve_agent_card_endpoint
 from .auth import StaticCredentialService
@@ -139,8 +140,10 @@ class A2AClient:
 
     async def send_message(
         self,
-        text: str,
+        text: str | None = None,
         *,
+        parts: Sequence[Part] | None = None,
+        message: Message | None = None,
         context_id: str | None = None,
         task_id: str | None = None,
         message_id: str | None = None,
@@ -151,8 +154,10 @@ class A2AClient:
     ) -> AsyncIterator[StreamResponse]:
         client = await self._get_client()
         sdk_client = client
-        request = self._build_user_message(
+        outbound_message = self._build_outbound_message(
             text=text,
+            parts=parts,
+            message=message,
             context_id=context_id,
             task_id=task_id,
             message_id=message_id,
@@ -166,7 +171,7 @@ class A2AClient:
             configuration_kwargs["history_length"] = history_length
         request_configuration = SendMessageConfiguration(**configuration_kwargs)
         send_request = SendMessageRequest(
-            message=request,
+            message=outbound_message,
             configuration=request_configuration,
         )
         request_metadata_struct = to_struct(request_metadata or None)
@@ -185,6 +190,8 @@ class A2AClient:
         last_event: StreamResponse | None = None
         async for item in self.send_message(
             request.text,
+            parts=request.parts,
+            message=request.message,
             context_id=request.context_id,
             task_id=request.task_id,
             message_id=request.message_id,
@@ -283,20 +290,25 @@ class A2AClient:
             return await self._build_client()
 
     async def _build_client(self) -> _SDKClientProtocol:
-        card = await self._get_agent_card()
+        endpoint = resolve_agent_card_endpoint(self._config)
         interceptors = self._build_interceptors()
         try:
             self._sdk_client = await self._client_creator(
-                card,
+                endpoint.base_url,
                 client_config=self._client_config,
                 interceptors=interceptors or None,
+                relative_card_path=endpoint.agent_card_path,
+                resolver_http_kwargs=build_agent_card_request_kwargs(self._config),
             )
         except ValueError as exc:
             raise A2AUnsupportedBindingError(
                 f"Unable to bind A2A client to peer transport: {exc}"
             ) from exc
         except Exception as exc:
-            raise A2AClientError(f"Failed to initialize A2A client: {exc}") from exc
+            mapped_error = map_a2a_sdk_error(exc, operation="agent_card")
+            if type(mapped_error) is A2AClientError:
+                raise A2AClientError(f"Failed to initialize A2A client: {exc}") from exc
+            raise mapped_error from exc
         if self._sdk_client is None:
             raise A2AClientError("Failed to initialize A2A client")
         return self._sdk_client
@@ -310,19 +322,40 @@ class A2AClient:
             interceptors.append(AuthInterceptor(credential_service))
         return interceptors
 
-    def _build_user_message(
+    def _build_outbound_message(
         self,
         *,
-        text: str,
+        text: str | None,
+        parts: Sequence[Part] | None,
+        message: Message | None,
         context_id: str | None,
         task_id: str | None,
         message_id: str | None,
     ) -> Message:
+        payload_count = sum(value is not None for value in (text, parts, message))
+        if payload_count != 1:
+            raise ValueError("Exactly one of text, parts, or message must be provided")
+
+        if message is not None:
+            if any(value is not None for value in (context_id, task_id, message_id)):
+                raise ValueError(
+                    "context_id, task_id, and message_id cannot be combined with message"
+                )
+            return cast(Message, proto_clone(message))
+
+        if parts is not None:
+            if not parts:
+                raise ValueError("parts must not be empty")
+            outbound_parts = [cast(Part, proto_clone(part)) for part in parts]
+        else:
+            assert text is not None
+            outbound_parts = [new_text_part(text)]
+
         return Message(
             message_id=message_id or f"msg-{uuid4().hex[:12]}",
             role=Role.ROLE_USER,
             context_id=context_id,
             task_id=task_id,
-            parts=[new_text_part(text)],
+            parts=outbound_parts,
             metadata=None,
         )
