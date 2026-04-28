@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Validate that a locally built wheel can be installed as a uv tool and serves authenticated /health.
+# Validate that a locally built wheel can be installed as a uv tool, prints help, and serves authenticated /health via `serve`.
 set -euo pipefail
 
 if ! command -v uv >/dev/null 2>&1; then
@@ -122,12 +122,19 @@ PY
 
 bearer_token="smoke-test-token"
 
+help_output="$("${tool_bin_dir}/codex-a2a" -h)"
+if [[ "${help_output}" != *"repo: https://github.com/liujuanjuan1984/codex-a2a"* ]]; then
+  echo "CLI smoke test failed; default invocation did not print help" >&2
+  printf '%s\n' "${help_output}" >&2
+  exit 1
+fi
+
 A2A_STATIC_AUTH_CREDENTIALS='[{"id":"smoke-bearer","scheme":"bearer","token":"'"${bearer_token}"'","principal":"automation"}]' \
 A2A_DATABASE_URL="sqlite+aiosqlite:///${database_path}" \
 A2A_PORT="${port}" \
 A2A_HOST="127.0.0.1" \
 CODEX_CLI_BIN="${fake_codex_bin}" \
-"${tool_bin_dir}/codex-a2a" >"${server_log}" 2>&1 &
+"${tool_bin_dir}/codex-a2a" serve >"${server_log}" 2>&1 &
 server_pid="$!"
 
 health_url="http://127.0.0.1:${port}/health"

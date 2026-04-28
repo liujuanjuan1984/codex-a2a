@@ -376,7 +376,7 @@ CODEX_SANDBOX_MODE=danger-full-access \
 CODEX_MODEL_REASONING_EFFORT=high \
 CODEX_WEB_SEARCH=live \
 CODEX_TIMEOUT=300 \
-codex-a2a
+codex-a2a serve
 ```
 
 Notes:
@@ -395,7 +395,7 @@ Use the source tree directly only for development, debugging, or validation of u
 uv sync --all-extras
 export DEMO_BEARER_TOKEN="$(python -c 'import secrets; print(secrets.token_hex(24))')"
 export A2A_STATIC_AUTH_CREDENTIALS='[{"id":"local-bearer","scheme":"bearer","token":"'"${DEMO_BEARER_TOKEN}"'","principal":"automation"}]'
-CODEX_WORKSPACE_ROOT=/abs/path/to/workspace uv run codex-a2a
+CODEX_WORKSPACE_ROOT=/abs/path/to/workspace uv run codex-a2a serve
 ```
 
 This path is for contributors. End users should prefer the released CLI path described first in [README.md](../README.md) and above in this guide.

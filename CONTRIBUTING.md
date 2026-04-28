@@ -45,7 +45,7 @@ export A2A_STATIC_AUTH_CREDENTIALS='[{"id":"local-bearer","scheme":"bearer","tok
 4. Start this service from the source tree:
 
 ```bash
-CODEX_WORKSPACE_ROOT=/abs/path/to/workspace uv run codex-a2a
+CODEX_WORKSPACE_ROOT=/abs/path/to/workspace uv run codex-a2a serve
 ```
 
 5. Inspect the discovery surfaces:
