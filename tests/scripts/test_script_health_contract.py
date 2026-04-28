@@ -74,3 +74,6 @@ def test_dependabot_configuration_prefers_a_single_grouped_uv_pr() -> None:
     assert 'package-ecosystem: "github-actions"' not in DEPENDABOT_TEXT
     assert "open-pull-requests-limit: 1" in DEPENDABOT_TEXT
     assert "uv-all-updates" in DEPENDABOT_TEXT
+    assert 'dependency-name: "protobuf"' in DEPENDABOT_TEXT
+    assert 'dependency-name: "uvicorn"' in DEPENDABOT_TEXT
+    assert 'dependency-name: "setuptools-scm"' in DEPENDABOT_TEXT

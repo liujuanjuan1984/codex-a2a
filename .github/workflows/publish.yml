@@ -67,9 +67,6 @@ jobs:
           RELEASE_TAG: ${{ steps.release_tag.outputs.tag }}
 
       - name: Build package artifacts
-        env:
-          PYTHONWARNINGS: >-
-            ignore::UserWarning:vcs_versioning._backends._git
         run: uv build --no-sources
 
       - name: Capture built wheel path

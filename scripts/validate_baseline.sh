@@ -24,8 +24,18 @@ uv export \
 uv run pip-audit --requirement "${runtime_requirements}"
 
 rm -f dist/codex_a2a-*.whl dist/codex_a2a-*.tar.gz
-build_warning_filters="ignore::UserWarning:vcs_versioning._backends._git"
-PYTHONWARNINGS="${build_warning_filters}${PYTHONWARNINGS:+,${PYTHONWARNINGS}}" uv build --no-sources
+
+if [[ "$(git rev-parse --is-shallow-repository)" == "true" ]]; then
+  git fetch --quiet --update-shallow --tags origin '+refs/heads/*:refs/remotes/origin/*' || true
+fi
+
+if [[ "$(git rev-parse --is-shallow-repository)" == "true" ]]; then
+  build_warning_filters="ignore::UserWarning:setuptools_scm.git"
+  PYTHONWARNINGS="${build_warning_filters}${PYTHONWARNINGS:+,${PYTHONWARNINGS}}" \
+    uv build --no-sources
+else
+  uv build --no-sources
+fi
 
 shopt -s nullglob
 wheel_paths=(dist/codex_a2a-*.whl)

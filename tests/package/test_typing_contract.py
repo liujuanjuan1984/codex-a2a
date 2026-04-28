@@ -11,3 +11,4 @@ def test_package_declares_py_typed_marker() -> None:
 
 def test_build_backend_pins_setuptools_scm_below_warning_major_version() -> None:
     assert 'requires = ["setuptools>=80", "setuptools-scm[toml]>=8,<10"]' in PYPROJECT_TEXT
+    assert "[tool.setuptools_scm.scm.git]" not in PYPROJECT_TEXT
