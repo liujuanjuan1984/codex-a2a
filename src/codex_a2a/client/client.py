@@ -28,7 +28,7 @@ from a2a.types import (
     Task,
 )
 
-from codex_a2a.a2a_proto import new_text_part, proto_clone, to_struct
+from codex_a2a.a2a_proto import new_text_part, proto_clone, proto_to_python, to_struct
 
 from .agent_card import build_agent_card_request_kwargs, resolve_agent_card_endpoint
 from .auth import StaticCredentialService
@@ -159,8 +159,6 @@ class A2AClient:
         history_length: int | None = None,
         blocking: bool = True,
     ) -> AsyncIterator[StreamResponse]:
-        client = await self._get_client()
-        sdk_client = client
         outbound_message = self._build_outbound_message(
             text=text,
             parts=parts,
@@ -169,17 +167,6 @@ class A2AClient:
             task_id=task_id,
             message_id=message_id,
         )
-        request_metadata, extra_headers, metadata_extensions = split_request_metadata(metadata)
-        requested_extensions = merge_requested_extensions(
-            self._config.extensions,
-            metadata_extensions,
-        )
-        self._validate_extension_requirements(
-            request_metadata=request_metadata,
-            message=outbound_message,
-            requested_extensions=requested_extensions,
-        )
-
         configuration_kwargs: dict[str, Any] = {"return_immediately": not blocking}
         if accepted_output_modes is not None:
             configuration_kwargs["accepted_output_modes"] = accepted_output_modes
@@ -189,56 +176,36 @@ class A2AClient:
         send_request = SendMessageRequest(
             message=outbound_message,
             configuration=request_configuration,
+            metadata=dict(metadata) if metadata is not None else None,
         )
-        request_metadata_struct = to_struct(request_metadata or None)
-        if request_metadata_struct is not None:
-            send_request.metadata.CopyFrom(request_metadata_struct)
-        try:
-            async for item in sdk_client.send_message(
-                send_request,
-                context=build_call_context(extra_headers, requested_extensions),
-            ):
-                yield filter_negotiated_extensions_from_stream_response(
-                    item,
-                    requested_extensions,
-                )
-        except Exception as exc:
-            raise map_a2a_sdk_error(exc, operation="SendMessage") from exc
+        async for item in self._stream_send_request(send_request):
+            yield item
 
-    async def send(self, request: A2ASendRequest) -> StreamResponse:
+    async def send(self, request: SendMessageRequest | A2ASendRequest) -> StreamResponse:
         last_event: StreamResponse | None = None
-        async for item in self.send_message(
-            request.text,
-            parts=request.parts,
-            message=request.message,
-            context_id=request.context_id,
-            task_id=request.task_id,
-            message_id=request.message_id,
-            metadata=request.metadata,
-            accepted_output_modes=request.accepted_output_modes,
-            history_length=request.history_length,
-            blocking=request.blocking,
-        ):
+        async for item in self._stream_send_request(self._coerce_send_request(request)):
             last_event = item
         if last_event is None:
             raise A2AClientError("A2A send_message returned no response")
         return last_event
 
-    async def get_task(self, request: A2AGetTaskRequest) -> Task:
+    async def get_task(
+        self,
+        request: GetTaskRequest | A2AGetTaskRequest,
+        *,
+        metadata: Mapping[str, Any] | None = None,
+    ) -> Task:
         client = await self._get_client()
         sdk_client = client
+        task_request, request_metadata = self._coerce_get_task_request(request, metadata=metadata)
         _request_metadata, extra_headers, metadata_extensions = split_request_metadata(
-            request.metadata
+            request_metadata
         )
         requested_extensions = merge_requested_extensions(
             self._config.extensions,
             metadata_extensions,
         )
         try:
-            task_request = GetTaskRequest(
-                id=request.task_id,
-                history_length=request.history_length,
-            )
             task = await sdk_client.get_task(
                 task_request,
                 context=build_call_context(extra_headers, requested_extensions),
@@ -254,27 +221,23 @@ class A2AClient:
         metadata: Mapping[str, Any] | None = None,
     ) -> Task:
         return await self.get_task(
-            A2AGetTaskRequest(
-                task_id=task_id,
-                metadata=dict(metadata) if metadata is not None else None,
-            )
+            GetTaskRequest(id=task_id),
+            metadata=metadata,
         )
 
-    async def cancel(self, request: A2ACancelTaskRequest) -> Task:
+    async def cancel(self, request: CancelTaskRequest | A2ACancelTaskRequest) -> Task:
         client = await self._get_client()
         sdk_client = client
+        cancel_request = self._coerce_cancel_task_request(request)
         request_metadata, extra_headers, metadata_extensions = split_request_metadata(
-            request.metadata
+            self._request_metadata_mapping(cancel_request.metadata)
         )
         requested_extensions = merge_requested_extensions(
             self._config.extensions,
             metadata_extensions,
         )
         try:
-            cancel_request = CancelTaskRequest(id=request.task_id)
-            metadata_struct = to_struct(request_metadata or None)
-            if metadata_struct is not None:
-                cancel_request.metadata.CopyFrom(metadata_struct)
+            cancel_request = self._with_request_metadata(cancel_request, request_metadata)
             task = await sdk_client.cancel_task(
                 cancel_request,
                 context=build_call_context(extra_headers, requested_extensions),
@@ -285,7 +248,7 @@ class A2AClient:
 
     async def cancel_task(self, task_id: str, *, metadata: Mapping[str, Any] | None = None) -> Task:
         return await self.cancel(
-            A2ACancelTaskRequest(task_id=task_id, metadata=dict(metadata) if metadata else None)
+            CancelTaskRequest(id=task_id, metadata=dict(metadata) if metadata else None)
         )
 
     @staticmethod
@@ -366,6 +329,106 @@ class A2AClient:
         if cached_card is not None:
             self._card = cached_card
         return self._sdk_client
+
+    async def _stream_send_request(
+        self, request: SendMessageRequest
+    ) -> AsyncIterator[StreamResponse]:
+        client = await self._get_client()
+        sdk_client = client
+        request_metadata, extra_headers, metadata_extensions = split_request_metadata(
+            self._request_metadata_mapping(request.metadata)
+        )
+        requested_extensions = merge_requested_extensions(
+            self._config.extensions,
+            metadata_extensions,
+        )
+        normalized_request = self._with_request_metadata(request, request_metadata)
+        self._validate_extension_requirements(
+            request_metadata=request_metadata,
+            message=normalized_request.message,
+            requested_extensions=requested_extensions,
+        )
+        try:
+            async for item in sdk_client.send_message(
+                normalized_request,
+                context=build_call_context(extra_headers, requested_extensions),
+            ):
+                yield filter_negotiated_extensions_from_stream_response(
+                    item,
+                    requested_extensions,
+                )
+        except Exception as exc:
+            raise map_a2a_sdk_error(exc, operation="SendMessage") from exc
+
+    def _coerce_send_request(
+        self, request: SendMessageRequest | A2ASendRequest
+    ) -> SendMessageRequest:
+        if isinstance(request, SendMessageRequest):
+            return cast(SendMessageRequest, proto_clone(request))
+        return self._build_send_request_from_input(request)
+
+    def _coerce_get_task_request(
+        self,
+        request: GetTaskRequest | A2AGetTaskRequest,
+        *,
+        metadata: Mapping[str, Any] | None = None,
+    ) -> tuple[GetTaskRequest, Mapping[str, Any] | None]:
+        if isinstance(request, GetTaskRequest):
+            return cast(GetTaskRequest, proto_clone(request)), dict(metadata) if metadata else None
+        return (
+            GetTaskRequest(
+                id=request.task_id,
+                history_length=request.history_length,
+            ),
+            dict(request.metadata) if request.metadata is not None else None,
+        )
+
+    def _coerce_cancel_task_request(
+        self,
+        request: CancelTaskRequest | A2ACancelTaskRequest,
+    ) -> CancelTaskRequest:
+        if isinstance(request, CancelTaskRequest):
+            return cast(CancelTaskRequest, proto_clone(request))
+        return CancelTaskRequest(
+            id=request.task_id,
+            metadata=dict(request.metadata) if request.metadata is not None else None,
+        )
+
+    def _build_send_request_from_input(self, request: A2ASendRequest) -> SendMessageRequest:
+        outbound_message = self._build_outbound_message(
+            text=request.text,
+            parts=request.parts,
+            message=request.message,
+            context_id=request.context_id,
+            task_id=request.task_id,
+            message_id=request.message_id,
+        )
+        configuration_kwargs: dict[str, Any] = {"return_immediately": not request.blocking}
+        if request.accepted_output_modes is not None:
+            configuration_kwargs["accepted_output_modes"] = request.accepted_output_modes
+        if request.history_length is not None:
+            configuration_kwargs["history_length"] = request.history_length
+        return SendMessageRequest(
+            message=outbound_message,
+            configuration=SendMessageConfiguration(**configuration_kwargs),
+            metadata=dict(request.metadata) if request.metadata is not None else None,
+        )
+
+    @staticmethod
+    def _request_metadata_mapping(metadata: Any) -> Mapping[str, Any] | None:
+        normalized = proto_to_python(metadata)
+        if isinstance(normalized, Mapping):
+            return cast(Mapping[str, Any], normalized)
+        return None
+
+    @staticmethod
+    def _with_request_metadata(request: Any, metadata: Mapping[str, Any] | None) -> Any:
+        normalized_request = proto_clone(request)
+        normalized_request.metadata.Clear()
+        metadata_struct = to_struct(dict(metadata) if metadata is not None else None)
+        if metadata_struct is not None:
+            normalized_request.metadata.CopyFrom(metadata_struct)
+        return normalized_request
 
     def _extract_sdk_client_card(self) -> AgentCard | None:
         if self._sdk_client is None:

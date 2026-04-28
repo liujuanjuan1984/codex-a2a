@@ -18,6 +18,7 @@ from a2a.types import (
     Role,
     SecurityRequirement,
     SecurityScheme,
+    SendMessageConfiguration,
     SendMessageRequest,
     StreamResponse,
     Task,
@@ -35,7 +36,7 @@ from codex_a2a.client import (
     A2AUnsupportedBindingError,
     StaticCredentialService,
 )
-from codex_a2a.client.types import A2ACancelTaskRequest, A2AGetTaskRequest, A2ASendRequest
+from codex_a2a.client.types import A2ASendRequest
 from codex_a2a.contracts.extensions import SESSION_BINDING_EXTENSION_URI
 
 
@@ -138,12 +139,18 @@ async def test_send_get_task_and_cancel_use_sdk_methods() -> None:
     client._sdk_client = sdk_client  # noqa: SLF001
 
     send_result = await client.send(
-        A2ASendRequest(
-            text="hello",
+        SendMessageRequest(
+            message=Message(
+                message_id="msg-1",
+                role=Role.ROLE_USER,
+                parts=[new_text_part("hello")],
+            ),
             metadata={"authorization": "Bearer token", "trace_id": "trace-1"},
-            accepted_output_modes=["text/plain"],
-            history_length=3,
-            blocking=False,
+            configuration=SendMessageConfiguration(
+                accepted_output_modes=["text/plain"],
+                history_length=3,
+                return_immediately=True,
+            ),
         )
     )
     assert send_result.HasField("task")
@@ -156,11 +163,11 @@ async def test_send_get_task_and_cancel_use_sdk_methods() -> None:
     assert send_call["request"].configuration.return_immediately is True
 
     task_result = await client.get_task(
-        A2AGetTaskRequest(
-            task_id="task-1",
+        GetTaskRequest(
+            id="task-1",
             history_length=2,
-            metadata={"authorization": "Bearer token", "trace_id": "trace-2"},
-        )
+        ),
+        metadata={"authorization": "Bearer token", "trace_id": "trace-2"},
     )
     assert task_result.id == "task-1"
     assert proto_to_python(sdk_client.get_task_calls[0]) == {
@@ -170,8 +177,8 @@ async def test_send_get_task_and_cancel_use_sdk_methods() -> None:
     assert sdk_client.get_task_contexts[0].service_parameters == {"Authorization": "Bearer token"}
 
     cancel_result = await client.cancel(
-        A2ACancelTaskRequest(
-            task_id="task-1",
+        CancelTaskRequest(
+            id="task-1",
             metadata={"authorization": "Bearer token", "trace_id": "trace-3"},
         )
     )
@@ -197,8 +204,12 @@ async def test_send_negotiates_extensions_from_config_and_metadata() -> None:
     client._sdk_client = sdk_client  # noqa: SLF001
 
     await client.send(
-        A2ASendRequest(
-            text="hello",
+        SendMessageRequest(
+            message=Message(
+                message_id="msg-1",
+                role=Role.ROLE_USER,
+                parts=[new_text_part("hello")],
+            ),
             metadata={
                 "authorization": "Bearer token",
                 "shared": {"session": {"id": "session-1"}},
@@ -225,8 +236,12 @@ async def test_send_fails_fast_when_shared_metadata_lacks_negotiated_extension()
 
     with pytest.raises(A2AClientConfigError, match="metadata.shared.session.id"):
         await client.send(
-            A2ASendRequest(
-                text="hello",
+            SendMessageRequest(
+                message=Message(
+                    message_id="msg-1",
+                    role=Role.ROLE_USER,
+                    parts=[new_text_part("hello")],
+                ),
                 metadata={"shared": {"session": {"id": "session-1"}}},
             )
         )
@@ -265,8 +280,12 @@ async def test_send_filters_unnegotiated_shared_metadata_from_response() -> None
     client._sdk_client = sdk_client  # noqa: SLF001
 
     response = await client.send(
-        A2ASendRequest(
-            text="hello",
+        SendMessageRequest(
+            message=Message(
+                message_id="msg-1",
+                role=Role.ROLE_USER,
+                parts=[new_text_part("hello")],
+            ),
             metadata={"a2a-extensions": [SESSION_BINDING_EXTENSION_URI]},
         )
     )
@@ -278,7 +297,7 @@ async def test_send_filters_unnegotiated_shared_metadata_from_response() -> None
 
 
 @pytest.mark.asyncio
-async def test_send_supports_v1_parts_and_message_payloads() -> None:
+async def test_send_supports_v1_parts_and_message_requests() -> None:
     sdk_client = _MockSDKClient()
     client = A2AClient(
         A2AClientConfig(agent_url="https://example.org"),
@@ -288,13 +307,16 @@ async def test_send_supports_v1_parts_and_message_payloads() -> None:
     client._sdk_client = sdk_client  # noqa: SLF001
 
     await client.send(
-        A2ASendRequest(
-            parts=[
-                new_text_part("hello"),
-                new_data_part({"kind": "mention", "path": "/tmp/skill"}),
-            ],
-            message_id="msg-parts",
-            context_id="ctx-parts",
+        SendMessageRequest(
+            message=Message(
+                message_id="msg-parts",
+                role=Role.ROLE_USER,
+                context_id="ctx-parts",
+                parts=[
+                    new_text_part("hello"),
+                    new_data_part({"kind": "mention", "path": "/tmp/skill"}),
+                ],
+            ),
         )
     )
     parts_request = sdk_client.send_calls[0]["request"]
@@ -314,6 +336,26 @@ async def test_send_supports_v1_parts_and_message_payloads() -> None:
     message_request = sdk_client.send_calls[1]["request"]
     assert message_request.message.message_id == "msg-raw"
     assert message_request.message.parts[0].text == "direct message"
+
+
+@pytest.mark.asyncio
+async def test_send_accepts_compat_wrapper_request() -> None:
+    sdk_client = _MockSDKClient()
+    client = A2AClient(
+        A2AClientConfig(agent_url="https://example.org"),
+        httpx_client=_MockAsyncHttpClient(),
+        card_resolver_factory=_MockAgentCardResolver,
+    )
+    client._sdk_client = sdk_client  # noqa: SLF001
+
+    await client.send(
+        A2ASendRequest(
+            text="hello",
+            metadata={"trace_id": "trace-1"},
+        )
+    )
+
+    assert proto_to_python(sdk_client.send_calls[0]["request"].metadata) == {"trace_id": "trace-1"}
 
 
 @pytest.mark.asyncio
