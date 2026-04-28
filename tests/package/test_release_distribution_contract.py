@@ -171,10 +171,10 @@ def test_repository_wrappers_only_keep_remaining_user_or_maintainer_entrypoints(
 def test_validation_and_publish_paths_filter_known_build_warnings() -> None:
     validate_baseline_text = Path("scripts/validate_baseline.sh").read_text()
     assert "vcs_versioning._backends._git" in validate_baseline_text
-    assert "vcs_versioning.overrides" in validate_baseline_text
     assert "uv run pip-audit --requirement" in validate_baseline_text
     assert "vcs_versioning._backends._git" in PUBLISH_WORKFLOW_TEXT
-    assert "vcs_versioning.overrides" in PUBLISH_WORKFLOW_TEXT
+    assert "vcs_versioning.overrides" not in validate_baseline_text
+    assert "vcs_versioning.overrides" not in PUBLISH_WORKFLOW_TEXT
 
 
 def test_gitignore_keeps_python_sources_without_unignoring_runtime_caches() -> None:
