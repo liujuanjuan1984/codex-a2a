@@ -10,6 +10,22 @@ updates:
       prefix: "deps"
     labels:
       - "dependencies"
+    ignore:
+      - dependency-name: "fastapi"
+        update-types:
+          - "version-update:semver-minor"
+      - dependency-name: "httpx"
+        update-types:
+          - "version-update:semver-minor"
+      - dependency-name: "protobuf"
+        update-types:
+          - "version-update:semver-major"
+      - dependency-name: "setuptools-scm"
+        update-types:
+          - "version-update:semver-major"
+      - dependency-name: "uvicorn"
+        update-types:
+          - "version-update:semver-minor"
     groups:
       uv-all-updates:
         patterns:

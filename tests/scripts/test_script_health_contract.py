@@ -23,6 +23,8 @@ def test_validate_baseline_keeps_local_regression_scope() -> None:
     assert "uv run pytest" in VALIDATE_BASELINE_TEXT
     assert "uv export" in VALIDATE_BASELINE_TEXT
     assert "uv run pip-audit" in VALIDATE_BASELINE_TEXT
+    assert "uv build --no-sources" in VALIDATE_BASELINE_TEXT
+    assert "git fetch --quiet --update-shallow" not in VALIDATE_BASELINE_TEXT
     assert "uv pip list --outdated" not in VALIDATE_BASELINE_TEXT
 
 
@@ -74,3 +76,6 @@ def test_dependabot_configuration_prefers_a_single_grouped_uv_pr() -> None:
     assert 'package-ecosystem: "github-actions"' not in DEPENDABOT_TEXT
     assert "open-pull-requests-limit: 1" in DEPENDABOT_TEXT
     assert "uv-all-updates" in DEPENDABOT_TEXT
+    assert 'dependency-name: "protobuf"' in DEPENDABOT_TEXT
+    assert 'dependency-name: "uvicorn"' in DEPENDABOT_TEXT
+    assert 'dependency-name: "setuptools-scm"' in DEPENDABOT_TEXT
