@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Annotated, Any, Literal
 
-from pydantic import AliasChoices, Field, ValidationError, field_validator, model_validator
+from pydantic import Field, ValidationError, field_validator, model_validator
 
 from codex_a2a.jsonrpc.params_common import (
     JsonRpcParamsValidationError,
@@ -34,7 +34,6 @@ class TurnImagePart(_StrictModel):
     bytes: str | None = None
     mime_type: str | None = Field(
         default=None,
-        validation_alias=AliasChoices("mimeType"),
         serialization_alias="mimeType",
     )
     name: str | None = None
@@ -88,9 +87,8 @@ class TurnSteerRequestParams(_StrictModel):
 
 
 class TurnSteerControlParams(_StrictModel):
-    thread_id: str = Field(validation_alias=AliasChoices("thread_id", "threadId"))
+    thread_id: str
     expected_turn_id: str = Field(
-        validation_alias=AliasChoices("expected_turn_id", "expectedTurnId"),
         serialization_alias="expectedTurnId",
     )
     request: TurnSteerRequestParams
@@ -115,12 +113,12 @@ def _raise_turn_control_validation_error(exc: ValidationError) -> None:
     loc = tuple(first.get("loc", ()))
     message_text = str(first.get("msg", "Invalid params")).removeprefix("Value error, ")
 
-    if loc in {("thread_id",), ("threadId",)}:
+    if loc == ("thread_id",):
         raise JsonRpcParamsValidationError(
             message="Missing required params.thread_id",
             data={"type": "MISSING_FIELD", "field": "thread_id"},
         )
-    if loc in {("expected_turn_id",), ("expectedTurnId",)}:
+    if loc == ("expected_turn_id",):
         raise JsonRpcParamsValidationError(
             message="Missing required params.expected_turn_id",
             data={"type": "MISSING_FIELD", "field": "expected_turn_id"},

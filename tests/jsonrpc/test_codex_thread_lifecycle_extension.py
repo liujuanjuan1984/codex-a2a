@@ -77,7 +77,7 @@ async def test_thread_lifecycle_extension_routes_control_methods(monkeypatch) ->
                 "method": "codex.threads.metadata.update",
                 "params": {
                     "thread_id": "thr-1",
-                    "request": {"gitInfo": {"branch": "feat/thread-lifecycle"}},
+                    "request": {"git_info": {"branch": "feat/thread-lifecycle"}},
                 },
             },
         )
@@ -134,7 +134,7 @@ async def test_thread_lifecycle_watch_routes_to_runtime(monkeypatch) -> None:
                 "params": {
                     "request": {
                         "events": ["thread.started", "thread.status.changed"],
-                        "threadIds": ["thr-1"],
+                        "thread_ids": ["thr-1"],
                     }
                 },
             },
@@ -146,7 +146,7 @@ async def test_thread_lifecycle_watch_routes_to_runtime(monkeypatch) -> None:
     kwargs = app.state.codex_thread_lifecycle_runtime.start.await_args.kwargs
     assert kwargs["request"] == {
         "events": ["thread.started", "thread.status.changed"],
-        "threadIds": ["thr-1"],
+        "thread_ids": ["thr-1"],
     }
     assert kwargs["context"] is not None
 
@@ -228,7 +228,7 @@ async def test_thread_lifecycle_extension_rejects_invalid_request_shapes(monkeyp
                 "jsonrpc": "2.0",
                 "id": 407,
                 "method": "codex.threads.metadata.update",
-                "params": {"thread_id": "thr-1", "request": {"gitInfo": {}}},
+                "params": {"thread_id": "thr-1", "request": {"git_info": {}}},
             },
         )
         watch_response = await client.post(

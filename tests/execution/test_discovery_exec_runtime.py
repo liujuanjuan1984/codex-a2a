@@ -201,7 +201,7 @@ async def test_exec_runtime_start_rejects_duplicate_process_ids() -> None:
     )
 
     first = await runtime.start(
-        request={"command": "bash", "arguments": "-lc 'printf hello'", "processId": "exec-1"},
+        request={"command": "bash", "arguments": "-lc 'printf hello'", "process_id": "exec-1"},
         directory="/workspace",
         context={"identity": "demo"},
         owner_identity="owner-1",
@@ -221,7 +221,7 @@ async def test_exec_runtime_start_rejects_duplicate_process_ids() -> None:
 
     with pytest.raises(ValueError, match="unique among active exec sessions"):
         await runtime.start(
-            request={"command": "bash", "processId": "exec-1"},
+            request={"command": "bash", "process_id": "exec-1"},
             directory="/workspace",
             context=None,
             owner_identity="owner-1",
@@ -268,7 +268,7 @@ async def test_exec_runtime_streams_output_and_terminal_status() -> None:
 
     await runtime._run_exec_session(  # noqa: SLF001
         handle=handle,
-        request={"command": "bash", "arguments": "-lc 'printf hello'", "processId": "exec-1"},
+        request={"command": "bash", "arguments": "-lc 'printf hello'", "process_id": "exec-1"},
         directory="/workspace",
         event_queue=queue,
     )
@@ -355,7 +355,7 @@ async def test_exec_runtime_write_resize_terminate_and_failure_status() -> None:
     queue = DummyEventQueue()
     await runtime._run_exec_session(  # noqa: SLF001
         handle=failed_handle,
-        request={"command": "bash", "processId": "exec-2"},
+        request={"command": "bash", "process_id": "exec-2"},
         directory=None,
         event_queue=queue,
     )

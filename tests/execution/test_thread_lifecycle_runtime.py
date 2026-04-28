@@ -130,7 +130,7 @@ async def test_thread_lifecycle_runtime_start_bridges_supported_notifications() 
     result = await runtime.start(
         request={
             "events": ["thread.started", "thread.status.changed"],
-            "threadIds": ["thr-1"],
+            "thread_ids": ["thr-1"],
         },
         context={"identity": "demo"},
     )
@@ -194,7 +194,7 @@ async def test_thread_lifecycle_runtime_releases_owner_on_task_cancel(tmp_path) 
 
     try:
         result = await runtime.start(
-            request={"events": ["thread.started"], "threadIds": ["thr-1"]},
+            request={"events": ["thread.started"], "thread_ids": ["thr-1"]},
             context={"identity": "user-1"},
         )
         active_before_cancel = await runtime_state.state_store.load_active_thread_watch_owners()
@@ -248,7 +248,7 @@ async def test_thread_lifecycle_runtime_release_cancels_owned_watch_task(tmp_pat
 
     try:
         result = await runtime.start(
-            request={"events": ["thread.started"], "threadIds": ["thr-1"]},
+            request={"events": ["thread.started"], "thread_ids": ["thr-1"]},
             context={"identity": "user-1"},
         )
 
@@ -300,7 +300,7 @@ async def test_thread_lifecycle_runtime_release_rejects_non_owner(tmp_path) -> N
 
     try:
         result = await runtime.start(
-            request={"events": ["thread.started"], "threadIds": ["thr-1"]},
+            request={"events": ["thread.started"], "thread_ids": ["thr-1"]},
             context={"identity": "user-1"},
         )
 
@@ -377,7 +377,7 @@ async def test_thread_lifecycle_runtime_release_skips_upstream_unsubscribe_on_sc
 
     try:
         result = await runtime.start(
-            request={"events": ["thread.started"], "threadIds": ["thr-1"]},
+            request={"events": ["thread.started"], "thread_ids": ["thr-1"]},
             context={"identity": "user-1"},
         )
         client.connection_scope_id = "scope-other"
@@ -416,11 +416,11 @@ async def test_thread_lifecycle_runtime_reuses_subscription_and_reconciles_orpha
 
     try:
         result_1 = await runtime.start(
-            request={"events": ["thread.started"], "threadIds": ["thr-1"]},
+            request={"events": ["thread.started"], "thread_ids": ["thr-1"]},
             context={"identity": "user-1"},
         )
         result_2 = await runtime.start(
-            request={"events": ["thread.started"], "threadIds": ["thr-1"]},
+            request={"events": ["thread.started"], "thread_ids": ["thr-1"]},
             context={"identity": "user-2"},
         )
 

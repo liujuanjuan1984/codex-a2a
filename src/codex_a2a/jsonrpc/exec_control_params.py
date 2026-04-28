@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import AliasChoices, Field, ValidationError, field_validator, model_validator
+from pydantic import ValidationError, field_validator, model_validator
 
 from codex_a2a.jsonrpc.params_common import (
     MetadataParams,
@@ -17,34 +17,14 @@ from codex_a2a.jsonrpc.params_common import (
 class ExecStartRequestParams(_StrictModel):
     command: str
     arguments: str | None = None
-    process_id: str | None = Field(
-        default=None,
-        validation_alias=AliasChoices("process_id", "processId"),
-        serialization_alias="processId",
-    )
+    process_id: str | None = None
     tty: bool = True
     rows: int | None = None
     cols: int | None = None
-    output_bytes_cap: int | None = Field(
-        default=None,
-        validation_alias=AliasChoices("output_bytes_cap", "outputBytesCap"),
-        serialization_alias="outputBytesCap",
-    )
-    disable_output_cap: bool | None = Field(
-        default=None,
-        validation_alias=AliasChoices("disable_output_cap", "disableOutputCap"),
-        serialization_alias="disableOutputCap",
-    )
-    timeout_ms: int | None = Field(
-        default=None,
-        validation_alias=AliasChoices("timeout_ms", "timeoutMs"),
-        serialization_alias="timeoutMs",
-    )
-    disable_timeout: bool | None = Field(
-        default=None,
-        validation_alias=AliasChoices("disable_timeout", "disableTimeout"),
-        serialization_alias="disableTimeout",
-    )
+    output_bytes_cap: int | None = None
+    disable_output_cap: bool | None = None
+    timeout_ms: int | None = None
+    disable_timeout: bool | None = None
 
     _validate_command = field_validator("command", mode="before")(validate_request_command)
 
@@ -79,20 +59,9 @@ class ExecStartRequestParams(_StrictModel):
 
 
 class ExecWriteRequestParams(_StrictModel):
-    process_id: str = Field(
-        validation_alias=AliasChoices("process_id", "processId"),
-        serialization_alias="processId",
-    )
-    delta_base64: str | None = Field(
-        default=None,
-        validation_alias=AliasChoices("delta_base64", "deltaBase64"),
-        serialization_alias="deltaBase64",
-    )
-    close_stdin: bool | None = Field(
-        default=None,
-        validation_alias=AliasChoices("close_stdin", "closeStdin"),
-        serialization_alias="closeStdin",
-    )
+    process_id: str
+    delta_base64: str | None = None
+    close_stdin: bool | None = None
 
     _validate_process_id = field_validator("process_id", mode="before")(
         validate_required_process_id
@@ -120,10 +89,7 @@ class ExecWriteRequestParams(_StrictModel):
 
 
 class ExecResizeRequestParams(_StrictModel):
-    process_id: str = Field(
-        validation_alias=AliasChoices("process_id", "processId"),
-        serialization_alias="processId",
-    )
+    process_id: str
     rows: int
     cols: int
 
@@ -140,10 +106,7 @@ class ExecResizeRequestParams(_StrictModel):
 
 
 class ExecTerminateRequestParams(_StrictModel):
-    process_id: str = Field(
-        validation_alias=AliasChoices("process_id", "processId"),
-        serialization_alias="processId",
-    )
+    process_id: str
 
     _validate_process_id = field_validator("process_id", mode="before")(
         validate_required_process_id

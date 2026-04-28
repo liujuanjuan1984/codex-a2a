@@ -294,7 +294,7 @@ def raise_control_validation_error(exc: ValidationError) -> None:
             message="request.command must be a non-empty string",
             data={"type": "INVALID_FIELD", "field": "request.command"},
         )
-    if loc == ("request", "processId") or loc == ("request", "process_id"):
+    if loc == ("request", "process_id"):
         raise JsonRpcParamsValidationError(
             message="request.process_id must be a non-empty string",
             data={"type": "INVALID_FIELD", "field": "request.process_id"},
@@ -307,9 +307,7 @@ def raise_control_validation_error(exc: ValidationError) -> None:
         ("request", "agent"),
         ("request", "system"),
         ("request", "variant"),
-        ("request", "processId"),
         ("request", "process_id"),
-        ("request", "deltaBase64"),
         ("request", "delta_base64"),
     }:
         field = format_loc(loc)
@@ -320,7 +318,7 @@ def raise_control_validation_error(exc: ValidationError) -> None:
     if (
         len(loc) >= 3
         and loc[:2] == ("request", "parts")
-        and loc[-1] in {"url", "bytes", "mimeType", "name", "path"}
+        and loc[-1] in {"url", "bytes", "mime_type", "name", "path"}
     ):
         field = format_loc(loc)
         raise JsonRpcParamsValidationError(
@@ -330,9 +328,7 @@ def raise_control_validation_error(exc: ValidationError) -> None:
     if loc in {
         ("request", "rows"),
         ("request", "cols"),
-        ("request", "outputBytesCap"),
         ("request", "output_bytes_cap"),
-        ("request", "timeoutMs"),
         ("request", "timeout_ms"),
     }:
         field = format_loc(loc)
@@ -342,11 +338,8 @@ def raise_control_validation_error(exc: ValidationError) -> None:
         )
     if loc in {
         ("request", "tty"),
-        ("request", "disableOutputCap"),
         ("request", "disable_output_cap"),
-        ("request", "disableTimeout"),
         ("request", "disable_timeout"),
-        ("request", "closeStdin"),
         ("request", "close_stdin"),
     }:
         field = format_loc(loc)

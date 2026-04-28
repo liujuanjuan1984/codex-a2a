@@ -36,7 +36,6 @@ from codex_a2a.client import (
     A2AUnsupportedBindingError,
     StaticCredentialService,
 )
-from codex_a2a.client.types import A2ASendRequest
 from codex_a2a.contracts.extensions import SESSION_BINDING_EXTENSION_URI
 
 
@@ -332,30 +331,10 @@ async def test_send_supports_v1_parts_and_message_requests() -> None:
         role=Role.ROLE_USER,
         parts=[new_text_part("direct message")],
     )
-    await client.send(A2ASendRequest(message=outbound_message))
+    await client.send(SendMessageRequest(message=outbound_message))
     message_request = sdk_client.send_calls[1]["request"]
     assert message_request.message.message_id == "msg-raw"
     assert message_request.message.parts[0].text == "direct message"
-
-
-@pytest.mark.asyncio
-async def test_send_accepts_compat_wrapper_request() -> None:
-    sdk_client = _MockSDKClient()
-    client = A2AClient(
-        A2AClientConfig(agent_url="https://example.org"),
-        httpx_client=_MockAsyncHttpClient(),
-        card_resolver_factory=_MockAgentCardResolver,
-    )
-    client._sdk_client = sdk_client  # noqa: SLF001
-
-    await client.send(
-        A2ASendRequest(
-            text="hello",
-            metadata={"trace_id": "trace-1"},
-        )
-    )
-
-    assert proto_to_python(sdk_client.send_calls[0]["request"].metadata) == {"trace_id": "trace-1"}
 
 
 @pytest.mark.asyncio

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import AliasChoices, Field, ValidationError, field_validator, model_validator
+from pydantic import Field, ValidationError, field_validator, model_validator
 
 from codex_a2a.contracts.extensions import THREAD_LIFECYCLE_SUPPORTED_EVENTS
 from codex_a2a.jsonrpc.params_common import (
@@ -36,7 +36,6 @@ class ThreadGitInfoPatchParams(_StrictModel):
     branch: str | None = None
     origin_url: str | None = Field(
         default=None,
-        validation_alias=AliasChoices("origin_url", "originUrl"),
         serialization_alias="originUrl",
     )
 
@@ -54,18 +53,13 @@ class ThreadGitInfoPatchParams(_StrictModel):
 
 class ThreadMetadataUpdateRequestParams(_StrictModel):
     git_info: ThreadGitInfoPatchParams = Field(
-        validation_alias=AliasChoices("git_info", "gitInfo"),
         serialization_alias="gitInfo",
     )
 
 
 class ThreadWatchRequestParams(_StrictModel):
     events: list[str] | None = None
-    thread_ids: list[str] | None = Field(
-        default=None,
-        validation_alias=AliasChoices("thread_ids", "threadIds"),
-        serialization_alias="threadIds",
-    )
+    thread_ids: list[str] | None = None
 
     @field_validator("events", mode="before")
     @classmethod
@@ -106,7 +100,7 @@ class ThreadWatchRequestParams(_StrictModel):
 
 
 class ThreadForkControlParams(_StrictModel):
-    thread_id: str = Field(validation_alias=AliasChoices("thread_id", "threadId"))
+    thread_id: str
     request: ThreadForkRequestParams | None = None
     metadata: MetadataParams | None = None
 
@@ -114,21 +108,21 @@ class ThreadForkControlParams(_StrictModel):
 
 
 class ThreadArchiveControlParams(_StrictModel):
-    thread_id: str = Field(validation_alias=AliasChoices("thread_id", "threadId"))
+    thread_id: str
     metadata: MetadataParams | None = None
 
     _validate_thread_id = field_validator("thread_id", mode="before")(validate_required_thread_id)
 
 
 class ThreadUnarchiveControlParams(_StrictModel):
-    thread_id: str = Field(validation_alias=AliasChoices("thread_id", "threadId"))
+    thread_id: str
     metadata: MetadataParams | None = None
 
     _validate_thread_id = field_validator("thread_id", mode="before")(validate_required_thread_id)
 
 
 class ThreadMetadataUpdateControlParams(_StrictModel):
-    thread_id: str = Field(validation_alias=AliasChoices("thread_id", "threadId"))
+    thread_id: str
     request: ThreadMetadataUpdateRequestParams
     metadata: MetadataParams | None = None
 
@@ -141,7 +135,7 @@ class ThreadWatchControlParams(_StrictModel):
 
 
 class ThreadWatchReleaseControlParams(_StrictModel):
-    task_id: str = Field(validation_alias=AliasChoices("task_id", "taskId"))
+    task_id: str
     metadata: MetadataParams | None = None
 
     @field_validator("task_id", mode="before")
@@ -159,12 +153,12 @@ def _raise_thread_lifecycle_validation_error(exc: ValidationError) -> None:
     loc = tuple(first.get("loc", ()))
     message_text = str(first.get("msg", "Invalid params")).removeprefix("Value error, ")
 
-    if loc in {("thread_id",), ("threadId",)}:
+    if loc == ("thread_id",):
         raise JsonRpcParamsValidationError(
             message="Missing required params.thread_id",
             data={"type": "MISSING_FIELD", "field": "thread_id"},
         )
-    if loc in {("task_id",), ("taskId",)}:
+    if loc == ("task_id",):
         raise JsonRpcParamsValidationError(
             message="Missing required params.task_id",
             data={"type": "MISSING_FIELD", "field": "task_id"},
@@ -201,24 +195,16 @@ def _raise_thread_lifecycle_validation_error(exc: ValidationError) -> None:
             data={"type": "INVALID_FIELD", "field": "request.ephemeral"},
         )
     if loc in {
-        ("request", "gitInfo", "sha"),
-        ("request", "gitInfo", "branch"),
-        ("request", "gitInfo", "originUrl"),
         ("request", "git_info", "sha"),
         ("request", "git_info", "branch"),
         ("request", "git_info", "origin_url"),
     }:
-        field = format_loc(loc).replace("gitInfo", "git_info").replace("originUrl", "origin_url")
+        field = format_loc(loc)
         raise JsonRpcParamsValidationError(
             message=f"{field} must be a string",
             data={"type": "INVALID_FIELD", "field": field},
         )
-    if len(loc) >= 3 and loc[:2] == ("request", "threadIds"):
-        raise JsonRpcParamsValidationError(
-            message="request.thread_ids[] must be a non-empty string",
-            data={"type": "INVALID_FIELD", "field": "request.thread_ids"},
-        )
-    if loc in {("request", "threadIds"), ("request", "thread_ids")}:
+    if loc == ("request", "thread_ids"):
         raise JsonRpcParamsValidationError(
             message=message_text,
             data={"type": "INVALID_FIELD", "field": "request.thread_ids"},
@@ -229,7 +215,7 @@ def _raise_thread_lifecycle_validation_error(exc: ValidationError) -> None:
             data={"type": "INVALID_FIELD", "field": "request.thread_ids"},
         )
     if loc:
-        field = format_loc(loc).replace("gitInfo", "git_info").replace("originUrl", "origin_url")
+        field = format_loc(loc)
         raise JsonRpcParamsValidationError(
             message=message_text,
             data={"type": "INVALID_FIELD", "field": field},

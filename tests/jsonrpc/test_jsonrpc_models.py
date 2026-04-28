@@ -79,19 +79,19 @@ def test_parse_list_sessions_params_rejects_non_integer_limit() -> None:
 
 
 def test_parse_interrupt_recovery_list_params_accepts_type_aliases() -> None:
-    payload = parse_interrupt_recovery_list_params({"interruptType": "permissions"})
+    payload = parse_interrupt_recovery_list_params({"interrupt_type": "permissions"})
 
     assert payload.interrupt_type == "permissions"
 
 
 def test_parse_interrupt_recovery_list_params_rejects_invalid_type() -> None:
     with pytest.raises(JsonRpcParamsValidationError) as exc_info:
-        parse_interrupt_recovery_list_params({"type": "unknown"})
+        parse_interrupt_recovery_list_params({"interrupt_type": "unknown"})
 
     assert str(exc_info.value) == (
         "type must be one of: permission, question, permissions, elicitation"
     )
-    assert exc_info.value.data == {"type": "INVALID_FIELD", "field": "type"}
+    assert exc_info.value.data == {"type": "INVALID_FIELD", "field": "interrupt_type"}
 
 
 def test_parse_list_sessions_params_applies_default_limit() -> None:
@@ -131,7 +131,7 @@ def test_parse_get_session_messages_params_applies_default_limit() -> None:
 def test_parse_thread_lifecycle_params_preserve_aliases() -> None:
     fork = parse_thread_fork_params(
         {
-            "threadId": "thr-1",
+            "thread_id": "thr-1",
             "request": {"ephemeral": True},
             "metadata": {"codex": {"directory": "/workspace"}},
         }
@@ -139,18 +139,18 @@ def test_parse_thread_lifecycle_params_preserve_aliases() -> None:
     metadata_update = parse_thread_metadata_update_params(
         {
             "thread_id": "thr-1",
-            "request": {"gitInfo": {"branch": "feat/thread-lifecycle", "originUrl": "https://x"}},
+            "request": {"git_info": {"branch": "feat/thread-lifecycle", "origin_url": "https://x"}},
         }
     )
     watch = parse_thread_watch_params(
         {
             "request": {
                 "events": ["thread.started", "thread.status.changed", "thread.started"],
-                "threadIds": ["thr-1", "thr-2", "thr-1"],
+                "thread_ids": ["thr-1", "thr-2", "thr-1"],
             }
         }
     )
-    watch_release = parse_thread_watch_release_params({"taskId": "task-watch-1"})
+    watch_release = parse_thread_watch_release_params({"task_id": "task-watch-1"})
 
     assert fork.thread_id == "thr-1"
     assert fork.request is not None
@@ -165,9 +165,9 @@ def test_parse_thread_lifecycle_params_preserve_aliases() -> None:
         }
     }
     assert watch.request is not None
-    assert watch.request.model_dump(by_alias=True, exclude_none=True) == {
+    assert watch.request.model_dump(by_alias=False, exclude_none=True) == {
         "events": ["thread.started", "thread.status.changed"],
-        "threadIds": ["thr-1", "thr-2"],
+        "thread_ids": ["thr-1", "thr-2"],
     }
     assert watch_release.task_id == "task-watch-1"
 
@@ -175,8 +175,8 @@ def test_parse_thread_lifecycle_params_preserve_aliases() -> None:
 def test_parse_turn_and_review_control_params_preserve_aliases() -> None:
     steer = parse_turn_steer_params(
         {
-            "threadId": "thr-1",
-            "expectedTurnId": "turn-1",
+            "thread_id": "thr-1",
+            "expected_turn_id": "turn-1",
             "request": {
                 "parts": [
                     {"type": "text", "text": "Focus on the failing tests first."},
@@ -198,9 +198,9 @@ def test_parse_turn_and_review_control_params_preserve_aliases() -> None:
     )
     review_watch = parse_review_watch_params(
         {
-            "threadId": "thr-1",
-            "reviewThreadId": "thr-1-review",
-            "turnId": "turn-review-1",
+            "thread_id": "thr-1",
+            "review_thread_id": "thr-1-review",
+            "turn_id": "turn-review-1",
             "request": {"events": ["review.started", "review.completed", "review.started"]},
         }
     )
@@ -246,7 +246,7 @@ def test_parse_turn_and_review_control_params_preserve_aliases() -> None:
         ),
         (
             parse_thread_metadata_update_params,
-            {"thread_id": "thr-1", "request": {"gitInfo": {}}},
+            {"thread_id": "thr-1", "request": {"git_info": {}}},
             "request.git_info must include at least one field",
             "request.git_info",
         ),
@@ -261,7 +261,7 @@ def test_parse_turn_and_review_control_params_preserve_aliases() -> None:
         ),
         (
             parse_thread_watch_params,
-            {"request": {"threadIds": ["thr-1", "  "]}},
+            {"request": {"thread_ids": ["thr-1", "  "]}},
             "request.thread_ids[] must be a non-empty string",
             "request.thread_ids",
         ),
@@ -433,7 +433,7 @@ def test_parse_discovery_param_aliases_preserve_upstream_shapes() -> None:
         (parse_discovery_apps_list_params, {"limit": 0}, "limit"),
         (
             parse_discovery_plugin_read_params,
-            {"marketplacePath": "", "pluginName": "sample"},
+            {"marketplace_path": "", "plugin_name": "sample"},
             "marketplace_path",
         ),
     ],

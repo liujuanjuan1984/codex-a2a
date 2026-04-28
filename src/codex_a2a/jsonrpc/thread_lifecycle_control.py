@@ -104,7 +104,10 @@ async def handle_thread_lifecycle_control_request(
                 request=(
                     None
                     if watch_params is None or watch_params.request is None
-                    else watch_params.request.model_dump(by_alias=True, exclude_none=True)
+                    else watch_params.request.model_dump(
+                        by_alias=False,
+                        exclude_none=True,
+                    )
                 ),
                 context=call_context,
             )

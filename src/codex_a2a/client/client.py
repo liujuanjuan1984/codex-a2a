@@ -49,7 +49,6 @@ from .extension_negotiation import (
 )
 from .payload_text import extract_text_from_payload
 from .request_context import build_call_context, split_request_metadata
-from .types import A2ACancelTaskRequest, A2AGetTaskRequest, A2ASendRequest
 
 
 class _SDKClientProtocol(Protocol):
@@ -181,9 +180,9 @@ class A2AClient:
         async for item in self._stream_send_request(send_request):
             yield item
 
-    async def send(self, request: SendMessageRequest | A2ASendRequest) -> StreamResponse:
+    async def send(self, request: SendMessageRequest) -> StreamResponse:
         last_event: StreamResponse | None = None
-        async for item in self._stream_send_request(self._coerce_send_request(request)):
+        async for item in self._stream_send_request(cast(SendMessageRequest, proto_clone(request))):
             last_event = item
         if last_event is None:
             raise A2AClientError("A2A send_message returned no response")
@@ -191,13 +190,14 @@ class A2AClient:
 
     async def get_task(
         self,
-        request: GetTaskRequest | A2AGetTaskRequest,
+        request: GetTaskRequest,
         *,
         metadata: Mapping[str, Any] | None = None,
     ) -> Task:
         client = await self._get_client()
         sdk_client = client
-        task_request, request_metadata = self._coerce_get_task_request(request, metadata=metadata)
+        task_request = cast(GetTaskRequest, proto_clone(request))
+        request_metadata = dict(metadata) if metadata is not None else None
         _request_metadata, extra_headers, metadata_extensions = split_request_metadata(
             request_metadata
         )
@@ -225,10 +225,10 @@ class A2AClient:
             metadata=metadata,
         )
 
-    async def cancel(self, request: CancelTaskRequest | A2ACancelTaskRequest) -> Task:
+    async def cancel(self, request: CancelTaskRequest) -> Task:
         client = await self._get_client()
         sdk_client = client
-        cancel_request = self._coerce_cancel_task_request(request)
+        cancel_request = cast(CancelTaskRequest, proto_clone(request))
         request_metadata, extra_headers, metadata_extensions = split_request_metadata(
             self._request_metadata_mapping(cancel_request.metadata)
         )
@@ -359,60 +359,6 @@ class A2AClient:
                 )
         except Exception as exc:
             raise map_a2a_sdk_error(exc, operation="SendMessage") from exc
-
-    def _coerce_send_request(
-        self, request: SendMessageRequest | A2ASendRequest
-    ) -> SendMessageRequest:
-        if isinstance(request, SendMessageRequest):
-            return cast(SendMessageRequest, proto_clone(request))
-        return self._build_send_request_from_input(request)
-
-    def _coerce_get_task_request(
-        self,
-        request: GetTaskRequest | A2AGetTaskRequest,
-        *,
-        metadata: Mapping[str, Any] | None = None,
-    ) -> tuple[GetTaskRequest, Mapping[str, Any] | None]:
-        if isinstance(request, GetTaskRequest):
-            return cast(GetTaskRequest, proto_clone(request)), dict(metadata) if metadata else None
-        return (
-            GetTaskRequest(
-                id=request.task_id,
-                history_length=request.history_length,
-            ),
-            dict(request.metadata) if request.metadata is not None else None,
-        )
-
-    def _coerce_cancel_task_request(
-        self,
-        request: CancelTaskRequest | A2ACancelTaskRequest,
-    ) -> CancelTaskRequest:
-        if isinstance(request, CancelTaskRequest):
-            return cast(CancelTaskRequest, proto_clone(request))
-        return CancelTaskRequest(
-            id=request.task_id,
-            metadata=dict(request.metadata) if request.metadata is not None else None,
-        )
-
-    def _build_send_request_from_input(self, request: A2ASendRequest) -> SendMessageRequest:
-        outbound_message = self._build_outbound_message(
-            text=request.text,
-            parts=request.parts,
-            message=request.message,
-            context_id=request.context_id,
-            task_id=request.task_id,
-            message_id=request.message_id,
-        )
-        configuration_kwargs: dict[str, Any] = {"return_immediately": not request.blocking}
-        if request.accepted_output_modes is not None:
-            configuration_kwargs["accepted_output_modes"] = request.accepted_output_modes
-        if request.history_length is not None:
-            configuration_kwargs["history_length"] = request.history_length
-        return SendMessageRequest(
-            message=outbound_message,
-            configuration=SendMessageConfiguration(**configuration_kwargs),
-            metadata=dict(request.metadata) if request.metadata is not None else None,
-        )
 
     @staticmethod
     def _request_metadata_mapping(metadata: Any) -> Mapping[str, Any] | None:

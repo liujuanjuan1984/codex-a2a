@@ -35,7 +35,7 @@ async def test_discovery_extension_routes_read_only_methods(monkeypatch) -> None
                 "jsonrpc": "2.0",
                 "id": 301,
                 "method": "codex.discovery.skills.list",
-                "params": {"cwds": ["/workspace/project"], "forceReload": True},
+                "params": {"cwds": ["/workspace/project"], "force_reload": True},
             },
         )
         apps_response = await client.post(
@@ -45,7 +45,7 @@ async def test_discovery_extension_routes_read_only_methods(monkeypatch) -> None
                 "jsonrpc": "2.0",
                 "id": 302,
                 "method": "codex.discovery.apps.list",
-                "params": {"limit": 20, "forceRefetch": False},
+                "params": {"limit": 20, "force_refetch": False},
             },
         )
         plugins_response = await client.post(
@@ -55,7 +55,7 @@ async def test_discovery_extension_routes_read_only_methods(monkeypatch) -> None
                 "jsonrpc": "2.0",
                 "id": 303,
                 "method": "codex.discovery.plugins.list",
-                "params": {"cwds": ["/workspace/project"], "forceRemoteSync": False},
+                "params": {"cwds": ["/workspace/project"], "force_remote_sync": False},
             },
         )
         plugin_response = await client.post(
@@ -66,8 +66,8 @@ async def test_discovery_extension_routes_read_only_methods(monkeypatch) -> None
                 "id": 304,
                 "method": "codex.discovery.plugins.read",
                 "params": {
-                    "marketplacePath": "/workspace/project/.codex/plugins/marketplace.json",
-                    "pluginName": "sample",
+                    "marketplace_path": "/workspace/project/.codex/plugins/marketplace.json",
+                    "plugin_name": "sample",
                 },
             },
         )
@@ -158,7 +158,7 @@ async def test_discovery_extension_rejects_invalid_request_shapes(monkeypatch) -
                 "jsonrpc": "2.0",
                 "id": 305,
                 "method": "codex.discovery.skills.list",
-                "params": {"cwds": [""], "forceReload": True},
+                "params": {"cwds": [""], "force_reload": True},
             },
         )
         apps_response = await client.post(
@@ -178,7 +178,7 @@ async def test_discovery_extension_rejects_invalid_request_shapes(monkeypatch) -
                 "jsonrpc": "2.0",
                 "id": 307,
                 "method": "codex.discovery.plugins.read",
-                "params": {"marketplacePath": "", "pluginName": "sample"},
+                "params": {"marketplace_path": "", "plugin_name": "sample"},
             },
         )
         watch_response = await client.post(

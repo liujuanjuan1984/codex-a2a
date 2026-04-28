@@ -65,7 +65,7 @@ class CodexExecRuntime:
         context: ServerCallContext | None,
         owner_identity: str | None,
     ) -> dict[str, Any]:
-        process_id = str(request.get("processId") or "").strip() or f"exec-{uuid.uuid4().hex}"
+        process_id = str(request.get("process_id") or "").strip() or f"exec-{uuid.uuid4().hex}"
         task_id = str(uuid.uuid4())
         context_id = task_id
         command_text = self._build_command_text(request)

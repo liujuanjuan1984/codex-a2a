@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Annotated, Any, Literal
 
-from pydantic import AliasChoices, Field, ValidationError, field_validator
+from pydantic import Field, ValidationError, field_validator
 
 from codex_a2a.contracts.extensions import REVIEW_CONTROL_SUPPORTED_EVENTS
 from codex_a2a.jsonrpc.params_common import (
@@ -69,7 +69,7 @@ ReviewTarget = Annotated[
 
 
 class ReviewStartControlParams(_StrictModel):
-    thread_id: str = Field(validation_alias=AliasChoices("thread_id", "threadId"))
+    thread_id: str
     delivery: Literal["inline", "detached"] | None = None
     target: ReviewTarget
 
@@ -100,13 +100,11 @@ class ReviewWatchRequestParams(_StrictModel):
 
 
 class ReviewWatchControlParams(_StrictModel):
-    thread_id: str = Field(validation_alias=AliasChoices("thread_id", "threadId"))
+    thread_id: str
     review_thread_id: str = Field(
-        validation_alias=AliasChoices("review_thread_id", "reviewThreadId"),
         serialization_alias="reviewThreadId",
     )
     turn_id: str = Field(
-        validation_alias=AliasChoices("turn_id", "turnId"),
         serialization_alias="turnId",
     )
     request: ReviewWatchRequestParams | None = None
@@ -127,7 +125,7 @@ def _raise_review_control_validation_error(exc: ValidationError) -> None:
     loc = tuple(first.get("loc", ()))
     message_text = str(first.get("msg", "Invalid params")).removeprefix("Value error, ")
 
-    if loc in {("thread_id",), ("threadId",)}:
+    if loc == ("thread_id",):
         raise JsonRpcParamsValidationError(
             message="Missing required params.thread_id",
             data={"type": "MISSING_FIELD", "field": "thread_id"},
@@ -142,12 +140,12 @@ def _raise_review_control_validation_error(exc: ValidationError) -> None:
             message="delivery must be one of: inline, detached",
             data={"type": "INVALID_FIELD", "field": "delivery"},
         )
-    if loc in {("review_thread_id",), ("reviewThreadId",)}:
+    if loc == ("review_thread_id",):
         raise JsonRpcParamsValidationError(
             message="Missing required params.review_thread_id",
             data={"type": "MISSING_FIELD", "field": "review_thread_id"},
         )
-    if loc in {("turn_id",), ("turnId",)}:
+    if loc == ("turn_id",):
         raise JsonRpcParamsValidationError(
             message="Missing required params.turn_id",
             data={"type": "MISSING_FIELD", "field": "turn_id"},

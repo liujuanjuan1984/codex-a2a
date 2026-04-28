@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import AliasChoices, Field, ValidationError, field_validator
+from pydantic import Field, ValidationError, field_validator
 
 from codex_a2a.jsonrpc.params_common import (
     JsonRpcParamsValidationError,
@@ -19,7 +19,6 @@ from codex_a2a.jsonrpc.params_common import (
 class SkillsExtraRootsParams(_StrictModel):
     cwd: str
     extra_user_roots: list[str] = Field(
-        validation_alias=AliasChoices("extra_user_roots", "extraUserRoots"),
         serialization_alias="extraUserRoots",
     )
 
@@ -45,12 +44,10 @@ class DiscoverySkillsListParams(_StrictModel):
     cwds: list[str] | None = None
     force_reload: bool | None = Field(
         default=None,
-        validation_alias=AliasChoices("force_reload", "forceReload"),
         serialization_alias="forceReload",
     )
     per_cwd_extra_user_roots: list[SkillsExtraRootsParams] | None = Field(
         default=None,
-        validation_alias=AliasChoices("per_cwd_extra_user_roots", "perCwdExtraUserRoots"),
         serialization_alias="perCwdExtraUserRoots",
     )
 
@@ -62,12 +59,10 @@ class DiscoveryAppsListParams(_StrictModel):
     limit: int | None = None
     thread_id: str | None = Field(
         default=None,
-        validation_alias=AliasChoices("thread_id", "threadId"),
         serialization_alias="threadId",
     )
     force_refetch: bool | None = Field(
         default=None,
-        validation_alias=AliasChoices("force_refetch", "forceRefetch"),
         serialization_alias="forceRefetch",
     )
 
@@ -83,7 +78,6 @@ class DiscoveryPluginsListParams(_StrictModel):
     cwds: list[str] | None = None
     force_remote_sync: bool | None = Field(
         default=None,
-        validation_alias=AliasChoices("force_remote_sync", "forceRemoteSync"),
         serialization_alias="forceRemoteSync",
     )
 
@@ -92,11 +86,9 @@ class DiscoveryPluginsListParams(_StrictModel):
 
 class DiscoveryPluginReadParams(_StrictModel):
     marketplace_path: str = Field(
-        validation_alias=AliasChoices("marketplace_path", "marketplacePath"),
         serialization_alias="marketplacePath",
     )
     plugin_name: str = Field(
-        validation_alias=AliasChoices("plugin_name", "pluginName"),
         serialization_alias="pluginName",
     )
 
@@ -155,20 +147,10 @@ def _raise_discovery_validation_error(exc: ValidationError) -> None:
             message="Missing required params.marketplace_path",
             data={"type": "MISSING_FIELD", "field": "marketplace_path"},
         )
-    if field == "marketplacePath":
-        raise JsonRpcParamsValidationError(
-            message="Missing required params.marketplace_path",
-            data={"type": "INVALID_FIELD", "field": "marketplace_path"},
-        )
     if field == "plugin_name":
         raise JsonRpcParamsValidationError(
             message="Missing required params.plugin_name",
             data={"type": "MISSING_FIELD", "field": "plugin_name"},
-        )
-    if field == "pluginName":
-        raise JsonRpcParamsValidationError(
-            message="Missing required params.plugin_name",
-            data={"type": "INVALID_FIELD", "field": "plugin_name"},
         )
     raise JsonRpcParamsValidationError(
         message=message,

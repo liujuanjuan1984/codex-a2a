@@ -66,7 +66,7 @@ async def test_exec_start_routes_to_exec_runtime(monkeypatch) -> None:
                     "request": {
                         "command": "bash",
                         "arguments": "-lc 'printf hello'",
-                        "processId": "exec-1",
+                        "process_id": "exec-1",
                         "tty": True,
                         "rows": 24,
                         "cols": 80,
@@ -89,7 +89,7 @@ async def test_exec_start_routes_to_exec_runtime(monkeypatch) -> None:
     assert kwargs["request"] == {
         "command": "bash",
         "arguments": "-lc 'printf hello'",
-        "processId": "exec-1",
+        "process_id": "exec-1",
         "tty": True,
         "rows": 24,
         "cols": 80,
@@ -143,7 +143,7 @@ async def test_exec_write_resize_and_terminate_route_to_exec_runtime(monkeypatch
                 "jsonrpc": "2.0",
                 "id": 202,
                 "method": "codex.exec.write",
-                "params": {"request": {"processId": "exec-1", "deltaBase64": "cHdkCg=="}},
+                "params": {"request": {"process_id": "exec-1", "delta_base64": "cHdkCg=="}},
             },
         )
         resize_response = await client.post(
@@ -153,7 +153,7 @@ async def test_exec_write_resize_and_terminate_route_to_exec_runtime(monkeypatch
                 "jsonrpc": "2.0",
                 "id": 203,
                 "method": "codex.exec.resize",
-                "params": {"request": {"processId": "exec-1", "rows": 40, "cols": 120}},
+                "params": {"request": {"process_id": "exec-1", "rows": 40, "cols": 120}},
             },
         )
         terminate_response = await client.post(
@@ -163,7 +163,7 @@ async def test_exec_write_resize_and_terminate_route_to_exec_runtime(monkeypatch
                 "jsonrpc": "2.0",
                 "id": 204,
                 "method": "codex.exec.terminate",
-                "params": {"request": {"processId": "exec-1"}},
+                "params": {"request": {"process_id": "exec-1"}},
             },
         )
 
@@ -232,7 +232,7 @@ async def test_exec_control_rejects_invalid_request_shapes(monkeypatch) -> None:
                 "jsonrpc": "2.0",
                 "id": 206,
                 "method": "codex.exec.write",
-                "params": {"request": {"processId": "exec-1"}},
+                "params": {"request": {"process_id": "exec-1"}},
             },
         )
         resize_response = await client.post(
@@ -242,7 +242,7 @@ async def test_exec_control_rejects_invalid_request_shapes(monkeypatch) -> None:
                 "jsonrpc": "2.0",
                 "id": 207,
                 "method": "codex.exec.resize",
-                "params": {"request": {"processId": "exec-1", "rows": 0, "cols": 120}},
+                "params": {"request": {"process_id": "exec-1", "rows": 0, "cols": 120}},
             },
         )
 
@@ -289,7 +289,7 @@ async def test_exec_control_maps_missing_session_lookup_to_business_error(monkey
                 "jsonrpc": "2.0",
                 "id": 208,
                 "method": "codex.exec.write",
-                "params": {"request": {"processId": "exec-missing", "closeStdin": True}},
+                "params": {"request": {"process_id": "exec-missing", "close_stdin": True}},
             },
         )
 
@@ -334,7 +334,7 @@ async def test_exec_control_maps_forbidden_session_access_to_business_error(monk
                 "jsonrpc": "2.0",
                 "id": 209,
                 "method": "codex.exec.write",
-                "params": {"request": {"processId": "exec-1", "closeStdin": True}},
+                "params": {"request": {"process_id": "exec-1", "close_stdin": True}},
             },
         )
 

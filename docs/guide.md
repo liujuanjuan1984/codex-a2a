@@ -802,9 +802,9 @@ curl -sS http://127.0.0.1:8000/ \
     "params": {
       "thread_id": "thr-1",
       "request": {
-        "gitInfo": {
+        "git_info": {
           "branch": "feature/thread-lifecycle",
-          "originUrl": "https://github.com/example/repo.git"
+          "origin_url": "https://github.com/example/repo.git"
         }
       }
     }
@@ -838,7 +838,7 @@ curl -sS http://127.0.0.1:8000/ \
     "params": {
       "request": {
         "events": ["thread.started", "thread.status.changed", "thread.archived"],
-        "threadIds": ["thr-1"]
+        "thread_ids": ["thr-1"]
       }
     }
   }'
