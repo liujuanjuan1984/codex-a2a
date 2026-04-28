@@ -176,7 +176,6 @@ def create_app(settings: Settings) -> FastAPI:
             review_runtime=review_runtime,
             thread_lifecycle_runtime=thread_lifecycle_runtime,
             methods=jsonrpc_methods,
-            protocol_version=settings.a2a_protocol_version,
             supported_methods=supported_extension_jsonrpc_methods,
             guard_hooks=session_guard_hooks,
             rpc_url=CORE_JSONRPC_PATH,
@@ -219,7 +218,6 @@ def create_app(settings: Settings) -> FastAPI:
     patch_openapi_contract(
         app,
         settings=settings,
-        protocol_version=settings.a2a_protocol_version,
         runtime_profile=runtime_profile,
     )
 

@@ -53,7 +53,6 @@ def _build_extension_app(
         review_runtime=MagicMock(),
         thread_lifecycle_runtime=MagicMock(),
         methods=methods,
-        protocol_version=settings.a2a_protocol_version,
         supported_methods=list(
             build_capability_snapshot(
                 runtime_profile=build_runtime_profile(settings)
@@ -118,7 +117,6 @@ def test_create_extension_jsonrpc_routes_returns_single_post_route() -> None:
             **EXEC_CONTROL_METHODS,
             **INTERRUPT_CALLBACK_METHODS,
         },
-        protocol_version=settings.a2a_protocol_version,
         supported_methods=list(
             build_capability_snapshot(
                 runtime_profile=build_runtime_profile(settings)

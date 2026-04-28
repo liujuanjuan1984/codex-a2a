@@ -486,7 +486,6 @@ def build_openapi_a2a_extension_contracts(
 def build_openapi_codex_contracts(
     *,
     settings: Settings,
-    protocol_version: str,
     runtime_profile: RuntimeProfile,
 ) -> dict[str, dict[str, Any]]:
     return {
@@ -505,15 +504,11 @@ def build_openapi_codex_contracts(
             runtime_profile=runtime_profile
         ),
         "wire_contract": build_wire_contract_extension_params(
-            protocol_version=protocol_version,
-            supported_protocol_versions=settings.a2a_supported_protocol_versions,
-            default_protocol_version=settings.a2a_protocol_version,
+            protocol_version=settings.a2a_protocol_version,
             runtime_profile=runtime_profile,
         ),
         "compatibility_profile": build_compatibility_profile_params(
-            protocol_version=protocol_version,
-            supported_protocol_versions=settings.a2a_supported_protocol_versions,
-            default_protocol_version=settings.a2a_protocol_version,
+            protocol_version=settings.a2a_protocol_version,
             runtime_profile=runtime_profile,
         ),
     }

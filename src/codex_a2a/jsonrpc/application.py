@@ -27,7 +27,7 @@ from codex_a2a.jsonrpc.review_control import handle_review_control_request
 from codex_a2a.jsonrpc.session_query import handle_session_query_request
 from codex_a2a.jsonrpc.thread_lifecycle_control import handle_thread_lifecycle_control_request
 from codex_a2a.jsonrpc.turn_control import handle_turn_control_request
-from codex_a2a.protocol_versions import get_current_protocol_version
+from codex_a2a.protocol_versions import ADVERTISED_PROTOCOL_VERSION, get_current_protocol_version
 from codex_a2a.upstream.client import CodexClient
 
 
@@ -41,7 +41,6 @@ def create_extension_jsonrpc_routes(
     review_runtime: CodexReviewRuntime,
     thread_lifecycle_runtime: CodexThreadLifecycleRuntime,
     methods: dict[str, str],
-    protocol_version: str,
     supported_methods: list[str],
     guard_hooks: SessionGuardHooks,
     rpc_url: str,
@@ -57,7 +56,6 @@ def create_extension_jsonrpc_routes(
         review_runtime=review_runtime,
         thread_lifecycle_runtime=thread_lifecycle_runtime,
         methods=methods,
-        protocol_version=protocol_version,
         supported_methods=supported_methods,
         guard_hooks=guard_hooks,
     )
@@ -82,7 +80,6 @@ class CodexSessionQueryJSONRPCApplication(JsonRpcDispatcher):
         review_runtime: CodexReviewRuntime,
         thread_lifecycle_runtime: CodexThreadLifecycleRuntime,
         methods: dict[str, str],
-        protocol_version: str,
         supported_methods: list[str],
         guard_hooks: SessionGuardHooks,
         **kwargs: Any,
@@ -119,9 +116,7 @@ class CodexSessionQueryJSONRPCApplication(JsonRpcDispatcher):
             "permissions": self._method_reply_permissions,
             "elicitation": self._method_reply_elicitation,
         }
-        self._protocol_version = protocol_version
         self._supported_methods = list(supported_methods)
-        self._supported_method_set = set(supported_methods)
         self._method_registry = ExtensionMethodRegistry.from_methods(methods)
         self._guard_hooks = guard_hooks
         self._validate_guard_hooks()
@@ -221,7 +216,7 @@ class CodexSessionQueryJSONRPCApplication(JsonRpcDispatcher):
         request_id: str | int,
         method: str,
     ) -> JSONResponse:
-        protocol_version = get_current_protocol_version(self._protocol_version)
+        protocol_version = get_current_protocol_version(ADVERTISED_PROTOCOL_VERSION)
         return self._generate_error_response(
             request_id,
             JSONRPCError(

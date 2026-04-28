@@ -59,7 +59,6 @@ def _codex_contracts(settings) -> dict[str, dict[str, object]]:  # noqa: ANN001
     runtime_profile = build_runtime_profile(settings)
     return build_openapi_codex_contracts(
         settings=settings,
-        protocol_version=settings.a2a_protocol_version,
         runtime_profile=runtime_profile,
     )
 
@@ -347,8 +346,6 @@ def test_guide_mentions_resubscribe_service_level_behavior() -> None:
     wire_contract = build_wire_contract_extension_params(
         protocol_version="1.0",
         runtime_profile=build_runtime_profile(make_settings(a2a_bearer_token="test-token")),
-        supported_protocol_versions=["1.0"],
-        default_protocol_version="1.0",
     )
     assert "SubscribeToTask" in wire_contract["service_behaviors"]
 

@@ -53,7 +53,6 @@ def _codex_contracts(settings) -> dict[str, dict[str, Any]]:  # noqa: ANN001
     runtime_profile = build_runtime_profile(settings)
     return build_openapi_codex_contracts(
         settings=settings,
-        protocol_version=settings.a2a_protocol_version,
         runtime_profile=runtime_profile,
     )
 

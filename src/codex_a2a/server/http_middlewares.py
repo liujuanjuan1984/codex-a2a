@@ -348,9 +348,6 @@ def install_http_middlewares(
                 )
             return _unsupported_protocol_http_response(exc)
 
-        request.state.a2a_requested_protocol_version = negotiated.requested_version
-        request.state.a2a_protocol_version = negotiated.negotiated_version
-        request.state.a2a_protocol_version_explicit = negotiated.explicit
         _inject_context_protocol_header(
             request,
             protocol_version=negotiated.negotiated_version,

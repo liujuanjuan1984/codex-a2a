@@ -12,10 +12,10 @@ from codex_a2a.contracts.runtime_output import (
 )
 from codex_a2a.execution.tool_call_payloads import build_tool_call_payload_contract_params
 from codex_a2a.protocol_versions import (
+    ADVERTISED_PROTOCOL_VERSION,
     build_protocol_compatibility_summary,
     default_supported_protocol_versions,
     normalize_protocol_version,
-    normalize_protocol_versions,
 )
 
 from .extension_specs import *  # noqa: F403
@@ -41,14 +41,11 @@ def build_wire_contract_extension_params(
     *,
     protocol_version: str,
     runtime_profile: RuntimeProfile,
-    supported_protocol_versions: tuple[str, ...] | list[str] | None = None,
-    default_protocol_version: str | None = None,
 ) -> dict[str, Any]:
-    declared_default_protocol_version = normalize_protocol_version(
-        default_protocol_version or protocol_version
-    )
-    declared_supported_protocol_versions = normalize_protocol_versions(
-        supported_protocol_versions or default_supported_protocol_versions(protocol_version)
+    declared_protocol_version = normalize_protocol_version(protocol_version)
+    declared_default_protocol_version = normalize_protocol_version(ADVERTISED_PROTOCOL_VERSION)
+    declared_supported_protocol_versions = default_supported_protocol_versions(
+        declared_protocol_version
     )
     protocol_compatibility = build_protocol_compatibility_summary(
         default_protocol_version=declared_default_protocol_version,
@@ -73,26 +70,26 @@ def build_wire_contract_extension_params(
         ],
     }
     return {
-        "protocol_version": protocol_version,
+        "protocol_version": declared_protocol_version,
         "default_protocol_version": declared_default_protocol_version,
         "supported_protocol_versions": list(declared_supported_protocol_versions),
         "protocol_compatibility": protocol_compatibility,
         "transport_interfaces": [
             {
                 "protocol_binding": "HTTP+JSON",
-                "protocol_version": protocol_version,
+                "protocol_version": declared_protocol_version,
                 "url_path_prefix": REST_API_PATH_PREFIX,
             },
             {
                 "protocol_binding": "JSON-RPC",
-                "protocol_version": protocol_version,
+                "protocol_version": declared_protocol_version,
                 "url_path": CORE_JSONRPC_PATH,
             },
         ],
         "core": {
             "jsonrpc_endpoint": {
                 "protocol_binding": "JSON-RPC",
-                "protocol_version": protocol_version,
+                "protocol_version": declared_protocol_version,
                 "url_path": CORE_JSONRPC_PATH,
             },
             "jsonrpc_methods": list(CORE_JSONRPC_METHODS),
@@ -101,7 +98,7 @@ def build_wire_contract_extension_params(
         "extensions": {
             "jsonrpc_endpoint": {
                 "protocol_binding": "JSON-RPC",
-                "protocol_version": protocol_version,
+                "protocol_version": declared_protocol_version,
                 "url_path": EXTENSION_JSONRPC_PATH,
             },
             "jsonrpc_methods": list(snapshot.extension_jsonrpc_methods),
@@ -144,14 +141,11 @@ def build_compatibility_profile_params(
     *,
     protocol_version: str,
     runtime_profile: RuntimeProfile,
-    supported_protocol_versions: tuple[str, ...] | list[str] | None = None,
-    default_protocol_version: str | None = None,
 ) -> dict[str, Any]:
-    declared_default_protocol_version = normalize_protocol_version(
-        default_protocol_version or protocol_version
-    )
-    declared_supported_protocol_versions = normalize_protocol_versions(
-        supported_protocol_versions or default_supported_protocol_versions(protocol_version)
+    declared_protocol_version = normalize_protocol_version(protocol_version)
+    declared_default_protocol_version = normalize_protocol_version(ADVERTISED_PROTOCOL_VERSION)
+    declared_supported_protocol_versions = default_supported_protocol_versions(
+        declared_protocol_version
     )
     protocol_compatibility = build_protocol_compatibility_summary(
         default_protocol_version=declared_default_protocol_version,
@@ -334,7 +328,7 @@ def build_compatibility_profile_params(
 
     return {
         "profile_id": runtime_profile.profile_id,
-        "protocol_version": protocol_version,
+        "protocol_version": declared_protocol_version,
         "default_protocol_version": declared_default_protocol_version,
         "supported_protocol_versions": list(declared_supported_protocol_versions),
         "protocol_compatibility": protocol_compatibility,

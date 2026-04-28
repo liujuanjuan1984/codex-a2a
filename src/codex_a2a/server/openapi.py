@@ -145,7 +145,6 @@ def patch_openapi_contract(
     app: FastAPI,
     *,
     settings: Settings,
-    protocol_version: str,
     runtime_profile: RuntimeProfile,
 ) -> None:
     a2a_extension_contracts = build_openapi_a2a_extension_contracts(
@@ -153,7 +152,6 @@ def patch_openapi_contract(
     )
     codex_contracts = build_openapi_codex_contracts(
         settings=settings,
-        protocol_version=protocol_version,
         runtime_profile=runtime_profile,
     )
     original_openapi = app.openapi
