@@ -17,13 +17,17 @@ SYNC_CODEX_DOCS_TEXT = Path("scripts/sync_codex_docs.sh").read_text()
 
 
 def test_readme_documents_released_cli_installation_via_uv_tool() -> None:
+    assert "```text" in README_TEXT
+    assert "Repository: https://github.com/liujuanjuan1984/codex-a2a" in README_TEXT
     assert "uv tool install codex-a2a" in README_TEXT
     assert "uv tool upgrade codex-a2a" in README_TEXT
     assert 'uv tool install "codex-a2a==<version>"' in README_TEXT
     assert "Self-start the released CLI against a workspace root:" in README_TEXT
     assert "## Development From Source" not in README_TEXT
     assert "## Development From Source" in CONTRIBUTING_TEXT
-    assert "CODEX_WORKSPACE_ROOT=/abs/path/to/workspace uv run codex-a2a" in CONTRIBUTING_TEXT
+    assert "CODEX_WORKSPACE_ROOT=/abs/path/to/workspace uv run codex-a2a serve" in (
+        CONTRIBUTING_TEXT
+    )
     assert "http://127.0.0.1:8000/.well-known/agent-card.json" in CONTRIBUTING_TEXT
     assert "Install and verify the local `codex` CLI itself." in README_TEXT
     assert "does not provision Codex providers, login state, or API keys for you" in README_TEXT
@@ -38,7 +42,7 @@ def test_readme_documents_released_cli_installation_via_uv_tool() -> None:
         '"token":"\'"${DEMO_BEARER_TOKEN}"\'","principal":"automation"}]\' \\'
     )
     assert static_auth_example in README_TEXT
-    assert "CODEX_WORKSPACE_ROOT=/abs/path/to/workspace \\\ncodex-a2a" in README_TEXT
+    assert "CODEX_WORKSPACE_ROOT=/abs/path/to/workspace \\\ncodex-a2a serve" in README_TEXT
     assert "export A2A_HOST=127.0.0.1" not in README_TEXT
     assert "A2A_CLIENT_BASIC_AUTH" in README_TEXT
     assert "--token your-outbound-token" not in README_TEXT
@@ -154,6 +158,8 @@ def test_repository_wrappers_only_keep_remaining_user_or_maintainer_entrypoints(
     assert '"${installed_python}" -c "import codex_a2a; print(codex_a2a.__version__)"' in (
         SMOKE_TEST_SCRIPT_TEXT
     )
+    assert 'help_output="$("${tool_bin_dir}/codex-a2a" -h)"' in SMOKE_TEST_SCRIPT_TEXT
+    assert '"${tool_bin_dir}/codex-a2a" serve >"${server_log}" 2>&1 &' in (SMOKE_TEST_SCRIPT_TEXT)
     assert "uv run pytest --no-cov" in RUNTIME_MATRIX_SCRIPT_TEXT
     assert 'CODEX_CLI_BIN="${fake_codex_bin}"' in SMOKE_TEST_SCRIPT_TEXT
     assert 'A2A_DATABASE_URL="sqlite+aiosqlite:///${database_path}"' in SMOKE_TEST_SCRIPT_TEXT

@@ -1,6 +1,23 @@
 # codex-a2a
 
+```text
+               _                  ___
+              | |                |__ \
+  ___ ___   __| | _____  __   __ _   ) |__ _
+ / __/ _ \ / _` |/ _ \ \/ /  / _` | / // _` |
+| (_| (_) | (_| |  __/>  <  | (_| |/ /| (_| |
+ \___\___/ \__,_|\___/_/\_\  \__,_|____\__,_|
+```
+
 > Expose Codex through A2A.
+
+Repository: https://github.com/liujuanjuan1984/codex-a2a
+
+Install: `uv tool install --upgrade codex-a2a`
+
+Protocol: A2A `1.0` only.
+
+Start the runtime explicitly with `codex-a2a serve`.
 
 `codex-a2a` adds an A2A runtime layer to the local Codex runtime, with auth, streaming, session continuity, interrupt handling, a built-in outbound A2A client, and a clear deployment boundary.
 
@@ -74,7 +91,7 @@ A2A_PORT=8000 \
 A2A_PUBLIC_URL=http://127.0.0.1:8000 \
 A2A_DATABASE_URL=sqlite+aiosqlite:////abs/path/to/workspace/.codex-a2a/codex-a2a.db \
 CODEX_WORKSPACE_ROOT=/abs/path/to/workspace \
-codex-a2a
+codex-a2a serve
 ```
 
 For the full runtime configuration matrix, outbound client settings, and deployment notes, see [Usage Guide](docs/guide.md).
