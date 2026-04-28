@@ -166,9 +166,6 @@ class DummySessionQueryCodexClient:
         self.last_thread_metadata_update: dict[str, Any] | None = None
         self.last_turn_steer: dict[str, Any] | None = None
         self.last_review_start: dict[str, Any] | None = None
-        self.last_prompt_async: dict[str, Any] | None = None
-        self.last_command: dict[str, Any] | None = None
-        self.last_shell: dict[str, Any] | None = None
         self.exec_write_calls: list[dict[str, Any]] = []
         self.exec_resize_calls: list[dict[str, Any]] = []
         self.exec_terminate_calls: list[dict[str, Any]] = []
@@ -294,55 +291,6 @@ class DummySessionQueryCodexClient:
             "ok": True,
             "turn_id": "turn-review-1",
             "review_thread_id": review_thread_id,
-        }
-
-    async def session_prompt_async(
-        self,
-        session_id: str,
-        *,
-        request=None,
-        directory=None,
-        execution_options: RequestExecutionOptions | None = None,
-    ):
-        self.last_prompt_async = {
-            "session_id": session_id,
-            "request": request,
-            "directory": directory,
-            "execution_options": execution_options,
-        }
-        return {"ok": True, "session_id": session_id, "turn_id": "turn-1"}
-
-    async def session_command(
-        self,
-        session_id: str,
-        *,
-        request=None,
-        directory=None,
-        execution_options: RequestExecutionOptions | None = None,
-    ) -> CodexMessage:
-        self.last_command = {
-            "session_id": session_id,
-            "request": request,
-            "directory": directory,
-            "execution_options": execution_options,
-        }
-        return CodexMessage(
-            text=f"command:{request['command']} {request.get('arguments', '')}".strip(),
-            session_id=session_id,
-            message_id=request.get("messageID") or "cmd-1",
-            raw={"request": request},
-        )
-
-    async def session_shell(self, session_id: str, *, request=None, directory=None):
-        self.last_shell = {
-            "session_id": session_id,
-            "request": request,
-            "directory": directory,
-        }
-        return {
-            "info": {"id": "shell-1", "role": "assistant"},
-            "parts": [{"type": "text", "text": f"stdout\n$ {request['command']}"}],
-            "raw": {"request": request},
         }
 
     async def exec_start(

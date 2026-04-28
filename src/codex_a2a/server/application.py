@@ -6,19 +6,21 @@ from typing import Any
 
 import uvicorn
 from a2a.server.routes.agent_card_routes import create_agent_card_routes
+from a2a.server.routes.jsonrpc_routes import create_jsonrpc_routes
 from a2a.server.routes.rest_routes import create_rest_routes
 from fastapi import FastAPI
-from starlette.routing import Route
 
 from codex_a2a.client.manager import A2AClientManager
 from codex_a2a.config import Settings
 from codex_a2a.contracts.extensions import (
+    CORE_JSONRPC_PATH,
     DISCOVERY_METHODS,
     EXEC_CONTROL_METHODS,
+    EXTENSION_JSONRPC_PATH,
     INTERRUPT_CALLBACK_METHODS,
     INTERRUPT_RECOVERY_METHODS,
+    REST_API_PATH_PREFIX,
     REVIEW_CONTROL_METHODS,
-    SESSION_CONTROL_METHODS,
     SESSION_QUERY_METHODS,
     THREAD_LIFECYCLE_METHODS,
     TURN_CONTROL_METHODS,
@@ -29,7 +31,10 @@ from codex_a2a.execution.exec_runtime import CodexExecRuntime
 from codex_a2a.execution.executor import CodexAgentExecutor
 from codex_a2a.execution.review_runtime import CodexReviewRuntime
 from codex_a2a.execution.thread_lifecycle_runtime import CodexThreadLifecycleRuntime
-from codex_a2a.jsonrpc.application import CodexSessionQueryJSONRPCApplication
+from codex_a2a.jsonrpc.application import (
+    CodexSessionQueryJSONRPCApplication,
+    create_extension_jsonrpc_routes,
+)
 from codex_a2a.jsonrpc.hooks import SessionGuardHooks
 from codex_a2a.logging_context import install_log_record_factory
 from codex_a2a.profile.runtime import build_runtime_profile
@@ -126,7 +131,6 @@ def create_app(settings: Settings) -> FastAPI:
     context_builder = IdentityAwareCallContextBuilder()
     jsonrpc_methods = {
         **SESSION_QUERY_METHODS,
-        **SESSION_CONTROL_METHODS,
         **DISCOVERY_METHODS,
         "thread_fork": THREAD_LIFECYCLE_METHODS["fork"],
         "thread_archive": THREAD_LIFECYCLE_METHODS["archive"],
@@ -137,8 +141,6 @@ def create_app(settings: Settings) -> FastAPI:
         "interrupts_list": INTERRUPT_RECOVERY_METHODS["list"],
         **INTERRUPT_CALLBACK_METHODS,
     }
-    if "shell" not in capability_snapshot.session_query_method_keys:
-        jsonrpc_methods.pop("shell", None)
     if capability_snapshot.turn_control_methods:
         jsonrpc_methods["turn_steer"] = TURN_CONTROL_METHODS["steer"]
     if capability_snapshot.review_control_methods:
@@ -155,19 +157,7 @@ def create_app(settings: Settings) -> FastAPI:
         session_owner_matcher=bindings.session_owner_matcher,
     )
 
-    jsonrpc_app = CodexSessionQueryJSONRPCApplication(
-        request_handler=handler,
-        context_builder=context_builder,
-        codex_client=client,
-        exec_runtime=exec_runtime,
-        discovery_runtime=discovery_runtime,
-        review_runtime=review_runtime,
-        thread_lifecycle_runtime=thread_lifecycle_runtime,
-        methods=jsonrpc_methods,
-        protocol_version=settings.a2a_protocol_version,
-        supported_methods=list(capability_snapshot.supported_jsonrpc_methods),
-        guard_hooks=session_guard_hooks,
-    )
+    supported_extension_jsonrpc_methods = list(capability_snapshot.extension_jsonrpc_methods)
     app = FastAPI(
         title=settings.a2a_title,
         version=settings.a2a_version,
@@ -179,16 +169,34 @@ def create_app(settings: Settings) -> FastAPI:
     )
     app.router.routes.extend(create_agent_card_routes(agent_card))
     app.router.routes.extend(
-        create_agent_card_routes(agent_card, card_url="/.well-known/agent.json")
+        create_jsonrpc_routes(
+            request_handler=handler,
+            context_builder=context_builder,
+            rpc_url=CORE_JSONRPC_PATH,
+        )
     )
-    app.router.routes.append(
-        Route(path="/", endpoint=jsonrpc_app.handle_requests, methods=["POST"])
+    app.router.routes.extend(
+        create_extension_jsonrpc_routes(
+            request_handler=handler,
+            context_builder=context_builder,
+            codex_client=client,
+            exec_runtime=exec_runtime,
+            discovery_runtime=discovery_runtime,
+            review_runtime=review_runtime,
+            thread_lifecycle_runtime=thread_lifecycle_runtime,
+            methods=jsonrpc_methods,
+            protocol_version=settings.a2a_protocol_version,
+            supported_methods=supported_extension_jsonrpc_methods,
+            guard_hooks=session_guard_hooks,
+            rpc_url=EXTENSION_JSONRPC_PATH,
+            dispatcher_factory=CodexSessionQueryJSONRPCApplication,
+        )
     )
     app.router.routes.extend(
         create_rest_routes(
             request_handler=handler,
             context_builder=context_builder,
-            path_prefix="/v1",
+            path_prefix=REST_API_PATH_PREFIX,
         )
     )
     app.state.codex_client = client

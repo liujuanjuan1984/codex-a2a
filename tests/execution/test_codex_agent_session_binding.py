@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from a2a.types import (
     Artifact,
+    StreamResponse,
     Task,
     TaskArtifactUpdateEvent,
     TaskState,
@@ -342,14 +343,8 @@ async def test_agent_handles_a2a_call_tool() -> None:
         extract_text = staticmethod(A2AClient.extract_text)
 
         async def send_message(self, text: str, **_kwargs):
-            task = Task(
-                id="remote-task",
-                context_id="remote-ctx",
-                status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
-            )
-            yield (
-                task,
-                TaskArtifactUpdateEvent(
+            yield StreamResponse(
+                artifact_update=TaskArtifactUpdateEvent(
                     task_id="remote-task",
                     context_id="remote-ctx",
                     artifact=Artifact(
@@ -357,7 +352,7 @@ async def test_agent_handles_a2a_call_tool() -> None:
                         name="response",
                         parts=[new_text_part(f"remote response to {text}")],
                     ),
-                ),
+                )
             )
 
         async def close(self) -> None:
@@ -434,14 +429,15 @@ async def test_agent_supports_tool_loop_and_merges_stream_output() -> None:
     class _MockManager:
         async def get_client(self, _agent_url: str):
             async def _send_message(_text: str, **_kwargs):
-                task = Task(
-                    id="remote-task",
-                    context_id="remote-ctx",
-                    status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
+                yield StreamResponse(
+                    task=Task(
+                        id="remote-task",
+                        context_id="remote-ctx",
+                        status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
+                    )
                 )
-                yield (
-                    task,
-                    TaskArtifactUpdateEvent(
+                yield StreamResponse(
+                    artifact_update=TaskArtifactUpdateEvent(
                         task_id="remote-task",
                         context_id="remote-ctx",
                         artifact=Artifact(

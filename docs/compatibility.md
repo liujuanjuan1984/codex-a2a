@@ -11,7 +11,7 @@ This document explains the compatibility promises this repository currently trie
 
 The repository pins the SDK version in `pyproject.toml` and validates the published CLI build in CI. Upgrade the SDK deliberately rather than relying on floating dependency resolution.
 
-The authenticated compatibility profile and wire contract publish `default_protocol_version`, `supported_protocol_versions`, and `protocol_compatibility`. Request-time `A2A-Version` negotiation now targets the repository's `1.0` baseline only, and the published contracts should describe the implemented `1.0` transport surface rather than any legacy compatibility line.
+The OpenAPI-published compatibility profile and wire contract publish `default_protocol_version`, `supported_protocol_versions`, and `protocol_compatibility`. Request-time `A2A-Version` negotiation now targets the repository's `1.0` baseline only, and the published contracts should describe the implemented `1.0` transport surface rather than any legacy compatibility line.
 
 ## Contract Honesty
 
@@ -19,7 +19,7 @@ Machine-readable discovery surfaces must reflect actual runtime behavior:
 
 - public Agent Card
 - authenticated extended card
-- OpenAPI metadata
+- OpenAPI metadata, including `x-a2a-extension-contracts` and `x-codex-contracts`
 - JSON-RPC wire contract
 - compatibility profile
 
@@ -28,7 +28,9 @@ If runtime support is not implemented, do not expose it as a supported machine-r
 Open-source consumption guidance:
 
 - Treat the core A2A send / stream / task methods as the portable baseline.
+- Treat `POST /` as the core A2A JSON-RPC surface and `POST /codex/jsonrpc` as the provider-private extension surface.
 - Treat `urn:a2a:*` entries in this repository as shared repo-family conventions, not as claims that they are part of the A2A core baseline.
+- Treat `a2a.interrupt.*` reply methods as a shared provider-private callback contract on `POST /codex/jsonrpc`, not as core A2A methods or Agent Card-negotiated extensions.
 - Treat `codex.*` methods plus `metadata.codex.directory` and `metadata.codex.execution` as a Codex-specific control plane layered on top of the portable A2A surface.
 - Treat [extension-specifications.md](./extension-specifications.md) as the stable URI/spec index, not as the main usage guide.
 
@@ -90,17 +92,16 @@ Execution-environment boundary fields are also published through the runtime pro
 ## Extension Stability
 
 - Shared metadata and extension contracts should stay synchronized across Agent Card, OpenAPI, and runtime behavior.
-- Public Agent Card should stay intentionally minimal. Detailed extension params belong in the authenticated extended card and OpenAPI, not back in the anonymous discovery surface.
+- Public Agent Card should stay intentionally minimal. Negotiated shared extension params belong in `capabilities.extensions`; provider-private contract payloads belong in OpenAPI `x-codex-contracts`, with the authenticated extended card focused on skill discovery and deployment-aware examples.
 - Product-specific extensions should remain stable within the current major line unless explicitly documented otherwise.
 - Deployment-conditional methods must be declared as conditional rather than silently disappearing.
-- `codex.sessions.shell` is compatibility-sensitive as a one-shot shell snapshot contract. Future interactive exec support must use a separate extension family rather than silently widening this method's behavior.
-- Rich input mapping is compatibility-sensitive across both `codex.sessions.prompt_async` and the core A2A message surface. Changes to supported part types, `Part(url|raw)` image handling, or `Part(data)` mention/skill mapping should be treated as wire-level behavior changes.
+- Rich input mapping is compatibility-sensitive across the core A2A message surface and `codex.turns.steer`. Changes to supported part types, `Part(url|raw)` image handling, or `Part(data)` mention/skill mapping should be treated as wire-level behavior changes.
 - `codex.exec.*` is compatibility-sensitive as the standalone interactive exec contract. Changes to handle shapes, task-stream delivery, or lifecycle method names should be treated as wire-level changes.
 - `codex.discovery.*` is compatibility-sensitive as the stable discovery contract for `skill.path` and `mention_path` identifiers. Changes to normalized item fields, plugin marketplace mapping, or discovery watch task payload kinds should be treated as wire-level changes.
 - `codex.threads.*` is compatibility-sensitive as the provider-private thread lifecycle contract. Changes to lifecycle method names, watch payload kinds, or watch-task bridge event names should be treated as wire-level changes.
 - `codex.turns.*` is compatibility-sensitive as the active-turn control contract. Changes to `expected_turn_id` semantics, same-turn rich-input handling, or rejected override fields should be treated as wire-level changes.
 - `codex.review.*` is compatibility-sensitive as the review control and watch contract. Changes to supported target types, `delivery` semantics, review watch payload kinds, or review watch event names should be treated as wire-level changes.
-- Provider-private Agent Card skill decomposition is also compatibility-sensitive. Renaming or re-merging `codex.sessions.query/control`, `codex.discovery.query/watch`, `codex.threads.control/watch`, `codex.turns.control`, `codex.review.control`, `codex.exec.control/stream`, or narrowing `codex.interrupt.callback` output modes should be treated as discoverability contract changes.
+- Provider-private Agent Card skill decomposition is also compatibility-sensitive. Renaming or re-merging `codex.sessions.query`, `codex.discovery.query/watch`, `codex.threads.control/watch`, `codex.turns.control`, `codex.review.control`, `codex.exec.control/stream`, or narrowing `codex.interrupt.callback` output modes should be treated as discoverability contract changes.
 - Agent Card media modes and `acceptedOutputModes` handling are compatibility-sensitive. Changes to declared default modes, to task-scoped persistence of negotiated modes, or to structured-output downgrade behavior should be treated as wire-level changes.
 - For core chat tasks, negotiated output modes are lifecycle-scoped. `SendMessage`, `SendStreamingMessage`, `GetTask`, `SubscribeToTask`, and push notifications should not drift apart for the same task.
 - For core chat requests, explicit `acceptedOutputModes` are also a compatibility-sensitive fail-fast boundary: requests must remain compatible with declared chat output modes, and current chat turns require `text/plain`.
@@ -128,8 +129,8 @@ Current repository judgment under those rules:
 - `codex.interrupts.list` is acceptable as an adapter-local recovery surface because it only exposes active pending interrupt handles already known to this adapter and does not mutate upstream state.
 - `codex.turns.steer` is boundary-sensitive and should remain narrowly scoped, provider-private, and resistant to scope creep into a general orchestration API.
 - `codex.review.*` is also boundary-sensitive and should stay framed as a provider-private reviewer surface rather than a generic A2A review standard.
-- `codex.sessions.shell` and `codex.exec.*` sit closest to the adapter boundary because they expose standalone command execution semantics instead of a stable session/message projection. They remain supported for internal or tightly controlled deployments, but should stay deployment-conditional and provider-private rather than being treated as generic extension templates.
-- Current default posture keeps `codex.sessions.shell`, `codex.review.*`, and `codex.exec.*` disabled unless a deployment intentionally opts into them. `codex.turns.steer` is enabled by default but remains narrowly scoped, provider-private, and deployment-configurable.
+- `codex.exec.*` sits closest to the adapter boundary because it exposes standalone interactive command execution semantics instead of a stable session/message projection. It should stay deployment-conditional and provider-private rather than being treated as a generic extension template.
+- Current default posture keeps `codex.review.*` and `codex.exec.*` disabled unless a deployment intentionally opts into them. `codex.turns.steer` is enabled by default but remains narrowly scoped, provider-private, and deployment-configurable.
 - Inbound auth is intentionally static and deployment-scoped. The current contract requires a static multi-credential registry with stable principals; it does not claim OAuth2, OIDC, or dynamic token introspection.
 - Stable principal mapping is part of the runtime compatibility surface because session ownership, thread watch ownership, and exec ownership all key off the authenticated principal rather than a rotating token hash.
 
@@ -140,11 +141,12 @@ This repository distinguishes between three layers:
 - core A2A surface
   - standard send / stream / task methods
 - shared extensions
-  - repo-family conventions such as session binding, stream hints, and interrupt callbacks (`permission`, `question`, `permissions`, and `elicitation` reply surfaces)
-- Codex-specific extensions
+  - repo-family conventions such as session binding and stream hints
+- provider-private control contracts
+  - `a2a.interrupt.*` reply methods on `POST /codex/jsonrpc`
   - `codex.*` JSON-RPC methods plus `metadata.codex.directory` and `metadata.codex.execution`
   - this now includes:
-    - session query/control
+    - session query
     - discovery/query surfaces
     - discovery watch task bridge
     - thread lifecycle watch-task bridge
@@ -163,7 +165,8 @@ Discovery note:
 - `codex.review.start` is the declared review-start control method for `uncommittedChanges`, `baseBranch`, `commit`, and `custom` review targets.
 - `codex.review.watch` is the declared review lifecycle watch-task bridge for `review.started`, `review.status.changed`, `review.completed`, and `review.failed`.
 - `codex.review.start` remains a control-handle surface; clients should use `codex.review.watch` plus `SubscribeToTask` for review lifecycle observation.
-- `codex.interrupts.list` is always-on but adapter-local and identity-scoped. `codex.sessions.shell`, `codex.turns.steer`, `codex.review.*`, and `codex.exec.*` remain deployment-conditional surfaces and should be discovered from machine-readable contracts before use.
+- `codex.interrupts.list` is always-on but adapter-local and identity-scoped. `codex.turns.steer`, `codex.review.*`, and `codex.exec.*` remain deployment-conditional surfaces and should be discovered from machine-readable contracts before use.
+- `a2a.interrupt.*` reply methods remain shared repo-family callback contracts, but they are published through provider-private OpenAPI contracts rather than Agent Card extension negotiation.
 - `thread/unsubscribe` is intentionally excluded from the stable public contract until this service exposes connection-safe subscription ownership.
 - This repository does not claim a generic standalone server-push JSON-RPC transport for those notifications; the compatibility contract is the watch-task bridge published through Agent Card and OpenAPI.
 

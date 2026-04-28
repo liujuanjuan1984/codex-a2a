@@ -19,10 +19,7 @@ from codex_a2a.upstream.models import (
 from codex_a2a.upstream.request_mapping import (
     apply_thread_start_execution_options,
     apply_turn_start_execution_options,
-    build_shell_exec_params,
     coerce_request_execution_options,
-    format_shell_response,
-    uuid_like_suffix,
 )
 from codex_a2a.upstream.stream_bridge import normalize_thread_summary
 
@@ -265,43 +262,6 @@ class CodexConversationFacade:
         finally:
             self._turn_trackers.pop(tracker_key, None)
 
-    async def session_prompt_async(
-        self,
-        session_id: str,
-        request: dict[str, Any],
-        *,
-        directory: str | None = None,
-        execution_options: RequestExecutionOptions | None = None,
-    ) -> dict[str, Any]:
-        params: dict[str, Any] = {
-            "threadId": session_id,
-            "input": convert_request_parts_to_turn_input(request),
-        }
-        if directory:
-            params["cwd"] = directory
-        elif self._workspace_root:
-            params["cwd"] = self._workspace_root
-        apply_turn_start_execution_options(
-            params,
-            execution_options=coerce_request_execution_options(execution_options),
-            default_model_id=self._model_id,
-        )
-        result = await self._start_turn(
-            session_id,
-            params,
-            directory=directory,
-            execution_options=execution_options,
-        )
-        if not isinstance(result, dict):
-            raise RuntimeError("codex turn/start response missing result object")
-        turn = result.get("turn")
-        if not isinstance(turn, dict):
-            raise RuntimeError("codex turn/start response missing turn")
-        turn_id = turn.get("id")
-        if not isinstance(turn_id, str) or not turn_id.strip():
-            raise RuntimeError("codex turn/start response missing turn id")
-        return {"ok": True, "session_id": session_id, "turn_id": turn_id.strip()}
-
     async def _start_turn(
         self,
         session_id: str,
@@ -444,60 +404,6 @@ class CodexConversationFacade:
             "ok": True,
             "turn_id": turn_id.strip(),
             "review_thread_id": review_thread_id.strip(),
-        }
-
-    async def session_command(
-        self,
-        session_id: str,
-        request: dict[str, Any],
-        *,
-        directory: str | None = None,
-        execution_options: RequestExecutionOptions | None = None,
-        timeout_seconds: float | None,
-    ) -> CodexMessage:
-        command = str(request["command"]).strip()
-        arguments = str(request.get("arguments", "")).strip()
-        prompt = f"/{command}" if not arguments else f"/{command} {arguments}"
-        return await self.send_message(
-            session_id,
-            prompt,
-            directory=directory,
-            execution_options=execution_options,
-            timeout_seconds=timeout_seconds,
-        )
-
-    async def session_shell(
-        self,
-        session_id: str,
-        request: dict[str, Any],
-        *,
-        directory: str | None = None,
-    ) -> dict[str, Any]:
-        command_text = str(request["command"]).strip()
-        if not command_text:
-            raise RuntimeError("shell command must not be empty")
-        result = await self._rpc_request(
-            "command/exec",
-            build_shell_exec_params(
-                command_text=command_text,
-                directory=directory,
-                default_workspace_root=self._workspace_root,
-            ),
-        )
-        if not isinstance(result, dict):
-            raise RuntimeError("codex command/exec response missing result object")
-        return {
-            "info": {
-                "id": f"shell:{session_id}:{uuid_like_suffix(command_text)}",
-                "role": "assistant",
-            },
-            "parts": [
-                {
-                    "type": "text",
-                    "text": format_shell_response(result),
-                }
-            ],
-            "raw": result,
         }
 
     @staticmethod

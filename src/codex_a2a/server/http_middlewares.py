@@ -20,8 +20,13 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 
 from codex_a2a.auth import authenticate_static_credential, build_static_auth_credentials
 from codex_a2a.config import Settings
+from codex_a2a.contracts.extensions import (
+    CORE_JSONRPC_PATH,
+    EXTENSION_JSONRPC_PATH,
+    REST_API_PATH_PREFIX,
+)
 from codex_a2a.jsonrpc.errors import (
-    adapt_jsonrpc_error_for_protocol,
+    adapt_jsonrpc_error,
     build_http_error_body,
     version_not_supported_error,
 )
@@ -34,7 +39,6 @@ from codex_a2a.logging_context import (
 from codex_a2a.protocol_versions import (
     UnsupportedProtocolVersionError,
     negotiate_protocol_version,
-    normalize_protocol_version,
     reset_current_protocol_version,
     set_current_protocol_version,
 )
@@ -44,17 +48,16 @@ logger = logging.getLogger(__name__)
 
 _PUBLIC_AGENT_CARD_PATHS = {
     "/.well-known/agent-card.json",
-    "/.well-known/agent.json",
 }
 _AUTHENTICATED_EXTENDED_CARD_PATHS = {
-    "/v1/extendedAgentCard",
+    f"{REST_API_PATH_PREFIX}/extendedAgentCard",
 }
 _OPENAPI_PATHS = {
     "/openapi.json",
 }
 _REST_MESSAGE_PATHS = {
-    "/v1/message:send",
-    "/v1/message:stream",
+    f"{REST_API_PATH_PREFIX}/message:send",
+    f"{REST_API_PATH_PREFIX}/message:stream",
 }
 GZIP_COMPRESSIBLE_PATHS = (
     _PUBLIC_AGENT_CARD_PATHS | _AUTHENTICATED_EXTENDED_CARD_PATHS | _OPENAPI_PATHS
@@ -192,18 +195,6 @@ async def _get_request_body(request: Request) -> bytes:
     return body
 
 
-def _looks_like_legacy_message_payload(payload: dict | None) -> bool:
-    if payload is None:
-        return False
-    message = payload.get("message")
-    if not isinstance(message, dict):
-        return False
-    if "content" in message:
-        return True
-    role = message.get("role")
-    return isinstance(role, str) and role in {"user", "agent"}
-
-
 def _looks_like_jsonrpc_envelope(payload: dict | None) -> bool:
     if payload is None:
         return False
@@ -212,11 +203,15 @@ def _looks_like_jsonrpc_envelope(payload: dict | None) -> bool:
     return isinstance(method, str) and isinstance(version, str)
 
 
+def _is_jsonrpc_path(path: str) -> bool:
+    return path in {CORE_JSONRPC_PATH, EXTENSION_JSONRPC_PATH}
+
+
 def _requires_protocol_negotiation(request: Request) -> bool:
     path = request.url.path
     if request.method == "OPTIONS":
         return False
-    return path == "/" or path.startswith("/v1/")
+    return _is_jsonrpc_path(path) or path.startswith(f"{REST_API_PATH_PREFIX}/")
 
 
 def _jsonrpc_request_id(payload: dict | None) -> str | int | None:
@@ -238,20 +233,12 @@ def _requested_protocol_version(request: Request) -> tuple[str | None, str | Non
     return header_value, query_value
 
 
-def _error_protocol_version(requested_version: str, default_protocol_version: str) -> str:
-    try:
-        return normalize_protocol_version(requested_version)
-    except ValueError:
-        return normalize_protocol_version(default_protocol_version)
-
-
 def _jsonrpc_error_response(
     *,
     request_id: str | int | None,
-    protocol_version: str,
     error: JSONRPCError,
 ) -> JSONResponse:
-    adapted_error = adapt_jsonrpc_error_for_protocol(protocol_version, error)
+    adapted_error = adapt_jsonrpc_error(error)
     error_payload = (
         adapted_error.model_dump(mode="json", exclude_none=True)
         if isinstance(adapted_error, JSONRPCError)
@@ -272,13 +259,8 @@ def _unsupported_protocol_jsonrpc_response(
     request_id: str | int | None,
     exc: UnsupportedProtocolVersionError,
 ) -> JSONResponse:
-    error_protocol_version = _error_protocol_version(
-        exc.requested_version,
-        exc.default_protocol_version,
-    )
     return _jsonrpc_error_response(
         request_id=request_id,
-        protocol_version=error_protocol_version,
         error=version_not_supported_error(
             requested_version=exc.requested_version,
             supported_protocol_versions=list(exc.supported_protocol_versions),
@@ -293,22 +275,13 @@ def _unsupported_protocol_http_response(exc: UnsupportedProtocolVersionError) ->
         "supported_protocol_versions": list(exc.supported_protocol_versions),
         "default_protocol_version": exc.default_protocol_version,
     }
-    protocol_version = _error_protocol_version(
-        exc.requested_version,
-        exc.default_protocol_version,
-    )
     return JSONResponse(
         build_http_error_body(
-            protocol_version=protocol_version,
             status_code=400,
             status="INVALID_ARGUMENT",
             message=f"Unsupported A2A version: {exc.requested_version}",
             reason="VERSION_NOT_SUPPORTED",
             metadata=metadata,
-            legacy_payload={
-                "error": "Unsupported A2A version",
-                **metadata,
-            },
         ),
         status_code=400,
     )
@@ -367,7 +340,7 @@ def install_http_middlewares(
             )
         except UnsupportedProtocolVersionError as exc:
             request_id: str | int | None = None
-            if request.method == "POST" and request.url.path == "/":
+            if request.method == "POST" and _is_jsonrpc_path(request.url.path):
                 request_id = _jsonrpc_request_id(_parse_json_body(await _get_request_body(request)))
                 return _unsupported_protocol_jsonrpc_response(
                     request_id=request_id,
@@ -443,13 +416,13 @@ def install_http_middlewares(
 
         body = await _get_request_body(request)
         payload = _parse_json_body(body)
-        if _looks_like_jsonrpc_envelope(payload) or _looks_like_legacy_message_payload(payload):
+        if _looks_like_jsonrpc_envelope(payload):
             return JSONResponse(
                 {
                     "error": (
                         "Invalid HTTP+JSON payload for REST endpoint. "
                         "Use an A2A 1.0 request body with message.parts, or call "
-                        "POST / with JSON-RPC method=SendMessage or "
+                        f"POST {CORE_JSONRPC_PATH} with JSON-RPC method=SendMessage or "
                         "method=SendStreamingMessage."
                     )
                 },

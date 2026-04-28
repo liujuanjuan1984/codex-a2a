@@ -19,6 +19,7 @@ from a2a.types import (
     SecurityRequirement,
     SecurityScheme,
     SendMessageRequest,
+    StreamResponse,
     Task,
     TaskArtifactUpdateEvent,
     TaskState,
@@ -26,14 +27,16 @@ from a2a.types import (
 )
 from a2a.utils.constants import TransportProtocol
 
-from codex_a2a.a2a_proto import new_text_part, proto_to_python
+from codex_a2a.a2a_proto import new_data_part, new_text_part, proto_to_python
 from codex_a2a.client import (
     A2AClient,
     A2AClientConfig,
+    A2AClientConfigError,
     A2AUnsupportedBindingError,
     StaticCredentialService,
 )
 from codex_a2a.client.types import A2ACancelTaskRequest, A2AGetTaskRequest, A2ASendRequest
+from codex_a2a.contracts.extensions import SESSION_BINDING_EXTENSION_URI
 
 
 class _MockAsyncHttpClient:
@@ -52,22 +55,26 @@ class _MockAgentCardResolver:
 
     async def get_agent_card(self, *_, **__) -> AgentCard:
         _MockAgentCardResolver.calls += 1
-        return AgentCard(
-            name="mock",
-            description="mock agent",
-            version="1.0.0",
-            capabilities=AgentCapabilities(),
-            default_input_modes=["text/plain"],
-            default_output_modes=["text/plain"],
-            skills=[],
-            supported_interfaces=[
-                AgentInterface(
-                    url="https://example.org",
-                    protocol_binding=TransportProtocol.HTTP_JSON,
-                    protocol_version="1.0",
-                )
-            ],
-        )
+        return _build_mock_agent_card()
+
+
+def _build_mock_agent_card() -> AgentCard:
+    return AgentCard(
+        name="mock",
+        description="mock agent",
+        version="1.0.0",
+        capabilities=AgentCapabilities(),
+        default_input_modes=["text/plain"],
+        default_output_modes=["text/plain"],
+        skills=[],
+        supported_interfaces=[
+            AgentInterface(
+                url="https://example.org",
+                protocol_binding=TransportProtocol.HTTP_JSON,
+                protocol_version="1.0",
+            )
+        ],
+    )
 
 
 class _MockSDKClient:
@@ -77,6 +84,7 @@ class _MockSDKClient:
         self.get_task_contexts: list[Any] = []
         self.cancel_calls: list[CancelTaskRequest] = []
         self.cancel_contexts: list[Any] = []
+        self._card = _build_mock_agent_card()
 
     async def send_message(
         self,
@@ -95,7 +103,7 @@ class _MockSDKClient:
             context_id="ctx-1",
             status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
         )
-        yield task
+        yield StreamResponse(task=task)
 
     async def get_task(self, request: GetTaskRequest, *, context=None) -> Task:
         self.get_task_calls.append(request)
@@ -138,7 +146,8 @@ async def test_send_get_task_and_cancel_use_sdk_methods() -> None:
             blocking=False,
         )
     )
-    assert send_result.id == "task-1"
+    assert send_result.HasField("task")
+    assert send_result.task.id == "task-1"
     send_call = sdk_client.send_calls[0]
     assert proto_to_python(send_call["request"].metadata) == {"trace_id": "trace-1"}
     assert send_call["context"].service_parameters == {"Authorization": "Bearer token"}
@@ -175,6 +184,139 @@ async def test_send_get_task_and_cancel_use_sdk_methods() -> None:
 
 
 @pytest.mark.asyncio
+async def test_send_negotiates_extensions_from_config_and_metadata() -> None:
+    sdk_client = _MockSDKClient()
+    client = A2AClient(
+        A2AClientConfig(
+            agent_url="https://example.org",
+            extensions=[SESSION_BINDING_EXTENSION_URI],
+        ),
+        httpx_client=_MockAsyncHttpClient(),
+        card_resolver_factory=_MockAgentCardResolver,
+    )
+    client._sdk_client = sdk_client  # noqa: SLF001
+
+    await client.send(
+        A2ASendRequest(
+            text="hello",
+            metadata={
+                "authorization": "Bearer token",
+                "shared": {"session": {"id": "session-1"}},
+            },
+        )
+    )
+
+    send_call = sdk_client.send_calls[0]
+    assert send_call["context"].service_parameters == {
+        "Authorization": "Bearer token",
+        "A2A-Extensions": SESSION_BINDING_EXTENSION_URI,
+    }
+
+
+@pytest.mark.asyncio
+async def test_send_fails_fast_when_shared_metadata_lacks_negotiated_extension() -> None:
+    sdk_client = _MockSDKClient()
+    client = A2AClient(
+        A2AClientConfig(agent_url="https://example.org"),
+        httpx_client=_MockAsyncHttpClient(),
+        card_resolver_factory=_MockAgentCardResolver,
+    )
+    client._sdk_client = sdk_client  # noqa: SLF001
+
+    with pytest.raises(A2AClientConfigError, match="metadata.shared.session.id"):
+        await client.send(
+            A2ASendRequest(
+                text="hello",
+                metadata={"shared": {"session": {"id": "session-1"}}},
+            )
+        )
+
+    assert sdk_client.send_calls == []
+
+
+@pytest.mark.asyncio
+async def test_send_filters_unnegotiated_shared_metadata_from_response() -> None:
+    class _ResponseMetadataSDKClient(_MockSDKClient):
+        async def send_message(self, request: SendMessageRequest, *, context=None):
+            self.send_calls.append({"request": request, "context": context})
+            yield StreamResponse(
+                artifact_update=TaskArtifactUpdateEvent(
+                    task_id="task-1",
+                    context_id="ctx-1",
+                    artifact=Artifact(
+                        artifact_id="artifact-1",
+                        metadata={
+                            "shared": {
+                                "session": {"id": "session-1"},
+                                "stream": {"source": "remote"},
+                            }
+                        },
+                        parts=[new_text_part("hello")],
+                    ),
+                )
+            )
+
+    sdk_client = _ResponseMetadataSDKClient()
+    client = A2AClient(
+        A2AClientConfig(agent_url="https://example.org"),
+        httpx_client=_MockAsyncHttpClient(),
+        card_resolver_factory=_MockAgentCardResolver,
+    )
+    client._sdk_client = sdk_client  # noqa: SLF001
+
+    response = await client.send(
+        A2ASendRequest(
+            text="hello",
+            metadata={"a2a-extensions": [SESSION_BINDING_EXTENSION_URI]},
+        )
+    )
+
+    assert response.HasField("artifact_update")
+    assert proto_to_python(response.artifact_update.artifact.metadata) == {
+        "shared": {"session": {"id": "session-1"}}
+    }
+
+
+@pytest.mark.asyncio
+async def test_send_supports_v1_parts_and_message_payloads() -> None:
+    sdk_client = _MockSDKClient()
+    client = A2AClient(
+        A2AClientConfig(agent_url="https://example.org"),
+        httpx_client=_MockAsyncHttpClient(),
+        card_resolver_factory=_MockAgentCardResolver,
+    )
+    client._sdk_client = sdk_client  # noqa: SLF001
+
+    await client.send(
+        A2ASendRequest(
+            parts=[
+                new_text_part("hello"),
+                new_data_part({"kind": "mention", "path": "/tmp/skill"}),
+            ],
+            message_id="msg-parts",
+            context_id="ctx-parts",
+        )
+    )
+    parts_request = sdk_client.send_calls[0]["request"]
+    assert parts_request.message.message_id == "msg-parts"
+    assert parts_request.message.context_id == "ctx-parts"
+    assert proto_to_python(parts_request.message.parts[1].data) == {
+        "kind": "mention",
+        "path": "/tmp/skill",
+    }
+
+    outbound_message = Message(
+        message_id="msg-raw",
+        role=Role.ROLE_USER,
+        parts=[new_text_part("direct message")],
+    )
+    await client.send(A2ASendRequest(message=outbound_message))
+    message_request = sdk_client.send_calls[1]["request"]
+    assert message_request.message.message_id == "msg-raw"
+    assert message_request.message.parts[0].text == "direct message"
+
+
+@pytest.mark.asyncio
 async def test_get_agent_card_uses_resolver_and_cached() -> None:
     _MockAgentCardResolver.calls = 0
     client = A2AClient(
@@ -192,19 +334,82 @@ async def test_get_agent_card_uses_resolver_and_cached() -> None:
 
 
 @pytest.mark.asyncio
-async def test_build_client_maps_unsupported_transport_binding() -> None:
-    class _RejectingFactory:
-        def __init__(self, *_args, **_kwargs) -> None:
-            pass
+async def test_build_client_uses_sdk_url_creation_with_normalized_card_path() -> None:
+    observed: dict[str, Any] = {}
 
-        def create(self, *_args, **_kwargs):
-            raise ValueError("No shared transport found")
+    async def _capturing_creator(agent, **kwargs):
+        observed["agent"] = agent
+        observed["kwargs"] = kwargs
+        return _MockSDKClient()
+
+    client = A2AClient(
+        A2AClientConfig(agent_url="https://example.org/tenant/.well-known/agent-card.json"),
+        httpx_client=_MockAsyncHttpClient(),
+        card_resolver_factory=_MockAgentCardResolver,
+        client_creator=_capturing_creator,
+    )
+
+    await client._build_client()
+
+    assert observed["agent"] == "https://example.org/tenant"
+    assert observed["kwargs"]["relative_card_path"] == "/.well-known/agent-card.json"
+    assert observed["kwargs"]["resolver_http_kwargs"]["timeout"].connect == 5.0
+
+
+@pytest.mark.asyncio
+async def test_build_client_reuses_cached_card_after_explicit_card_fetch() -> None:
+    _MockAgentCardResolver.calls = 0
+    observed: dict[str, Any] = {}
+
+    async def _capturing_creator(agent, **kwargs):
+        observed["agent"] = agent
+        observed["kwargs"] = kwargs
+        return _MockSDKClient()
+
+    client = A2AClient(
+        A2AClientConfig(agent_url="https://example.org/tenant/.well-known/agent-card.json"),
+        httpx_client=_MockAsyncHttpClient(),
+        card_resolver_factory=_MockAgentCardResolver,
+        client_creator=_capturing_creator,
+    )
+
+    card = await client.get_agent_card()
+    await client._build_client()
+
+    assert card.name == "mock"
+    assert isinstance(observed["agent"], AgentCard)
+    assert observed["agent"].name == "mock"
+    assert "relative_card_path" not in observed["kwargs"]
+    assert "resolver_http_kwargs" not in observed["kwargs"]
+    assert _MockAgentCardResolver.calls == 1
+
+
+@pytest.mark.asyncio
+async def test_get_agent_card_uses_cached_sdk_card_without_resolver() -> None:
+    _MockAgentCardResolver.calls = 0
+    client = A2AClient(
+        A2AClientConfig(agent_url="https://example.org"),
+        httpx_client=_MockAsyncHttpClient(),
+        card_resolver_factory=_MockAgentCardResolver,
+    )
+    client._sdk_client = _MockSDKClient()  # noqa: SLF001
+
+    card = await client.get_agent_card()
+
+    assert card.name == "mock"
+    assert _MockAgentCardResolver.calls == 0
+
+
+@pytest.mark.asyncio
+async def test_build_client_maps_unsupported_transport_binding() -> None:
+    async def _rejecting_creator(*_args, **_kwargs):
+        raise ValueError("No shared transport found")
 
     client = A2AClient(
         A2AClientConfig(agent_url="https://example.org"),
         httpx_client=_MockAsyncHttpClient(),
         card_resolver_factory=_MockAgentCardResolver,
-        client_factory_type=_RejectingFactory,
+        client_creator=_rejecting_creator,
     )
 
     with pytest.raises(A2AUnsupportedBindingError):
@@ -271,11 +476,6 @@ async def test_static_credential_service_works_with_sdk_auth_interceptor() -> No
 
 
 def test_extract_text_prefers_stream_artifact_payload() -> None:
-    task = Task(
-        id="remote-task",
-        context_id="remote-context",
-        status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
-    )
     update = TaskArtifactUpdateEvent(
         task_id="remote-task",
         context_id="remote-context",
@@ -286,41 +486,16 @@ def test_extract_text_prefers_stream_artifact_payload() -> None:
         ),
     )
 
-    assert A2AClient.extract_text((task, update)) == "streamed remote text"
+    assert A2AClient.extract_text(StreamResponse(artifact_update=update)) == "streamed remote text"
 
 
-def test_extract_text_reads_task_status_message() -> None:
-    task = Task(
-        id="remote-task",
-        context_id="remote-context",
-        status=TaskStatus(
-            state=TaskState.TASK_STATE_COMPLETED,
-            message=Message(
-                role=Role.ROLE_AGENT,
-                message_id="m1",
-                parts=[new_text_part("status message text")],
-            ),
-        ),
+def test_extract_text_reads_stream_message_payload() -> None:
+    payload = StreamResponse(
+        message=Message(
+            role=Role.ROLE_AGENT,
+            message_id="m2",
+            parts=[new_text_part("stream message text")],
+        )
     )
 
-    assert A2AClient.extract_text(task) == "status message text"
-
-
-def test_extract_text_reads_nested_mapping_payload() -> None:
-    payload = {
-        "result": {
-            "history": [
-                {"parts": [{"text": "mapped nested text"}]},
-            ]
-        }
-    }
-
-    assert A2AClient.extract_text(payload) == "mapped nested text"
-
-
-def test_extract_text_reads_model_dump_payload() -> None:
-    class _Payload:
-        def model_dump(self) -> dict[str, object]:
-            return {"artifacts": [{"parts": [{"text": "model dump text"}]}]}
-
-    assert A2AClient.extract_text(_Payload()) == "model dump text"
+    assert A2AClient.extract_text(payload) == "stream message text"

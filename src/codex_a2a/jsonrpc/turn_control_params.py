@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Annotated, Any, Literal
 
-from pydantic import AliasChoices, Field, ValidationError, field_validator
+from pydantic import AliasChoices, Field, ValidationError, field_validator, model_validator
 
 from codex_a2a.jsonrpc.params_common import (
     JsonRpcParamsValidationError,
@@ -10,14 +10,79 @@ from codex_a2a.jsonrpc.params_common import (
     format_loc,
     map_extra_forbidden,
     normalize_non_empty_string,
+    strip_optional_string,
     validate_non_empty_parts,
     validate_required_thread_id,
 )
-from codex_a2a.jsonrpc.session_control_params import PromptAsyncPart
+
+
+class TurnTextPart(_StrictModel):
+    type: Literal["text"]
+    text: str
+
+    @field_validator("text", mode="before")
+    @classmethod
+    def _validate_text(cls, value: Any) -> str:
+        if not isinstance(value, str):
+            raise ValueError("request.parts[].text must be a string")
+        return value
+
+
+class TurnImagePart(_StrictModel):
+    type: Literal["image"]
+    url: str | None = None
+    bytes: str | None = None
+    mime_type: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("mimeType"),
+        serialization_alias="mimeType",
+    )
+    name: str | None = None
+
+    @field_validator("url", "bytes", "mime_type", "name", mode="before")
+    @classmethod
+    def _validate_optional_strings(cls, value: Any) -> str | None:
+        return strip_optional_string(value)
+
+    @model_validator(mode="after")
+    def _require_url_or_bytes(self) -> TurnImagePart:
+        if self.url is None and self.bytes is None:
+            raise ValueError("request.parts[].url or request.parts[].bytes is required")
+        if self.bytes is not None and self.mime_type is None and self.url is None:
+            raise ValueError("request.parts[].mimeType is required when bytes is provided")
+        return self
+
+
+class TurnMentionPart(_StrictModel):
+    type: Literal["mention"]
+    name: str
+    path: str
+
+    @field_validator("name", "path", mode="before")
+    @classmethod
+    def _validate_strings(cls, value: Any) -> str:
+        return normalize_non_empty_string(value, message="must be a non-empty string")
+
+
+class TurnSkillPart(_StrictModel):
+    type: Literal["skill"]
+    name: str
+    path: str
+
+    @field_validator("name", "path", mode="before")
+    @classmethod
+    def _validate_strings(cls, value: Any) -> str:
+        return normalize_non_empty_string(value, message="must be a non-empty string")
+
+
+TurnInputPart = Annotated[
+    TurnTextPart | TurnImagePart | TurnMentionPart | TurnSkillPart,
+    Field(discriminator="type"),
+]
 
 
 class TurnSteerRequestParams(_StrictModel):
-    parts: list[PromptAsyncPart]
+    parts: list[TurnInputPart]
 
     _validate_parts = field_validator("parts", mode="before")(validate_non_empty_parts)
 

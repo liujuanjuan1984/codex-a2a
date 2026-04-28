@@ -8,6 +8,7 @@ from a2a.utils.errors import A2AError
 from fastapi.responses import JSONResponse
 from starlette.requests import Request
 from starlette.responses import Response
+from starlette.routing import Route
 
 from codex_a2a.execution.discovery_runtime import CodexDiscoveryRuntime
 from codex_a2a.execution.exec_runtime import CodexExecRuntime
@@ -16,19 +17,57 @@ from codex_a2a.execution.thread_lifecycle_runtime import CodexThreadLifecycleRun
 from codex_a2a.jsonrpc.discovery_control import handle_discovery_control_request
 from codex_a2a.jsonrpc.discovery_query import handle_discovery_query_request
 from codex_a2a.jsonrpc.dispatch import ExtensionMethodRegistry
-from codex_a2a.jsonrpc.errors import adapt_jsonrpc_error_for_protocol
+from codex_a2a.jsonrpc.errors import adapt_jsonrpc_error
 from codex_a2a.jsonrpc.exec_control import handle_exec_control_request
 from codex_a2a.jsonrpc.hooks import SessionGuardHooks
 from codex_a2a.jsonrpc.interrupt_recovery import handle_interrupt_recovery_request
 from codex_a2a.jsonrpc.interrupts import handle_interrupt_callback_request
 from codex_a2a.jsonrpc.request_models import JSONRPCRequestModel
 from codex_a2a.jsonrpc.review_control import handle_review_control_request
-from codex_a2a.jsonrpc.session_control import handle_session_control_request
 from codex_a2a.jsonrpc.session_query import handle_session_query_request
 from codex_a2a.jsonrpc.thread_lifecycle_control import handle_thread_lifecycle_control_request
 from codex_a2a.jsonrpc.turn_control import handle_turn_control_request
 from codex_a2a.protocol_versions import get_current_protocol_version
 from codex_a2a.upstream.client import CodexClient
+
+
+def create_extension_jsonrpc_routes(
+    *,
+    request_handler,
+    context_builder,
+    codex_client: CodexClient,
+    exec_runtime: CodexExecRuntime,
+    discovery_runtime: CodexDiscoveryRuntime,
+    review_runtime: CodexReviewRuntime,
+    thread_lifecycle_runtime: CodexThreadLifecycleRuntime,
+    methods: dict[str, str],
+    protocol_version: str,
+    supported_methods: list[str],
+    guard_hooks: SessionGuardHooks,
+    rpc_url: str,
+    dispatcher_factory=None,
+) -> list[Route]:
+    factory = dispatcher_factory or CodexSessionQueryJSONRPCApplication
+    dispatcher = factory(
+        request_handler=request_handler,
+        context_builder=context_builder,
+        codex_client=codex_client,
+        exec_runtime=exec_runtime,
+        discovery_runtime=discovery_runtime,
+        review_runtime=review_runtime,
+        thread_lifecycle_runtime=thread_lifecycle_runtime,
+        methods=methods,
+        protocol_version=protocol_version,
+        supported_methods=supported_methods,
+        guard_hooks=guard_hooks,
+    )
+    return [
+        Route(
+            path=rpc_url,
+            endpoint=dispatcher.handle_requests,
+            methods=["POST"],
+        )
+    ]
 
 
 class CodexSessionQueryJSONRPCApplication(JsonRpcDispatcher):
@@ -56,9 +95,6 @@ class CodexSessionQueryJSONRPCApplication(JsonRpcDispatcher):
         self._thread_lifecycle_runtime = thread_lifecycle_runtime
         self._method_list_sessions = methods["list_sessions"]
         self._method_get_session_messages = methods["get_session_messages"]
-        self._method_prompt_async = methods["prompt_async"]
-        self._method_command = methods["command"]
-        self._method_shell = methods.get("shell")
         self._method_discovery_skills_list = methods["list_skills"]
         self._method_discovery_apps_list = methods["list_apps"]
         self._method_discovery_plugins_list = methods["list_plugins"]
@@ -91,20 +127,6 @@ class CodexSessionQueryJSONRPCApplication(JsonRpcDispatcher):
         self._validate_guard_hooks()
 
     def _validate_guard_hooks(self) -> None:
-        missing_for_session_control: list[str] = []
-        if self._guard_hooks.session_claim is None:
-            missing_for_session_control.append("session_claim")
-        if self._guard_hooks.session_claim_finalize is None:
-            missing_for_session_control.append("session_claim_finalize")
-        if self._guard_hooks.session_claim_release is None:
-            missing_for_session_control.append("session_claim_release")
-        if missing_for_session_control:
-            missing = ", ".join(missing_for_session_control)
-            raise ValueError(
-                "CodexSessionQueryJSONRPCApplication missing required session control hooks: "
-                f"{missing}"
-            )
-
         if self._guard_hooks.session_owner_matcher is None:
             raise ValueError(
                 "CodexSessionQueryJSONRPCApplication missing required interrupt ownership "
@@ -129,7 +151,9 @@ class CodexSessionQueryJSONRPCApplication(JsonRpcDispatcher):
             return self._unsupported_method_response(base_request.id, base_request.method)
 
         if not self._method_registry.is_extension_method(base_request.method):
-            return await super().handle_requests(request)
+            if base_request.id is None:
+                return Response(status_code=204)
+            return self._unsupported_method_response(base_request.id, base_request.method)
 
         params = base_request.params or {}
         if not isinstance(params, dict):
@@ -140,13 +164,6 @@ class CodexSessionQueryJSONRPCApplication(JsonRpcDispatcher):
 
         if base_request.method in self._method_registry.session_query_methods:
             return await handle_session_query_request(self, base_request, params)
-        if base_request.method in self._method_registry.session_control_methods:
-            return await handle_session_control_request(
-                self,
-                base_request,
-                params,
-                request=request,
-            )
         if base_request.method in self._method_registry.discovery_query_methods:
             return await handle_discovery_query_request(self, base_request, params)
         if base_request.method in self._method_registry.discovery_control_methods:
@@ -223,11 +240,8 @@ class CodexSessionQueryJSONRPCApplication(JsonRpcDispatcher):
         request_id: str | int | None,
         error: Exception | JSONRPCError | A2AError,
     ) -> JSONResponse:
-        protocol_version = get_current_protocol_version(self._protocol_version)
         if isinstance(error, JSONRPCError | A2AError):
-            adapted_error: Exception | JSONRPCError | A2AError = adapt_jsonrpc_error_for_protocol(
-                protocol_version, error
-            )
+            adapted_error: Exception | JSONRPCError | A2AError = adapt_jsonrpc_error(error)
         else:
             adapted_error = error
         return super()._generate_error_response(

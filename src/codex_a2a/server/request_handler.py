@@ -158,15 +158,6 @@ class CodexRequestHandler(DefaultRequestHandler):
             )
         return active_task, request_context
 
-    async def _setup_message_execution(self, params, context=None):  # noqa: ANN001
-        del params, context
-        raise NotImplementedError
-
-    def _uses_legacy_message_execution(self) -> bool:
-        return (
-            type(self)._setup_message_execution is not CodexRequestHandler._setup_message_execution
-        )
-
     async def start_background_task_stream(
         self,
         *,
@@ -445,59 +436,6 @@ class CodexRequestHandler(DefaultRequestHandler):
         task_id = getattr(getattr(params, "message", None), "task_id", None) or str(uuid.uuid4())
         accepted_output_modes = self._accepted_output_modes_from_params(params)
         stream_completed = False
-        if self._uses_legacy_message_execution():
-            queue: EventQueueLegacy | None = None
-            producer_task = None
-            try:
-                (
-                    _task_manager,
-                    task_id,
-                    queue,
-                    result_aggregator,
-                    producer_task,
-                ) = await self._setup_message_execution(params, context)
-                logger.debug("A2A stream request started task_id=%s", task_id)
-                consumer = EventConsumer(queue)
-                producer_task.add_done_callback(consumer.agent_task_callback)
-                async for event in result_aggregator.consume_and_emit(consumer):
-                    if isinstance(event, Task):
-                        self._validate_task_id_match(task_id, event.id)
-                    yield event
-                stream_completed = True
-            except TaskStoreOperationError as exc:
-                logger.exception(
-                    "Task store operation failed during streaming task_id=%s operation=%s",
-                    task_id,
-                    exc.operation,
-                )
-                for event in self._task_store_failure_events(
-                    task_id=task_id,
-                    context_id=self._resolve_context_id_from_params(params, task_id),
-                    operation=exc.operation,
-                ):
-                    yield event
-            finally:
-                self._metrics.dec_gauge(A2A_STREAM_ACTIVE)
-                logger.debug(
-                    "A2A stream request closed task_id=%s completed=%s",
-                    task_id,
-                    stream_completed,
-                )
-                if stream_completed:
-                    self._clear_task_output_modes(task_id)
-                elif queue is not None:
-                    close_queue = getattr(queue, "close", None)
-                    if callable(close_queue):
-                        await close_queue(immediate=True)
-                if producer_task is not None:
-                    if not stream_completed and not producer_task.done():
-                        producer_task.cancel()
-                    cleanup_task = asyncio.create_task(
-                        self._cleanup_producer(producer_task, task_id)
-                    )
-                    cleanup_task.set_name(f"cleanup_producer:{task_id}")
-                    self._track_background_task(cleanup_task)
-            return
 
         try:
             active_task, request_context = await self._setup_active_task(
@@ -506,21 +444,27 @@ class CodexRequestHandler(DefaultRequestHandler):
             )
             task_id = request_context.task_id or task_id
             logger.debug("A2A stream request started task_id=%s", task_id)
-            async for raw_event in active_task.subscribe(
+            subscription = active_task.subscribe(
                 request=request_context,
                 include_initial_task=False,
-            ):
-                event = raw_event
-                if isinstance(event, Task):
-                    self._validate_task_id_match(task_id, event.id)
-                    event = apply_history_length(event, params.configuration)
-                negotiated_event = apply_accepted_output_modes(event, accepted_output_modes)
-                if negotiated_event is None:
-                    continue
-                yield annotate_output_negotiation_metadata(
-                    negotiated_event,
-                    accepted_output_modes,
-                )
+            )
+            try:
+                async for raw_event in subscription:
+                    event = raw_event
+                    if isinstance(event, Task):
+                        self._validate_task_id_match(task_id, event.id)
+                        event = apply_history_length(event, params.configuration)
+                    negotiated_event = apply_accepted_output_modes(event, accepted_output_modes)
+                    if negotiated_event is None:
+                        continue
+                    yield annotate_output_negotiation_metadata(
+                        negotiated_event,
+                        accepted_output_modes,
+                    )
+            finally:
+                close_subscription = getattr(subscription, "aclose", None)
+                if callable(close_subscription):
+                    await close_subscription()
             stream_completed = True
         except TaskStoreOperationError as exc:
             logger.exception(
@@ -550,67 +494,6 @@ class CodexRequestHandler(DefaultRequestHandler):
         accepted_output_modes = self._accepted_output_modes_from_params(params)
         active_task = None
         result = None
-        if self._uses_legacy_message_execution():
-            queue = None
-            producer_task = None
-            result_aggregator = None
-            blocking = True
-            interrupted_or_non_blocking = False
-            continuation_task = None
-            try:
-                (
-                    _task_manager,
-                    task_id,
-                    queue,
-                    result_aggregator,
-                    producer_task,
-                ) = await self._setup_message_execution(params, context)
-                logger.debug("A2A message request started task_id=%s", task_id)
-                consumer = EventConsumer(queue)
-                producer_task.add_done_callback(consumer.agent_task_callback)
-
-                if params.HasField("configuration") and params.configuration.return_immediately:
-                    blocking = False
-
-                (
-                    result,
-                    interrupted_or_non_blocking,
-                    continuation_task,
-                ) = await result_aggregator.consume_and_break_on_interrupt(
-                    consumer,
-                    blocking=blocking,
-                    event_callback=None,
-                )
-                if continuation_task is not None:
-                    continuation_task.set_name(f"continue_consuming:{task_id}")
-                    self._track_background_task(continuation_task)
-            except TaskStoreOperationError as exc:
-                logger.exception(
-                    "Task store operation failed during SendMessage task_id=%s operation=%s",
-                    task_id,
-                    exc.operation,
-                )
-                return self._task_store_failure_task(
-                    task_id=task_id,
-                    context_id=self._resolve_context_id_from_params(params, task_id),
-                    operation=exc.operation,
-                )
-            finally:
-                if producer_task is None:
-                    pass
-                elif interrupted_or_non_blocking:
-                    cleanup_task = asyncio.create_task(
-                        self._cleanup_producer(producer_task, task_id)
-                    )
-                    cleanup_task.set_name(f"cleanup_producer:{task_id}")
-                    self._track_background_task(cleanup_task)
-                else:
-                    await asyncio.shield(self._cleanup_producer(producer_task, task_id))
-
-            if not result:
-                raise InternalError()
-            logger.debug("A2A message request completed task_id=%s", task_id)
-            return result
 
         try:
             active_task, request_context = await self._setup_active_task(
@@ -622,33 +505,39 @@ class CodexRequestHandler(DefaultRequestHandler):
             return_immediately = bool(
                 params.HasField("configuration") and params.configuration.return_immediately
             )
-            async for raw_event in active_task.subscribe(
+            subscription = active_task.subscribe(
                 request=request_context,
                 include_initial_task=False,
                 replace_status_update_with_task=True,
-            ):
-                event = raw_event
-                logger.debug(
-                    "Processing[%s] event [%s] %s",
-                    params.message.task_id,
-                    type(event).__name__,
-                    event,
-                )
-                if isinstance(event, TaskStatusUpdateEvent):
-                    self._validate_task_id_match(task_id, event.task_id)
-                    event = await active_task.get_task()
-                    logger.debug("Replaced TaskStatusUpdateEvent with Task: %s", event)
+            )
+            try:
+                async for raw_event in subscription:
+                    event = raw_event
+                    logger.debug(
+                        "Processing[%s] event [%s] %s",
+                        params.message.task_id,
+                        type(event).__name__,
+                        event,
+                    )
+                    if isinstance(event, TaskStatusUpdateEvent):
+                        self._validate_task_id_match(task_id, event.task_id)
+                        event = await active_task.get_task()
+                        logger.debug("Replaced TaskStatusUpdateEvent with Task: %s", event)
 
-                if isinstance(event, Task) and (
-                    return_immediately
-                    or event.status.state in (TERMINAL_TASK_STATES | INTERRUPTED_TASK_STATES)
-                ):
-                    self._validate_task_id_match(task_id, event.id)
-                    result = event
-                    break
+                    if isinstance(event, Task) and (
+                        return_immediately
+                        or event.status.state in (TERMINAL_TASK_STATES | INTERRUPTED_TASK_STATES)
+                    ):
+                        self._validate_task_id_match(task_id, event.id)
+                        result = event
+                        break
 
-                if isinstance(event, Message):
-                    result = event
+                    if isinstance(event, Message):
+                        result = event
+            finally:
+                close_subscription = getattr(subscription, "aclose", None)
+                if callable(close_subscription):
+                    await close_subscription()
         except TaskStoreOperationError as exc:
             logger.exception(
                 "Task store operation failed during SendMessage task_id=%s operation=%s",

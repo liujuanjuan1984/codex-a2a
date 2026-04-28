@@ -11,6 +11,9 @@ _CURRENT_PROTOCOL_VERSION: ContextVar[str | None] = ContextVar(
     "_CURRENT_PROTOCOL_VERSION",
     default=None,
 )
+SUPPORTED_PROTOCOL_VERSION = "1.0"
+SUPPORTED_PROTOCOL_VERSIONS: tuple[str, ...] = (SUPPORTED_PROTOCOL_VERSION,)
+ADVERTISED_PROTOCOL_VERSION = "1.0"
 
 V1_SUPPORTED_FEATURES: tuple[str, ...] = (
     "A2A-Version request-time negotiation and response header echo.",
@@ -68,9 +71,26 @@ def normalize_protocol_versions(values: Iterable[str]) -> tuple[str, ...]:
     return tuple(normalized_versions)
 
 
+def _validate_supported_line(normalized_version: str) -> None:
+    if normalized_version != SUPPORTED_PROTOCOL_VERSION:
+        raise ValueError(f"codex-a2a only supports A2A protocol line {SUPPORTED_PROTOCOL_VERSION}.")
+
+
+def _validate_supported_lines(values: Iterable[str]) -> tuple[str, ...]:
+    normalized_versions = normalize_protocol_versions(values)
+    if normalized_versions != SUPPORTED_PROTOCOL_VERSIONS:
+        supported_display = ", ".join(SUPPORTED_PROTOCOL_VERSIONS)
+        raise ValueError(
+            "codex-a2a only supports the A2A protocol line "
+            f"{supported_display}; received {list(normalized_versions)!r}."
+        )
+    return normalized_versions
+
+
 def default_supported_protocol_versions(protocol_version: str) -> tuple[str, ...]:
     normalized = normalize_protocol_version(protocol_version)
-    return (normalized,)
+    _validate_supported_line(normalized)
+    return SUPPORTED_PROTOCOL_VERSIONS
 
 
 def negotiate_protocol_version(
@@ -81,7 +101,8 @@ def negotiate_protocol_version(
     supported_protocol_versions: Iterable[str],
 ) -> NegotiatedProtocolVersion:
     normalized_default = normalize_protocol_version(default_protocol_version)
-    normalized_supported = normalize_protocol_versions(supported_protocol_versions)
+    _validate_supported_line(normalized_default)
+    normalized_supported = _validate_supported_lines(supported_protocol_versions)
 
     raw_header = (header_value or "").strip()
     raw_query = (query_value or "").strip()
@@ -132,35 +153,19 @@ def build_protocol_compatibility_summary(
     supported_protocol_versions: Iterable[str],
 ) -> dict[str, Any]:
     normalized_default = normalize_protocol_version(default_protocol_version)
-    normalized_supported = normalize_protocol_versions(supported_protocol_versions)
-    versions: dict[str, dict[str, Any]] = {}
-
-    for version in normalized_supported:
-        if version == "1.0":
-            versions[version] = {
-                "enabled": True,
-                "default": normalized_default == version,
-                "status": "supported",
-                "supported_features": list(V1_SUPPORTED_FEATURES),
-                "known_gaps": [],
-            }
-            continue
-
-        versions[version] = {
-            "enabled": True,
-            "default": normalized_default == version,
-            "status": "custom",
-            "supported_features": [
-                "Declared by repository configuration.",
-                "Version-specific compatibility details are not yet modeled.",
-            ],
-            "known_gaps": [
-                "This protocol line does not yet have a dedicated compatibility summary.",
-            ],
-        }
+    _validate_supported_line(normalized_default)
+    normalized_supported = _validate_supported_lines(supported_protocol_versions)
 
     return {
         "default_protocol_version": normalized_default,
         "supported_protocol_versions": list(normalized_supported),
-        "versions": versions,
+        "versions": {
+            SUPPORTED_PROTOCOL_VERSION: {
+                "enabled": True,
+                "default": True,
+                "status": "supported",
+                "supported_features": list(V1_SUPPORTED_FEATURES),
+                "known_gaps": [],
+            }
+        },
     }

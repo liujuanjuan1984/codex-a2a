@@ -5,12 +5,13 @@ from typing import Any
 from codex_a2a.auth import has_configured_auth_scheme
 from codex_a2a.config import Settings
 from codex_a2a.contracts.extensions import (
+    CORE_JSONRPC_PATH,
     DISCOVERY_METHODS,
     EXEC_CONTROL_METHODS,
+    EXTENSION_JSONRPC_PATH,
     INTERRUPT_CALLBACK_METHODS,
     INTERRUPT_RECOVERY_METHODS,
     REVIEW_CONTROL_METHODS,
-    SESSION_CONTROL_METHODS,
     SESSION_QUERY_DEFAULT_LIMIT,
     SESSION_QUERY_METHODS,
     THREAD_LIFECYCLE_METHODS,
@@ -54,15 +55,23 @@ def build_openapi_security(
     return schemes, security
 
 
-def build_jsonrpc_extension_openapi_description(*, runtime_profile: RuntimeProfile) -> str:
+def build_core_jsonrpc_openapi_description() -> str:
+    return (
+        "Core A2A JSON-RPC entrypoint. Supports the standard A2A methods "
+        "(SendMessage, SendStreamingMessage, GetTask, CancelTask, "
+        "ListTasks, CreateTaskPushNotificationConfig, GetTaskPushNotificationConfig, "
+        "ListTaskPushNotificationConfigs, DeleteTaskPushNotificationConfig, "
+        f"SubscribeToTask, GetExtendedAgentCard) on POST {CORE_JSONRPC_PATH}.\n\n"
+        f"Provider-private Codex extension methods are exposed separately on "
+        f"POST {EXTENSION_JSONRPC_PATH}."
+    )
+
+
+def build_extension_jsonrpc_openapi_description(*, runtime_profile: RuntimeProfile) -> str:
     session_methods: list[str] = [
         SESSION_QUERY_METHODS["list_sessions"],
         SESSION_QUERY_METHODS["get_session_messages"],
-        SESSION_CONTROL_METHODS["prompt_async"],
-        SESSION_CONTROL_METHODS["command"],
     ]
-    if runtime_profile.session_shell_enabled:
-        session_methods.append(SESSION_CONTROL_METHODS["shell"])
     discovery_methods = ", ".join(DISCOVERY_METHODS.values())
     thread_lifecycle_methods = ", ".join(THREAD_LIFECYCLE_METHODS.values())
     interrupt_recovery_methods = ", ".join(INTERRUPT_RECOVERY_METHODS.values())
@@ -83,16 +92,12 @@ def build_jsonrpc_extension_openapi_description(*, runtime_profile: RuntimeProfi
     )
     interrupt_methods = ", ".join(sorted(INTERRUPT_CALLBACK_METHODS.values()))
     return (
-        "A2A JSON-RPC entrypoint. Supports core A2A methods "
-        "(SendMessage, SendStreamingMessage, GetTask, CancelTask, "
-        "ListTasks, CreateTaskPushNotificationConfig, GetTaskPushNotificationConfig, "
-        "ListTaskPushNotificationConfigs, DeleteTaskPushNotificationConfig, "
-        "SubscribeToTask, GetExtendedAgentCard) plus Codex session extensions, "
-        "Codex thread lifecycle extensions, interrupt recovery extensions, "
-        "active-turn control extensions, review "
+        f"Provider-private Codex JSON-RPC extension entrypoint on POST {EXTENSION_JSONRPC_PATH}. "
+        "Supports Codex session extensions, Codex thread lifecycle extensions, "
+        "interrupt recovery extensions, active-turn control extensions, review "
         "control extensions, Codex discovery extensions, interactive exec "
         "extensions, and shared interrupt callback methods.\n\n"
-        f"Codex session query/control methods: {', '.join(session_methods)}.\n"
+        f"Codex session query methods: {', '.join(session_methods)}.\n"
         f"Codex thread lifecycle methods: {thread_lifecycle_methods}.\n"
         f"Codex interrupt recovery methods: {interrupt_recovery_methods}.\n"
         f"Codex active-turn control methods: {turn_methods}.\n"
@@ -106,11 +111,8 @@ def build_jsonrpc_extension_openapi_description(*, runtime_profile: RuntimeProfi
     )
 
 
-def build_jsonrpc_extension_openapi_examples(
-    *,
-    runtime_profile: RuntimeProfile,
-) -> dict[str, Any]:
-    examples: dict[str, Any] = {
+def build_core_jsonrpc_openapi_examples() -> dict[str, Any]:
+    return {
         "message_send": {
             "summary": "Send message via JSON-RPC core method",
             "value": {
@@ -150,6 +152,14 @@ def build_jsonrpc_extension_openapi_examples(
                 "params": {},
             },
         },
+    }
+
+
+def build_extension_jsonrpc_openapi_examples(
+    *,
+    runtime_profile: RuntimeProfile,
+) -> dict[str, Any]:
+    examples: dict[str, Any] = {
         "session_list": {
             "summary": "List Codex sessions",
             "value": {
@@ -166,36 +176,6 @@ def build_jsonrpc_extension_openapi_examples(
                 "id": 2,
                 "method": SESSION_QUERY_METHODS["get_session_messages"],
                 "params": {"session_id": "s-1", "limit": SESSION_QUERY_DEFAULT_LIMIT},
-            },
-        },
-        "session_prompt_async": {
-            "summary": "Send async prompt to an existing session",
-            "value": {
-                "jsonrpc": "2.0",
-                "id": 21,
-                "method": SESSION_CONTROL_METHODS["prompt_async"],
-                "params": {
-                    "session_id": "s-1",
-                    "request": {
-                        "parts": [
-                            {"type": "text", "text": "Use the app to summarize next steps."},
-                            {"type": "image", "url": "https://example.com/screenshot.png"},
-                            {"type": "mention", "name": "Demo App", "path": "app://demo-app"},
-                        ]
-                    },
-                },
-            },
-        },
-        "session_command": {
-            "summary": "Send command to an existing session",
-            "value": {
-                "jsonrpc": "2.0",
-                "id": 22,
-                "method": SESSION_CONTROL_METHODS["command"],
-                "params": {
-                    "session_id": "s-1",
-                    "request": {"command": "plan", "arguments": "show current work"},
-                },
             },
         },
         "discovery_skills_list": {
@@ -465,16 +445,6 @@ def build_jsonrpc_extension_openapi_examples(
                 "params": {"request": {"process_id": "exec-1"}},
             },
         }
-    if runtime_profile.session_shell_enabled:
-        examples["session_shell"] = {
-            "summary": "Run a one-shot shell command attributed to an existing session",
-            "value": {
-                "jsonrpc": "2.0",
-                "id": 23,
-                "method": SESSION_CONTROL_METHODS["shell"],
-                "params": {"session_id": "s-1", "request": {"command": "git status --short"}},
-            },
-        }
     return examples
 
 
@@ -504,15 +474,23 @@ def build_rest_message_openapi_examples() -> dict[str, Any]:
     }
 
 
-def build_openapi_extension_contracts(
+def build_openapi_a2a_extension_contracts(
+    *,
+    runtime_profile: RuntimeProfile,
+) -> dict[str, dict[str, Any]]:
+    return {
+        "session_binding": build_session_binding_extension_params(runtime_profile=runtime_profile),
+        "streaming": build_streaming_extension_params(),
+    }
+
+
+def build_openapi_codex_contracts(
     *,
     settings: Settings,
     protocol_version: str,
     runtime_profile: RuntimeProfile,
 ) -> dict[str, dict[str, Any]]:
     return {
-        "session_binding": build_session_binding_extension_params(runtime_profile=runtime_profile),
-        "streaming": build_streaming_extension_params(),
         "session_query": build_session_query_extension_params(runtime_profile=runtime_profile),
         "discovery": build_discovery_extension_params(runtime_profile=runtime_profile),
         "thread_lifecycle": build_thread_lifecycle_extension_params(

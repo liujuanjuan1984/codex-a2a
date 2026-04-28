@@ -10,7 +10,6 @@ from a2a.utils.constants import AGENT_CARD_WELL_KNOWN_PATH
 from .config import A2AClientConfig
 from .errors import A2AClientConfigError
 
-PREV_AGENT_CARD_WELL_KNOWN_PATH = "/.well-known/agent.json"
 EXTENDED_AGENT_CARD_PATH = "/v1/extendedAgentCard"
 
 
@@ -28,8 +27,8 @@ def resolve_agent_card_endpoint(config: A2AClientConfig) -> AgentCardEndpoint:
 
     normalized_no_leading = (parsed_url.path or "").rstrip("/").lstrip("/")
     candidate_paths = (
+        config.agent_card_path,
         AGENT_CARD_WELL_KNOWN_PATH,
-        PREV_AGENT_CARD_WELL_KNOWN_PATH,
         EXTENDED_AGENT_CARD_PATH,
     )
 

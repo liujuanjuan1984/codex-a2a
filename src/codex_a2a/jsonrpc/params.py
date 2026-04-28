@@ -47,14 +47,6 @@ from codex_a2a.jsonrpc.review_control_params import (
     parse_review_start_params,
     parse_review_watch_params,
 )
-from codex_a2a.jsonrpc.session_control_params import (
-    CommandControlParams,
-    PromptAsyncControlParams,
-    ShellControlParams,
-    parse_command_params,
-    parse_prompt_async_params,
-    parse_shell_params,
-)
 from codex_a2a.jsonrpc.thread_lifecycle_params import (
     ThreadArchiveControlParams,
     ThreadForkControlParams,
@@ -75,7 +67,6 @@ from codex_a2a.jsonrpc.turn_control_params import (
 )
 
 __all__ = [
-    "CommandControlParams",
     "DiscoveryAppsListParams",
     "DiscoveryPluginReadParams",
     "DiscoveryPluginsListParams",
@@ -91,12 +82,10 @@ __all__ = [
     "MetadataParams",
     "PermissionReplyParams",
     "PermissionsReplyParams",
-    "PromptAsyncControlParams",
     "QuestionRejectParams",
     "QuestionReplyParams",
     "ReviewStartControlParams",
     "ReviewWatchControlParams",
-    "ShellControlParams",
     "ThreadArchiveControlParams",
     "ThreadForkControlParams",
     "ThreadMetadataUpdateControlParams",
@@ -104,7 +93,6 @@ __all__ = [
     "ThreadWatchControlParams",
     "ThreadWatchReleaseControlParams",
     "TurnSteerControlParams",
-    "parse_command_params",
     "parse_discovery_apps_list_params",
     "parse_discovery_plugin_read_params",
     "parse_discovery_plugins_list_params",
@@ -120,12 +108,10 @@ __all__ = [
     "parse_list_sessions_params",
     "parse_permission_reply_params",
     "parse_permissions_reply_params",
-    "parse_prompt_async_params",
     "parse_question_reject_params",
     "parse_question_reply_params",
     "parse_review_start_params",
     "parse_review_watch_params",
-    "parse_shell_params",
     "parse_thread_archive_params",
     "parse_thread_fork_params",
     "parse_thread_metadata_update_params",

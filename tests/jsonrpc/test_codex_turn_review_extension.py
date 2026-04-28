@@ -3,6 +3,7 @@ from unittest.mock import AsyncMock
 import httpx
 import pytest
 
+from codex_a2a.contracts.extensions import EXTENSION_JSONRPC_PATH
 from tests.support.dummy_clients import DummySessionQueryCodexClient as DummyCodexClient
 from tests.support.jsonrpc_errors import (
     error_context as _error_context,
@@ -58,7 +59,7 @@ async def test_turn_and_review_control_methods_route_to_client(monkeypatch) -> N
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         headers = {"Authorization": "Bearer t-1"}
         steer_response = await client.post(
-            "/",
+            EXTENSION_JSONRPC_PATH,
             headers=headers,
             json={
                 "jsonrpc": "2.0",
@@ -76,7 +77,7 @@ async def test_turn_and_review_control_methods_route_to_client(monkeypatch) -> N
             },
         )
         review_response = await client.post(
-            "/",
+            EXTENSION_JSONRPC_PATH,
             headers=headers,
             json={
                 "jsonrpc": "2.0",
@@ -168,7 +169,7 @@ async def test_review_watch_routes_to_runtime(monkeypatch) -> None:
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.post(
-            "/",
+            EXTENSION_JSONRPC_PATH,
             headers={"Authorization": "Bearer t-1"},
             json={
                 "jsonrpc": "2.0",
@@ -218,7 +219,7 @@ async def test_turn_and_review_control_methods_reject_invalid_request_shapes(mon
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         headers = {"Authorization": "Bearer t-1"}
         steer_response = await client.post(
-            "/",
+            EXTENSION_JSONRPC_PATH,
             headers=headers,
             json={
                 "jsonrpc": "2.0",
@@ -232,7 +233,7 @@ async def test_turn_and_review_control_methods_reject_invalid_request_shapes(mon
             },
         )
         review_response = await client.post(
-            "/",
+            EXTENSION_JSONRPC_PATH,
             headers=headers,
             json={
                 "jsonrpc": "2.0",
@@ -245,7 +246,7 @@ async def test_turn_and_review_control_methods_reject_invalid_request_shapes(mon
             },
         )
         review_watch_response = await client.post(
-            "/",
+            EXTENSION_JSONRPC_PATH,
             headers=headers,
             json={
                 "jsonrpc": "2.0",
@@ -283,7 +284,7 @@ async def test_turn_control_requires_turn_control_capability(monkeypatch) -> Non
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         resp = await client.post(
-            "/",
+            EXTENSION_JSONRPC_PATH,
             headers={"Authorization": "Bearer t-1"},
             json={
                 "jsonrpc": "2.0",

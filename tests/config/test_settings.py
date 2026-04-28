@@ -74,35 +74,22 @@ def test_settings_valid():
             == "sqlite+aiosqlite:////tmp/workspace/.codex-a2a/codex-a2a.db"
         )
         assert settings.a2a_version == __version__
-        assert settings.a2a_protocol_version == "1.0.0"
+        assert settings.a2a_protocol_version == "1.0"
         assert settings.a2a_supported_protocol_versions == ["1.0"]
         assert settings.a2a_log_level == "WARNING"
 
 
-def test_settings_parse_a2a_supported_protocol_versions() -> None:
+@pytest.mark.parametrize("protocol_version", ["0.3.0", "1.1.0"])
+def test_settings_reject_non_1_0_protocol_line(protocol_version: str) -> None:
     env = {
         **_registry_env(),
-        "A2A_PROTOCOL_VERSION": "0.3.0",
-        "A2A_SUPPORTED_PROTOCOL_VERSIONS": "0.3.0,1.0,1.0.0",
-    }
-    with mock.patch.dict(os.environ, env, clear=True):
-        settings = Settings.from_env()
-
-    assert settings.a2a_protocol_version == "0.3.0"
-    assert settings.a2a_supported_protocol_versions == ["0.3", "1.0"]
-
-
-def test_settings_reject_supported_protocol_versions_missing_default() -> None:
-    env = {
-        **_registry_env(),
-        "A2A_PROTOCOL_VERSION": "0.3.0",
-        "A2A_SUPPORTED_PROTOCOL_VERSIONS": "1.0",
+        "A2A_PROTOCOL_VERSION": protocol_version,
     }
     with mock.patch.dict(os.environ, env, clear=True):
         with pytest.raises(ValidationError) as excinfo:
             Settings.from_env()
 
-    assert "A2A_SUPPORTED_PROTOCOL_VERSIONS must include A2A_PROTOCOL_VERSION" in str(excinfo.value)
+    assert "A2A_PROTOCOL_VERSION must stay on the 1.0 protocol line" in str(excinfo.value)
 
 
 def test_settings_accept_static_auth_registry_without_legacy_credentials() -> None:
@@ -119,7 +106,7 @@ def test_settings_accept_static_auth_registry_without_legacy_credentials() -> No
                     "scheme": "basic",
                     "username": "ops",
                     "password": "ops-pass",  # pragma: allowlist secret
-                    "capabilities": ["session_shell"],
+                    "capabilities": ["exec_control"],
                 },
                 {
                     "scheme": "bearer",
@@ -137,7 +124,7 @@ def test_settings_accept_static_auth_registry_without_legacy_credentials() -> No
     assert settings.a2a_static_auth_credentials[0].credential_id == "bot-alpha"
     assert settings.a2a_static_auth_credentials[0].principal == "automation-alpha"
     assert settings.a2a_static_auth_credentials[1].principal == "ops"
-    assert settings.a2a_static_auth_credentials[1].capabilities == ("session_shell",)
+    assert settings.a2a_static_auth_credentials[1].capabilities == ("exec_control",)
     assert settings.a2a_static_auth_credentials[2].enabled is False
 
 
@@ -240,7 +227,6 @@ def test_settings_parse_ops_flags_and_timeouts():
     env = {
         **_registry_env(),
         "A2A_ENABLE_HEALTH_ENDPOINT": "false",
-        "A2A_ENABLE_SESSION_SHELL": "false",
         "A2A_ENABLE_TURN_CONTROL": "false",
         "A2A_ENABLE_REVIEW_CONTROL": "false",
         "A2A_ENABLE_EXEC_CONTROL": "false",
@@ -251,7 +237,6 @@ def test_settings_parse_ops_flags_and_timeouts():
     with mock.patch.dict(os.environ, env, clear=True):
         settings = Settings.from_env()
         assert settings.a2a_enable_health_endpoint is False
-        assert settings.a2a_enable_session_shell is False
         assert settings.a2a_enable_turn_control is False
         assert settings.a2a_enable_review_control is False
         assert settings.a2a_enable_exec_control is False

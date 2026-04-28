@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncIterator, Mapping
+from collections.abc import AsyncIterator, Mapping, Sequence
 from typing import Any, Protocol, cast
 from uuid import uuid4
 
@@ -10,7 +10,7 @@ from a2a.client import (
     A2ACardResolver,
     ClientCallContext,
     ClientConfig,
-    ClientFactory,
+    create_client,
 )
 from a2a.client.auth.credentials import CredentialService
 from a2a.client.auth.interceptor import AuthInterceptor
@@ -20,6 +20,7 @@ from a2a.types import (
     CancelTaskRequest,
     GetTaskRequest,
     Message,
+    Part,
     Role,
     SendMessageConfiguration,
     SendMessageRequest,
@@ -27,7 +28,7 @@ from a2a.types import (
     Task,
 )
 
-from codex_a2a.a2a_proto import new_text_part, to_struct
+from codex_a2a.a2a_proto import new_text_part, proto_clone, to_struct
 
 from .agent_card import build_agent_card_request_kwargs, resolve_agent_card_endpoint
 from .auth import StaticCredentialService
@@ -39,9 +40,16 @@ from .errors import (
     A2AUnsupportedBindingError,
     map_a2a_sdk_error,
 )
+from .extension_negotiation import (
+    filter_negotiated_extensions_from_stream_response,
+    filter_negotiated_extensions_from_task,
+    merge_requested_extensions,
+    missing_extension_requirements,
+    required_extensions_for_send_message,
+)
 from .payload_text import extract_text_from_payload
 from .request_context import build_call_context, split_request_metadata
-from .types import A2ACancelTaskRequest, A2AClientEvent, A2AGetTaskRequest, A2ASendRequest
+from .types import A2ACancelTaskRequest, A2AGetTaskRequest, A2ASendRequest
 
 
 class _SDKClientProtocol(Protocol):
@@ -76,7 +84,7 @@ class A2AClient:
         *,
         httpx_client: httpx.AsyncClient | None = None,
         card_resolver_factory=A2ACardResolver,
-        client_factory_type=ClientFactory,
+        client_creator=create_client,
         credential_service: CredentialService | None = None,
     ) -> None:
         if not config.agent_url:
@@ -92,7 +100,7 @@ class A2AClient:
         self._card: AgentCard | None = None
         self._sdk_client: _SDKClientProtocol | None = None
         self._card_resolver_factory = card_resolver_factory
-        self._client_factory_type = client_factory_type
+        self._client_creator = client_creator
         self._credential_service = credential_service
         self._client_config = ClientConfig(
             streaming=True,
@@ -139,8 +147,10 @@ class A2AClient:
 
     async def send_message(
         self,
-        text: str,
+        text: str | None = None,
         *,
+        parts: Sequence[Part] | None = None,
+        message: Message | None = None,
         context_id: str | None = None,
         task_id: str | None = None,
         message_id: str | None = None,
@@ -148,16 +158,27 @@ class A2AClient:
         accepted_output_modes: list[str] | None = None,
         history_length: int | None = None,
         blocking: bool = True,
-    ) -> AsyncIterator[A2AClientEvent]:
+    ) -> AsyncIterator[StreamResponse]:
         client = await self._get_client()
         sdk_client = client
-        request = self._build_user_message(
+        outbound_message = self._build_outbound_message(
             text=text,
+            parts=parts,
+            message=message,
             context_id=context_id,
             task_id=task_id,
             message_id=message_id,
         )
-        request_metadata, extra_headers = split_request_metadata(metadata)
+        request_metadata, extra_headers, metadata_extensions = split_request_metadata(metadata)
+        requested_extensions = merge_requested_extensions(
+            self._config.extensions,
+            metadata_extensions,
+        )
+        self._validate_extension_requirements(
+            request_metadata=request_metadata,
+            message=outbound_message,
+            requested_extensions=requested_extensions,
+        )
 
         configuration_kwargs: dict[str, Any] = {"return_immediately": not blocking}
         if accepted_output_modes is not None:
@@ -166,7 +187,7 @@ class A2AClient:
             configuration_kwargs["history_length"] = history_length
         request_configuration = SendMessageConfiguration(**configuration_kwargs)
         send_request = SendMessageRequest(
-            message=request,
+            message=outbound_message,
             configuration=request_configuration,
         )
         request_metadata_struct = to_struct(request_metadata or None)
@@ -175,16 +196,21 @@ class A2AClient:
         try:
             async for item in sdk_client.send_message(
                 send_request,
-                context=build_call_context(extra_headers),
+                context=build_call_context(extra_headers, requested_extensions),
             ):
-                yield item
+                yield filter_negotiated_extensions_from_stream_response(
+                    item,
+                    requested_extensions,
+                )
         except Exception as exc:
             raise map_a2a_sdk_error(exc, operation="SendMessage") from exc
 
-    async def send(self, request: A2ASendRequest) -> A2AClientEvent:
-        last_event: A2AClientEvent | None = None
+    async def send(self, request: A2ASendRequest) -> StreamResponse:
+        last_event: StreamResponse | None = None
         async for item in self.send_message(
             request.text,
+            parts=request.parts,
+            message=request.message,
             context_id=request.context_id,
             task_id=request.task_id,
             message_id=request.message_id,
@@ -201,16 +227,23 @@ class A2AClient:
     async def get_task(self, request: A2AGetTaskRequest) -> Task:
         client = await self._get_client()
         sdk_client = client
-        _request_metadata, extra_headers = split_request_metadata(request.metadata)
+        _request_metadata, extra_headers, metadata_extensions = split_request_metadata(
+            request.metadata
+        )
+        requested_extensions = merge_requested_extensions(
+            self._config.extensions,
+            metadata_extensions,
+        )
         try:
             task_request = GetTaskRequest(
                 id=request.task_id,
                 history_length=request.history_length,
             )
-            return await sdk_client.get_task(
+            task = await sdk_client.get_task(
                 task_request,
-                context=build_call_context(extra_headers),
+                context=build_call_context(extra_headers, requested_extensions),
             )
+            return filter_negotiated_extensions_from_task(task, requested_extensions)
         except Exception as exc:
             raise map_a2a_sdk_error(exc, operation="tasks/get") from exc
 
@@ -230,16 +263,23 @@ class A2AClient:
     async def cancel(self, request: A2ACancelTaskRequest) -> Task:
         client = await self._get_client()
         sdk_client = client
-        request_metadata, extra_headers = split_request_metadata(request.metadata)
+        request_metadata, extra_headers, metadata_extensions = split_request_metadata(
+            request.metadata
+        )
+        requested_extensions = merge_requested_extensions(
+            self._config.extensions,
+            metadata_extensions,
+        )
         try:
             cancel_request = CancelTaskRequest(id=request.task_id)
             metadata_struct = to_struct(request_metadata or None)
             if metadata_struct is not None:
                 cancel_request.metadata.CopyFrom(metadata_struct)
-            return await sdk_client.cancel_task(
+            task = await sdk_client.cancel_task(
                 cancel_request,
-                context=build_call_context(extra_headers),
+                context=build_call_context(extra_headers, requested_extensions),
             )
+            return filter_negotiated_extensions_from_task(task, requested_extensions)
         except Exception as exc:
             raise map_a2a_sdk_error(exc, operation="tasks/cancel") from exc
 
@@ -249,7 +289,7 @@ class A2AClient:
         )
 
     @staticmethod
-    def extract_text(event: Task | Message | Any) -> str:
+    def extract_text(event: StreamResponse) -> str:
         extracted = extract_text_from_payload(event)
         return extracted or ""
 
@@ -260,21 +300,32 @@ class A2AClient:
         if self._closed:
             raise A2AClientLifecycleError("client is closed")
 
-        endpoint = resolve_agent_card_endpoint(self._config)
-        resolver = self._card_resolver_factory(
-            self._httpx_client,
-            endpoint.base_url,
-            endpoint.agent_card_path,
-        )
-        try:
+        cached_card = self._extract_sdk_client_card()
+        if cached_card is not None:
+            self._card = cached_card
+            return self._card
+
+        async with self._lock:
+            if self._card is not None:
+                return self._card
+
+            cached_card = self._extract_sdk_client_card()
+            if cached_card is not None:
+                self._card = cached_card
+                return self._card
+
+            endpoint = resolve_agent_card_endpoint(self._config)
+            resolver = self._card_resolver_factory(
+                self._httpx_client,
+                endpoint.base_url,
+                endpoint.agent_card_path,
+            )
             try:
                 self._card = await resolver.get_agent_card(
                     http_kwargs=build_agent_card_request_kwargs(self._config)
                 )
-            except TypeError:
-                self._card = await resolver.get_agent_card()
-        except Exception as exc:
-            raise map_a2a_sdk_error(exc, operation="agent_card") from exc
+            except Exception as exc:
+                raise map_a2a_sdk_error(exc, operation="agent_card") from exc
         return cast(AgentCard, self._card)
 
     async def _get_client(self) -> _SDKClientProtocol:
@@ -286,28 +337,43 @@ class A2AClient:
             return await self._build_client()
 
     async def _build_client(self) -> _SDKClientProtocol:
-        card = await self._get_agent_card()
-        try:
-            factory = self._client_factory_type(self._client_config)
-        except ValueError as exc:
-            raise A2AUnsupportedBindingError(
-                f"Unable to initialize A2A client with transport preference: {exc}"
-            ) from exc
-        except Exception as exc:
-            raise A2AClientError(f"Unable to initialize A2A client factory: {exc}") from exc
-
+        endpoint = resolve_agent_card_endpoint(self._config)
         interceptors = self._build_interceptors()
+        agent_or_card: str | AgentCard = endpoint.base_url
+        client_kwargs: dict[str, Any] = {
+            "client_config": self._client_config,
+            "interceptors": interceptors or None,
+        }
+        if self._card is not None:
+            agent_or_card = cast(AgentCard, proto_clone(self._card))
+        else:
+            client_kwargs["relative_card_path"] = endpoint.agent_card_path
+            client_kwargs["resolver_http_kwargs"] = build_agent_card_request_kwargs(self._config)
         try:
-            self._sdk_client = factory.create(card, interceptors=interceptors)
+            self._sdk_client = await self._client_creator(agent_or_card, **client_kwargs)
         except ValueError as exc:
             raise A2AUnsupportedBindingError(
                 f"Unable to bind A2A client to peer transport: {exc}"
             ) from exc
-        except TypeError:
-            self._sdk_client = factory.create(card)
+        except Exception as exc:
+            mapped_error = map_a2a_sdk_error(exc, operation="agent_card")
+            if type(mapped_error) is A2AClientError:
+                raise A2AClientError(f"Failed to initialize A2A client: {exc}") from exc
+            raise mapped_error from exc
         if self._sdk_client is None:
             raise A2AClientError("Failed to initialize A2A client")
+        cached_card = self._extract_sdk_client_card()
+        if cached_card is not None:
+            self._card = cached_card
         return self._sdk_client
+
+    def _extract_sdk_client_card(self) -> AgentCard | None:
+        if self._sdk_client is None:
+            return None
+        agent_card = getattr(cast(Any, self._sdk_client), "_card", None)
+        if agent_card is None:
+            return None
+        return cast(AgentCard, proto_clone(cast(AgentCard, agent_card)))
 
     def _build_interceptors(self) -> list[ClientCallInterceptor]:
         interceptors: list[ClientCallInterceptor] = []
@@ -318,19 +384,61 @@ class A2AClient:
             interceptors.append(AuthInterceptor(credential_service))
         return interceptors
 
-    def _build_user_message(
+    def _build_outbound_message(
         self,
         *,
-        text: str,
+        text: str | None,
+        parts: Sequence[Part] | None,
+        message: Message | None,
         context_id: str | None,
         task_id: str | None,
         message_id: str | None,
     ) -> Message:
+        payload_count = sum(value is not None for value in (text, parts, message))
+        if payload_count != 1:
+            raise ValueError("Exactly one of text, parts, or message must be provided")
+
+        if message is not None:
+            if any(value is not None for value in (context_id, task_id, message_id)):
+                raise ValueError(
+                    "context_id, task_id, and message_id cannot be combined with message"
+                )
+            return cast(Message, proto_clone(message))
+
+        if parts is not None:
+            if not parts:
+                raise ValueError("parts must not be empty")
+            outbound_parts = [cast(Part, proto_clone(part)) for part in parts]
+        else:
+            assert text is not None
+            outbound_parts = [new_text_part(text)]
+
         return Message(
             message_id=message_id or f"msg-{uuid4().hex[:12]}",
             role=Role.ROLE_USER,
             context_id=context_id,
             task_id=task_id,
-            parts=[new_text_part(text)],
+            parts=outbound_parts,
             metadata=None,
+        )
+
+    def _validate_extension_requirements(
+        self,
+        *,
+        request_metadata: Mapping[str, Any] | None,
+        message: Message,
+        requested_extensions: tuple[str, ...] | None,
+    ) -> None:
+        missing_requirements = missing_extension_requirements(
+            required_extensions_for_send_message(
+                request_metadata=request_metadata,
+                message=message,
+            ),
+            requested_extensions,
+        )
+        if not missing_requirements:
+            return
+        raise A2AClientConfigError(
+            "Request metadata requires explicit A2A extension negotiation via A2A-Extensions: "
+            + ", ".join(requirement.field for requirement in missing_requirements)
         )

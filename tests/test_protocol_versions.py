@@ -11,22 +11,23 @@ from codex_a2a.protocol_versions import (
 
 
 def test_normalize_protocol_version_accepts_major_minor_patch() -> None:
-    assert normalize_protocol_version("0.3.0") == "0.3"
+    assert normalize_protocol_version("2.0.0") == "2.0"
     assert normalize_protocol_version(" 1.0 ") == "1.0"
 
 
 def test_normalize_protocol_versions_deduplicates_in_order() -> None:
-    assert normalize_protocol_versions(["0.3.0", "0.3", "1.0.0"]) == ("0.3", "1.0")
+    assert normalize_protocol_versions(["1.0.0", "1.0", "2.0.0"]) == ("1.0", "2.0")
 
 
 def test_normalize_protocol_version_rejects_invalid_values() -> None:
     with pytest.raises(ValueError, match="Major.Minor"):
-        normalize_protocol_version("v0.3")
+        normalize_protocol_version("v1.0")
 
 
 def test_default_supported_protocol_versions_uses_declared_line() -> None:
-    assert default_supported_protocol_versions("0.3.0") == ("0.3",)
     assert default_supported_protocol_versions("1.0.0") == ("1.0",)
+    with pytest.raises(ValueError, match="only supports A2A protocol line 1.0"):
+        default_supported_protocol_versions("2.0.0")
 
 
 def test_protocol_compatibility_summary_declares_supported_lines_only() -> None:
@@ -43,6 +44,14 @@ def test_protocol_compatibility_summary_declares_supported_lines_only() -> None:
     assert summary["versions"]["1.0"]["status"] == "supported"
     assert "A2A-Version" in summary["versions"]["1.0"]["supported_features"][0]
     assert summary["versions"]["1.0"]["known_gaps"] == []
+
+
+def test_protocol_compatibility_summary_rejects_non_1_0_lines() -> None:
+    with pytest.raises(ValueError, match="only supports the A2A protocol line 1.0"):
+        build_protocol_compatibility_summary(
+            default_protocol_version="1.0.0",
+            supported_protocol_versions=["1.0", "2.0"],
+        )
 
 
 def test_negotiate_protocol_version_defaults_to_configured_baseline() -> None:

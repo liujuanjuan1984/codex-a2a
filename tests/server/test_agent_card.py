@@ -4,20 +4,14 @@ from a2a.types import AgentExtension, AgentSkill
 
 from codex_a2a.a2a_proto import proto_to_python
 from codex_a2a.contracts.extensions import (
-    COMPATIBILITY_PROFILE_EXTENSION_URI,
-    DISCOVERY_EXTENSION_URI,
-    EXEC_CONTROL_EXTENSION_URI,
+    CORE_JSONRPC_PATH,
+    EXTENSION_JSONRPC_PATH,
     INTERRUPT_CALLBACK_EXTENSION_URI,
-    INTERRUPT_RECOVERY_EXTENSION_URI,
-    REVIEW_CONTROL_EXTENSION_URI,
+    REST_API_PATH_PREFIX,
     SESSION_BINDING_EXTENSION_URI,
     SESSION_QUERY_DEFAULT_LIMIT,
-    SESSION_QUERY_EXTENSION_URI,
     SESSION_QUERY_MAX_LIMIT,
     STREAMING_EXTENSION_URI,
-    THREAD_LIFECYCLE_EXTENSION_URI,
-    TURN_CONTROL_EXTENSION_URI,
-    WIRE_CONTRACT_EXTENSION_URI,
 )
 from codex_a2a.media_modes import (
     APPLICATION_JSON_MEDIA_MODE,
@@ -28,10 +22,12 @@ from codex_a2a.media_modes import (
     TEXT_OUTPUT_MEDIA_MODES,
     TEXT_PLAIN_MEDIA_MODE,
 )
+from codex_a2a.profile.runtime import build_runtime_profile
 from codex_a2a.server.agent_card import (
     build_agent_card,
     build_authenticated_extended_agent_card,
 )
+from codex_a2a.server.openapi_contract_fragments import build_openapi_codex_contracts
 from tests.support.settings import make_settings
 
 
@@ -39,13 +35,6 @@ def _require_params(extension: AgentExtension) -> dict[str, Any]:
     assert extension.params is not None
     params = proto_to_python(extension.params)
     assert isinstance(params, dict)
-    return params
-
-
-def _extension_params(extension: AgentExtension) -> dict[str, Any]:
-    params = proto_to_python(extension.params)
-    if not isinstance(params, dict):
-        return {}
     return params
 
 
@@ -60,11 +49,21 @@ def _require_examples(skill: AgentSkill) -> list[str]:
     return skill.examples
 
 
+def _codex_contracts(settings) -> dict[str, dict[str, Any]]:  # noqa: ANN001
+    runtime_profile = build_runtime_profile(settings)
+    return build_openapi_codex_contracts(
+        settings=settings,
+        protocol_version=settings.a2a_protocol_version,
+        runtime_profile=runtime_profile,
+    )
+
+
 def test_public_agent_card_description_reflects_discovery_surface() -> None:
     card = build_agent_card(make_settings(a2a_bearer_token="test-token"))
 
     assert "HTTP+JSON and JSON-RPC transports" in card.description
     assert "authenticated extended Agent Card discovery" in card.description
+    assert "OpenAPI-based provider-private contract discovery" in card.description
     assert "single-tenant deployment" in card.description.lower()
     assert "machine-readable wire contract" not in card.description
     assert card.capabilities.extended_agent_card is True
@@ -76,7 +75,10 @@ def test_authenticated_extended_agent_card_description_reflects_detailed_contrac
     assert "SendMessage, SendStreamingMessage" in card.description
     assert "GetTask, ListTasks, CancelTask, SubscribeToTask" in card.description
     assert "GetExtendedAgentCard" in card.description
-    assert "interactive exec extensions" in card.description
+    assert "Provider-private control surfaces are published as authenticated skills" in (
+        card.description
+    )
+    assert "interactive exec" in card.description
     assert "active-turn control" in card.description
     assert "review control" in card.description
     assert "machine-readable wire contract" in card.description
@@ -147,65 +149,65 @@ def test_agent_card_declares_registry_auth_schemes() -> None:
 
 
 def test_agent_card_declares_media_modes_that_match_runtime_contract() -> None:
-    card = build_agent_card(make_settings(a2a_bearer_token="test-token"))
-    skill_by_id = {skill.id: skill for skill in card.skills or []}
+    settings = make_settings(a2a_bearer_token="test-token")
+    public_card = build_agent_card(settings)
+    extended_card = build_authenticated_extended_agent_card(settings)
+    public_skill_by_id = {skill.id: skill for skill in public_card.skills or []}
+    extended_skill_by_id = {skill.id: skill for skill in extended_card.skills or []}
 
-    assert card.default_input_modes == DEFAULT_INPUT_MEDIA_MODES
-    assert card.default_output_modes == DEFAULT_OUTPUT_MEDIA_MODES
+    assert public_card.default_input_modes == DEFAULT_INPUT_MEDIA_MODES
+    assert public_card.default_output_modes == DEFAULT_OUTPUT_MEDIA_MODES
+    assert set(public_skill_by_id) == {"codex.chat"}
 
-    chat_skill = skill_by_id["codex.chat"]
+    chat_skill = public_skill_by_id["codex.chat"]
     assert chat_skill.input_modes == DEFAULT_INPUT_MEDIA_MODES
     assert chat_skill.output_modes == DEFAULT_OUTPUT_MEDIA_MODES
 
-    sessions_query_skill = skill_by_id["codex.sessions.query"]
+    sessions_query_skill = extended_skill_by_id["codex.sessions.query"]
     assert sessions_query_skill.input_modes == [APPLICATION_JSON_MEDIA_MODE]
     assert sessions_query_skill.output_modes == JSON_OUTPUT_MEDIA_MODES
 
-    sessions_control_skill = skill_by_id["codex.sessions.control"]
-    assert sessions_control_skill.input_modes == [APPLICATION_JSON_MEDIA_MODE]
-    assert sessions_control_skill.output_modes == DEFAULT_OUTPUT_MEDIA_MODES
-
-    discovery_skill = skill_by_id["codex.discovery.query"]
+    discovery_skill = extended_skill_by_id["codex.discovery.query"]
     assert discovery_skill.input_modes == [APPLICATION_JSON_MEDIA_MODE]
     assert discovery_skill.output_modes == JSON_OUTPUT_MEDIA_MODES
 
-    discovery_watch_skill = skill_by_id["codex.discovery.watch"]
+    discovery_watch_skill = extended_skill_by_id["codex.discovery.watch"]
     assert discovery_watch_skill.input_modes == [APPLICATION_JSON_MEDIA_MODE]
     assert discovery_watch_skill.output_modes == JSON_OUTPUT_MEDIA_MODES
 
-    thread_control_skill = skill_by_id["codex.threads.control"]
+    thread_control_skill = extended_skill_by_id["codex.threads.control"]
     assert thread_control_skill.input_modes == [APPLICATION_JSON_MEDIA_MODE]
     assert thread_control_skill.output_modes == JSON_OUTPUT_MEDIA_MODES
 
-    thread_watch_skill = skill_by_id["codex.threads.watch"]
+    thread_watch_skill = extended_skill_by_id["codex.threads.watch"]
     assert thread_watch_skill.input_modes == [APPLICATION_JSON_MEDIA_MODE]
     assert thread_watch_skill.output_modes == JSON_OUTPUT_MEDIA_MODES
 
-    turn_control_skill = skill_by_id["codex.turns.control"]
+    turn_control_skill = extended_skill_by_id["codex.turns.control"]
     assert turn_control_skill.input_modes == [APPLICATION_JSON_MEDIA_MODE]
     assert turn_control_skill.output_modes == JSON_OUTPUT_MEDIA_MODES
 
-    review_control_skill = skill_by_id["codex.review.control"]
+    review_control_skill = extended_skill_by_id["codex.review.control"]
     assert review_control_skill.input_modes == [APPLICATION_JSON_MEDIA_MODE]
     assert review_control_skill.output_modes == JSON_OUTPUT_MEDIA_MODES
 
-    review_watch_skill = skill_by_id["codex.review.watch"]
+    review_watch_skill = extended_skill_by_id["codex.review.watch"]
     assert review_watch_skill.input_modes == [APPLICATION_JSON_MEDIA_MODE]
     assert review_watch_skill.output_modes == JSON_OUTPUT_MEDIA_MODES
 
-    interrupt_recovery_skill = skill_by_id["codex.interrupt.recovery"]
+    interrupt_recovery_skill = extended_skill_by_id["codex.interrupt.recovery"]
     assert interrupt_recovery_skill.input_modes == [APPLICATION_JSON_MEDIA_MODE]
     assert interrupt_recovery_skill.output_modes == JSON_OUTPUT_MEDIA_MODES
 
-    interrupt_skill = skill_by_id["codex.interrupt.callback"]
+    interrupt_skill = extended_skill_by_id["codex.interrupt.callback"]
     assert interrupt_skill.input_modes == [APPLICATION_JSON_MEDIA_MODE]
     assert interrupt_skill.output_modes == JSON_OUTPUT_MEDIA_MODES
 
-    exec_control_skill = skill_by_id["codex.exec.control"]
+    exec_control_skill = extended_skill_by_id["codex.exec.control"]
     assert exec_control_skill.input_modes == [APPLICATION_JSON_MEDIA_MODE]
     assert exec_control_skill.output_modes == JSON_OUTPUT_MEDIA_MODES
 
-    exec_stream_skill = skill_by_id["codex.exec.stream"]
+    exec_stream_skill = extended_skill_by_id["codex.exec.stream"]
     assert exec_stream_skill.input_modes == [APPLICATION_JSON_MEDIA_MODE]
     assert exec_stream_skill.output_modes == TEXT_OUTPUT_MEDIA_MODES
 
@@ -219,6 +221,11 @@ def test_agent_card_declares_media_modes_that_match_runtime_contract() -> None:
 def test_public_agent_card_minimizes_provider_private_contracts() -> None:
     card = build_agent_card(make_settings(a2a_bearer_token="test-token"))
     ext_by_uri = {ext.uri: ext for ext in card.capabilities.extensions or []}
+
+    assert set(ext_by_uri) == {
+        SESSION_BINDING_EXTENSION_URI,
+        STREAMING_EXTENSION_URI,
+    }
 
     session_binding = ext_by_uri[SESSION_BINDING_EXTENSION_URI]
     session_binding_params = _require_params(session_binding)
@@ -241,67 +248,31 @@ def test_public_agent_card_minimizes_provider_private_contracts() -> None:
     assert streaming_params["usage_fields"]["total_tokens"] == "metadata.shared.usage.total_tokens"
     assert "tool_call_payload_contract" not in streaming_params
 
-    assert _extension_params(ext_by_uri[SESSION_QUERY_EXTENSION_URI]) == {}
-    assert _extension_params(ext_by_uri[DISCOVERY_EXTENSION_URI]) == {}
-    assert _extension_params(ext_by_uri[THREAD_LIFECYCLE_EXTENSION_URI]) == {}
-    assert _extension_params(ext_by_uri[TURN_CONTROL_EXTENSION_URI]) == {}
-    assert _extension_params(ext_by_uri[REVIEW_CONTROL_EXTENSION_URI]) == {}
-    assert _extension_params(ext_by_uri[EXEC_CONTROL_EXTENSION_URI]) == {}
-    assert _extension_params(ext_by_uri[COMPATIBILITY_PROFILE_EXTENSION_URI]) == {}
-    assert _extension_params(ext_by_uri[WIRE_CONTRACT_EXTENSION_URI]) == {}
-
-    interrupt_recovery = ext_by_uri[INTERRUPT_RECOVERY_EXTENSION_URI]
-    interrupt_recovery_params = _require_params(interrupt_recovery)
-    assert interrupt_recovery_params == {
-        "methods": {"list": "codex.interrupts.list"},
-        "supported_interrupt_types": [
-            "permission",
-            "question",
-            "permissions",
-            "elicitation",
-        ],
-        "identity_scope": "authenticated_caller",
-    }
-
-    interrupt = ext_by_uri[INTERRUPT_CALLBACK_EXTENSION_URI]
-    interrupt_params = _require_params(interrupt)
-    assert interrupt_params == {
-        "methods": {
-            "reply_permission": "a2a.interrupt.permission.reply",
-            "reply_question": "a2a.interrupt.question.reply",
-            "reject_question": "a2a.interrupt.question.reject",
-            "reply_permissions": "a2a.interrupt.permissions.reply",
-            "reply_elicitation": "a2a.interrupt.elicitation.reply",
-        },
-        "supported_interrupt_events": [
-            "permission.asked",
-            "question.asked",
-            "permissions.asked",
-            "elicitation.asked",
-        ],
-        "request_id_field": "metadata.shared.interrupt.request_id",
-    }
-
 
 def test_authenticated_extended_agent_card_injects_profile_into_extensions() -> None:
-    card = build_authenticated_extended_agent_card(
-        make_settings(
-            a2a_bearer_token="test-token",
-            a2a_project="alpha",
-            codex_workspace_root="/srv/workspaces/alpha",
-            codex_provider_id="google",
-            codex_model_id="gemini-2.5-flash",
-            codex_agent="code-reviewer",
-            codex_variant="safe",
-            a2a_allow_directory_override=False,
-            a2a_execution_sandbox_mode="workspace-write",
-            a2a_execution_network_access="restricted",
-            a2a_execution_network_allowed_domains=["api.openai.com"],
-            a2a_execution_approval_policy="on-request",
-            a2a_execution_write_access_scope="workspace_root_or_descendant",
-        )
+    settings = make_settings(
+        a2a_bearer_token="test-token",
+        a2a_project="alpha",
+        codex_workspace_root="/srv/workspaces/alpha",
+        codex_provider_id="google",
+        codex_model_id="gemini-2.5-flash",
+        codex_agent="code-reviewer",
+        codex_variant="safe",
+        a2a_allow_directory_override=False,
+        a2a_execution_sandbox_mode="workspace-write",
+        a2a_execution_network_access="restricted",
+        a2a_execution_network_allowed_domains=["api.openai.com"],
+        a2a_execution_approval_policy="on-request",
+        a2a_execution_write_access_scope="workspace_root_or_descendant",
     )
+    card = build_authenticated_extended_agent_card(settings)
     ext_by_uri = {ext.uri: ext for ext in card.capabilities.extensions or []}
+    codex_contracts = _codex_contracts(settings)
+
+    assert set(ext_by_uri) == {
+        SESSION_BINDING_EXTENSION_URI,
+        STREAMING_EXTENSION_URI,
+    }
 
     binding = ext_by_uri[SESSION_BINDING_EXTENSION_URI]
     binding_params = _require_params(binding)
@@ -324,11 +295,6 @@ def test_authenticated_extended_agent_card_injects_profile_into_extensions() -> 
     assert profile["runtime_features"]["directory_binding"] == {
         "allow_override": False,
         "scope": "workspace_root_only",
-    }
-    assert profile["runtime_features"]["session_shell"] == {
-        "enabled": True,
-        "availability": "enabled",
-        "toggle": "A2A_ENABLE_SESSION_SHELL",
     }
     assert profile["runtime_features"]["turn_control"] == {
         "enabled": True,
@@ -441,8 +407,11 @@ def test_authenticated_extended_agent_card_injects_profile_into_extensions() -> 
         "preserve_verbatim": True,
     }
 
-    session_query = ext_by_uri[SESSION_QUERY_EXTENSION_URI]
-    session_query_params = _require_params(session_query)
+    session_query_params = codex_contracts["session_query"]
+    assert session_query_params["jsonrpc_endpoint"] == {
+        "protocol_binding": "JSON-RPC",
+        "url_path": EXTENSION_JSONRPC_PATH,
+    }
     assert session_query_params["profile"] == profile
     assert session_query_params["supported_metadata"] == ["codex.directory", "codex.execution"]
     assert session_query_params["provider_private_metadata"] == [
@@ -461,7 +430,7 @@ def test_authenticated_extended_agent_card_injects_profile_into_extensions() -> 
         "codex.sessions.list": "upstream_passthrough",
         "codex.sessions.messages.list": "local_tail_slice",
     }
-    assert session_query_params["rich_input"]["prompt_async_part_types"] == [
+    assert session_query_params["rich_input"]["supported_part_types"] == [
         "text",
         "image",
         "mention",
@@ -473,13 +442,14 @@ def test_authenticated_extended_agent_card_injects_profile_into_extensions() -> 
         "Part(data mention|skill payloads)": "mention|skill",
     }
     assert (
-        session_query_params["rich_input"]["prompt_async_part_contracts"]["image"]["maps_to"]
+        session_query_params["rich_input"]["part_contracts"]["image"]["maps_to"]
         == "turn/start.input[].type=input_image"
     )
     assert any(
         "mention.path values are forwarded verbatim" in note
         for note in session_query_params["rich_input"]["notes"]
     )
+    assert "control_methods" not in session_query_params
     assert session_query_params["result_envelope"] == {}
     assert any(
         "forwards limit upstream" in note for note in session_query_params["pagination"]["notes"]
@@ -495,18 +465,12 @@ def test_authenticated_extended_agent_card_injects_profile_into_extensions() -> 
         "contextId equal to the upstream session_id" in note
         for note in session_query_params["context_semantics"]["notes"]
     )
-    shell_contract = session_query_params["method_contracts"]["codex.sessions.shell"]
-    assert shell_contract["execution_binding"] == "standalone_command_exec"
-    assert shell_contract["session_binding"] == "ownership_attribution_only"
-    assert shell_contract["uses_upstream_session_context"] is False
-    assert any("command/exec" in note for note in shell_contract["notes"])
-    assert any("one-shot shell snapshot" in note for note in shell_contract["notes"])
-    prompt_contract = session_query_params["method_contracts"]["codex.sessions.prompt_async"]
-    assert any("type=text, image, mention, and skill" in note for note in prompt_contract["notes"])
-    assert any("local_image" in note for note in prompt_contract["notes"])
+    assert "codex.sessions.shell" not in session_query_params["method_contracts"]
+    assert "codex.sessions.prompt_async" not in session_query_params["method_contracts"]
+    assert "codex.sessions.command" not in session_query_params["method_contracts"]
 
-    discovery = ext_by_uri[DISCOVERY_EXTENSION_URI]
-    discovery_params = _require_params(discovery)
+    discovery_params = codex_contracts["discovery"]
+    assert discovery_params["jsonrpc_endpoint"]["url_path"] == EXTENSION_JSONRPC_PATH
     assert discovery_params["profile"] == profile
     assert discovery_params["methods"]["list_skills"] == "codex.discovery.skills.list"
     assert discovery_params["methods"]["list_apps"] == "codex.discovery.apps.list"
@@ -520,8 +484,8 @@ def test_authenticated_extended_agent_card_injects_profile_into_extensions() -> 
     assert apps_contract["result"]["fields"] == ["items", "next_cursor"]
     assert any("mention_path" in note for note in apps_contract["notes"])
 
-    thread_lifecycle = ext_by_uri[THREAD_LIFECYCLE_EXTENSION_URI]
-    thread_lifecycle_params = _require_params(thread_lifecycle)
+    thread_lifecycle_params = codex_contracts["thread_lifecycle"]
+    assert thread_lifecycle_params["jsonrpc_endpoint"]["url_path"] == EXTENSION_JSONRPC_PATH
     assert thread_lifecycle_params["profile"] == profile
     assert thread_lifecycle_params["methods"]["fork"] == "codex.threads.fork"
     assert thread_lifecycle_params["methods"]["archive"] == "codex.threads.archive"
@@ -556,8 +520,8 @@ def test_authenticated_extended_agent_card_injects_profile_into_extensions() -> 
         == 204
     )
 
-    interrupt_recovery = ext_by_uri[INTERRUPT_RECOVERY_EXTENSION_URI]
-    interrupt_recovery_params = _require_params(interrupt_recovery)
+    interrupt_recovery_params = codex_contracts["interrupt_recovery"]
+    assert interrupt_recovery_params["jsonrpc_endpoint"]["url_path"] == EXTENSION_JSONRPC_PATH
     assert interrupt_recovery_params["profile"] == profile
     assert interrupt_recovery_params["methods"]["list"] == "codex.interrupts.list"
     assert interrupt_recovery_params["supported_interrupt_types"] == [
@@ -578,8 +542,8 @@ def test_authenticated_extended_agent_card_injects_profile_into_extensions() -> 
         "properties",
     ]
 
-    turn_control = ext_by_uri[TURN_CONTROL_EXTENSION_URI]
-    turn_control_params = _require_params(turn_control)
+    turn_control_params = codex_contracts["turn_control"]
+    assert turn_control_params["jsonrpc_endpoint"]["url_path"] == EXTENSION_JSONRPC_PATH
     assert turn_control_params["profile"] == profile
     assert turn_control_params["methods"]["steer"] == "codex.turns.steer"
     assert turn_control_params["authorization"]["required_capabilities"] == ["turn_control"]
@@ -597,8 +561,8 @@ def test_authenticated_extended_agent_card_injects_profile_into_extensions() -> 
     assert steer_contract["result"]["fields"] == ["ok", "thread_id", "turn_id"]
     assert any("active regular turn" in note for note in turn_control_params["consumer_guidance"])
 
-    review_control = ext_by_uri[REVIEW_CONTROL_EXTENSION_URI]
-    review_control_params = _require_params(review_control)
+    review_control_params = codex_contracts["review_control"]
+    assert review_control_params["jsonrpc_endpoint"]["url_path"] == EXTENSION_JSONRPC_PATH
     assert review_control_params["profile"] == profile
     assert review_control_params["methods"]["start"] == "codex.review.start"
     assert review_control_params["methods"]["watch"] == "codex.review.watch"
@@ -641,8 +605,8 @@ def test_authenticated_extended_agent_card_injects_profile_into_extensions() -> 
     ]
     assert any("codex.review.watch" in note for note in review_control_params["consumer_guidance"])
 
-    interrupt = ext_by_uri[INTERRUPT_CALLBACK_EXTENSION_URI]
-    interrupt_params = _require_params(interrupt)
+    interrupt_params = codex_contracts["interrupt_callback"]
+    assert interrupt_params["jsonrpc_endpoint"]["url_path"] == EXTENSION_JSONRPC_PATH
     assert interrupt_params["profile"] == profile
     assert interrupt_params["request_id_field"] == "metadata.shared.interrupt.request_id"
     assert interrupt_params["supported_metadata"] == ["codex.directory"]
@@ -662,8 +626,8 @@ def test_authenticated_extended_agent_card_injects_profile_into_extensions() -> 
     assert "expected_interrupt_type" in interrupt_params["errors"]["error_data_fields"]
     assert "actual_interrupt_type" in interrupt_params["errors"]["error_data_fields"]
 
-    exec_control = ext_by_uri[EXEC_CONTROL_EXTENSION_URI]
-    exec_control_params = _require_params(exec_control)
+    exec_control_params = codex_contracts["exec_control"]
+    assert exec_control_params["jsonrpc_endpoint"]["url_path"] == EXTENSION_JSONRPC_PATH
     assert exec_control_params["profile"] == profile
     assert exec_control_params["supported_metadata"] == ["codex.directory"]
     assert exec_control_params["provider_private_metadata"] == ["codex.directory"]
@@ -672,11 +636,10 @@ def test_authenticated_extended_agent_card_injects_profile_into_extensions() -> 
     start_contract = exec_control_params["method_contracts"]["codex.exec.start"]
     assert start_contract["execution_binding"] == "standalone_interactive_command_exec"
     assert start_contract["result"]["fields"] == ["ok", "task_id", "context_id", "process_id"]
-    assert any("codex.sessions.shell" in note for note in start_contract["notes"])
+    assert any("interactive command/exec session" in note for note in start_contract["notes"])
 
-    wire_contract = ext_by_uri[WIRE_CONTRACT_EXTENSION_URI]
-    wire_contract_params = _require_params(wire_contract)
-    assert wire_contract_params["protocol_version"] == "1.0.0"
+    wire_contract_params = codex_contracts["wire_contract"]
+    assert wire_contract_params["protocol_version"] == "1.0"
     assert wire_contract_params["default_protocol_version"] == "1.0"
     assert wire_contract_params["supported_protocol_versions"] == ["1.0"]
     assert set(wire_contract_params["protocol_compatibility"]["versions"]) == {"1.0"}
@@ -691,13 +654,40 @@ def test_authenticated_extended_agent_card_injects_profile_into_extensions() -> 
     )
     assert "GetExtendedAgentCard" in wire_contract_params["all_jsonrpc_methods"]
     assert "CreateTaskPushNotificationConfig" in wire_contract_params["all_jsonrpc_methods"]
-    assert "POST /v1/message:send" in wire_contract_params["core"]["http_endpoints"]
-    assert "GET /v1/extendedAgentCard" in wire_contract_params["core"]["http_endpoints"]
+    assert (
+        f"POST {REST_API_PATH_PREFIX}/message:send"
+        in wire_contract_params["core"]["http_endpoints"]
+    )
+    assert (
+        f"GET {REST_API_PATH_PREFIX}/extendedAgentCard"
+        in wire_contract_params["core"]["http_endpoints"]
+    )
+    assert wire_contract_params["core"]["jsonrpc_endpoint"] == {
+        "protocol_binding": "JSON-RPC",
+        "protocol_version": "1.0",
+        "url_path": CORE_JSONRPC_PATH,
+    }
+    assert wire_contract_params["extensions"]["jsonrpc_endpoint"] == {
+        "protocol_binding": "JSON-RPC",
+        "protocol_version": "1.0",
+        "url_path": EXTENSION_JSONRPC_PATH,
+    }
+    assert wire_contract_params["transport_interfaces"] == [
+        {
+            "protocol_binding": "HTTP+JSON",
+            "protocol_version": "1.0",
+            "url_path_prefix": REST_API_PATH_PREFIX,
+        },
+        {
+            "protocol_binding": "JSON-RPC",
+            "protocol_version": "1.0",
+            "url_path": CORE_JSONRPC_PATH,
+        },
+    ]
 
-    compatibility = ext_by_uri[COMPATIBILITY_PROFILE_EXTENSION_URI]
-    compatibility_params = _require_params(compatibility)
+    compatibility_params = codex_contracts["compatibility_profile"]
     assert compatibility_params["profile_id"] == "codex-a2a-single-tenant-coding-v1"
-    assert compatibility_params["protocol_version"] == "1.0.0"
+    assert compatibility_params["protocol_version"] == "1.0"
     assert compatibility_params["default_protocol_version"] == "1.0"
     assert compatibility_params["supported_protocol_versions"] == ["1.0"]
     assert (
@@ -706,7 +696,16 @@ def test_authenticated_extended_agent_card_injects_profile_into_extensions() -> 
     )
     assert compatibility_params["deployment"] == profile["deployment"]
     assert compatibility_params["runtime_features"] == profile["runtime_features"]
+    assert compatibility_params["core"]["jsonrpc_endpoint"] == CORE_JSONRPC_PATH
+    assert compatibility_params["extension_transport"]["jsonrpc_endpoint"] == EXTENSION_JSONRPC_PATH
     assert "GetExtendedAgentCard" in compatibility_params["core"]["jsonrpc_methods"]
+    assert compatibility_params["extension_taxonomy"]["shared_agent_card_extensions"] == [
+        SESSION_BINDING_EXTENSION_URI,
+        STREAMING_EXTENSION_URI,
+    ]
+    assert compatibility_params["extension_taxonomy"]["shared_provider_private_contracts"] == [
+        INTERRUPT_CALLBACK_EXTENSION_URI,
+    ]
     assert compatibility_params["extension_taxonomy"]["provider_private_metadata"] == [
         "codex.directory",
         "codex.execution",
@@ -747,10 +746,12 @@ def test_authenticated_extended_agent_card_injects_profile_into_extensions() -> 
     assert interrupt_recovery_policy["availability"] == "always"
     assert interrupt_recovery_policy["retention"] == "stable"
     assert interrupt_recovery_policy["extension_uri"] == "urn:codex-a2a:codex-interrupt-recovery/v1"
-    shell_policy = compatibility_params["method_retention"]["codex.sessions.shell"]
-    assert shell_policy["availability"] == "enabled"
-    assert shell_policy["retention"] == "deployment-conditional"
-    assert shell_policy["toggle"] == "A2A_ENABLE_SESSION_SHELL"
+    assert compatibility_params["method_retention"]["codex.sessions.list"] == {
+        "surface": "extension",
+        "availability": "always",
+        "retention": "stable",
+        "extension_uri": "urn:codex-a2a:codex-session-query/v1",
+    }
     exec_policy = compatibility_params["method_retention"]["codex.exec.start"]
     assert exec_policy["availability"] == "enabled"
     assert exec_policy["retention"] == "deployment-conditional"
@@ -789,61 +790,22 @@ def test_authenticated_extended_agent_card_chat_examples_include_project_hint_wh
 
 def test_public_agent_card_skills_are_minimal() -> None:
     card = build_agent_card(make_settings(a2a_bearer_token="test-token"))
-    session_skill = next(skill for skill in card.skills if skill.id == "codex.sessions.query")
-    session_control_skill = next(
-        skill for skill in card.skills if skill.id == "codex.sessions.control"
-    )
-    thread_control_skill = next(
-        skill for skill in card.skills if skill.id == "codex.threads.control"
-    )
-    thread_watch_skill = next(skill for skill in card.skills if skill.id == "codex.threads.watch")
-    interrupt_recovery_skill = next(
-        skill for skill in card.skills if skill.id == "codex.interrupt.recovery"
-    )
-    turn_control_skill = next(skill for skill in card.skills if skill.id == "codex.turns.control")
-    review_control_skill = next(
-        skill for skill in card.skills if skill.id == "codex.review.control"
-    )
-    review_watch_skill = next(skill for skill in card.skills if skill.id == "codex.review.watch")
+    skill_ids = {skill.id for skill in card.skills or []}
 
-    assert list(session_skill.examples) == []
-    assert "provider-private" in session_skill.tags
-    assert list(session_control_skill.examples) == []
-    assert "provider-private" in session_control_skill.tags
-    assert list(thread_control_skill.examples) == []
-    assert "provider-private" in thread_control_skill.tags
-    assert list(thread_watch_skill.examples) == []
-    assert "provider-private" in thread_watch_skill.tags
-    assert list(interrupt_recovery_skill.examples) == []
-    assert "provider-private" in interrupt_recovery_skill.tags
-    assert list(turn_control_skill.examples) == []
-    assert "provider-private" in turn_control_skill.tags
-    assert list(review_control_skill.examples) == []
-    assert "provider-private" in review_control_skill.tags
-    assert list(review_watch_skill.examples) == []
-    assert "provider-private" in review_watch_skill.tags
+    assert skill_ids == {"codex.chat"}
 
 
-def test_authenticated_extended_agent_card_omits_shell_method_when_disabled() -> None:
-    card = build_authenticated_extended_agent_card(
-        make_settings(
-            a2a_bearer_token="test-token",
-            a2a_enable_session_shell=False,
-            a2a_interrupt_request_ttl_seconds=45,
-        )
+def test_authenticated_extended_agent_card_omits_removed_session_control_contracts() -> None:
+    settings = make_settings(
+        a2a_bearer_token="test-token",
+        a2a_interrupt_request_ttl_seconds=45,
     )
-    ext_by_uri = {ext.uri: ext for ext in card.capabilities.extensions or []}
-    session_query = ext_by_uri[SESSION_QUERY_EXTENSION_URI]
-    session_query_params = _require_params(session_query)
+    session_query_params = _codex_contracts(settings)["session_query"]
 
-    assert "shell" not in session_query_params["methods"]
-    assert "shell" not in session_query_params["control_methods"]
+    assert "control_methods" not in session_query_params
     assert "codex.sessions.shell" not in session_query_params["method_contracts"]
-    assert session_query_params["profile"]["runtime_features"]["session_shell"] == {
-        "enabled": False,
-        "availability": "disabled",
-        "toggle": "A2A_ENABLE_SESSION_SHELL",
-    }
+    assert "codex.sessions.prompt_async" not in session_query_params["method_contracts"]
+    assert "codex.sessions.command" not in session_query_params["method_contracts"]
     assert session_query_params["profile"]["runtime_features"]["interrupts"] == {
         "request_ttl_seconds": 45
     }
@@ -862,30 +824,22 @@ def test_authenticated_extended_agent_card_omits_shell_method_when_disabled() ->
             "scope": "unknown",
         },
     }
-    wire_contract = ext_by_uri[WIRE_CONTRACT_EXTENSION_URI]
-    wire_contract_params = _require_params(wire_contract)
+    wire_contract_params = _codex_contracts(settings)["wire_contract"]
     assert "codex.sessions.shell" not in wire_contract_params["all_jsonrpc_methods"]
-    assert wire_contract_params["extensions"]["conditionally_available_methods"] == {
-        "codex.sessions.shell": {
-            "reason": "disabled_by_configuration",
-            "toggle": "A2A_ENABLE_SESSION_SHELL",
-        }
-    }
-    compatibility = ext_by_uri[COMPATIBILITY_PROFILE_EXTENSION_URI]
-    compatibility_params = _require_params(compatibility)
-    shell_policy = compatibility_params["method_retention"]["codex.sessions.shell"]
-    assert shell_policy["availability"] == "disabled"
-    assert compatibility_params["runtime_features"]["session_shell"] == {
-        "enabled": False,
-        "availability": "disabled",
-        "toggle": "A2A_ENABLE_SESSION_SHELL",
-    }
+    assert "codex.sessions.prompt_async" not in wire_contract_params["all_jsonrpc_methods"]
+    assert "codex.sessions.command" not in wire_contract_params["all_jsonrpc_methods"]
+    assert (
+        "codex.sessions.shell"
+        not in wire_contract_params["extensions"]["conditionally_available_methods"]
+    )
+    compatibility_params = _codex_contracts(settings)["compatibility_profile"]
+    assert "codex.sessions.shell" not in compatibility_params["method_retention"]
+    assert "session_shell" not in compatibility_params["runtime_features"]
 
 
 def test_agent_card_hides_boundary_sensitive_control_surfaces_when_disabled() -> None:
     settings = make_settings(
         a2a_bearer_token="test-token",
-        a2a_enable_session_shell=False,
         a2a_enable_turn_control=False,
         a2a_enable_review_control=False,
         a2a_enable_exec_control=False,
@@ -905,11 +859,11 @@ def test_agent_card_hides_boundary_sensitive_control_surfaces_when_disabled() ->
         assert skill_id not in public_skill_ids
         assert skill_id not in extended_skill_ids
 
-    ext_by_uri = {ext.uri: ext for ext in extended_card.capabilities.extensions or []}
-    turn_params = _require_params(ext_by_uri[TURN_CONTROL_EXTENSION_URI])
-    review_params = _require_params(ext_by_uri[REVIEW_CONTROL_EXTENSION_URI])
-    exec_params = _require_params(ext_by_uri[EXEC_CONTROL_EXTENSION_URI])
-    wire_contract_params = _require_params(ext_by_uri[WIRE_CONTRACT_EXTENSION_URI])
+    codex_contracts = _codex_contracts(settings)
+    turn_params = codex_contracts["turn_control"]
+    review_params = codex_contracts["review_control"]
+    exec_params = codex_contracts["exec_control"]
+    wire_contract_params = codex_contracts["wire_contract"]
 
     assert turn_params["methods"] == {}
     assert turn_params["method_contracts"] == {}
@@ -928,10 +882,6 @@ def test_agent_card_hides_boundary_sensitive_control_surfaces_when_disabled() ->
     assert "codex.review.watch" not in wire_contract_params["all_jsonrpc_methods"]
     assert "codex.exec.start" not in wire_contract_params["all_jsonrpc_methods"]
     assert wire_contract_params["extensions"]["conditionally_available_methods"] == {
-        "codex.sessions.shell": {
-            "reason": "disabled_by_configuration",
-            "toggle": "A2A_ENABLE_SESSION_SHELL",
-        },
         "codex.turns.steer": {
             "reason": "disabled_by_configuration",
             "toggle": "A2A_ENABLE_TURN_CONTROL",

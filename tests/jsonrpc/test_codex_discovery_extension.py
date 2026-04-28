@@ -3,6 +3,7 @@ from unittest.mock import AsyncMock
 import httpx
 import pytest
 
+from codex_a2a.contracts.extensions import EXTENSION_JSONRPC_PATH
 from tests.support.dummy_clients import DummySessionQueryCodexClient as DummyCodexClient
 from tests.support.settings import make_settings
 
@@ -28,7 +29,7 @@ async def test_discovery_extension_routes_read_only_methods(monkeypatch) -> None
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         headers = {"Authorization": "Bearer t-1"}
         skills_response = await client.post(
-            "/",
+            EXTENSION_JSONRPC_PATH,
             headers=headers,
             json={
                 "jsonrpc": "2.0",
@@ -38,7 +39,7 @@ async def test_discovery_extension_routes_read_only_methods(monkeypatch) -> None
             },
         )
         apps_response = await client.post(
-            "/",
+            EXTENSION_JSONRPC_PATH,
             headers=headers,
             json={
                 "jsonrpc": "2.0",
@@ -48,7 +49,7 @@ async def test_discovery_extension_routes_read_only_methods(monkeypatch) -> None
             },
         )
         plugins_response = await client.post(
-            "/",
+            EXTENSION_JSONRPC_PATH,
             headers=headers,
             json={
                 "jsonrpc": "2.0",
@@ -58,7 +59,7 @@ async def test_discovery_extension_routes_read_only_methods(monkeypatch) -> None
             },
         )
         plugin_response = await client.post(
-            "/",
+            EXTENSION_JSONRPC_PATH,
             headers=headers,
             json={
                 "jsonrpc": "2.0",
@@ -117,7 +118,7 @@ async def test_discovery_watch_routes_to_runtime(monkeypatch) -> None:
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.post(
-            "/",
+            EXTENSION_JSONRPC_PATH,
             headers={"Authorization": "Bearer t-1"},
             json={
                 "jsonrpc": "2.0",
@@ -151,7 +152,7 @@ async def test_discovery_extension_rejects_invalid_request_shapes(monkeypatch) -
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         headers = {"Authorization": "Bearer t-1"}
         skills_response = await client.post(
-            "/",
+            EXTENSION_JSONRPC_PATH,
             headers=headers,
             json={
                 "jsonrpc": "2.0",
@@ -161,7 +162,7 @@ async def test_discovery_extension_rejects_invalid_request_shapes(monkeypatch) -
             },
         )
         apps_response = await client.post(
-            "/",
+            EXTENSION_JSONRPC_PATH,
             headers=headers,
             json={
                 "jsonrpc": "2.0",
@@ -171,7 +172,7 @@ async def test_discovery_extension_rejects_invalid_request_shapes(monkeypatch) -
             },
         )
         plugin_response = await client.post(
-            "/",
+            EXTENSION_JSONRPC_PATH,
             headers=headers,
             json={
                 "jsonrpc": "2.0",
@@ -181,7 +182,7 @@ async def test_discovery_extension_rejects_invalid_request_shapes(monkeypatch) -
             },
         )
         watch_response = await client.post(
-            "/",
+            EXTENSION_JSONRPC_PATH,
             headers=headers,
             json={
                 "jsonrpc": "2.0",

@@ -5,12 +5,16 @@ from typing import Any, cast
 from fastapi import FastAPI
 
 from codex_a2a.config import Settings
+from codex_a2a.contracts.extensions import CORE_JSONRPC_PATH, EXTENSION_JSONRPC_PATH
 from codex_a2a.profile.runtime import RuntimeProfile
 
 from .openapi_contract_fragments import (
-    build_jsonrpc_extension_openapi_description,
-    build_jsonrpc_extension_openapi_examples,
-    build_openapi_extension_contracts,
+    build_core_jsonrpc_openapi_description,
+    build_core_jsonrpc_openapi_examples,
+    build_extension_jsonrpc_openapi_description,
+    build_extension_jsonrpc_openapi_examples,
+    build_openapi_a2a_extension_contracts,
+    build_openapi_codex_contracts,
     build_openapi_security,
     build_rest_message_openapi_examples,
 )
@@ -53,7 +57,10 @@ def _ensure_minimal_a2a_schemas(schema: dict[str, Any]) -> None:
             "required": ["messageId", "role", "parts"],
             "properties": {
                 "messageId": {"type": "string"},
-                "role": {"type": "string", "enum": ["ROLE_USER", "ROLE_AGENT"]},
+                "role": {
+                    "type": "string",
+                    "enum": ["ROLE_UNSPECIFIED", "ROLE_USER", "ROLE_AGENT"],
+                },
                 "parts": {
                     "type": "array",
                     "items": {"$ref": "#/components/schemas/A2APart"},
@@ -141,7 +148,10 @@ def patch_openapi_contract(
     protocol_version: str,
     runtime_profile: RuntimeProfile,
 ) -> None:
-    extension_contracts = build_openapi_extension_contracts(
+    a2a_extension_contracts = build_openapi_a2a_extension_contracts(
+        runtime_profile=runtime_profile,
+    )
+    codex_contracts = build_openapi_codex_contracts(
         settings=settings,
         protocol_version=protocol_version,
         runtime_profile=runtime_profile,
@@ -163,14 +173,18 @@ def patch_openapi_contract(
                 schema["security"] = security
         paths = schema.setdefault("paths", {})
         if isinstance(paths, dict):
-            post = _ensure_path_item(paths, "/", "post")
+            core_codex_contracts = {
+                "wire_contract": codex_contracts["wire_contract"],
+                "compatibility_profile": codex_contracts["compatibility_profile"],
+            }
+
+            post = _ensure_path_item(paths, CORE_JSONRPC_PATH, "post")
             if "security" in schema:
                 post["security"] = list(cast(list[dict[str, list[str]]], schema["security"]))
-            post["summary"] = "Handle A2A JSON-RPC Requests"
-            post["description"] = build_jsonrpc_extension_openapi_description(
-                runtime_profile=runtime_profile
-            )
-            post["x-a2a-extension-contracts"] = dict(extension_contracts)
+            post["summary"] = "Handle Core A2A JSON-RPC Requests"
+            post["description"] = build_core_jsonrpc_openapi_description()
+            post["x-a2a-extension-contracts"] = a2a_extension_contracts
+            post["x-codex-contracts"] = core_codex_contracts
             post.setdefault("responses", {"200": {"description": "JSON-RPC response"}})
 
             request_body = post.setdefault("requestBody", {})
@@ -184,7 +198,32 @@ def patch_openapi_contract(
                             "schema",
                             {"$ref": "#/components/schemas/A2AJsonRpcRequest"},
                         )
-                        app_json["examples"] = build_jsonrpc_extension_openapi_examples(
+                        app_json["examples"] = build_core_jsonrpc_openapi_examples()
+
+            extension_post = _ensure_path_item(paths, EXTENSION_JSONRPC_PATH, "post")
+            if "security" in schema:
+                extension_post["security"] = list(
+                    cast(list[dict[str, list[str]]], schema["security"])
+                )
+            extension_post["summary"] = "Handle Codex Extension JSON-RPC Requests"
+            extension_post["description"] = build_extension_jsonrpc_openapi_description(
+                runtime_profile=runtime_profile
+            )
+            extension_post["x-codex-contracts"] = codex_contracts
+            extension_post.setdefault("responses", {"200": {"description": "JSON-RPC response"}})
+
+            extension_request_body = extension_post.setdefault("requestBody", {})
+            if isinstance(extension_request_body, dict):
+                extension_request_body.setdefault("required", True)
+                extension_content = extension_request_body.setdefault("content", {})
+                if isinstance(extension_content, dict):
+                    extension_app_json = extension_content.setdefault("application/json", {})
+                    if isinstance(extension_app_json, dict):
+                        extension_app_json.setdefault(
+                            "schema",
+                            {"$ref": "#/components/schemas/A2AJsonRpcRequest"},
+                        )
+                        extension_app_json["examples"] = build_extension_jsonrpc_openapi_examples(
                             runtime_profile=runtime_profile
                         )
 
@@ -197,7 +236,7 @@ def patch_openapi_contract(
                     ),
                     "schema_ref": "#/components/schemas/SendMessageRequest",
                     "contracts": {
-                        "session_binding": extension_contracts["session_binding"],
+                        "session_binding": a2a_extension_contracts["session_binding"],
                     },
                 },
                 "/v1/message:stream": {
@@ -208,9 +247,11 @@ def patch_openapi_contract(
                     ),
                     "schema_ref": "#/components/schemas/SendStreamingMessageRequest",
                     "contracts": {
-                        "session_binding": extension_contracts["session_binding"],
-                        "streaming": extension_contracts["streaming"],
-                        "interrupt_callback": extension_contracts["interrupt_callback"],
+                        "session_binding": a2a_extension_contracts["session_binding"],
+                        "streaming": a2a_extension_contracts["streaming"],
+                    },
+                    "codex_contracts": {
+                        "interrupt_callback": codex_contracts["interrupt_callback"],
                     },
                 },
             }
@@ -225,9 +266,11 @@ def patch_openapi_contract(
                 rest_post["summary"] = contract["summary"]
                 rest_post["description"] = contract["description"]
                 rest_post["x-a2a-extension-contracts"] = contract["contracts"]
+                if "codex_contracts" in contract:
+                    rest_post["x-codex-contracts"] = contract["codex_contracts"]
                 rest_post.setdefault("responses", {"200": {"description": "A2A response"}})
                 if rest_path == "/v1/message:stream":
-                    rest_post["x-a2a-streaming"] = extension_contracts["streaming"]
+                    rest_post["x-a2a-streaming"] = a2a_extension_contracts["streaming"]
 
                 request_body = rest_post.setdefault("requestBody", {})
                 if not isinstance(request_body, dict):

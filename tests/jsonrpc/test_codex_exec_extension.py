@@ -3,6 +3,7 @@ from unittest.mock import ANY, AsyncMock
 import httpx
 import pytest
 
+from codex_a2a.contracts.extensions import EXTENSION_JSONRPC_PATH
 from tests.support.dummy_clients import DummySessionQueryCodexClient as DummyCodexClient
 from tests.support.http_auth import basic_auth_header as _basic_auth_header
 from tests.support.jsonrpc_errors import (
@@ -55,7 +56,7 @@ async def test_exec_start_routes_to_exec_runtime(monkeypatch) -> None:
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.post(
-            "/",
+            EXTENSION_JSONRPC_PATH,
             headers=_basic_auth_header("operator", "op-pass"),
             json={
                 "jsonrpc": "2.0",
@@ -136,7 +137,7 @@ async def test_exec_write_resize_and_terminate_route_to_exec_runtime(monkeypatch
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         headers = _basic_auth_header("operator", "op-pass")
         write_response = await client.post(
-            "/",
+            EXTENSION_JSONRPC_PATH,
             headers=headers,
             json={
                 "jsonrpc": "2.0",
@@ -146,7 +147,7 @@ async def test_exec_write_resize_and_terminate_route_to_exec_runtime(monkeypatch
             },
         )
         resize_response = await client.post(
-            "/",
+            EXTENSION_JSONRPC_PATH,
             headers=headers,
             json={
                 "jsonrpc": "2.0",
@@ -156,7 +157,7 @@ async def test_exec_write_resize_and_terminate_route_to_exec_runtime(monkeypatch
             },
         )
         terminate_response = await client.post(
-            "/",
+            EXTENSION_JSONRPC_PATH,
             headers=headers,
             json={
                 "jsonrpc": "2.0",
@@ -215,7 +216,7 @@ async def test_exec_control_rejects_invalid_request_shapes(monkeypatch) -> None:
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         headers = _basic_auth_header("operator", "op-pass")
         start_response = await client.post(
-            "/",
+            EXTENSION_JSONRPC_PATH,
             headers=headers,
             json={
                 "jsonrpc": "2.0",
@@ -225,7 +226,7 @@ async def test_exec_control_rejects_invalid_request_shapes(monkeypatch) -> None:
             },
         )
         write_response = await client.post(
-            "/",
+            EXTENSION_JSONRPC_PATH,
             headers=headers,
             json={
                 "jsonrpc": "2.0",
@@ -235,7 +236,7 @@ async def test_exec_control_rejects_invalid_request_shapes(monkeypatch) -> None:
             },
         )
         resize_response = await client.post(
-            "/",
+            EXTENSION_JSONRPC_PATH,
             headers=headers,
             json={
                 "jsonrpc": "2.0",
@@ -282,7 +283,7 @@ async def test_exec_control_maps_missing_session_lookup_to_business_error(monkey
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.post(
-            "/",
+            EXTENSION_JSONRPC_PATH,
             headers=_basic_auth_header("operator", "op-pass"),
             json={
                 "jsonrpc": "2.0",
@@ -327,7 +328,7 @@ async def test_exec_control_maps_forbidden_session_access_to_business_error(monk
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.post(
-            "/",
+            EXTENSION_JSONRPC_PATH,
             headers=_basic_auth_header("operator", "op-pass"),
             json={
                 "jsonrpc": "2.0",
@@ -358,7 +359,7 @@ async def test_exec_control_requires_exec_capability(monkeypatch) -> None:
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.post(
-            "/",
+            EXTENSION_JSONRPC_PATH,
             headers={"Authorization": "Bearer t-1"},
             json={
                 "jsonrpc": "2.0",

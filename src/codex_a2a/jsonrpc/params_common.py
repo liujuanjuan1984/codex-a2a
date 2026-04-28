@@ -4,7 +4,7 @@ from collections.abc import Mapping, Sequence
 from typing import Any
 
 from a2a._base import A2ABaseModel
-from pydantic import ConfigDict, field_validator
+from pydantic import ConfigDict, ValidationError, field_validator
 
 from codex_a2a.contracts.extensions import (
     SESSION_QUERY_DEFAULT_LIMIT,
@@ -244,3 +244,117 @@ class CodexMetadataParams(_PermissiveModel):
 
 class MetadataParams(_StrictModel):
     codex: CodexMetadataParams | None = None
+
+
+def raise_control_validation_error(exc: ValidationError) -> None:
+    errors = exc.errors(include_url=False)
+    if errors and all(err.get("type") == "extra_forbidden" for err in errors):
+        raise map_extra_forbidden(errors)
+
+    first = errors[0]
+    loc = tuple(first.get("loc", ()))
+    message_text = str(first.get("msg", "Invalid params")).removeprefix("Value error, ")
+    if message_text == "request.rows and request.cols must be provided together":
+        raise JsonRpcParamsValidationError(
+            message=message_text,
+            data={"type": "INVALID_FIELD", "field": "request.cols"},
+        )
+    if message_text == "request.parts[].url or request.parts[].bytes is required":
+        raise JsonRpcParamsValidationError(
+            message=message_text,
+            data={"type": "INVALID_FIELD", "field": "request.parts"},
+        )
+    if message_text == "request.parts[].mimeType is required when bytes is provided":
+        raise JsonRpcParamsValidationError(
+            message=message_text,
+            data={"type": "INVALID_FIELD", "field": "request.parts"},
+        )
+    if message_text == "request.delta_base64 or request.close_stdin=true is required":
+        raise JsonRpcParamsValidationError(
+            message=message_text,
+            data={"type": "INVALID_FIELD", "field": "request.close_stdin"},
+        )
+    if loc == ("session_id",):
+        raise JsonRpcParamsValidationError(
+            message="Missing required params.session_id",
+            data={"type": "MISSING_FIELD", "field": "session_id"},
+        )
+    if loc == ("request",):
+        raise JsonRpcParamsValidationError(
+            message="params.request must be an object",
+            data={"type": "INVALID_FIELD", "field": "request"},
+        )
+    if loc == ("request", "parts"):
+        raise JsonRpcParamsValidationError(
+            message="request.parts must be a non-empty array",
+            data={"type": "INVALID_FIELD", "field": "request.parts"},
+        )
+    if loc == ("request", "command"):
+        raise JsonRpcParamsValidationError(
+            message="request.command must be a non-empty string",
+            data={"type": "INVALID_FIELD", "field": "request.command"},
+        )
+    if loc == ("request", "processId") or loc == ("request", "process_id"):
+        raise JsonRpcParamsValidationError(
+            message="request.process_id must be a non-empty string",
+            data={"type": "INVALID_FIELD", "field": "request.process_id"},
+        )
+    if (metadata_error := metadata_validation_error(loc, message_text=message_text)) is not None:
+        raise metadata_error
+    if loc in {
+        ("request", "arguments"),
+        ("request", "messageID"),
+        ("request", "agent"),
+        ("request", "system"),
+        ("request", "variant"),
+        ("request", "processId"),
+        ("request", "process_id"),
+        ("request", "deltaBase64"),
+        ("request", "delta_base64"),
+    }:
+        field = format_loc(loc)
+        raise JsonRpcParamsValidationError(
+            message=f"{field} must be a string",
+            data={"type": "INVALID_FIELD", "field": field},
+        )
+    if (
+        len(loc) >= 3
+        and loc[:2] == ("request", "parts")
+        and loc[-1] in {"url", "bytes", "mimeType", "name", "path"}
+    ):
+        field = format_loc(loc)
+        raise JsonRpcParamsValidationError(
+            message=f"{field} must be a string",
+            data={"type": "INVALID_FIELD", "field": field},
+        )
+    if loc in {
+        ("request", "rows"),
+        ("request", "cols"),
+        ("request", "outputBytesCap"),
+        ("request", "output_bytes_cap"),
+        ("request", "timeoutMs"),
+        ("request", "timeout_ms"),
+    }:
+        field = format_loc(loc)
+        raise JsonRpcParamsValidationError(
+            message=f"{field} must be a positive integer",
+            data={"type": "INVALID_FIELD", "field": field},
+        )
+    if loc in {
+        ("request", "tty"),
+        ("request", "disableOutputCap"),
+        ("request", "disable_output_cap"),
+        ("request", "disableTimeout"),
+        ("request", "disable_timeout"),
+        ("request", "closeStdin"),
+        ("request", "close_stdin"),
+    }:
+        field = format_loc(loc)
+        raise JsonRpcParamsValidationError(
+            message=f"{field} must be a boolean",
+            data={"type": "INVALID_FIELD", "field": field},
+        )
+    raise JsonRpcParamsValidationError(
+        message=message_text,
+        data={"type": "INVALID_FIELD", "field": format_loc(loc) if loc else "params"},
+    )

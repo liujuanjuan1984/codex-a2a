@@ -414,21 +414,6 @@ class CodexClient:
             timeout_seconds=self._resolve_timeout_seconds(timeout_override=timeout_override),
         )
 
-    async def session_prompt_async(
-        self,
-        session_id: str,
-        request: dict[str, Any],
-        *,
-        directory: str | None = None,
-        execution_options: RequestExecutionOptions | None = None,
-    ) -> dict[str, Any]:
-        return await self._conversation_facade.session_prompt_async(
-            session_id,
-            request,
-            directory=directory,
-            execution_options=execution_options,
-        )
-
     async def turn_steer(
         self,
         thread_id: str,
@@ -453,35 +438,6 @@ class CodexClient:
             thread_id,
             target=target,
             delivery=delivery,
-        )
-
-    async def session_command(
-        self,
-        session_id: str,
-        request: dict[str, Any],
-        *,
-        directory: str | None = None,
-        execution_options: RequestExecutionOptions | None = None,
-    ) -> CodexMessage:
-        return await self._conversation_facade.session_command(
-            session_id,
-            request,
-            directory=directory,
-            execution_options=execution_options,
-            timeout_seconds=self._request_timeout,
-        )
-
-    async def session_shell(
-        self,
-        session_id: str,
-        request: dict[str, Any],
-        *,
-        directory: str | None = None,
-    ) -> dict[str, Any]:
-        return await self._conversation_facade.session_shell(
-            session_id,
-            request,
-            directory=directory,
         )
 
     async def exec_start(

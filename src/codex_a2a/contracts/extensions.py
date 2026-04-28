@@ -25,6 +25,17 @@ from .extension_specs import (
     _build_request_execution_options_contract,
 )
 
+CORE_JSONRPC_PATH = "/"
+EXTENSION_JSONRPC_PATH = "/codex/jsonrpc"
+REST_API_PATH_PREFIX = "/v1"
+
+
+def _extension_jsonrpc_endpoint_contract() -> dict[str, Any]:
+    return {
+        "protocol_binding": "JSON-RPC",
+        "url_path": EXTENSION_JSONRPC_PATH,
+    }
+
 
 def build_wire_contract_extension_params(
     *,
@@ -66,13 +77,33 @@ def build_wire_contract_extension_params(
         "default_protocol_version": declared_default_protocol_version,
         "supported_protocol_versions": list(declared_supported_protocol_versions),
         "protocol_compatibility": protocol_compatibility,
-        "preferred_transport": "HTTP+JSON",
-        "additional_transports": ["JSON-RPC"],
+        "transport_interfaces": [
+            {
+                "protocol_binding": "HTTP+JSON",
+                "protocol_version": protocol_version,
+                "url_path_prefix": REST_API_PATH_PREFIX,
+            },
+            {
+                "protocol_binding": "JSON-RPC",
+                "protocol_version": protocol_version,
+                "url_path": CORE_JSONRPC_PATH,
+            },
+        ],
         "core": {
+            "jsonrpc_endpoint": {
+                "protocol_binding": "JSON-RPC",
+                "protocol_version": protocol_version,
+                "url_path": CORE_JSONRPC_PATH,
+            },
             "jsonrpc_methods": list(CORE_JSONRPC_METHODS),
             "http_endpoints": list(CORE_HTTP_ENDPOINTS),
         },
         "extensions": {
+            "jsonrpc_endpoint": {
+                "protocol_binding": "JSON-RPC",
+                "protocol_version": protocol_version,
+                "url_path": EXTENSION_JSONRPC_PATH,
+            },
             "jsonrpc_methods": list(snapshot.extension_jsonrpc_methods),
             "conditionally_available_methods": dict(snapshot.conditional_methods),
             "extension_uris": [
@@ -90,9 +121,18 @@ def build_wire_contract_extension_params(
         },
         "all_jsonrpc_methods": list(snapshot.supported_jsonrpc_methods),
         "unsupported_method_error": {
-            "code": -32601,
-            "type": "METHOD_NOT_SUPPORTED",
-            "data_fields": list(WIRE_CONTRACT_UNSUPPORTED_METHOD_DATA_FIELDS),
+            "core_jsonrpc": {
+                "endpoint": CORE_JSONRPC_PATH,
+                "code": -32601,
+                "message": "Method not found",
+                "data_fields": [],
+            },
+            "extension_jsonrpc": {
+                "endpoint": EXTENSION_JSONRPC_PATH,
+                "code": -32601,
+                "message": "Method not found",
+                "data_fields": list(WIRE_CONTRACT_UNSUPPORTED_METHOD_DATA_FIELDS),
+            },
         },
         "service_behaviors": {
             TASKS_RESUBSCRIBE_METHOD: resubscribe_behavior,
@@ -212,13 +252,6 @@ def build_compatibility_profile_params(
             for method in snapshot.session_query_methods
         }
     )
-    method_retention[SESSION_CONTROL_METHODS["shell"]] = {
-        "surface": "extension",
-        "availability": ("enabled" if runtime_profile.session_shell_enabled else "disabled"),
-        "retention": "deployment-conditional",
-        "extension_uri": SESSION_QUERY_EXTENSION_URI,
-        "toggle": "A2A_ENABLE_SESSION_SHELL",
-    }
     method_retention.update(
         {
             method: {
@@ -308,19 +341,25 @@ def build_compatibility_profile_params(
         "deployment": runtime_profile.deployment.as_dict(),
         "runtime_features": runtime_profile.runtime_features_dict(),
         "core": {
+            "jsonrpc_endpoint": CORE_JSONRPC_PATH,
             "jsonrpc_methods": list(CORE_JSONRPC_METHODS),
             "http_endpoints": list(CORE_HTTP_ENDPOINTS),
+        },
+        "extension_transport": {
+            "jsonrpc_endpoint": EXTENSION_JSONRPC_PATH,
         },
         "service_behaviors": {
             TASKS_RESUBSCRIBE_METHOD: resubscribe_behavior,
         },
         "extension_taxonomy": {
-            "shared_extensions": [
+            "shared_agent_card_extensions": [
                 SESSION_BINDING_EXTENSION_URI,
                 STREAMING_EXTENSION_URI,
+            ],
+            "shared_provider_private_contracts": [
                 INTERRUPT_CALLBACK_EXTENSION_URI,
             ],
-            "codex_extensions": [
+            "codex_provider_private_contracts": [
                 SESSION_QUERY_EXTENSION_URI,
                 DISCOVERY_EXTENSION_URI,
                 THREAD_LIFECYCLE_EXTENSION_URI,
@@ -347,8 +386,18 @@ def build_compatibility_profile_params(
                 "of the A2A core baseline."
             ),
             (
-                "Treat shared session-binding, stream-hints, and interrupt callback surfaces "
-                "as shared extensions rather than provider-private Codex capabilities."
+                "Treat shared session-binding and stream-hints as the negotiated "
+                "Agent Card extension surface for this deployment."
+            ),
+            (
+                "Treat a2a.interrupt.* callback methods as a shared provider-private "
+                "contract exposed on the extension endpoint rather than as core A2A "
+                "behavior or an Agent Card-negotiated extension."
+            ),
+            (
+                f"Use {CORE_JSONRPC_PATH} for core A2A JSON-RPC methods and "
+                f"{EXTENSION_JSONRPC_PATH} for provider-private codex.* and "
+                "a2a.interrupt.* extension methods."
             ),
             (
                 "Treat codex.* methods and codex.directory/codex.execution metadata as "
@@ -377,15 +426,10 @@ def build_compatibility_profile_params(
                 "task-stream bridge for coarse-grained lifecycle observation."
             ),
             (
-                "codex.sessions.shell is deployment-conditional: discover it from the "
-                "declared profile and current extension contracts before calling it, and "
-                "treat it as a bounded shell snapshot helper for internal workflows."
-            ),
-            (
                 "Treat codex.exec.* as the interactive standalone command runtime for "
                 "internal or tightly controlled deployments. Use it for write/resize/"
-                "terminate flows instead of inferring those semantics from "
-                "codex.sessions.shell."
+                "terminate flows instead of overloading the core A2A chat surface with "
+                "terminal-control semantics."
             ),
             (
                 "Treat execution_environment fields as deployment-configured discovery "
@@ -492,11 +536,6 @@ def build_session_query_extension_params(
     active_query_methods = {
         key: contract.method for key, contract in active_method_contracts.items()
     }
-    active_control_methods = {
-        key: active_query_methods[key]
-        for key in SESSION_CONTROL_METHOD_KEYS
-        if key in active_query_methods
-    }
     method_contracts: dict[str, Any] = {}
     pagination_applies_to: list[str] = []
     pagination_behavior_by_method: dict[str, str] = {}
@@ -541,19 +580,18 @@ def build_session_query_extension_params(
                 pagination_behavior_by_method[method_contract.method] = "local_tail_slice"
 
     return {
+        "jsonrpc_endpoint": _extension_jsonrpc_endpoint_contract(),
         "methods": active_query_methods,
-        "control_methods": active_control_methods,
         "profile": runtime_profile.summary_dict(),
         "supported_metadata": list(_REQUEST_EXECUTION_PROVIDER_METADATA),
         "provider_private_metadata": list(_REQUEST_EXECUTION_PROVIDER_METADATA),
         "request_execution_options": _build_request_execution_options_contract(),
         "rich_input": {
-            "prompt_async_part_types": ["text", "image", "mention", "skill"],
-            "prompt_async_part_contracts": {
+            "supported_part_types": ["text", "image", "mention", "skill"],
+            "part_contracts": {
                 "text": {"fields": ["type", "text"]},
                 "image": {
                     "fields": ["type", "url"],
-                    "optional_aliases": ["image_url", "imageUrl"],
                     "bytes_variant_fields": ["type", "bytes", "mimeType", "name"],
                     "maps_to": "turn/start.input[].type=input_image",
                 },
@@ -659,6 +697,7 @@ def build_discovery_extension_params(
         method_contracts[contract.method] = method_contract_doc
 
     return {
+        "jsonrpc_endpoint": _extension_jsonrpc_endpoint_contract(),
         "methods": dict(DISCOVERY_METHODS),
         "profile": runtime_profile.summary_dict(),
         "method_contracts": method_contracts,
@@ -783,6 +822,7 @@ def build_thread_lifecycle_extension_params(
         method_contracts[contract.method] = method_contract_doc
 
     return {
+        "jsonrpc_endpoint": _extension_jsonrpc_endpoint_contract(),
         "methods": dict(THREAD_LIFECYCLE_METHODS),
         "method_contracts": method_contracts,
         "profile": runtime_profile.summary_dict(),
@@ -891,6 +931,7 @@ def build_interrupt_recovery_extension_params(
         method_contracts[contract.method] = method_contract_doc
 
     return {
+        "jsonrpc_endpoint": _extension_jsonrpc_endpoint_contract(),
         "methods": dict(INTERRUPT_RECOVERY_METHODS),
         "method_contracts": method_contracts,
         "supported_interrupt_types": list(INTERRUPT_RECOVERY_INTERRUPT_TYPES),
@@ -941,6 +982,7 @@ def build_turn_control_extension_params(
         method_contracts[contract.method] = method_contract_doc
 
     return {
+        "jsonrpc_endpoint": _extension_jsonrpc_endpoint_contract(),
         "methods": active_methods,
         "method_contracts": method_contracts,
         "profile": runtime_profile.summary_dict(),
@@ -997,6 +1039,7 @@ def build_review_control_extension_params(
         method_contracts[contract.method] = method_contract_doc
 
     return {
+        "jsonrpc_endpoint": _extension_jsonrpc_endpoint_contract(),
         "methods": active_methods,
         "method_contracts": method_contracts,
         "profile": runtime_profile.summary_dict(),
@@ -1063,7 +1106,7 @@ def build_review_control_extension_params(
         "consumer_guidance": [
             (
                 "Use review/start when you want the upstream reviewer surface, not when you "
-                "simply want to send a slash command through codex.sessions.command."
+                "want to repurpose core A2A chat turns as review control."
             ),
             (
                 "Use codex.review.watch when clients need a stable task-stream bridge "
@@ -1106,6 +1149,7 @@ def build_exec_control_extension_params(
         method_contracts[contract.method] = method_contract_doc
 
     return {
+        "jsonrpc_endpoint": _extension_jsonrpc_endpoint_contract(),
         "methods": active_methods,
         "method_contracts": method_contracts,
         "profile": runtime_profile.summary_dict(),
@@ -1158,6 +1202,7 @@ def build_interrupt_callback_extension_params(
         method_contracts[contract.method] = method_contract_doc
 
     return {
+        "jsonrpc_endpoint": _extension_jsonrpc_endpoint_contract(),
         "methods": dict(INTERRUPT_CALLBACK_METHODS),
         "method_contracts": method_contracts,
         "supported_interrupt_events": [
