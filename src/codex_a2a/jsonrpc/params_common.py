@@ -23,11 +23,21 @@ class JsonRpcParamsValidationError(ValueError):
 
 
 class _StrictModel(A2ABaseModel):
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+        validate_by_alias=False,
+        serialize_by_alias=False,
+    )
 
 
 class _PermissiveModel(A2ABaseModel):
-    model_config = ConfigDict(extra="allow", populate_by_name=True)
+    model_config = ConfigDict(
+        extra="allow",
+        populate_by_name=True,
+        validate_by_alias=False,
+        serialize_by_alias=False,
+    )
 
 
 def strip_optional_string(value: Any) -> str | None:
@@ -264,7 +274,7 @@ def raise_control_validation_error(exc: ValidationError) -> None:
             message=message_text,
             data={"type": "INVALID_FIELD", "field": "request.parts"},
         )
-    if message_text == "request.parts[].mimeType is required when bytes is provided":
+    if message_text == "request.parts[].mime_type is required when bytes is provided":
         raise JsonRpcParamsValidationError(
             message=message_text,
             data={"type": "INVALID_FIELD", "field": "request.parts"},

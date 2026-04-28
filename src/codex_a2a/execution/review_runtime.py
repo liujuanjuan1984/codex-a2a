@@ -189,7 +189,7 @@ class CodexReviewRuntime:
             "thread_id": handle.source_thread_id,
             "review_thread_id": handle.review_thread_id,
             "turn_id": handle.turn_id,
-            "status": "inProgress",
+            "status": "running",
             "source": "review/start",
         }
 

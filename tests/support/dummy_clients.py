@@ -245,7 +245,7 @@ class DummySessionQueryCodexClient:
         self.last_thread_metadata_update = {"thread_id": thread_id, "params": params}
         branch = None
         if isinstance(params, dict):
-            git_info = params.get("gitInfo")
+            git_info = params.get("git_info")
             if isinstance(git_info, dict):
                 branch = git_info.get("branch")
         return {
@@ -302,7 +302,7 @@ class DummySessionQueryCodexClient:
     ) -> dict[str, Any]:
         del timeout_override
         del directory
-        process_id = str(request.get("processId") or "exec-1")
+        process_id = str(request.get("process_id") or "exec-1")
         return {"stdout": "hello\n", "stderr": "", "exitCode": 0, "processId": process_id}
 
     async def exec_write(
@@ -424,32 +424,6 @@ class DummySessionQueryCodexClient:
     async def discard_interrupt_request(self, request_id: str) -> None:
         self._interrupt_requests.pop(request_id, None)
         self._interrupt_request_params.pop(request_id, None)
-        self._expired_interrupt_requests.discard(request_id)
-
-    def prime_interrupt_request(
-        self,
-        request_id: str,
-        *,
-        interrupt_type: str,
-        session_id: str = "ses-1",
-        created_at: float = 0.0,
-        identity: str | None = None,
-        credential_id: str | None = None,
-        task_id: str | None = None,
-        context_id: str | None = None,
-        params: dict[str, Any] | None = None,
-    ) -> None:
-        self._interrupt_requests[request_id] = InterruptRequestBinding(
-            request_id=request_id,
-            interrupt_type=interrupt_type,
-            session_id=session_id,
-            created_at=created_at,
-            identity=identity,
-            credential_id=credential_id,
-            task_id=task_id,
-            context_id=context_id,
-        )
-        self._interrupt_request_params[request_id] = dict(params or {})
         self._expired_interrupt_requests.discard(request_id)
 
     async def resolve_interrupt_request(

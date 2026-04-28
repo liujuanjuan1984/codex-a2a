@@ -80,7 +80,7 @@ async def handle_turn_control_request(
         result = await app._codex_client.turn_steer(
             thread_id,
             expected_turn_id=parsed_params.expected_turn_id,
-            request=parsed_params.request.model_dump(by_alias=True, exclude_none=True),
+            request=parsed_params.request.model_dump(exclude_none=True),
         )
     except PermissionError:
         return app._generate_error_response(

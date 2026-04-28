@@ -102,7 +102,7 @@ async def test_thread_lifecycle_extension_routes_control_methods(monkeypatch) ->
     )
     assert dummy.last_thread_metadata_update == {
         "thread_id": "thr-1",
-        "params": {"gitInfo": {"branch": "feat/thread-lifecycle"}},
+        "params": {"git_info": {"branch": "feat/thread-lifecycle"}},
     }
 
 
@@ -307,9 +307,9 @@ async def test_thread_lifecycle_watch_release_maps_not_found_and_forbidden(monke
     not_found_payload = not_found_response.json()
     assert not_found_payload["error"]["code"] == -32014
     assert _error_reason(not_found_payload) == "WATCH_NOT_FOUND"
-    assert _error_context(not_found_payload)["taskId"] == "task-404"
+    assert _error_context(not_found_payload)["task_id"] == "task-404"
 
     forbidden_payload = forbidden_response.json()
     assert forbidden_payload["error"]["code"] == -32015
     assert _error_reason(forbidden_payload) == "WATCH_FORBIDDEN"
-    assert _error_context(forbidden_payload)["taskId"] == "task-403"
+    assert _error_context(forbidden_payload)["task_id"] == "task-403"

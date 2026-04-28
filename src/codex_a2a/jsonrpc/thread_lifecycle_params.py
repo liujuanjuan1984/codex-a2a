@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import Field, ValidationError, field_validator, model_validator
+from pydantic import ValidationError, field_validator, model_validator
 
 from codex_a2a.contracts.extensions import THREAD_LIFECYCLE_SUPPORTED_EVENTS
 from codex_a2a.jsonrpc.params_common import (
@@ -34,10 +34,7 @@ class ThreadForkRequestParams(_StrictModel):
 class ThreadGitInfoPatchParams(_StrictModel):
     sha: str | None = None
     branch: str | None = None
-    origin_url: str | None = Field(
-        default=None,
-        serialization_alias="originUrl",
-    )
+    origin_url: str | None = None
 
     @field_validator("sha", "branch", "origin_url", mode="before")
     @classmethod
@@ -52,9 +49,7 @@ class ThreadGitInfoPatchParams(_StrictModel):
 
 
 class ThreadMetadataUpdateRequestParams(_StrictModel):
-    git_info: ThreadGitInfoPatchParams = Field(
-        serialization_alias="gitInfo",
-    )
+    git_info: ThreadGitInfoPatchParams
 
 
 class ThreadWatchRequestParams(_StrictModel):

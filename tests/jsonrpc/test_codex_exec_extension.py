@@ -296,7 +296,7 @@ async def test_exec_control_maps_missing_session_lookup_to_business_error(monkey
     payload = response.json()
     assert payload["error"]["code"] == -32009
     assert _error_reason(payload) == "EXEC_SESSION_NOT_FOUND"
-    assert _error_context(payload)["processId"] == "exec-missing"
+    assert _error_context(payload)["process_id"] == "exec-missing"
 
 
 @pytest.mark.asyncio
@@ -341,7 +341,7 @@ async def test_exec_control_maps_forbidden_session_access_to_business_error(monk
     payload = response.json()
     assert payload["error"]["code"] == -32018
     assert _error_reason(payload) == "EXEC_FORBIDDEN"
-    assert _error_context(payload)["processId"] == "exec-1"
+    assert _error_context(payload)["process_id"] == "exec-1"
 
 
 @pytest.mark.asyncio
@@ -375,4 +375,4 @@ async def test_exec_control_requires_exec_capability(monkeypatch) -> None:
     context = _error_context(payload)
     assert context["method"] == "codex.exec.start"
     assert context["capability"] == "exec_control"
-    assert context["credentialId"] == "test-bearer"
+    assert context["credential_id"] == "test-bearer"

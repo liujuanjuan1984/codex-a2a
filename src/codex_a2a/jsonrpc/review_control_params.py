@@ -101,12 +101,8 @@ class ReviewWatchRequestParams(_StrictModel):
 
 class ReviewWatchControlParams(_StrictModel):
     thread_id: str
-    review_thread_id: str = Field(
-        serialization_alias="reviewThreadId",
-    )
-    turn_id: str = Field(
-        serialization_alias="turnId",
-    )
+    review_thread_id: str
+    turn_id: str
     request: ReviewWatchRequestParams | None = None
 
     @field_validator("thread_id", "review_thread_id", "turn_id", mode="before")

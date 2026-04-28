@@ -45,7 +45,7 @@ def _normalize_prompt_image_part(part: Mapping[str, Any]) -> dict[str, Any]:
     url = _optional_string(part.get("url"))
 
     encoded_bytes = _optional_string(part.get("bytes"))
-    mime_type = _optional_string(part.get("mimeType"))
+    mime_type = _optional_string(part.get("mime_type"))
     name = _optional_string(part.get("name"))
 
     if url:
@@ -55,7 +55,7 @@ def _normalize_prompt_image_part(part: Mapping[str, Any]) -> dict[str, Any]:
             mime_type = _guess_mime_type(name)
         if not mime_type or not mime_type.startswith("image/"):
             raise UnsupportedInputError(
-                "request.parts[].mimeType must be an image MIME type when bytes is provided"
+                "request.parts[].mime_type must be an image MIME type when bytes is provided"
             )
         return {
             "type": "image",

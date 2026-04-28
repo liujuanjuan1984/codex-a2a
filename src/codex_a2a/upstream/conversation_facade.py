@@ -19,6 +19,7 @@ from codex_a2a.upstream.models import (
 from codex_a2a.upstream.request_mapping import (
     apply_thread_start_execution_options,
     apply_turn_start_execution_options,
+    build_thread_rpc_params,
     coerce_request_execution_options,
 )
 from codex_a2a.upstream.stream_bridge import normalize_thread_summary
@@ -411,13 +412,4 @@ class CodexConversationFacade:
         thread_id: str,
         params: dict[str, Any] | None,
     ) -> dict[str, Any]:
-        rpc_params: dict[str, Any] = {"threadId": thread_id}
-        if isinstance(params, dict):
-            rpc_params.update(
-                {
-                    key: value
-                    for key, value in params.items()
-                    if key != "directory" and value is not None
-                }
-            )
-        return rpc_params
+        return build_thread_rpc_params(thread_id, params)

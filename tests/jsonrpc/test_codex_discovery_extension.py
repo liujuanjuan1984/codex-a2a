@@ -76,26 +76,26 @@ async def test_discovery_extension_routes_read_only_methods(monkeypatch) -> None
     assert skills_response.json()["result"]["items"][0]["skills"][0]["path"].endswith("SKILL.md")
     assert dummy.last_skills_params == {
         "cwds": ["/workspace/project"],
-        "forceReload": True,
+        "force_reload": True,
     }
 
     assert apps_response.status_code == 200
     assert apps_response.json()["result"]["items"][0]["mention_path"] == "app://demo-app"
-    assert dummy.last_apps_params == {"limit": 20, "forceRefetch": False}
+    assert dummy.last_apps_params == {"limit": 20, "force_refetch": False}
 
     assert plugins_response.status_code == 200
     plugin_summary = plugins_response.json()["result"]["items"][0]["plugins"][0]
     assert plugin_summary["mention_path"] == "plugin://sample@test"
     assert dummy.last_plugins_params == {
         "cwds": ["/workspace/project"],
-        "forceRemoteSync": False,
+        "force_remote_sync": False,
     }
 
     assert plugin_response.status_code == 200
     assert plugin_response.json()["result"]["item"]["mention_path"] == "plugin://sample@test"
     assert dummy.last_plugin_read_params == {
-        "marketplacePath": "/workspace/project/.codex/plugins/marketplace.json",
-        "pluginName": "sample",
+        "marketplace_path": "/workspace/project/.codex/plugins/marketplace.json",
+        "plugin_name": "sample",
     }
 
 

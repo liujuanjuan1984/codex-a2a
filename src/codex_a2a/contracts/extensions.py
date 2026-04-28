@@ -576,7 +576,7 @@ def build_session_query_extension_params(
                 "text": {"fields": ["type", "text"]},
                 "image": {
                     "fields": ["type", "url"],
-                    "bytes_variant_fields": ["type", "bytes", "mimeType", "name"],
+                    "bytes_variant_fields": ["type", "bytes", "mime_type", "name"],
                     "maps_to": "turn/start.input[].type=input_image",
                 },
                 "mention": {

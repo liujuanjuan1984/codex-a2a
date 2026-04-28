@@ -27,6 +27,12 @@ from codex_a2a.upstream.models import (
     _PendingRpcRequest,
     _TurnTracker,
 )
+from codex_a2a.upstream.request_mapping import (
+    build_discovery_apps_params,
+    build_discovery_plugin_read_params,
+    build_discovery_plugins_params,
+    build_discovery_skills_params,
+)
 from codex_a2a.upstream.startup import (
     build_cli_config_args,
     build_startup_config_overrides,
@@ -352,16 +358,28 @@ class CodexClient:
         )
 
     async def list_skills(self, *, params: dict[str, Any] | None = None) -> Any:
-        return await self._rpc_request("skills/list", self._merge_params(params))
+        return await self._rpc_request(
+            "skills/list",
+            self._merge_params(build_discovery_skills_params(params)),
+        )
 
     async def list_apps(self, *, params: dict[str, Any] | None = None) -> Any:
-        return await self._rpc_request("app/list", self._merge_params(params))
+        return await self._rpc_request(
+            "app/list",
+            self._merge_params(build_discovery_apps_params(params)),
+        )
 
     async def list_plugins(self, *, params: dict[str, Any] | None = None) -> Any:
-        return await self._rpc_request("plugin/list", self._merge_params(params))
+        return await self._rpc_request(
+            "plugin/list",
+            self._merge_params(build_discovery_plugins_params(params)),
+        )
 
     async def read_plugin(self, *, params: dict[str, Any] | None = None) -> Any:
-        return await self._rpc_request("plugin/read", self._merge_params(params))
+        return await self._rpc_request(
+            "plugin/read",
+            self._merge_params(build_discovery_plugin_read_params(params)),
+        )
 
     async def list_sessions(self, *, params: dict[str, Any] | None = None) -> Any:
         return await self._conversation_facade.list_sessions(query=self._merge_params(params))

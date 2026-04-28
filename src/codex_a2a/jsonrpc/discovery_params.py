@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import Field, ValidationError, field_validator
+from pydantic import ValidationError, field_validator
 
 from codex_a2a.jsonrpc.params_common import (
     JsonRpcParamsValidationError,
@@ -18,9 +18,7 @@ from codex_a2a.jsonrpc.params_common import (
 
 class SkillsExtraRootsParams(_StrictModel):
     cwd: str
-    extra_user_roots: list[str] = Field(
-        serialization_alias="extraUserRoots",
-    )
+    extra_user_roots: list[str]
 
     @field_validator("cwd", mode="before")
     @classmethod
@@ -42,14 +40,8 @@ class SkillsExtraRootsParams(_StrictModel):
 
 class DiscoverySkillsListParams(_StrictModel):
     cwds: list[str] | None = None
-    force_reload: bool | None = Field(
-        default=None,
-        serialization_alias="forceReload",
-    )
-    per_cwd_extra_user_roots: list[SkillsExtraRootsParams] | None = Field(
-        default=None,
-        serialization_alias="perCwdExtraUserRoots",
-    )
+    force_reload: bool | None = None
+    per_cwd_extra_user_roots: list[SkillsExtraRootsParams] | None = None
 
     _validate_cwds = field_validator("cwds", mode="before")(validate_cwds)
 
@@ -57,14 +49,8 @@ class DiscoverySkillsListParams(_StrictModel):
 class DiscoveryAppsListParams(_StrictModel):
     cursor: str | None = None
     limit: int | None = None
-    thread_id: str | None = Field(
-        default=None,
-        serialization_alias="threadId",
-    )
-    force_refetch: bool | None = Field(
-        default=None,
-        serialization_alias="forceRefetch",
-    )
+    thread_id: str | None = None
+    force_refetch: bool | None = None
 
     @field_validator("cursor", "thread_id", mode="before")
     @classmethod
@@ -76,21 +62,14 @@ class DiscoveryAppsListParams(_StrictModel):
 
 class DiscoveryPluginsListParams(_StrictModel):
     cwds: list[str] | None = None
-    force_remote_sync: bool | None = Field(
-        default=None,
-        serialization_alias="forceRemoteSync",
-    )
+    force_remote_sync: bool | None = None
 
     _validate_cwds = field_validator("cwds", mode="before")(validate_cwds)
 
 
 class DiscoveryPluginReadParams(_StrictModel):
-    marketplace_path: str = Field(
-        serialization_alias="marketplacePath",
-    )
-    plugin_name: str = Field(
-        serialization_alias="pluginName",
-    )
+    marketplace_path: str
+    plugin_name: str
 
     @field_validator("marketplace_path", mode="before")
     @classmethod
@@ -163,7 +142,7 @@ def parse_discovery_skills_list_params(params: dict[str, Any]) -> dict[str, Any]
         parsed = DiscoverySkillsListParams.model_validate(params)
     except ValidationError as exc:
         _raise_discovery_validation_error(exc)
-    return parsed.model_dump(by_alias=True, exclude_none=True)
+    return parsed.model_dump(exclude_none=True)
 
 
 def parse_discovery_apps_list_params(params: dict[str, Any]) -> dict[str, Any]:
@@ -171,7 +150,7 @@ def parse_discovery_apps_list_params(params: dict[str, Any]) -> dict[str, Any]:
         parsed = DiscoveryAppsListParams.model_validate(params)
     except ValidationError as exc:
         _raise_discovery_validation_error(exc)
-    return parsed.model_dump(by_alias=True, exclude_none=True)
+    return parsed.model_dump(exclude_none=True)
 
 
 def parse_discovery_plugins_list_params(params: dict[str, Any]) -> dict[str, Any]:
@@ -179,7 +158,7 @@ def parse_discovery_plugins_list_params(params: dict[str, Any]) -> dict[str, Any
         parsed = DiscoveryPluginsListParams.model_validate(params)
     except ValidationError as exc:
         _raise_discovery_validation_error(exc)
-    return parsed.model_dump(by_alias=True, exclude_none=True)
+    return parsed.model_dump(exclude_none=True)
 
 
 def parse_discovery_plugin_read_params(params: dict[str, Any]) -> dict[str, Any]:
@@ -187,7 +166,7 @@ def parse_discovery_plugin_read_params(params: dict[str, Any]) -> dict[str, Any]
         parsed = DiscoveryPluginReadParams.model_validate(params)
     except ValidationError as exc:
         _raise_discovery_validation_error(exc)
-    return parsed.model_dump(by_alias=True, exclude_none=True)
+    return parsed.model_dump(exclude_none=True)
 
 
 def parse_discovery_watch_params(params: dict[str, Any]) -> dict[str, Any]:
@@ -195,4 +174,4 @@ def parse_discovery_watch_params(params: dict[str, Any]) -> dict[str, Any]:
         parsed = DiscoveryWatchParams.model_validate(params)
     except ValidationError as exc:
         _raise_discovery_validation_error(exc)
-    return parsed.model_dump(by_alias=True, exclude_none=True)
+    return parsed.model_dump(exclude_none=True)

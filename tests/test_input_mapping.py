@@ -23,7 +23,7 @@ def test_convert_request_parts_to_turn_input_supports_rich_inputs() -> None:
         {
             "parts": [
                 {"type": "text", "text": "Review this."},
-                {"type": "image", "bytes": "YWJj", "mimeType": "image/png"},
+                {"type": "image", "bytes": "YWJj", "mime_type": "image/png"},
                 {"type": "mention", "name": "Demo App", "path": "app://demo-app"},
                 {"type": "skill", "name": "skill-creator", "path": "/tmp/SKILL.md"},
             ]
@@ -46,8 +46,8 @@ def test_convert_request_parts_to_turn_input_supports_rich_inputs() -> None:
             "request.parts\\[\\]\\.url or request.parts\\[\\]\\.bytes is required",
         ),
         (
-            {"parts": [{"type": "image", "bytes": "YWJj", "mime_type": "image/png"}]},
-            "request.parts\\[\\]\\.mimeType must be an image MIME type when bytes is provided",
+            {"parts": [{"type": "image", "bytes": "YWJj", "mimeType": "image/png"}]},
+            "request.parts\\[\\]\\.mime_type must be an image MIME type when bytes is provided",
         ),
     ],
 )
@@ -66,8 +66,8 @@ def test_convert_request_parts_to_turn_input_rejects_legacy_image_aliases(
         ({"parts": [123]}, "request.parts items must be objects"),
         ({"parts": [{"type": "text", "text": 123}]}, "request.parts\\[\\]\\.text must be a string"),
         (
-            {"parts": [{"type": "image", "bytes": "YWJj", "mimeType": "text/plain"}]},
-            "request.parts\\[\\]\\.mimeType must be an image MIME type when bytes is provided",
+            {"parts": [{"type": "image", "bytes": "YWJj", "mime_type": "text/plain"}]},
+            "request.parts\\[\\]\\.mime_type must be an image MIME type when bytes is provided",
         ),
         (
             {"parts": [{"type": "image"}]},

@@ -32,10 +32,7 @@ class TurnImagePart(_StrictModel):
     type: Literal["image"]
     url: str | None = None
     bytes: str | None = None
-    mime_type: str | None = Field(
-        default=None,
-        serialization_alias="mimeType",
-    )
+    mime_type: str | None = None
     name: str | None = None
 
     @field_validator("url", "bytes", "mime_type", "name", mode="before")
@@ -48,7 +45,7 @@ class TurnImagePart(_StrictModel):
         if self.url is None and self.bytes is None:
             raise ValueError("request.parts[].url or request.parts[].bytes is required")
         if self.bytes is not None and self.mime_type is None and self.url is None:
-            raise ValueError("request.parts[].mimeType is required when bytes is provided")
+            raise ValueError("request.parts[].mime_type is required when bytes is provided")
         return self
 
 
@@ -88,9 +85,7 @@ class TurnSteerRequestParams(_StrictModel):
 
 class TurnSteerControlParams(_StrictModel):
     thread_id: str
-    expected_turn_id: str = Field(
-        serialization_alias="expectedTurnId",
-    )
+    expected_turn_id: str
     request: TurnSteerRequestParams
 
     _validate_thread_id = field_validator("thread_id", mode="before")(validate_required_thread_id)

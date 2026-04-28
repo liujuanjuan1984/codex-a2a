@@ -5,7 +5,7 @@ from collections.abc import Mapping
 from typing import Any, Literal, TypeAlias
 
 from a2a._base import A2ABaseModel
-from pydantic import AliasChoices, Field, ValidationError, field_validator
+from pydantic import ValidationError, field_validator
 
 ToolCallSourceMethod = Literal["commandExecution", "fileChange"]
 
@@ -21,7 +21,9 @@ def _normalized_status(value: Any) -> str | None:
     normalized = _normalized_optional_string(value)
     if normalized is None:
         return None
-    return _TOOL_CALL_STATUS_ALIASES.get(normalized, normalized)
+    if normalized not in _TOOL_CALL_STATUSES:
+        return None
+    return normalized
 
 
 def _source_method_from_item_type(value: Any) -> ToolCallSourceMethod | None:
@@ -35,14 +37,8 @@ def _source_method_from_item_type(value: Any) -> ToolCallSourceMethod | None:
 
 class ToolCallStatePayload(A2ABaseModel):
     kind: Literal["state"] = "state"
-    source_method: ToolCallSourceMethod | None = Field(
-        default=None,
-        validation_alias=AliasChoices("source_method", "sourceMethod"),
-    )
-    call_id: str | None = Field(
-        default=None,
-        validation_alias=AliasChoices("call_id", "callId", "callID"),
-    )
+    source_method: ToolCallSourceMethod | None = None
+    call_id: str | None = None
     tool: str | None = None
     status: str | None = None
     title: Any | None = None
@@ -69,20 +65,11 @@ class ToolCallStatePayload(A2ABaseModel):
 
 class ToolCallOutputDeltaPayload(A2ABaseModel):
     kind: Literal["output_delta"] = "output_delta"
-    source_method: ToolCallSourceMethod | None = Field(
-        default=None,
-        validation_alias=AliasChoices("source_method", "sourceMethod"),
-    )
-    call_id: str | None = Field(
-        default=None,
-        validation_alias=AliasChoices("call_id", "callId", "callID"),
-    )
+    source_method: ToolCallSourceMethod | None = None
+    call_id: str | None = None
     tool: str | None = None
     status: str | None = None
-    output_delta: str = Field(
-        ...,
-        validation_alias=AliasChoices("output_delta", "outputDelta"),
-    )
+    output_delta: str
 
     @field_validator("call_id", "tool", mode="before")
     @classmethod
@@ -109,18 +96,7 @@ class ToolCallOutputDeltaPayload(A2ABaseModel):
 
 ToolCallPayload: TypeAlias = ToolCallStatePayload | ToolCallOutputDeltaPayload
 
-_TOOL_CALL_STATUS_ALIASES: dict[str, str] = {
-    "inProgress": "running",
-    "in_progress": "running",
-    "running": "running",
-    "completed": "completed",
-    "failed": "failed",
-    "error": "failed",
-    "errored": "failed",
-    "cancelled": "cancelled",
-    "canceled": "cancelled",
-    "pending": "pending",
-}
+_TOOL_CALL_STATUSES = frozenset({"running", "completed", "failed", "cancelled", "pending"})
 
 
 def serialize_tool_call_payload(payload: ToolCallPayload) -> str:
@@ -145,9 +121,7 @@ def tool_call_state_payload_from_part(part: Mapping[str, Any]) -> ToolCallStateP
     state = part.get("state")
     payload: dict[str, Any] = {"kind": "state"}
 
-    call_id = _normalized_optional_string(
-        part.get("callID") or part.get("callId") or part.get("call_id")
-    )
+    call_id = _normalized_optional_string(part.get("call_id"))
     if call_id is not None:
         payload["call_id"] = call_id
 
@@ -155,9 +129,7 @@ def tool_call_state_payload_from_part(part: Mapping[str, Any]) -> ToolCallStateP
     if tool is not None:
         payload["tool"] = tool
 
-    source_method = _normalized_optional_string(
-        part.get("sourceMethod") or part.get("source_method")
-    )
+    source_method = _normalized_optional_string(part.get("source_method"))
     if source_method is not None:
         payload["source_method"] = source_method
 
@@ -176,8 +148,10 @@ def tool_call_state_payload_from_part(part: Mapping[str, Any]) -> ToolCallStateP
 
 
 def tool_call_state_payload_from_item(item: Mapping[str, Any]) -> ToolCallStatePayload | None:
-    source_method = _source_method_from_item_type(item.get("type"))
-    call_id = _normalized_optional_string(item.get("id"))
+    source_method = _normalized_optional_string(item.get("source_method"))
+    if source_method not in {"commandExecution", "fileChange"}:
+        return None
+    call_id = _normalized_optional_string(item.get("call_id"))
     if source_method is None or call_id is None:
         return None
 
@@ -199,9 +173,9 @@ def tool_call_state_payload_from_item(item: Mapping[str, Any]) -> ToolCallStateP
                 command_input["cwd"] = cwd
             payload["input"] = command_input
 
-        aggregated_output = item.get("aggregatedOutput")
-        exit_code = item.get("exitCode")
-        duration_ms = item.get("durationMs")
+        aggregated_output = item.get("aggregated_output")
+        exit_code = item.get("exit_code")
+        duration_ms = item.get("duration_ms")
         if (
             isinstance(aggregated_output, str)
             and aggregated_output != ""
@@ -295,11 +269,11 @@ def build_tool_call_payload_contract_params() -> dict[str, Any]:
             "allowed_values": ["state", "output_delta"],
         },
         "aliases": {
-            "source_method": ["sourceMethod"],
-            "call_id": ["callId", "callID"],
-            "output_delta": ["outputDelta"],
+            "source_method": [],
+            "call_id": [],
+            "output_delta": [],
         },
-        "status_aliases": dict(_TOOL_CALL_STATUS_ALIASES),
+        "status_aliases": {},
         "variants": {
             "state": {
                 "required_fields": ["kind"],

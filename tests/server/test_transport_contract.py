@@ -819,8 +819,8 @@ async def test_jsonrpc_unsupported_protocol_version_preserves_request_id(monkeyp
     assert isinstance(details, list)
     error_info = details[0]
     assert error_info["reason"] == "VERSION_NOT_SUPPORTED"
-    assert error_info["metadata"]["requestedVersion"] == "2.0"
-    assert error_info["metadata"]["supportedProtocolVersions"] == '["1.0"]'
+    assert error_info["metadata"]["requested_version"] == "2.0"
+    assert error_info["metadata"]["supported_protocol_versions"] == '["1.0"]'
 
 
 @pytest.mark.asyncio
@@ -848,8 +848,8 @@ async def test_rest_unsupported_v1_protocol_version_uses_protocol_error_shape(
     assert payload["error"]["message"] == "Unsupported A2A version: 1.1"
     error_info = payload["error"]["details"][0]
     assert error_info["reason"] == "VERSION_NOT_SUPPORTED"
-    assert error_info["metadata"]["requestedVersion"] == "1.1"
-    assert error_info["metadata"]["defaultProtocolVersion"] == "1.0"
+    assert error_info["metadata"]["requested_version"] == "1.1"
+    assert error_info["metadata"]["default_protocol_version"] == "1.0"
 
 
 @pytest.mark.asyncio
@@ -998,8 +998,8 @@ async def test_jsonrpc_disabled_shell_reports_current_supported_methods(monkeypa
     assert payload["error"]["code"] == -32601
     assert payload["error"]["message"] == "Method not found"
     assert payload["error"]["data"]["method"] == "codex.sessions.prompt_async"
-    assert payload["error"]["data"]["protocolVersion"] == "1.0"
-    assert "codex.sessions.prompt_async" not in payload["error"]["data"]["supportedMethods"]
+    assert payload["error"]["data"]["protocol_version"] == "1.0"
+    assert "codex.sessions.prompt_async" not in payload["error"]["data"]["supported_methods"]
 
 
 @pytest.mark.asyncio

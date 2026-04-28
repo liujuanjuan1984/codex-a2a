@@ -49,21 +49,6 @@ def _to_upper_snake_case(name: str) -> str:
     return "".join(normalized).strip("_")
 
 
-def _to_lower_camel_case(name: str) -> str:
-    if "_" not in name:
-        return name
-    head, *tail = [part for part in name.split("_") if part]
-    return head + "".join(part[:1].upper() + part[1:] for part in tail)
-
-
-def _camelize(value: Any) -> Any:
-    if isinstance(value, Mapping):
-        return {_to_lower_camel_case(str(key)): _camelize(item) for key, item in value.items()}
-    if isinstance(value, list):
-        return [_camelize(item) for item in value]
-    return value
-
-
 def _stringify_metadata_value(value: Any) -> str:
     if isinstance(value, str):
         return value
@@ -84,7 +69,7 @@ def _build_error_info_detail(
     }
     if metadata:
         payload["metadata"] = {
-            _to_lower_camel_case(str(key)): _stringify_metadata_value(value)
+            str(key): _stringify_metadata_value(value)
             for key, value in metadata.items()
             if value is not None
         }
@@ -94,7 +79,7 @@ def _build_error_info_detail(
 def _build_context_detail(type_name: str, payload: Mapping[str, Any]) -> dict[str, Any]:
     return {
         "@type": f"type.googleapis.com/codex_a2a.{type_name}",
-        **_camelize(dict(payload)),
+        **dict(payload),
     }
 
 
@@ -125,9 +110,7 @@ def adapt_jsonrpc_error(error: JSONRPCError | A2AError) -> JSONRPCError | A2AErr
     if root_code in STANDARD_JSONRPC_ERROR_CODES:
         adapted_data = None
         if isinstance(root_data, Mapping):
-            adapted_data = _camelize(
-                {str(key): value for key, value in root_data.items() if key != "type"}
-            )
+            adapted_data = {str(key): value for key, value in root_data.items() if key != "type"}
         elif root_data is not None:
             adapted_data = root_data
         return JSONRPCError(
@@ -216,22 +199,6 @@ def invalid_params_response(
     return app._generate_error_response(
         request_id,
         InvalidParamsError(message=str(exc), data=exc.data),
-    )
-
-
-def session_forbidden_response(
-    app: CodexSessionQueryJSONRPCApplication,
-    request_id: str | int | None,
-    *,
-    session_id: str,
-) -> Response:
-    return app._generate_error_response(
-        request_id,
-        JSONRPCError(
-            code=ERR_SESSION_FORBIDDEN,
-            message="Session forbidden",
-            data={"type": "SESSION_FORBIDDEN", "session_id": session_id},
-        ),
     )
 
 

@@ -72,7 +72,7 @@ async def handle_review_control_request(
                 request=(
                     None
                     if watch_params.request is None
-                    else watch_params.request.model_dump(by_alias=True, exclude_none=True)
+                    else watch_params.request.model_dump(exclude_none=True)
                 ),
                 context=call_context,
             )
@@ -83,7 +83,7 @@ async def handle_review_control_request(
             assert start_params is not None
             result = await app._codex_client.review_start(
                 thread_id,
-                target=start_params.target.model_dump(by_alias=True, exclude_none=True),
+                target=start_params.target.model_dump(exclude_none=True),
                 delivery=start_params.delivery,
             )
     except PermissionError:

@@ -308,4 +308,4 @@ async def test_turn_control_requires_turn_control_capability(monkeypatch) -> Non
     context = _error_context(payload)
     assert context["method"] == "codex.turns.steer"
     assert context["capability"] == "turn_control"
-    assert context["credentialId"] == "test-bearer"
+    assert context["credential_id"] == "test-bearer"

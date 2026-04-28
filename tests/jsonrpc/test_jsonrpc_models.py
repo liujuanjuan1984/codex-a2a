@@ -154,14 +154,14 @@ def test_parse_thread_lifecycle_params_preserve_aliases() -> None:
 
     assert fork.thread_id == "thr-1"
     assert fork.request is not None
-    assert fork.request.model_dump(by_alias=True, exclude_none=True) == {"ephemeral": True}
+    assert fork.request.model_dump(exclude_none=True) == {"ephemeral": True}
     assert fork.metadata is not None
     assert fork.metadata.codex is not None
     assert fork.metadata.codex.directory == "/workspace"
-    assert metadata_update.request.model_dump(by_alias=True, exclude_none=True) == {
-        "gitInfo": {
+    assert metadata_update.request.model_dump(exclude_none=True) == {
+        "git_info": {
             "branch": "feat/thread-lifecycle",
-            "originUrl": "https://x",
+            "origin_url": "https://x",
         }
     }
     assert watch.request is not None
@@ -172,7 +172,7 @@ def test_parse_thread_lifecycle_params_preserve_aliases() -> None:
     assert watch_release.task_id == "task-watch-1"
 
 
-def test_parse_turn_and_review_control_params_preserve_aliases() -> None:
+def test_parse_turn_and_review_control_params_use_canonical_shapes() -> None:
     steer = parse_turn_steer_params(
         {
             "thread_id": "thr-1",
@@ -207,7 +207,7 @@ def test_parse_turn_and_review_control_params_preserve_aliases() -> None:
 
     assert steer.thread_id == "thr-1"
     assert steer.expected_turn_id == "turn-1"
-    assert steer.request.model_dump(by_alias=True, exclude_none=True) == {
+    assert steer.request.model_dump(exclude_none=True) == {
         "parts": [
             {"type": "text", "text": "Focus on the failing tests first."},
             {"type": "mention", "name": "Demo App", "path": "app://demo-app"},
@@ -215,7 +215,7 @@ def test_parse_turn_and_review_control_params_preserve_aliases() -> None:
     }
     assert review.thread_id == "thr-1"
     assert review.delivery == "detached"
-    assert review.target.model_dump(by_alias=True, exclude_none=True) == {
+    assert review.target.model_dump(exclude_none=True) == {
         "type": "commit",
         "sha": "commit-demo-123",
         "title": "Polish tui colors",
@@ -224,7 +224,7 @@ def test_parse_turn_and_review_control_params_preserve_aliases() -> None:
     assert review_watch.review_thread_id == "thr-1-review"
     assert review_watch.turn_id == "turn-review-1"
     assert review_watch.request is not None
-    assert review_watch.request.model_dump(by_alias=True, exclude_none=True) == {
+    assert review_watch.request.model_dump(exclude_none=True) == {
         "events": ["review.started", "review.completed"]
     }
 
@@ -369,7 +369,7 @@ def test_parse_turn_and_review_control_params_reject_invalid_fields(
     assert exc_info.value.data["field"] == field
 
 
-def test_parse_discovery_param_aliases_preserve_upstream_shapes() -> None:
+def test_parse_discovery_params_use_canonical_shapes() -> None:
     skills = parse_discovery_skills_list_params(
         {
             "cwds": ["/workspace/project"],
@@ -404,22 +404,22 @@ def test_parse_discovery_param_aliases_preserve_upstream_shapes() -> None:
 
     assert skills == {
         "cwds": ["/workspace/project"],
-        "forceReload": True,
-        "perCwdExtraUserRoots": [
+        "force_reload": True,
+        "per_cwd_extra_user_roots": [
             {
                 "cwd": "/workspace/project",
-                "extraUserRoots": ["/workspace/shared-skills"],
+                "extra_user_roots": ["/workspace/shared-skills"],
             }
         ],
     }
-    assert apps == {"limit": 20, "threadId": "thr-1", "forceRefetch": False}
+    assert apps == {"limit": 20, "thread_id": "thr-1", "force_refetch": False}
     assert plugins == {
         "cwds": ["/workspace/project"],
-        "forceRemoteSync": True,
+        "force_remote_sync": True,
     }
     assert plugin == {
-        "marketplacePath": "/workspace/project/.codex/plugins/marketplace.json",
-        "pluginName": "sample",
+        "marketplace_path": "/workspace/project/.codex/plugins/marketplace.json",
+        "plugin_name": "sample",
     }
     assert parse_discovery_watch_params({"request": {"events": ["skills.changed"]}}) == {
         "request": {"events": ["skills.changed"]}

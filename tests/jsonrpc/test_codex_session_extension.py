@@ -124,7 +124,7 @@ async def test_removed_session_control_methods_return_method_not_found(
     payload = response.json()
     assert payload["error"]["code"] == -32601
     assert payload["error"]["data"]["method"] == "codex.sessions.command"
-    assert "codex.sessions.command" not in payload["error"]["data"]["supportedMethods"]
+    assert "codex.sessions.command" not in payload["error"]["data"]["supported_methods"]
 
 
 @pytest.mark.asyncio
