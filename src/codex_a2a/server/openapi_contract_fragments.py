@@ -105,8 +105,8 @@ def build_extension_jsonrpc_openapi_description(*, runtime_profile: RuntimeProfi
         f"Codex interactive exec methods: {exec_methods}.\n"
         f"Shared interrupt callback methods: {interrupt_methods}.\n\n"
         "Notification semantics: extension requests without JSON-RPC id return HTTP 204. "
-        "Unsupported methods return JSON-RPC -32601 with supportedMethods and "
-        "protocolVersion in error.data."
+        "Unsupported methods return JSON-RPC -32601 with supported_methods and "
+        "protocol_version in error.data."
     )
 
 

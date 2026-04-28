@@ -804,8 +804,8 @@ CORE_HTTP_ENDPOINTS: tuple[str, ...] = (
 )
 WIRE_CONTRACT_UNSUPPORTED_METHOD_DATA_FIELDS: tuple[str, ...] = (
     "method",
-    "supportedMethods",
-    "protocolVersion",
+    "supported_methods",
+    "protocol_version",
 )
 
 
