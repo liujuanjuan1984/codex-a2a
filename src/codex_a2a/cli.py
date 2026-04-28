@@ -5,11 +5,14 @@ import asyncio
 import os
 import sys
 from collections.abc import Sequence
+from uuid import uuid4
+
+from a2a.types import Message, Role, SendMessageConfiguration, SendMessageRequest
 
 from . import __version__
+from .a2a_proto import new_text_part
 from .client import A2AClient, A2AClientConfig
 from .client.request_context import build_default_headers
-from .client.types import A2ASendRequest
 
 
 async def run_call(
@@ -45,10 +48,16 @@ async def run_call(
         if first_chunk:
             # Keep CLI behavior stable even when upstream emits no text payload.
             response = await client.send(
-                A2ASendRequest(
-                    text=text,
+                SendMessageRequest(
+                    message=Message(
+                        message_id=f"msg-{uuid4().hex[:12]}",
+                        role=Role.ROLE_USER,
+                        parts=[new_text_part(text)],
+                    ),
                     metadata=metadata or None,
-                    accepted_output_modes=["text/plain"],
+                    configuration=SendMessageConfiguration(
+                        accepted_output_modes=["text/plain"],
+                    ),
                 )
             )
             text_output = A2AClient.extract_text(response)

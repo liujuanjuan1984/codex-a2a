@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Iterable
 from contextvars import ContextVar, Token
 from dataclasses import dataclass
 from typing import Any
@@ -11,6 +10,9 @@ _CURRENT_PROTOCOL_VERSION: ContextVar[str | None] = ContextVar(
     "_CURRENT_PROTOCOL_VERSION",
     default=None,
 )
+SUPPORTED_PROTOCOL_VERSION = "1.0"
+SUPPORTED_PROTOCOL_VERSIONS: tuple[str, ...] = (SUPPORTED_PROTOCOL_VERSION,)
+ADVERTISED_PROTOCOL_VERSION = "1.0"
 
 V1_SUPPORTED_FEATURES: tuple[str, ...] = (
     "A2A-Version request-time negotiation and response header echo.",
@@ -20,17 +22,11 @@ V1_SUPPORTED_FEATURES: tuple[str, ...] = (
 
 
 class UnsupportedProtocolVersionError(ValueError):
-    def __init__(
-        self,
-        requested_version: str,
-        *,
-        supported_protocol_versions: tuple[str, ...],
-        default_protocol_version: str,
-    ) -> None:
+    def __init__(self, requested_version: str) -> None:
         self.requested_version = requested_version
-        self.supported_protocol_versions = supported_protocol_versions
-        self.default_protocol_version = default_protocol_version
-        supported_display = ", ".join(supported_protocol_versions)
+        self.supported_protocol_versions = SUPPORTED_PROTOCOL_VERSIONS
+        self.default_protocol_version = ADVERTISED_PROTOCOL_VERSION
+        supported_display = ", ".join(SUPPORTED_PROTOCOL_VERSIONS)
         super().__init__(
             f"Unsupported A2A protocol version {requested_version!r}. "
             f"Supported versions: {supported_display}."
@@ -39,8 +35,7 @@ class UnsupportedProtocolVersionError(ValueError):
 
 @dataclass(frozen=True)
 class NegotiatedProtocolVersion:
-    requested_version: str
-    negotiated_version: str
+    protocol_version: str
     explicit: bool
 
 
@@ -54,59 +49,26 @@ def normalize_protocol_version(value: str) -> str:
     return f"{match.group('major')}.{match.group('minor')}"
 
 
-def normalize_protocol_versions(values: Iterable[str]) -> tuple[str, ...]:
-    normalized_versions: list[str] = []
-    seen: set[str] = set()
-    for value in values:
-        normalized = normalize_protocol_version(str(value))
-        if normalized in seen:
-            continue
-        seen.add(normalized)
-        normalized_versions.append(normalized)
-    if not normalized_versions:
-        raise ValueError("At least one supported protocol version must be declared.")
-    return tuple(normalized_versions)
-
-
-def default_supported_protocol_versions(protocol_version: str) -> tuple[str, ...]:
-    normalized = normalize_protocol_version(protocol_version)
-    return (normalized,)
-
-
 def negotiate_protocol_version(
     *,
     header_value: str | None,
     query_value: str | None,
-    default_protocol_version: str,
-    supported_protocol_versions: Iterable[str],
 ) -> NegotiatedProtocolVersion:
-    normalized_default = normalize_protocol_version(default_protocol_version)
-    normalized_supported = normalize_protocol_versions(supported_protocol_versions)
-
     raw_header = (header_value or "").strip()
     raw_query = (query_value or "").strip()
     explicit = bool(raw_header or raw_query)
-    raw_requested = raw_header or raw_query or normalized_default
+    raw_requested = raw_header or raw_query or ADVERTISED_PROTOCOL_VERSION
 
     try:
         normalized_requested = normalize_protocol_version(raw_requested)
     except ValueError as exc:
-        raise UnsupportedProtocolVersionError(
-            raw_requested,
-            supported_protocol_versions=normalized_supported,
-            default_protocol_version=normalized_default,
-        ) from exc
+        raise UnsupportedProtocolVersionError(raw_requested) from exc
 
-    if normalized_requested not in normalized_supported:
-        raise UnsupportedProtocolVersionError(
-            normalized_requested,
-            supported_protocol_versions=normalized_supported,
-            default_protocol_version=normalized_default,
-        )
+    if normalized_requested != SUPPORTED_PROTOCOL_VERSION:
+        raise UnsupportedProtocolVersionError(normalized_requested)
 
     return NegotiatedProtocolVersion(
-        requested_version=normalized_requested,
-        negotiated_version=normalized_requested,
+        protocol_version=normalized_requested,
         explicit=explicit,
     )
 
@@ -119,48 +81,24 @@ def reset_current_protocol_version(token: Token[str | None]) -> None:
     _CURRENT_PROTOCOL_VERSION.reset(token)
 
 
-def get_current_protocol_version(default: str) -> str:
+def get_current_protocol_version() -> str:
     protocol_version = _CURRENT_PROTOCOL_VERSION.get()
     if protocol_version:
         return protocol_version
-    return normalize_protocol_version(default)
+    return ADVERTISED_PROTOCOL_VERSION
 
 
-def build_protocol_compatibility_summary(
-    *,
-    default_protocol_version: str,
-    supported_protocol_versions: Iterable[str],
-) -> dict[str, Any]:
-    normalized_default = normalize_protocol_version(default_protocol_version)
-    normalized_supported = normalize_protocol_versions(supported_protocol_versions)
-    versions: dict[str, dict[str, Any]] = {}
-
-    for version in normalized_supported:
-        if version == "1.0":
-            versions[version] = {
+def build_protocol_compatibility_summary() -> dict[str, Any]:
+    return {
+        "default_protocol_version": ADVERTISED_PROTOCOL_VERSION,
+        "supported_protocol_versions": list(SUPPORTED_PROTOCOL_VERSIONS),
+        "versions": {
+            SUPPORTED_PROTOCOL_VERSION: {
                 "enabled": True,
-                "default": normalized_default == version,
+                "default": True,
                 "status": "supported",
                 "supported_features": list(V1_SUPPORTED_FEATURES),
                 "known_gaps": [],
             }
-            continue
-
-        versions[version] = {
-            "enabled": True,
-            "default": normalized_default == version,
-            "status": "custom",
-            "supported_features": [
-                "Declared by repository configuration.",
-                "Version-specific compatibility details are not yet modeled.",
-            ],
-            "known_gaps": [
-                "This protocol line does not yet have a dedicated compatibility summary.",
-            ],
-        }
-
-    return {
-        "default_protocol_version": normalized_default,
-        "supported_protocol_versions": list(normalized_supported),
-        "versions": versions,
+        },
     }

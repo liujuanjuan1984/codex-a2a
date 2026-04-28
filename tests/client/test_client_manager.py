@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from codex_a2a.client import A2AClientConfig, A2AClientManager
+from codex_a2a.contracts.extensions import SESSION_BINDING_EXTENSION_URI, STREAMING_EXTENSION_URI
 from tests.support.settings import make_settings
 
 
@@ -43,6 +44,10 @@ async def test_manager_normalizes_config_and_transports() -> None:
     assert client.config.use_client_preference is True
     assert client.config.default_headers == {"Authorization": "Bearer peer-token"}
     assert client.config.supported_transports == ["HTTP+JSON", "JSONRPC"]
+    assert client.config.extensions == [
+        SESSION_BINDING_EXTENSION_URI,
+        STREAMING_EXTENSION_URI,
+    ]
 
 
 @pytest.mark.asyncio

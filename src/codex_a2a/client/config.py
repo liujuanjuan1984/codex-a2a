@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 from pydantic import BaseModel, Field, field_validator
 
 
@@ -24,3 +26,22 @@ class A2AClientConfig(BaseModel):
         if value <= 0:
             raise ValueError("card_fetch_timeout_seconds must be > 0")
         return value
+
+    @field_validator("extensions", mode="before")
+    @classmethod
+    def normalize_extensions(cls, value: object) -> list[str]:
+        if value is None:
+            return []
+        if isinstance(value, str):
+            values = [value]
+        elif isinstance(value, Sequence):
+            values = [str(item) for item in value]
+        else:
+            raise ValueError("extensions must be a string or sequence of strings")
+
+        normalized: list[str] = []
+        for item in values:
+            extension = str(item).strip()
+            if extension and extension not in normalized:
+                normalized.append(extension)
+        return normalized

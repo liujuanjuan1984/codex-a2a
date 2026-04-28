@@ -222,32 +222,7 @@ async def test_list_messages_applies_limit_locally_after_mapping() -> None:
 
 
 @pytest.mark.asyncio
-async def test_session_shell_uses_command_exec_without_thread_context() -> None:
-    client = CodexClient(
-        make_settings(
-            a2a_bearer_token="t-1",
-            codex_workspace_root="/safe",
-            codex_timeout=1.0,
-        )
-    )
-
-    seen: list[tuple[str, dict | None]] = []
-
-    async def fake_rpc_request(method: str, params: dict | None = None):
-        seen.append((method, params))
-        return {"stdout": "/safe\n", "stderr": "", "exitCode": 0}
-
-    client._rpc_request = fake_rpc_request
-
-    result = await client.session_shell("thr-1", {"command": "pwd"})
-
-    assert seen == [("command/exec", {"command": ["pwd"], "cwd": "/safe"})]
-    assert result["info"]["id"].startswith("shell:thr-1:")
-    assert result["parts"][0]["text"] == "exit_code: 0\nstdout:\n/safe"
-
-
-@pytest.mark.asyncio
-async def test_session_prompt_async_maps_rich_input_parts_to_turn_start() -> None:
+async def test_send_message_maps_rich_input_parts_to_turn_start() -> None:
     client = CodexClient(
         make_settings(
             a2a_bearer_token="t-1",
@@ -264,24 +239,29 @@ async def test_session_prompt_async_maps_rich_input_parts_to_turn_start() -> Non
 
     client._rpc_request = fake_rpc_request
     client._conversation_facade._loaded_thread_ids.add("thr-1")
+    tracker = client._get_or_create_tracker("thr-1", "turn-42")
+    tracker.text_chunks.append("ok")
+    tracker.message_id = "m-42"
+    tracker.completed.set()
 
-    result = await client.session_prompt_async(
+    result = await client.send_message(
         "thr-1",
-        {
-            "parts": [
-                {"type": "text", "text": "Use the app."},
-                {"type": "image", "url": "https://example.com/image.png"},
-                {"type": "mention", "name": "Demo App", "path": "app://demo-app"},
-                {
-                    "type": "skill",
-                    "name": "skill-creator",
-                    "path": "/tmp/skill-creator/SKILL.md",
-                },
-            ]
-        },
+        "ignored",
+        input_items=[
+            {"type": "text", "text": "Use the app."},
+            {"type": "image", "url": "https://example.com/image.png"},
+            {"type": "mention", "name": "Demo App", "path": "app://demo-app"},
+            {
+                "type": "skill",
+                "name": "skill-creator",
+                "path": "/tmp/skill-creator/SKILL.md",
+            },
+        ],
     )
 
-    assert result == {"ok": True, "session_id": "thr-1", "turn_id": "turn-42"}
+    assert result.text == "ok"
+    assert result.session_id == "thr-1"
+    assert result.message_id == "m-42"
     assert seen == [
         (
             "turn/start",
@@ -307,7 +287,7 @@ async def test_session_prompt_async_maps_rich_input_parts_to_turn_start() -> Non
 
 
 @pytest.mark.asyncio
-async def test_session_prompt_async_resumes_unloaded_thread_before_turn_start() -> None:
+async def test_send_message_resumes_unloaded_thread_before_turn_start() -> None:
     client = CodexClient(
         make_settings(
             a2a_bearer_token="t-1",
@@ -328,13 +308,14 @@ async def test_session_prompt_async_resumes_unloaded_thread_before_turn_start() 
         return {"turn": {"id": "turn-42"}}
 
     client._rpc_request = fake_rpc_request
+    tracker = client._get_or_create_tracker("thr-1", "turn-42")
+    tracker.text_chunks.append("ok")
+    tracker.message_id = "m-42"
+    tracker.completed.set()
 
-    result = await client.session_prompt_async(
-        "thr-1",
-        {"parts": [{"type": "text", "text": "Use the app."}]},
-    )
+    result = await client.send_message("thr-1", "Use the app.")
 
-    assert result == {"ok": True, "session_id": "thr-1", "turn_id": "turn-42"}
+    assert result.text == "ok"
     assert seen == [
         ("thread/loaded/list", {}),
         ("thread/resume", {"threadId": "thr-1", "cwd": "/safe", "model": "gpt-5.2-codex"}),
@@ -351,7 +332,7 @@ async def test_session_prompt_async_resumes_unloaded_thread_before_turn_start() 
 
 
 @pytest.mark.asyncio
-async def test_session_prompt_async_retries_turn_start_after_thread_not_found() -> None:
+async def test_send_message_retries_turn_start_after_thread_not_found() -> None:
     client = CodexClient(
         make_settings(
             a2a_bearer_token="t-1",
@@ -377,13 +358,14 @@ async def test_session_prompt_async_retries_turn_start_after_thread_not_found() 
 
     client._rpc_request = fake_rpc_request
     client._conversation_facade._loaded_thread_ids.add("thr-1")
+    tracker = client._get_or_create_tracker("thr-1", "turn-43")
+    tracker.text_chunks.append("ok")
+    tracker.message_id = "m-43"
+    tracker.completed.set()
 
-    result = await client.session_prompt_async(
-        "thr-1",
-        {"parts": [{"type": "text", "text": "Retry after resume."}]},
-    )
+    result = await client.send_message("thr-1", "Retry after resume.")
 
-    assert result == {"ok": True, "session_id": "thr-1", "turn_id": "turn-43"}
+    assert result.text == "ok"
     assert seen == [
         (
             "turn/start",
@@ -434,14 +416,14 @@ async def test_exec_start_uses_interactive_command_exec_params() -> None:
         {
             "command": "bash",
             "arguments": "-lc 'printf hello'",
-            "processId": "exec-1",
+            "process_id": "exec-1",
             "tty": True,
             "rows": 24,
             "cols": 80,
-            "outputBytesCap": 4096,
-            "disableOutputCap": False,
-            "timeoutMs": 3000,
-            "disableTimeout": False,
+            "output_bytes_cap": 4096,
+            "disable_output_cap": False,
+            "timeout_ms": 3000,
+            "disable_timeout": False,
         }
     )
 
@@ -528,7 +510,7 @@ async def test_thread_lifecycle_methods_forward_expected_rpc_calls() -> None:
     await client.thread_unsubscribe("thr-1")
     unarchive = await client.thread_unarchive("thr-1")
     metadata = await client.thread_metadata_update(
-        "thr-1", params={"gitInfo": {"branch": "feat/thread-lifecycle"}}
+        "thr-1", params={"git_info": {"branch": "feat/thread-lifecycle"}}
     )
 
     assert fork == {
@@ -1079,10 +1061,10 @@ async def test_handle_notification_normalizes_tool_output_delta_payload() -> Non
         "id": "msg-1",
         "type": "tool_call",
         "role": "assistant",
-        "callID": "call-1",
+        "call_id": "call-1",
         "tool": "bash",
         "state": {"status": "running"},
-        "sourceMethod": "commandExecution",
+        "source_method": "commandExecution",
     }
     assert event["properties"]["delta"] == {
         "kind": "output_delta",
@@ -1124,9 +1106,9 @@ async def test_handle_notification_normalizes_file_change_output_delta_payload()
         "id": "call-file-1",
         "type": "tool_call",
         "role": "assistant",
-        "callID": "call-file-1",
+        "call_id": "call-file-1",
         "tool": "apply_patch",
-        "sourceMethod": "fileChange",
+        "source_method": "fileChange",
     }
     assert event["properties"]["delta"] == {
         "kind": "output_delta",
@@ -1171,8 +1153,8 @@ async def test_handle_notification_normalizes_command_execution_started_state() 
         "id": "call-1",
         "type": "tool_call",
         "role": "assistant",
-        "callID": "call-1",
-        "sourceMethod": "commandExecution",
+        "call_id": "call-1",
+        "source_method": "commandExecution",
         "state": {
             "status": "running",
             "input": {
@@ -1228,8 +1210,8 @@ async def test_handle_notification_normalizes_file_change_completed_state() -> N
         "id": "call-file-1",
         "type": "tool_call",
         "role": "assistant",
-        "callID": "call-file-1",
-        "sourceMethod": "fileChange",
+        "call_id": "call-file-1",
+        "source_method": "fileChange",
         "state": {
             "status": "completed",
             "input": {
@@ -1280,8 +1262,8 @@ async def test_handle_notification_replays_real_command_execution_fixture() -> N
         "id": "call-fixture-command",
         "type": "tool_call",
         "role": "assistant",
-        "callID": "call-fixture-command",
-        "sourceMethod": "commandExecution",
+        "call_id": "call-fixture-command",
+        "source_method": "commandExecution",
         "state": {
             "status": "running",
             "input": {
@@ -1365,8 +1347,8 @@ async def test_handle_notification_replays_real_file_change_fixture() -> None:
         "id": "call-fixture-file-change",
         "type": "tool_call",
         "role": "assistant",
-        "callID": "call-fixture-file-change",
-        "sourceMethod": "fileChange",
+        "call_id": "call-fixture-file-change",
+        "source_method": "fileChange",
         "state": {
             "status": "running",
             "input": {

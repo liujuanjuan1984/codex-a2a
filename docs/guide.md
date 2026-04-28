@@ -6,27 +6,31 @@ This guide covers runtime configuration, transport contracts, streaming/session/
 
 - The service supports both transports:
   - HTTP+JSON (REST endpoints such as `/v1/message:send`)
-  - JSON-RPC (`POST /`)
-- Agent Card keeps `preferredTransport=HTTP+JSON` and also exposes JSON-RPC in `additional_interfaces`.
+  - Shared JSON-RPC (`POST /`) for both core A2A methods and provider-private extension methods
+- Agent Card publishes both HTTP+JSON and JSON-RPC endpoints through `supported_interfaces[]`.
+- Both supported interfaces now publish the same `public_url`. For HTTP+JSON, that URL is the REST service root; concrete REST methods remain under `/v1/...`.
 - The public Agent Card at `/.well-known/agent-card.json` is intentionally slimmed to the minimum discovery surface.
-- Detailed provider-private contracts are available through the authenticated extended card:
+- The authenticated extended card exposes the authenticated provider-private skill inventory and deployment-aware examples:
   - preferred: JSON-RPC `GetExtendedAgentCard`
   - HTTP core route: `GET /v1/extendedAgentCard`
+- Full provider-private contract payloads are available through OpenAPI metadata:
+  - `GET /openapi.json`
+  - `x-a2a-extension-contracts` for negotiated shared extensions
+  - `x-codex-contracts` for provider-private control contracts
 - Agent Card responses publish `ETag` and `Cache-Control`; clients should revalidate instead of repeatedly fetching full payloads.
 - Larger discovery documents support gzip compression on these HTTP GET routes:
   - `/.well-known/agent-card.json`
-  - `/.well-known/agent.json`
   - `GET /v1/extendedAgentCard`
   - `GET /openapi.json`
 - Streaming and task routes do not rely on this gzip behavior.
 - Payload schema is transport-specific and should not be mixed:
   - REST send payload uses `message.parts` and role values like `ROLE_USER`
   - JSON-RPC `SendMessage` payload uses `params.message.parts` and role values like `ROLE_USER`
-- The JSON-RPC entrypoint and authenticated extended card publish the explicit wire contract for the supported method set and unsupported-method error shape.
+- OpenAPI metadata on the shared JSON-RPC entrypoint publishes the explicit wire contract for the supported method set and unsupported-method error shape.
 
 ## Wire Contract
 
-The full machine-readable wire contract is published through the authenticated extended card and OpenAPI metadata. The public Agent Card keeps only the minimum capability declarations needed for discovery.
+The full machine-readable wire contract is published through OpenAPI metadata. The authenticated extended card mirrors the same provider-private skill partition for authenticated discovery, while the public Agent Card keeps only the minimum capability declarations needed for discovery.
 
 Use it to answer:
 
@@ -47,35 +51,39 @@ Current behavior:
   - `/v1/message:send`
   - `/v1/message:stream`
   - `/v1/tasks/{id}:subscribe`
-- extension JSON-RPC methods are declared separately from the core baseline
+- extension JSON-RPC methods are declared separately from the core baseline even though they share the same `POST /` endpoint
 - `codex.interrupts.list` is an always-on adapter-local recovery surface for pending interrupt request IDs
-- `codex.sessions.shell` becomes deployment-conditional when `A2A_ENABLE_SESSION_SHELL=false`
 - `codex.turns.steer` becomes deployment-conditional when `A2A_ENABLE_TURN_CONTROL=false`
 - `codex.review.start` and `codex.review.watch` become deployment-conditional when `A2A_ENABLE_REVIEW_CONTROL=false`
 - `codex.exec.*` becomes deployment-conditional when `A2A_ENABLE_EXEC_CONTROL=false`
 
-Unsupported method contract:
+Unsupported method contract on the shared JSON-RPC endpoint (`POST /`):
 
-- JSON-RPC error code: `-32601`
-- error message: `Unsupported method: <method>`
-- error data fields:
-  - `type=METHOD_NOT_SUPPORTED`
-  - `method`
-  - `supported_methods`
-  - `protocol_version`
+- Core A2A methods plus unknown method names:
+  - JSON-RPC error code: `-32601`
+  - error message: `Method not found`
+  - no additional `error.data` contract is declared
+- Recognized provider-private extension namespaces (`codex.*`, `a2a.interrupt.*`):
+  - JSON-RPC error code: `-32601`
+  - error message: `Method not found`
+  - error data fields:
+    - `method`
+    - `supported_methods`
+    - `protocol_version`
 
 Consumer guidance:
 
 - Discover the current method set from Agent Card / OpenAPI before calling custom JSON-RPC methods.
-- Fetch the authenticated extended card when you need the detailed method matrix, provider-private notes, or full extension params.
-- Treat `supported_methods` in `error.data` as the runtime truth for the current deployment, especially when a deployment-conditional method is disabled.
+- Fetch the authenticated extended card when you need the authenticated skill inventory or deployment-aware examples.
+- Use OpenAPI when you need the detailed method matrix, provider-private notes, or full provider-private contract payloads.
+- Treat `supported_methods` in extension-namespace `error.data` as the runtime truth for the current deployment, especially when a deployment-conditional method is disabled.
 - Treat the core A2A methods as the portable interoperability baseline.
 - Treat `codex.*` methods plus `metadata.codex.directory` and `metadata.codex.execution` as a Codex-specific control plane for Codex-aware clients rather than generic A2A portability claims.
 - See [extension-specifications.md](./extension-specifications.md) for the stable URI/spec index, and [compatibility.md](./compatibility.md) for compatibility promises.
 
 ## Compatibility Profile
 
-The full machine-readable compatibility profile is published through the authenticated extended card and OpenAPI metadata. Its purpose is to declare:
+The full machine-readable compatibility profile is published through OpenAPI metadata. The authenticated extended card carries aligned skill inventory and deployment-aware examples, but not the full compatibility payload. Its purpose is to declare:
 
 - the stable A2A core interoperability baseline
 - which shared extensions are intended to be reused across this repo family
@@ -94,8 +102,6 @@ Current profile shape:
 - runtime features:
   - `directory_binding.allow_override=true|false`
   - `directory_binding.scope=workspace_root_or_descendant|workspace_root_only`
-  - `session_shell.enabled=true|false`
-  - `session_shell.availability=enabled|disabled`
   - `turn_control.enabled=true|false`
   - `turn_control.availability=enabled|disabled`
   - `review_control.enabled=true|false`
@@ -134,14 +140,12 @@ Retention guidance:
 - Treat this deployment as a single-tenant, shared-workspace coding profile.
 - Treat shared session-binding and streaming metadata contracts as required for the current deployment model; they are not optional documentation-only hints.
 - Treat `urn:a2a:*` extension URIs in this repository as shared extension conventions used across this repo family, not as claims that they are part of the A2A core baseline.
-- Treat `a2a.interrupt.*` methods as shared extensions.
+- Treat `a2a.interrupt.*` methods as a shared provider-private callback contract on `POST /`, not as core A2A methods or Agent Card-negotiated extensions.
 - Treat `codex.*` methods plus `metadata.codex.directory` and `metadata.codex.execution` as Codex-specific extensions or provider-private operational surfaces rather than portable A2A baseline capabilities.
-- Treat `codex.sessions.shell` as a deployment-conditional, provider-private shell snapshot helper. Discover it from the declared compatibility profile and extension contracts before calling it.
-- Treat `codex.sessions.shell` as a one-shot shell snapshot surface. It is useful for tightly controlled internal workflows, but it is not an interactive shell session and does not imply PTY lifecycle support.
 - Treat `codex.interrupts.list` as an adapter-local recovery surface for rediscovering active pending interrupt request IDs after reconnecting.
 - Treat `codex.turns.steer`, `codex.review.*`, and `codex.exec.*` as deployment-aware provider-private controls. Discover them from the authenticated extended card or OpenAPI before calling them.
-- Treat `codex.exec.*` as the standalone interactive exec surface for internal or tightly controlled deployments. Use it for stdin write, PTY resize, and terminate flows instead of inferring those semantics from `codex.sessions.shell`.
-- Default deployment posture keeps `codex.sessions.shell`, `codex.review.*`, and `codex.exec.*` disabled unless a deployment intentionally opts into them. `codex.turns.steer` is enabled by default but remains provider-private and can still be disabled with `A2A_ENABLE_TURN_CONTROL=false`.
+- Treat `codex.exec.*` as the standalone interactive exec surface for internal or tightly controlled deployments. Use it for stdin write, PTY resize, and terminate flows as a separate provider-private contract rather than inferring terminal lifecycle support from chat/session flows.
+- Default deployment posture keeps `codex.review.*` and `codex.exec.*` disabled unless a deployment intentionally opts into them. `codex.turns.steer` is enabled by default but remains provider-private and can still be disabled with `A2A_ENABLE_TURN_CONTROL=false`.
 - Generic A2A clients should remain usable without the `codex.*` control plane. Opt into those methods only when you are intentionally integrating with Codex-specific workflows such as session continuation, discovery-backed mentions, or interactive exec.
 - Treat `execution_environment.*` as deployment-configured discovery metadata. It does not promise per-request snapshots of temporary approvals, escalations, or host-side runtime mutations.
 
@@ -196,8 +200,7 @@ Use the grouped sections below as the deployment-first reading order:
 - `A2A_DESCRIPTION`: agent description exposed on Agent Card and docs surfaces
 - `A2A_VERSION`: agent version string
 - `A2A_PROJECT`: optional project label injected into examples and discovery metadata
-- `A2A_PROTOCOL_VERSION`: advertised A2A protocol version, default `1.0.0`
-- `A2A_SUPPORTED_PROTOCOL_VERSIONS`: comma-separated request negotiation lines, default `1.0`
+- `A2A_PROTOCOL_VERSION`: advertised A2A protocol version, default `1.0.0`; values outside the `1.0` protocol line are rejected
 - `A2A_DOCUMENTATION_URL`: optional external documentation URL exposed on Agent Card
 - `A2A_STATIC_AUTH_CREDENTIALS`: JSON array of static inbound credentials. Supports multiple `bearer` and `basic` entries, each with a stable `principal`; `bearer` entries must declare `principal`, while `basic` entries derive `principal` from `username`.
 
@@ -227,7 +230,6 @@ These variables are forwarded to the local `codex app-server` subprocess.
 ### Advanced Runtime Settings
 
 - `A2A_ENABLE_HEALTH_ENDPOINT`: enable the authenticated lightweight `/health` probe, default `true`
-- `A2A_ENABLE_SESSION_SHELL`: expose `codex.sessions.shell` on JSON-RPC extensions, default `false`
 - `A2A_ENABLE_TURN_CONTROL`: expose `codex.turns.steer` on JSON-RPC extensions, default `true`
 - `A2A_ENABLE_REVIEW_CONTROL`: expose `codex.review.start` and `codex.review.watch` on JSON-RPC extensions, default `false`
 - `A2A_ENABLE_EXEC_CONTROL`: expose `codex.exec.*` on JSON-RPC extensions, default `false`
@@ -277,10 +279,8 @@ These variables are forwarded to the local `codex app-server` subprocess.
 | `A2A_VERSION` | Agent version |
 | `A2A_PROJECT` | Project label |
 | `A2A_PROTOCOL_VERSION` | Protocol version |
-| `A2A_SUPPORTED_PROTOCOL_VERSIONS` | Supported protocol versions |
 | `A2A_DOCUMENTATION_URL` | Documentation URL |
 | `A2A_ENABLE_HEALTH_ENDPOINT` | Enable /health |
-| `A2A_ENABLE_SESSION_SHELL` | Enable session shell |
 | `A2A_ENABLE_TURN_CONTROL` | Enable turn control |
 | `A2A_ENABLE_REVIEW_CONTROL` | Enable review control |
 | `A2A_ENABLE_EXEC_CONTROL` | Enable interactive exec |
@@ -409,10 +409,9 @@ This path is for contributors. End users should prefer the released CLI path des
 - Static credential registry mode is the only supported inbound auth shape. It lets deployments define multiple bearer tokens and/or multiple Basic credentials with stable `principal` values.
 - Stable `principal` values back runtime ownership checks. This avoids tying session, watch, or exec ownership to a bearer token hash that changes during token rotation.
 - Capability gating stays intentionally small:
-  - `codex.sessions.shell` requires `session_shell`
   - `codex.turns.steer` requires `turn_control`
   - `codex.exec.*` requires `exec_control`
-  - Basic credentials grant all three capabilities by default unless the registry entry overrides capabilities
+  - Basic credentials grant both capabilities by default unless the registry entry overrides capabilities
   - bearer credentials do not gain those capabilities unless the static credential entry explicitly grants them
 - Within one `codex-a2a` instance, all consumers share the same underlying Codex workspace/environment. This deployment model is not tenant-isolated by default.
 
@@ -420,17 +419,15 @@ This path is for contributors. End users should prefer the released CLI path des
 
 - The service forwards A2A `message:send` requests and `SendMessage` JSON-RPC calls to Codex session/message flows.
 - Streaming is always enabled for this service surface. `/v1/message:stream` and JSON-RPC `SendStreamingMessage` are compatibility-sensitive core capabilities rather than deployment-time toggles.
-- `codex.sessions.shell` is a session-scoped shell helper for ownership, attribution, and traceability in internal deployments. It keeps `session_id` in the A2A contract, but the underlying execution still uses Codex `command/exec` rather than resuming or creating an upstream Codex thread.
-- `codex.sessions.shell` returns a one-shot shell snapshot only. It does not expose PTY lifecycle methods such as stdin write, resize, or terminate, and should be treated as a bounded helper rather than a general session shell.
 - `codex.exec.start`, `codex.exec.write`, `codex.exec.resize`, and `codex.exec.terminate` expose a standalone interactive `command/exec` runtime when `A2A_ENABLE_EXEC_CONTROL=true`. This surface is intended for internal or tightly controlled deployments where interactive terminal control is an explicit part of the adapter contract. `codex.exec.start` returns process/task handles immediately, while stdout/stderr deltas and the final result flow through normal A2A task streaming and `SubscribeToTask`.
 - Rich input is supported on two surfaces:
-  - `codex.sessions.prompt_async.request.parts[]` accepts `text`, `image`, `mention`, and `skill`
   - core A2A `SendMessage` and `SendStreamingMessage` keep standard A2A parts and map `Part(text)`, image `Part(url|raw)`, and `Part(data={"type":"mention"|"skill", ...})` into Codex turn input
+  - `codex.turns.steer.request.parts[]` accepts the same stable `text`, `image`, `mention`, and `skill` items for same-turn continuation
 - Agent Card media modes reflect that stable core message surface: default input modes are `text/plain`, `image/*`, and `application/json`; default output modes are `text/plain` and `application/json`.
-- The authenticated extended Agent Card also decomposes provider-private JSON-RPC surfaces into narrower skills: `codex.sessions.query`, `codex.sessions.control`, `codex.discovery.query`, `codex.discovery.watch`, `codex.threads.control`, `codex.threads.watch`, `codex.turns.control`, `codex.review.control`, `codex.exec.control`, `codex.exec.stream`, and `codex.interrupt.callback`.
-- `codex.sessions.shell`, `codex.turns.control`, `codex.review.*`, and `codex.exec.*` only appear in the authenticated extended card when their deployment toggles are enabled.
+- The authenticated extended Agent Card also decomposes provider-private JSON-RPC surfaces into narrower skills: `codex.sessions.query`, `codex.discovery.query`, `codex.discovery.watch`, `codex.threads.control`, `codex.threads.watch`, `codex.turns.control`, `codex.review.control`, `codex.exec.control`, `codex.exec.stream`, and `codex.interrupt.callback`.
+- `codex.turns.control`, `codex.review.*`, and `codex.exec.*` only appear in the authenticated extended card when their deployment toggles are enabled.
+- OpenAPI carries the full provider-private contract payloads for those skills under `x-codex-contracts`; the authenticated extended card is intentionally narrower and discovery-oriented.
 - Those provider-private skills use narrower `output_modes` where practical: query/control/watch handle surfaces declare `application/json` when their primary contract is a structured JSON-RPC result or `Part(data)` watch payload, while `codex.exec.stream` declares `text/plain` because stdout/stderr deltas and terminal summaries are emitted as `Part(text)`.
-- `codex.sessions.control` intentionally remains mixed: `codex.sessions.prompt_async` returns a structured handle, while `codex.sessions.command` and `codex.sessions.shell` return A2A message items that contain `Part(text)`.
 - On the core chat surface, the `application/json` input mode is intentionally narrower than arbitrary JSON: only `Part(data={"type":"mention"|"skill", ...})` is part of the declared stable contract.
 - Image input maps to upstream `turn/start.input[].type=input_image`.
 - `mention.path` and `skill.path` are forwarded verbatim. The service does not guess app or plugin identifiers from display names.
@@ -551,12 +548,12 @@ curl -sS http://127.0.0.1:8000/v1/message:send \
 
 ## Codex Session Query (A2A Extension)
 
-This service exposes Codex session list and message-history queries via A2A JSON-RPC extension methods (default endpoint: `POST /`). No extra custom REST endpoint is introduced.
+This service exposes Codex session list and message-history queries via A2A JSON-RPC extension methods on `POST /`. No extra custom REST endpoint is introduced.
 
-- Trigger: call extension methods through A2A JSON-RPC
+- Trigger: call extension methods on the shared JSON-RPC endpoint
 - Auth: same `Authorization: Bearer <token>`
 - Privacy guard: when `A2A_LOG_PAYLOADS=true`, request/response bodies are still suppressed for `method=codex.sessions.*`
-- Endpoint discovery: prefer `additional_interfaces[]` with `transport=jsonrpc` from Agent Card
+- Endpoint discovery: use `supported_interfaces[]` for the shared A2A JSON-RPC surface, then use the authenticated extended card and OpenAPI for provider-private method discovery and contract details
 - Result format:
   - `result.items` is always an array of A2A standard objects
   - session list => `Task` with `status.state=completed`
@@ -805,9 +802,9 @@ curl -sS http://127.0.0.1:8000/ \
     "params": {
       "thread_id": "thr-1",
       "request": {
-        "gitInfo": {
+        "git_info": {
           "branch": "feature/thread-lifecycle",
-          "originUrl": "https://github.com/example/repo.git"
+          "origin_url": "https://github.com/example/repo.git"
         }
       }
     }
@@ -841,7 +838,7 @@ curl -sS http://127.0.0.1:8000/ \
     "params": {
       "request": {
         "events": ["thread.started", "thread.status.changed", "thread.archived"],
-        "threadIds": ["thr-1"]
+        "thread_ids": ["thr-1"]
       }
     }
   }'
@@ -910,7 +907,7 @@ Turn-control guidance:
 
 - use `codex.turns.steer` only when the target thread already has an active regular turn
 - pass `expected_turn_id` so the request fails fast if the active turn changed before the steer request arrived
-- `request.parts` accepts the same stable rich input items as `codex.sessions.prompt_async`
+- `request.parts` accepts the same stable rich input items as core chat requests
 - turn-level override fields are intentionally rejected, including `metadata`, `metadata.codex.directory`, `metadata.codex.execution`, and request-level model/agent/system variants
 
 ### Turn Steer (`codex.turns.steer`)
@@ -946,7 +943,7 @@ This service exposes provider-private review-start control through JSON-RPC:
 
 Review-control guidance:
 
-- use `codex.review.start` when you want the upstream reviewer surface rather than a slash command sent through `codex.sessions.command`
+- use `codex.review.start` when you want the upstream reviewer surface rather than a normal chat turn
 - supported target types are `uncommittedChanges`, `baseBranch`, `commit`, and `custom`
 - `delivery` supports `inline` and `detached`
 - `codex.review.start` remains control-only and returns the review handle (`turn_id`, `review_thread_id`)
@@ -1043,7 +1040,7 @@ The bridge is intentionally coarse-grained:
 
 ## Codex Interrupt Callback (A2A Extension)
 
-When stream metadata reports an interrupt request at `metadata.shared.interrupt`, clients can reply through JSON-RPC extension methods:
+When stream metadata reports an interrupt request at `metadata.shared.interrupt`, clients can reply through JSON-RPC extension methods on `POST /`:
 
 - asked lifecycle events expose `phase=asked`
 - resolved lifecycle events expose `phase=resolved`

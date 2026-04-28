@@ -59,34 +59,6 @@ def apply_turn_start_execution_options(
     return params
 
 
-def format_shell_response(result: dict[str, Any]) -> str:
-    exit_code = result.get("exitCode")
-    stdout = result.get("stdout")
-    stderr = result.get("stderr")
-    lines: list[str] = [f"exit_code: {exit_code}"]
-    if isinstance(stdout, str) and stdout:
-        lines.append("stdout:")
-        lines.append(stdout.rstrip())
-    if isinstance(stderr, str) and stderr:
-        lines.append("stderr:")
-        lines.append(stderr.rstrip())
-    return "\n".join(lines)
-
-
-def build_shell_exec_params(
-    *,
-    command_text: str,
-    directory: str | None,
-    default_workspace_root: str | None,
-) -> dict[str, Any]:
-    params: dict[str, Any] = {"command": shlex.split(command_text)}
-    if directory:
-        params["cwd"] = directory
-    elif default_workspace_root:
-        params["cwd"] = default_workspace_root
-    return params
-
-
 def build_interactive_exec_params(
     *,
     command_text: str,
@@ -129,6 +101,88 @@ def build_interactive_exec_params(
     return params
 
 
+def build_discovery_skills_params(params: dict[str, Any] | None) -> dict[str, Any]:
+    if not isinstance(params, dict):
+        return {}
+    rpc_params: dict[str, Any] = {}
+    if "cwds" in params:
+        rpc_params["cwds"] = params["cwds"]
+    if "force_reload" in params:
+        rpc_params["forceReload"] = params["force_reload"]
+    extra_roots = params.get("per_cwd_extra_user_roots")
+    if isinstance(extra_roots, list):
+        rpc_params["perCwdExtraUserRoots"] = [
+            {
+                "cwd": item["cwd"],
+                "extraUserRoots": item["extra_user_roots"],
+            }
+            for item in extra_roots
+            if isinstance(item, dict) and "cwd" in item and "extra_user_roots" in item
+        ]
+    return rpc_params
+
+
+def build_discovery_apps_params(params: dict[str, Any] | None) -> dict[str, Any]:
+    if not isinstance(params, dict):
+        return {}
+    rpc_params: dict[str, Any] = {}
+    if "cursor" in params:
+        rpc_params["cursor"] = params["cursor"]
+    if "limit" in params:
+        rpc_params["limit"] = params["limit"]
+    if "thread_id" in params:
+        rpc_params["threadId"] = params["thread_id"]
+    if "force_refetch" in params:
+        rpc_params["forceRefetch"] = params["force_refetch"]
+    return rpc_params
+
+
+def build_discovery_plugins_params(params: dict[str, Any] | None) -> dict[str, Any]:
+    if not isinstance(params, dict):
+        return {}
+    rpc_params: dict[str, Any] = {}
+    if "cwds" in params:
+        rpc_params["cwds"] = params["cwds"]
+    if "force_remote_sync" in params:
+        rpc_params["forceRemoteSync"] = params["force_remote_sync"]
+    return rpc_params
+
+
+def build_discovery_plugin_read_params(params: dict[str, Any] | None) -> dict[str, Any]:
+    if not isinstance(params, dict):
+        return {}
+    rpc_params: dict[str, Any] = {}
+    if "marketplace_path" in params:
+        rpc_params["marketplacePath"] = params["marketplace_path"]
+    if "plugin_name" in params:
+        rpc_params["pluginName"] = params["plugin_name"]
+    return rpc_params
+
+
+def build_thread_rpc_params(
+    thread_id: str,
+    params: dict[str, Any] | None,
+) -> dict[str, Any]:
+    rpc_params: dict[str, Any] = {"threadId": thread_id}
+    if not isinstance(params, dict):
+        return rpc_params
+    for key, value in params.items():
+        if key == "directory" or value is None:
+            continue
+        if key == "git_info" and isinstance(value, dict):
+            git_info = {
+                "branch": value.get("branch"),
+                "sha": value.get("sha"),
+                "originUrl": value.get("origin_url"),
+            }
+            rpc_params["gitInfo"] = {
+                field: item for field, item in git_info.items() if item is not None
+            }
+            continue
+        rpc_params[key] = value
+    return rpc_params
+
+
 def format_exec_result_text(result: dict[str, Any]) -> str:
     exit_code = result.get("exitCode")
     stdout = result.get("stdout")
@@ -141,10 +195,3 @@ def format_exec_result_text(result: dict[str, Any]) -> str:
         lines.append("stderr:")
         lines.append(stderr.rstrip())
     return "\n".join(lines)
-
-
-def uuid_like_suffix(value: str) -> str:
-    normalized = value.strip().replace(" ", "-")
-    if not normalized:
-        return "empty"
-    return normalized[:32]

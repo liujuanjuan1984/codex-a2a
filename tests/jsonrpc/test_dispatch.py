@@ -4,7 +4,6 @@ from codex_a2a.contracts.extensions import (
     INTERRUPT_CALLBACK_METHODS,
     INTERRUPT_RECOVERY_METHODS,
     REVIEW_CONTROL_METHODS,
-    SESSION_CONTROL_METHODS,
     SESSION_QUERY_METHODS,
     THREAD_LIFECYCLE_METHODS,
     TURN_CONTROL_METHODS,
@@ -16,7 +15,6 @@ def test_extension_method_registry_partitions_methods() -> None:
     registry = ExtensionMethodRegistry.from_methods(
         {
             **SESSION_QUERY_METHODS,
-            **SESSION_CONTROL_METHODS,
             **DISCOVERY_METHODS,
             "thread_fork": THREAD_LIFECYCLE_METHODS["fork"],
             "thread_archive": THREAD_LIFECYCLE_METHODS["archive"],
@@ -39,7 +37,6 @@ def test_extension_method_registry_partitions_methods() -> None:
             SESSION_QUERY_METHODS["get_session_messages"],
         }
     )
-    assert registry.session_control_methods == frozenset(SESSION_CONTROL_METHODS.values())
     assert registry.discovery_query_methods == frozenset(
         {
             DISCOVERY_METHODS["list_skills"],
@@ -55,19 +52,17 @@ def test_extension_method_registry_partitions_methods() -> None:
     assert registry.review_control_methods == frozenset(REVIEW_CONTROL_METHODS.values())
     assert registry.exec_control_methods == frozenset(EXEC_CONTROL_METHODS.values())
     assert registry.interrupt_callback_methods == frozenset(INTERRUPT_CALLBACK_METHODS.values())
-    assert registry.is_extension_method(SESSION_CONTROL_METHODS["command"]) is True
+    assert registry.is_extension_method(SESSION_QUERY_METHODS["list_sessions"]) is True
     assert registry.is_extension_method(THREAD_LIFECYCLE_METHODS["watch"]) is True
     assert registry.is_extension_method(TURN_CONTROL_METHODS["steer"]) is True
     assert registry.is_extension_method(EXEC_CONTROL_METHODS["exec_start"]) is True
 
 
-def test_extension_method_registry_omits_missing_shell_method() -> None:
+def test_extension_method_registry_without_optional_surfaces() -> None:
     registry = ExtensionMethodRegistry.from_methods(
         {
             "list_sessions": SESSION_QUERY_METHODS["list_sessions"],
             "get_session_messages": SESSION_QUERY_METHODS["get_session_messages"],
-            "prompt_async": SESSION_CONTROL_METHODS["prompt_async"],
-            "command": SESSION_CONTROL_METHODS["command"],
             **DISCOVERY_METHODS,
             "thread_fork": THREAD_LIFECYCLE_METHODS["fork"],
             "thread_archive": THREAD_LIFECYCLE_METHODS["archive"],
@@ -88,12 +83,6 @@ def test_extension_method_registry_omits_missing_shell_method() -> None:
         }
     )
 
-    assert registry.session_control_methods == frozenset(
-        {
-            SESSION_CONTROL_METHODS["prompt_async"],
-            SESSION_CONTROL_METHODS["command"],
-        }
-    )
     assert registry.discovery_query_methods == frozenset(
         {
             DISCOVERY_METHODS["list_skills"],
@@ -108,6 +97,6 @@ def test_extension_method_registry_omits_missing_shell_method() -> None:
     assert registry.turn_control_methods == frozenset(TURN_CONTROL_METHODS.values())
     assert registry.review_control_methods == frozenset(REVIEW_CONTROL_METHODS.values())
     assert registry.exec_control_methods == frozenset(EXEC_CONTROL_METHODS.values())
-    assert registry.is_extension_method(SESSION_CONTROL_METHODS["command"]) is True
+    assert registry.is_extension_method(SESSION_QUERY_METHODS["get_session_messages"]) is True
     assert registry.is_extension_method(THREAD_LIFECYCLE_METHODS["fork"]) is True
     assert registry.is_extension_method("tasks/send") is False

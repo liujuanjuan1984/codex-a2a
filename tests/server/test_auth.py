@@ -6,7 +6,6 @@ from starlette.requests import Request
 
 from codex_a2a.auth import (
     CAPABILITY_EXEC_CONTROL,
-    CAPABILITY_SESSION_SHELL,
     CAPABILITY_TURN_CONTROL,
     AuthenticatedPrincipal,
     authenticate_static_credential,
@@ -67,7 +66,7 @@ def test_authenticate_static_credential_supports_bearer_and_basic() -> None:
                 "scheme": "basic",
                 "username": "ops",
                 "password": "ops-pass",  # pragma: allowlist secret
-                "capabilities": ["session_shell"],
+                "capabilities": ["exec_control"],
             },
         ),
     )
@@ -89,7 +88,7 @@ def test_authenticate_static_credential_supports_bearer_and_basic() -> None:
     )
     assert basic_principal is not None
     assert basic_principal.identity == "ops"
-    assert basic_principal.capabilities == (CAPABILITY_SESSION_SHELL,)
+    assert basic_principal.capabilities == (CAPABILITY_EXEC_CONTROL,)
     assert basic_principal.credential_id == "ops-basic"
 
 
@@ -107,7 +106,6 @@ def test_build_static_auth_credentials_assigns_turn_control_to_basic_by_default(
     credentials = build_static_auth_credentials(settings)
 
     assert credentials[0].capabilities == (
-        CAPABILITY_SESSION_SHELL,
         CAPABILITY_EXEC_CONTROL,
         CAPABILITY_TURN_CONTROL,
     )
@@ -118,10 +116,9 @@ def test_request_has_capability_reads_authenticated_principal() -> None:
         AuthenticatedPrincipal(
             identity="ops",
             auth_scheme="basic",
-            capabilities=(CAPABILITY_SESSION_SHELL,),
+            capabilities=(CAPABILITY_EXEC_CONTROL,),
         )
     )
 
-    assert request_has_capability(request, CAPABILITY_SESSION_SHELL) is True
-    assert request_has_capability(request, CAPABILITY_EXEC_CONTROL) is False
+    assert request_has_capability(request, CAPABILITY_EXEC_CONTROL) is True
     assert request_has_capability(request, CAPABILITY_TURN_CONTROL) is False

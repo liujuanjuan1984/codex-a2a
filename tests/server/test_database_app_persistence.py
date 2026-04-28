@@ -8,6 +8,7 @@ import httpx
 import pytest
 from a2a.types import Task, TaskState, TaskStatus
 
+from codex_a2a.contracts.extensions import EXTENSION_JSONRPC_PATH
 from tests.support.settings import make_settings
 
 
@@ -241,7 +242,7 @@ async def test_database_backend_persists_task_session_and_interrupt_state_across
         transport = httpx.ASGITransport(app=app2)
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
             response = await client.post(
-                "/",
+                EXTENSION_JSONRPC_PATH,
                 headers={"Authorization": "Bearer test-token"},
                 json={
                     "jsonrpc": "2.0",

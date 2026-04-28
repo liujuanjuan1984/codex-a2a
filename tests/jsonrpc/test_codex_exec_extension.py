@@ -3,6 +3,7 @@ from unittest.mock import ANY, AsyncMock
 import httpx
 import pytest
 
+from codex_a2a.contracts.extensions import EXTENSION_JSONRPC_PATH
 from tests.support.dummy_clients import DummySessionQueryCodexClient as DummyCodexClient
 from tests.support.http_auth import basic_auth_header as _basic_auth_header
 from tests.support.jsonrpc_errors import (
@@ -55,7 +56,7 @@ async def test_exec_start_routes_to_exec_runtime(monkeypatch) -> None:
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.post(
-            "/",
+            EXTENSION_JSONRPC_PATH,
             headers=_basic_auth_header("operator", "op-pass"),
             json={
                 "jsonrpc": "2.0",
@@ -65,7 +66,7 @@ async def test_exec_start_routes_to_exec_runtime(monkeypatch) -> None:
                     "request": {
                         "command": "bash",
                         "arguments": "-lc 'printf hello'",
-                        "processId": "exec-1",
+                        "process_id": "exec-1",
                         "tty": True,
                         "rows": 24,
                         "cols": 80,
@@ -88,7 +89,7 @@ async def test_exec_start_routes_to_exec_runtime(monkeypatch) -> None:
     assert kwargs["request"] == {
         "command": "bash",
         "arguments": "-lc 'printf hello'",
-        "processId": "exec-1",
+        "process_id": "exec-1",
         "tty": True,
         "rows": 24,
         "cols": 80,
@@ -136,33 +137,33 @@ async def test_exec_write_resize_and_terminate_route_to_exec_runtime(monkeypatch
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         headers = _basic_auth_header("operator", "op-pass")
         write_response = await client.post(
-            "/",
+            EXTENSION_JSONRPC_PATH,
             headers=headers,
             json={
                 "jsonrpc": "2.0",
                 "id": 202,
                 "method": "codex.exec.write",
-                "params": {"request": {"processId": "exec-1", "deltaBase64": "cHdkCg=="}},
+                "params": {"request": {"process_id": "exec-1", "delta_base64": "cHdkCg=="}},
             },
         )
         resize_response = await client.post(
-            "/",
+            EXTENSION_JSONRPC_PATH,
             headers=headers,
             json={
                 "jsonrpc": "2.0",
                 "id": 203,
                 "method": "codex.exec.resize",
-                "params": {"request": {"processId": "exec-1", "rows": 40, "cols": 120}},
+                "params": {"request": {"process_id": "exec-1", "rows": 40, "cols": 120}},
             },
         )
         terminate_response = await client.post(
-            "/",
+            EXTENSION_JSONRPC_PATH,
             headers=headers,
             json={
                 "jsonrpc": "2.0",
                 "id": 204,
                 "method": "codex.exec.terminate",
-                "params": {"request": {"processId": "exec-1"}},
+                "params": {"request": {"process_id": "exec-1"}},
             },
         )
 
@@ -215,7 +216,7 @@ async def test_exec_control_rejects_invalid_request_shapes(monkeypatch) -> None:
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         headers = _basic_auth_header("operator", "op-pass")
         start_response = await client.post(
-            "/",
+            EXTENSION_JSONRPC_PATH,
             headers=headers,
             json={
                 "jsonrpc": "2.0",
@@ -225,23 +226,23 @@ async def test_exec_control_rejects_invalid_request_shapes(monkeypatch) -> None:
             },
         )
         write_response = await client.post(
-            "/",
+            EXTENSION_JSONRPC_PATH,
             headers=headers,
             json={
                 "jsonrpc": "2.0",
                 "id": 206,
                 "method": "codex.exec.write",
-                "params": {"request": {"processId": "exec-1"}},
+                "params": {"request": {"process_id": "exec-1"}},
             },
         )
         resize_response = await client.post(
-            "/",
+            EXTENSION_JSONRPC_PATH,
             headers=headers,
             json={
                 "jsonrpc": "2.0",
                 "id": 207,
                 "method": "codex.exec.resize",
-                "params": {"request": {"processId": "exec-1", "rows": 0, "cols": 120}},
+                "params": {"request": {"process_id": "exec-1", "rows": 0, "cols": 120}},
             },
         )
 
@@ -282,20 +283,20 @@ async def test_exec_control_maps_missing_session_lookup_to_business_error(monkey
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.post(
-            "/",
+            EXTENSION_JSONRPC_PATH,
             headers=_basic_auth_header("operator", "op-pass"),
             json={
                 "jsonrpc": "2.0",
                 "id": 208,
                 "method": "codex.exec.write",
-                "params": {"request": {"processId": "exec-missing", "closeStdin": True}},
+                "params": {"request": {"process_id": "exec-missing", "close_stdin": True}},
             },
         )
 
     payload = response.json()
     assert payload["error"]["code"] == -32009
     assert _error_reason(payload) == "EXEC_SESSION_NOT_FOUND"
-    assert _error_context(payload)["processId"] == "exec-missing"
+    assert _error_context(payload)["process_id"] == "exec-missing"
 
 
 @pytest.mark.asyncio
@@ -327,20 +328,20 @@ async def test_exec_control_maps_forbidden_session_access_to_business_error(monk
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.post(
-            "/",
+            EXTENSION_JSONRPC_PATH,
             headers=_basic_auth_header("operator", "op-pass"),
             json={
                 "jsonrpc": "2.0",
                 "id": 209,
                 "method": "codex.exec.write",
-                "params": {"request": {"processId": "exec-1", "closeStdin": True}},
+                "params": {"request": {"process_id": "exec-1", "close_stdin": True}},
             },
         )
 
     payload = response.json()
     assert payload["error"]["code"] == -32018
     assert _error_reason(payload) == "EXEC_FORBIDDEN"
-    assert _error_context(payload)["processId"] == "exec-1"
+    assert _error_context(payload)["process_id"] == "exec-1"
 
 
 @pytest.mark.asyncio
@@ -358,7 +359,7 @@ async def test_exec_control_requires_exec_capability(monkeypatch) -> None:
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.post(
-            "/",
+            EXTENSION_JSONRPC_PATH,
             headers={"Authorization": "Bearer t-1"},
             json={
                 "jsonrpc": "2.0",
@@ -374,4 +375,4 @@ async def test_exec_control_requires_exec_capability(monkeypatch) -> None:
     context = _error_context(payload)
     assert context["method"] == "codex.exec.start"
     assert context["capability"] == "exec_control"
-    assert context["credentialId"] == "test-bearer"
+    assert context["credential_id"] == "test-bearer"

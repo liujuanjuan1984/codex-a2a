@@ -3,6 +3,7 @@ from unittest.mock import AsyncMock
 import httpx
 import pytest
 
+from codex_a2a.contracts.extensions import EXTENSION_JSONRPC_PATH
 from tests.support.dummy_clients import DummySessionQueryCodexClient as DummyCodexClient
 from tests.support.settings import make_settings
 
@@ -28,45 +29,45 @@ async def test_discovery_extension_routes_read_only_methods(monkeypatch) -> None
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         headers = {"Authorization": "Bearer t-1"}
         skills_response = await client.post(
-            "/",
+            EXTENSION_JSONRPC_PATH,
             headers=headers,
             json={
                 "jsonrpc": "2.0",
                 "id": 301,
                 "method": "codex.discovery.skills.list",
-                "params": {"cwds": ["/workspace/project"], "forceReload": True},
+                "params": {"cwds": ["/workspace/project"], "force_reload": True},
             },
         )
         apps_response = await client.post(
-            "/",
+            EXTENSION_JSONRPC_PATH,
             headers=headers,
             json={
                 "jsonrpc": "2.0",
                 "id": 302,
                 "method": "codex.discovery.apps.list",
-                "params": {"limit": 20, "forceRefetch": False},
+                "params": {"limit": 20, "force_refetch": False},
             },
         )
         plugins_response = await client.post(
-            "/",
+            EXTENSION_JSONRPC_PATH,
             headers=headers,
             json={
                 "jsonrpc": "2.0",
                 "id": 303,
                 "method": "codex.discovery.plugins.list",
-                "params": {"cwds": ["/workspace/project"], "forceRemoteSync": False},
+                "params": {"cwds": ["/workspace/project"], "force_remote_sync": False},
             },
         )
         plugin_response = await client.post(
-            "/",
+            EXTENSION_JSONRPC_PATH,
             headers=headers,
             json={
                 "jsonrpc": "2.0",
                 "id": 304,
                 "method": "codex.discovery.plugins.read",
                 "params": {
-                    "marketplacePath": "/workspace/project/.codex/plugins/marketplace.json",
-                    "pluginName": "sample",
+                    "marketplace_path": "/workspace/project/.codex/plugins/marketplace.json",
+                    "plugin_name": "sample",
                 },
             },
         )
@@ -75,26 +76,26 @@ async def test_discovery_extension_routes_read_only_methods(monkeypatch) -> None
     assert skills_response.json()["result"]["items"][0]["skills"][0]["path"].endswith("SKILL.md")
     assert dummy.last_skills_params == {
         "cwds": ["/workspace/project"],
-        "forceReload": True,
+        "force_reload": True,
     }
 
     assert apps_response.status_code == 200
     assert apps_response.json()["result"]["items"][0]["mention_path"] == "app://demo-app"
-    assert dummy.last_apps_params == {"limit": 20, "forceRefetch": False}
+    assert dummy.last_apps_params == {"limit": 20, "force_refetch": False}
 
     assert plugins_response.status_code == 200
     plugin_summary = plugins_response.json()["result"]["items"][0]["plugins"][0]
     assert plugin_summary["mention_path"] == "plugin://sample@test"
     assert dummy.last_plugins_params == {
         "cwds": ["/workspace/project"],
-        "forceRemoteSync": False,
+        "force_remote_sync": False,
     }
 
     assert plugin_response.status_code == 200
     assert plugin_response.json()["result"]["item"]["mention_path"] == "plugin://sample@test"
     assert dummy.last_plugin_read_params == {
-        "marketplacePath": "/workspace/project/.codex/plugins/marketplace.json",
-        "pluginName": "sample",
+        "marketplace_path": "/workspace/project/.codex/plugins/marketplace.json",
+        "plugin_name": "sample",
     }
 
 
@@ -117,7 +118,7 @@ async def test_discovery_watch_routes_to_runtime(monkeypatch) -> None:
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.post(
-            "/",
+            EXTENSION_JSONRPC_PATH,
             headers={"Authorization": "Bearer t-1"},
             json={
                 "jsonrpc": "2.0",
@@ -151,17 +152,17 @@ async def test_discovery_extension_rejects_invalid_request_shapes(monkeypatch) -
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         headers = {"Authorization": "Bearer t-1"}
         skills_response = await client.post(
-            "/",
+            EXTENSION_JSONRPC_PATH,
             headers=headers,
             json={
                 "jsonrpc": "2.0",
                 "id": 305,
                 "method": "codex.discovery.skills.list",
-                "params": {"cwds": [""], "forceReload": True},
+                "params": {"cwds": [""], "force_reload": True},
             },
         )
         apps_response = await client.post(
-            "/",
+            EXTENSION_JSONRPC_PATH,
             headers=headers,
             json={
                 "jsonrpc": "2.0",
@@ -171,17 +172,17 @@ async def test_discovery_extension_rejects_invalid_request_shapes(monkeypatch) -
             },
         )
         plugin_response = await client.post(
-            "/",
+            EXTENSION_JSONRPC_PATH,
             headers=headers,
             json={
                 "jsonrpc": "2.0",
                 "id": 307,
                 "method": "codex.discovery.plugins.read",
-                "params": {"marketplacePath": "", "pluginName": "sample"},
+                "params": {"marketplace_path": "", "plugin_name": "sample"},
             },
         )
         watch_response = await client.post(
-            "/",
+            EXTENSION_JSONRPC_PATH,
             headers=headers,
             json={
                 "jsonrpc": "2.0",

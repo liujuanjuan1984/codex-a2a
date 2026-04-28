@@ -104,7 +104,10 @@ async def handle_thread_lifecycle_control_request(
                 request=(
                     None
                     if watch_params is None or watch_params.request is None
-                    else watch_params.request.model_dump(by_alias=True, exclude_none=True)
+                    else watch_params.request.model_dump(
+                        by_alias=False,
+                        exclude_none=True,
+                    )
                 ),
                 context=call_context,
             )
@@ -130,7 +133,7 @@ async def handle_thread_lifecycle_control_request(
                 params=(
                     None
                     if fork_params.request is None
-                    else fork_params.request.model_dump(by_alias=True, exclude_none=True)
+                    else fork_params.request.model_dump(exclude_none=True)
                 ),
             )
             result = {"ok": True, "thread_id": thread["id"], "thread": thread}
@@ -158,7 +161,7 @@ async def handle_thread_lifecycle_control_request(
             thread = await app._codex_client.thread_metadata_update(
                 metadata_params.thread_id,
                 params=metadata_params.request.model_dump(
-                    by_alias=True,
+                    by_alias=False,
                     exclude_none=False,
                     exclude_unset=True,
                 ),

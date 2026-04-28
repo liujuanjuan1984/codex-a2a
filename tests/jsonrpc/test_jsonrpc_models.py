@@ -17,7 +17,6 @@ from codex_a2a.jsonrpc.params import (
     parse_list_sessions_params,
     parse_permission_reply_params,
     parse_permissions_reply_params,
-    parse_prompt_async_params,
     parse_review_start_params,
     parse_review_watch_params,
     parse_thread_archive_params,
@@ -27,125 +26,6 @@ from codex_a2a.jsonrpc.params import (
     parse_thread_watch_release_params,
     parse_turn_steer_params,
 )
-
-
-def test_parse_prompt_async_params_preserves_aliases() -> None:
-    payload = parse_prompt_async_params(
-        {
-            "session_id": "s-1",
-            "request": {
-                "parts": [{"type": "text", "text": "hello"}],
-                "messageID": "msg-1",
-            },
-            "metadata": {
-                "codex": {
-                    "directory": "/workspace",
-                    "execution": {
-                        "model": "gpt-5.2-codex",
-                        "effort": "medium",
-                        "summary": "concise",
-                        "personality": "pragmatic",
-                    },
-                }
-            },
-        }
-    )
-
-    assert payload.session_id == "s-1"
-    assert payload.request.model_dump(by_alias=True, exclude_none=True) == {
-        "parts": [{"type": "text", "text": "hello"}],
-        "messageID": "msg-1",
-    }
-    assert payload.metadata is not None
-    assert payload.metadata.codex is not None
-    assert payload.metadata.codex.directory == "/workspace"
-    assert payload.metadata.codex.execution is not None
-    assert payload.metadata.codex.execution.model == "gpt-5.2-codex"
-    assert payload.metadata.codex.execution.effort == "medium"
-    assert payload.metadata.codex.execution.summary == "concise"
-    assert payload.metadata.codex.execution.personality == "pragmatic"
-
-
-def test_parse_prompt_async_params_accepts_rich_input_parts() -> None:
-    payload = parse_prompt_async_params(
-        {
-            "session_id": "s-1",
-            "request": {
-                "parts": [
-                    {"type": "text", "text": "Summarize the screenshot."},
-                    {
-                        "type": "image",
-                        "url": "https://example.com/screenshot.png",
-                    },
-                    {
-                        "type": "mention",
-                        "name": "Demo App",
-                        "path": "app://demo-app",
-                    },
-                    {
-                        "type": "skill",
-                        "name": "skill-creator",
-                        "path": "/tmp/skill-creator/SKILL.md",
-                    },
-                ]
-            },
-        }
-    )
-
-    assert payload.request.model_dump(by_alias=True, exclude_none=True)["parts"] == [
-        {"type": "text", "text": "Summarize the screenshot."},
-        {"type": "image", "url": "https://example.com/screenshot.png"},
-        {"type": "mention", "name": "Demo App", "path": "app://demo-app"},
-        {
-            "type": "skill",
-            "name": "skill-creator",
-            "path": "/tmp/skill-creator/SKILL.md",
-        },
-    ]
-
-
-@pytest.mark.parametrize(
-    ("payload", "message", "data"),
-    [
-        (
-            {
-                "session_id": "s-1",
-                "request": {
-                    "parts": [{"type": "text", "text": "hello"}],
-                    "extra": True,
-                },
-            },
-            "Unsupported fields: request.extra",
-            {
-                "type": "INVALID_FIELD",
-                "field": "request",
-                "fields": ["request.extra"],
-            },
-        ),
-        (
-            {
-                "session_id": "s-1",
-                "request": {"parts": [{"type": "text", "text": "hello"}]},
-                "metadata": {"extra": True},
-            },
-            "Unsupported metadata fields: extra",
-            {
-                "type": "INVALID_FIELD",
-                "fields": ["metadata.extra"],
-            },
-        ),
-    ],
-)
-def test_parse_prompt_async_params_rejects_unknown_fields(
-    payload: dict,
-    message: str,
-    data: dict,
-) -> None:
-    with pytest.raises(JsonRpcParamsValidationError) as exc_info:
-        parse_prompt_async_params(payload)
-
-    assert str(exc_info.value) == message
-    assert exc_info.value.data == data
 
 
 def test_parse_permission_reply_params_rejects_missing_reply() -> None:
@@ -199,19 +79,19 @@ def test_parse_list_sessions_params_rejects_non_integer_limit() -> None:
 
 
 def test_parse_interrupt_recovery_list_params_accepts_type_aliases() -> None:
-    payload = parse_interrupt_recovery_list_params({"interruptType": "permissions"})
+    payload = parse_interrupt_recovery_list_params({"interrupt_type": "permissions"})
 
     assert payload.interrupt_type == "permissions"
 
 
 def test_parse_interrupt_recovery_list_params_rejects_invalid_type() -> None:
     with pytest.raises(JsonRpcParamsValidationError) as exc_info:
-        parse_interrupt_recovery_list_params({"type": "unknown"})
+        parse_interrupt_recovery_list_params({"interrupt_type": "unknown"})
 
     assert str(exc_info.value) == (
         "type must be one of: permission, question, permissions, elicitation"
     )
-    assert exc_info.value.data == {"type": "INVALID_FIELD", "field": "type"}
+    assert exc_info.value.data == {"type": "INVALID_FIELD", "field": "interrupt_type"}
 
 
 def test_parse_list_sessions_params_applies_default_limit() -> None:
@@ -248,94 +128,10 @@ def test_parse_get_session_messages_params_applies_default_limit() -> None:
     assert query == {"limit": SESSION_QUERY_DEFAULT_LIMIT}
 
 
-def test_parse_prompt_async_params_only_uses_fields_for_unsupported_fields() -> None:
-    with pytest.raises(JsonRpcParamsValidationError) as unsupported_exc:
-        parse_prompt_async_params(
-            {
-                "session_id": "s-1",
-                "request": {
-                    "parts": [{"type": "text", "text": "hello"}],
-                    "extra": True,
-                },
-            }
-        )
-
-    assert unsupported_exc.value.data["field"] == "request"
-    assert unsupported_exc.value.data["fields"] == ["request.extra"]
-
-    with pytest.raises(JsonRpcParamsValidationError) as invalid_type_exc:
-        parse_prompt_async_params(
-            {
-                "session_id": "s-1",
-                "request": {"parts": [{"type": "text", "text": 1}]},
-            }
-        )
-
-    assert invalid_type_exc.value.data == {
-        "type": "INVALID_FIELD",
-        "field": "request.parts[0].text",
-    }
-    assert "fields" not in invalid_type_exc.value.data
-
-
-def test_parse_prompt_async_params_rejects_unknown_part_type() -> None:
-    with pytest.raises(JsonRpcParamsValidationError) as exc_info:
-        parse_prompt_async_params(
-            {
-                "session_id": "s-1",
-                "request": {"parts": [{"type": "file", "path": "/tmp/x"}]},
-            }
-        )
-
-    assert str(exc_info.value) == "request.parts[].type must be one of: text, image, mention, skill"
-    assert exc_info.value.data == {
-        "type": "INVALID_FIELD",
-        "field": "request.parts[0].type",
-    }
-
-
-@pytest.mark.parametrize(
-    ("payload", "message", "field"),
-    [
-        (
-            {
-                "session_id": "s-1",
-                "request": {"parts": [{"type": "text", "text": "hello"}]},
-                "metadata": {"codex": {"execution": "fast"}},
-            },
-            "metadata.codex.execution must be an object",
-            "metadata.codex.execution",
-        ),
-        (
-            {
-                "session_id": "s-1",
-                "request": {"parts": [{"type": "text", "text": "hello"}]},
-                "metadata": {"codex": {"execution": {"effort": "turbo"}}},
-            },
-            (
-                "metadata.codex.execution.effort must be one of: "
-                "high, low, medium, minimal, none, xhigh"
-            ),
-            "metadata.codex.execution.effort",
-        ),
-    ],
-)
-def test_parse_prompt_async_params_rejects_invalid_execution_metadata(
-    payload: dict,
-    message: str,
-    field: str,
-) -> None:
-    with pytest.raises(JsonRpcParamsValidationError) as exc_info:
-        parse_prompt_async_params(payload)
-
-    assert str(exc_info.value) == message
-    assert exc_info.value.data == {"type": "INVALID_FIELD", "field": field}
-
-
 def test_parse_thread_lifecycle_params_preserve_aliases() -> None:
     fork = parse_thread_fork_params(
         {
-            "threadId": "thr-1",
+            "thread_id": "thr-1",
             "request": {"ephemeral": True},
             "metadata": {"codex": {"directory": "/workspace"}},
         }
@@ -343,44 +139,44 @@ def test_parse_thread_lifecycle_params_preserve_aliases() -> None:
     metadata_update = parse_thread_metadata_update_params(
         {
             "thread_id": "thr-1",
-            "request": {"gitInfo": {"branch": "feat/thread-lifecycle", "originUrl": "https://x"}},
+            "request": {"git_info": {"branch": "feat/thread-lifecycle", "origin_url": "https://x"}},
         }
     )
     watch = parse_thread_watch_params(
         {
             "request": {
                 "events": ["thread.started", "thread.status.changed", "thread.started"],
-                "threadIds": ["thr-1", "thr-2", "thr-1"],
+                "thread_ids": ["thr-1", "thr-2", "thr-1"],
             }
         }
     )
-    watch_release = parse_thread_watch_release_params({"taskId": "task-watch-1"})
+    watch_release = parse_thread_watch_release_params({"task_id": "task-watch-1"})
 
     assert fork.thread_id == "thr-1"
     assert fork.request is not None
-    assert fork.request.model_dump(by_alias=True, exclude_none=True) == {"ephemeral": True}
+    assert fork.request.model_dump(exclude_none=True) == {"ephemeral": True}
     assert fork.metadata is not None
     assert fork.metadata.codex is not None
     assert fork.metadata.codex.directory == "/workspace"
-    assert metadata_update.request.model_dump(by_alias=True, exclude_none=True) == {
-        "gitInfo": {
+    assert metadata_update.request.model_dump(exclude_none=True) == {
+        "git_info": {
             "branch": "feat/thread-lifecycle",
-            "originUrl": "https://x",
+            "origin_url": "https://x",
         }
     }
     assert watch.request is not None
-    assert watch.request.model_dump(by_alias=True, exclude_none=True) == {
+    assert watch.request.model_dump(by_alias=False, exclude_none=True) == {
         "events": ["thread.started", "thread.status.changed"],
-        "threadIds": ["thr-1", "thr-2"],
+        "thread_ids": ["thr-1", "thr-2"],
     }
     assert watch_release.task_id == "task-watch-1"
 
 
-def test_parse_turn_and_review_control_params_preserve_aliases() -> None:
+def test_parse_turn_and_review_control_params_use_canonical_shapes() -> None:
     steer = parse_turn_steer_params(
         {
-            "threadId": "thr-1",
-            "expectedTurnId": "turn-1",
+            "thread_id": "thr-1",
+            "expected_turn_id": "turn-1",
             "request": {
                 "parts": [
                     {"type": "text", "text": "Focus on the failing tests first."},
@@ -402,16 +198,16 @@ def test_parse_turn_and_review_control_params_preserve_aliases() -> None:
     )
     review_watch = parse_review_watch_params(
         {
-            "threadId": "thr-1",
-            "reviewThreadId": "thr-1-review",
-            "turnId": "turn-review-1",
+            "thread_id": "thr-1",
+            "review_thread_id": "thr-1-review",
+            "turn_id": "turn-review-1",
             "request": {"events": ["review.started", "review.completed", "review.started"]},
         }
     )
 
     assert steer.thread_id == "thr-1"
     assert steer.expected_turn_id == "turn-1"
-    assert steer.request.model_dump(by_alias=True, exclude_none=True) == {
+    assert steer.request.model_dump(exclude_none=True) == {
         "parts": [
             {"type": "text", "text": "Focus on the failing tests first."},
             {"type": "mention", "name": "Demo App", "path": "app://demo-app"},
@@ -419,7 +215,7 @@ def test_parse_turn_and_review_control_params_preserve_aliases() -> None:
     }
     assert review.thread_id == "thr-1"
     assert review.delivery == "detached"
-    assert review.target.model_dump(by_alias=True, exclude_none=True) == {
+    assert review.target.model_dump(exclude_none=True) == {
         "type": "commit",
         "sha": "commit-demo-123",
         "title": "Polish tui colors",
@@ -428,7 +224,7 @@ def test_parse_turn_and_review_control_params_preserve_aliases() -> None:
     assert review_watch.review_thread_id == "thr-1-review"
     assert review_watch.turn_id == "turn-review-1"
     assert review_watch.request is not None
-    assert review_watch.request.model_dump(by_alias=True, exclude_none=True) == {
+    assert review_watch.request.model_dump(exclude_none=True) == {
         "events": ["review.started", "review.completed"]
     }
 
@@ -450,7 +246,7 @@ def test_parse_turn_and_review_control_params_preserve_aliases() -> None:
         ),
         (
             parse_thread_metadata_update_params,
-            {"thread_id": "thr-1", "request": {"gitInfo": {}}},
+            {"thread_id": "thr-1", "request": {"git_info": {}}},
             "request.git_info must include at least one field",
             "request.git_info",
         ),
@@ -465,7 +261,7 @@ def test_parse_turn_and_review_control_params_preserve_aliases() -> None:
         ),
         (
             parse_thread_watch_params,
-            {"request": {"threadIds": ["thr-1", "  "]}},
+            {"request": {"thread_ids": ["thr-1", "  "]}},
             "request.thread_ids[] must be a non-empty string",
             "request.thread_ids",
         ),
@@ -573,7 +369,7 @@ def test_parse_turn_and_review_control_params_reject_invalid_fields(
     assert exc_info.value.data["field"] == field
 
 
-def test_parse_discovery_param_aliases_preserve_upstream_shapes() -> None:
+def test_parse_discovery_params_use_canonical_shapes() -> None:
     skills = parse_discovery_skills_list_params(
         {
             "cwds": ["/workspace/project"],
@@ -608,22 +404,22 @@ def test_parse_discovery_param_aliases_preserve_upstream_shapes() -> None:
 
     assert skills == {
         "cwds": ["/workspace/project"],
-        "forceReload": True,
-        "perCwdExtraUserRoots": [
+        "force_reload": True,
+        "per_cwd_extra_user_roots": [
             {
                 "cwd": "/workspace/project",
-                "extraUserRoots": ["/workspace/shared-skills"],
+                "extra_user_roots": ["/workspace/shared-skills"],
             }
         ],
     }
-    assert apps == {"limit": 20, "threadId": "thr-1", "forceRefetch": False}
+    assert apps == {"limit": 20, "thread_id": "thr-1", "force_refetch": False}
     assert plugins == {
         "cwds": ["/workspace/project"],
-        "forceRemoteSync": True,
+        "force_remote_sync": True,
     }
     assert plugin == {
-        "marketplacePath": "/workspace/project/.codex/plugins/marketplace.json",
-        "pluginName": "sample",
+        "marketplace_path": "/workspace/project/.codex/plugins/marketplace.json",
+        "plugin_name": "sample",
     }
     assert parse_discovery_watch_params({"request": {"events": ["skills.changed"]}}) == {
         "request": {"events": ["skills.changed"]}
@@ -637,7 +433,7 @@ def test_parse_discovery_param_aliases_preserve_upstream_shapes() -> None:
         (parse_discovery_apps_list_params, {"limit": 0}, "limit"),
         (
             parse_discovery_plugin_read_params,
-            {"marketplacePath": "", "pluginName": "sample"},
+            {"marketplace_path": "", "plugin_name": "sample"},
             "marketplace_path",
         ),
     ],

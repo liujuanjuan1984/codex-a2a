@@ -17,9 +17,9 @@ def test_normalize_tool_call_payload_requires_explicit_kind() -> None:
 def test_tool_call_state_payload_from_part_extracts_structured_state() -> None:
     payload = tool_call_state_payload_from_part(
         {
-            "callID": "call-1",
+            "call_id": "call-1",
             "tool": "bash",
-            "sourceMethod": "commandExecution",
+            "source_method": "commandExecution",
             "state": {
                 "status": "completed",
                 "title": "pytest",
@@ -60,15 +60,15 @@ def test_tool_call_output_delta_payload_preserves_verbatim_text() -> None:
     }
 
 
-def test_normalize_tool_call_payload_accepts_a2a_style_aliases() -> None:
+def test_normalize_tool_call_payload_requires_canonical_fields() -> None:
     payload = normalize_tool_call_payload(
         {
             "kind": "output_delta",
-            "sourceMethod": "commandExecution",
-            "callId": "call-1",
+            "source_method": "commandExecution",
+            "call_id": "call-1",
             "tool": "bash",
             "status": "running",
-            "outputDelta": "Passed\n",
+            "output_delta": "Passed\n",
         }
     )
 
@@ -86,14 +86,14 @@ def test_normalize_tool_call_payload_accepts_a2a_style_aliases() -> None:
 def test_tool_call_state_payload_from_item_normalizes_command_execution_lifecycle() -> None:
     payload = tool_call_state_payload_from_item(
         {
-            "type": "commandExecution",
-            "id": "call-1",
-            "status": "inProgress",
+            "source_method": "commandExecution",
+            "call_id": "call-1",
+            "status": "running",
             "command": "/bin/bash -lc pytest",
             "cwd": "/workspace",
-            "aggregatedOutput": "Passed\n",
-            "exitCode": 0,
-            "durationMs": 12,
+            "aggregated_output": "Passed\n",
+            "exit_code": 0,
+            "duration_ms": 12,
         }
     )
 
@@ -118,8 +118,8 @@ def test_tool_call_state_payload_from_item_normalizes_command_execution_lifecycl
 def test_tool_call_state_payload_from_item_summarizes_file_change_paths() -> None:
     payload = tool_call_state_payload_from_item(
         {
-            "type": "fileChange",
-            "id": "call-file-1",
+            "source_method": "fileChange",
+            "call_id": "call-file-1",
             "status": "completed",
             "changes": [
                 {"path": "/workspace/src/app.py", "kind": {"type": "edit"}},
@@ -147,8 +147,8 @@ def test_tool_call_state_payload_from_item_summarizes_file_change_paths() -> Non
 def test_tool_call_payload_contract_declares_machine_readable_variants() -> None:
     contract = build_tool_call_payload_contract_params()
 
-    assert contract["aliases"]["call_id"] == ["callId", "callID"]
-    assert contract["status_aliases"]["inProgress"] == "running"
+    assert contract["aliases"]["call_id"] == []
+    assert contract["status_aliases"] == {}
     assert contract["variants"]["state"]["optional_fields"] == [
         "source_method",
         "call_id",

@@ -192,7 +192,7 @@ class CodexThreadLifecycleRuntime:
     def _normalize_thread_ids(self, request: dict[str, Any] | None) -> frozenset[str] | None:
         if not isinstance(request, dict):
             return None
-        raw_thread_ids = request.get("threadIds")
+        raw_thread_ids = request.get("thread_ids")
         if not isinstance(raw_thread_ids, list):
             return None
         normalized = frozenset(

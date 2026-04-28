@@ -164,11 +164,11 @@ def _tool_call_update_event(
     if message_id is not None:
         part["messageID"] = message_id
     if call_id is not None:
-        part["callID"] = call_id
+        part["call_id"] = call_id
     if tool is not None:
         part["tool"] = tool
     if source_method is not None:
-        part["sourceMethod"] = source_method
+        part["source_method"] = source_method
     if status is not None:
         part["state"] = {"status": status}
     return {
@@ -987,7 +987,7 @@ async def test_streaming_emits_structured_tool_part_updates() -> None:
                 delta="",
                 part_id="prt-tool-1",
                 part_overrides={
-                    "callID": "call-1",
+                    "call_id": "call-1",
                     "tool": "bash",
                     "state": {"status": "pending"},
                 },
@@ -999,7 +999,7 @@ async def test_streaming_emits_structured_tool_part_updates() -> None:
                 delta="",
                 part_id="prt-tool-1",
                 part_overrides={
-                    "callID": "call-1",
+                    "call_id": "call-1",
                     "tool": "bash",
                     "state": {"status": "running"},
                 },
@@ -1011,7 +1011,7 @@ async def test_streaming_emits_structured_tool_part_updates() -> None:
                 delta="",
                 part_id="prt-tool-1",
                 part_overrides={
-                    "callID": "call-1",
+                    "call_id": "call-1",
                     "tool": "bash",
                     "state": {"status": "completed"},
                 },
@@ -1671,7 +1671,7 @@ async def test_streaming_interleaves_tool_state_and_output_delta_updates() -> No
                 delta="",
                 part_id="prt-tool-mixed",
                 part_overrides={
-                    "callID": "call-1",
+                    "call_id": "call-1",
                     "tool": "bash",
                     "state": {"status": "pending"},
                 },
@@ -1699,7 +1699,7 @@ async def test_streaming_interleaves_tool_state_and_output_delta_updates() -> No
                 delta="",
                 part_id="prt-tool-mixed",
                 part_overrides={
-                    "callID": "call-1",
+                    "call_id": "call-1",
                     "tool": "bash",
                     "state": {"status": "running"},
                 },
@@ -1727,7 +1727,7 @@ async def test_streaming_interleaves_tool_state_and_output_delta_updates() -> No
                 delta="",
                 part_id="prt-tool-mixed",
                 part_overrides={
-                    "callID": "call-1",
+                    "call_id": "call-1",
                     "tool": "bash",
                     "state": {"status": "completed"},
                 },

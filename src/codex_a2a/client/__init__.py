@@ -16,11 +16,6 @@ from .errors import (
     A2AUnsupportedOperationError,
 )
 from .manager import A2AClientManager
-from .types import (
-    A2ACancelTaskRequest,
-    A2AGetTaskRequest,
-    A2ASendRequest,
-)
 
 __all__ = [
     "A2AClient",
@@ -37,7 +32,4 @@ __all__ = [
     "A2AUnsupportedBindingError",
     "A2AUnsupportedOperationError",
     "A2APeerProtocolError",
-    "A2ACancelTaskRequest",
-    "A2AGetTaskRequest",
-    "A2ASendRequest",
 ]

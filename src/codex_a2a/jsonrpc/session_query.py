@@ -7,6 +7,7 @@ import httpx
 from a2a.server.jsonrpc_models import InternalError, JSONRPCError
 from starlette.responses import Response
 
+from codex_a2a.a2a_proto import proto_to_python
 from codex_a2a.jsonrpc.errors import (
     ERR_SESSION_NOT_FOUND,
     ERR_UPSTREAM_PAYLOAD_ERROR,
@@ -123,4 +124,7 @@ async def handle_session_query_request(
 
     if base_request.id is None:
         return Response(status_code=204)
-    return app._jsonrpc_success_response(base_request.id, {"items": items})
+    return app._jsonrpc_success_response(
+        base_request.id,
+        {"items": [proto_to_python(item) for item in items]},
+    )

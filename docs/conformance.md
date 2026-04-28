@@ -68,7 +68,7 @@ Each run keeps the following artifacts in the selected output directory:
 When a TCK run fails, inspect the raw report before changing the runtime:
 
 - Some failures may point to real runtime gaps.
-- Some failures may come from TCK assumptions that do not match `a2a-sdk==1.0.1`.
+- Some failures may come from TCK assumptions that do not match `a2a-sdk==1.0.2`.
 - Some failures may come from older A2A naming or schema expectations that no longer match the repository's `1.0` contract.
 - Some failures may be local experiment artifacts from the dummy-backed runtime.
 

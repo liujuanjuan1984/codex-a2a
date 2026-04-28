@@ -13,11 +13,17 @@ from codex_a2a.execution.tool_call_payloads import (
 
 def _extract_tool_status(payload: dict[str, Any]) -> str | None:
     value = payload_helpers.first_string(payload, "status")
-    if value is not None:
+    if value == "inProgress":
+        return "running"
+    if value in {"running", "completed", "failed", "cancelled", "pending"}:
         return value
     state = payload.get("state")
     if isinstance(state, dict):
-        return payload_helpers.first_string(state, "status")
+        state_status = payload_helpers.first_string(state, "status")
+        if state_status == "inProgress":
+            return "running"
+        if state_status in {"running", "completed", "failed", "cancelled", "pending"}:
+            return state_status
     return None
 
 
@@ -31,6 +37,36 @@ def _tool_source_method(method: str) -> ToolCallSourceMethod | None:
     if normalized == "fileChange":
         return "fileChange"
     return None
+
+
+def _normalize_tool_call_item(item: dict[str, Any]) -> dict[str, Any] | None:
+    source_method = payload_helpers.normalized_string(item.get("type"))
+    if source_method not in {"commandExecution", "fileChange"}:
+        return None
+    call_id = payload_helpers.first_string(item, "id")
+    if source_method is None or call_id is None:
+        return None
+
+    normalized: dict[str, Any] = {
+        "source_method": source_method,
+        "call_id": call_id,
+    }
+    status = _extract_tool_status(item)
+    if status is not None:
+        normalized["status"] = status
+    for source_key, target_key in (
+        ("command", "command"),
+        ("cwd", "cwd"),
+        ("aggregatedOutput", "aggregated_output"),
+        ("exitCode", "exit_code"),
+        ("durationMs", "duration_ms"),
+        ("changes", "changes"),
+        ("error", "error"),
+    ):
+        value = item.get(source_key)
+        if value is not None:
+            normalized[target_key] = value
+    return normalized
 
 
 def build_tool_call_output_event(method: str, params: dict[str, Any]) -> dict[str, Any] | None:
@@ -70,13 +106,13 @@ def build_tool_call_output_event(method: str, params: dict[str, Any]) -> dict[st
     if item_id is not None:
         part["messageID"] = item_id
     if call_id is not None:
-        part["callID"] = call_id
+        part["call_id"] = call_id
     if tool is not None:
         part["tool"] = tool
     if status is not None:
         part["state"] = {"status": status}
     if source_method is not None:
-        part["sourceMethod"] = source_method
+        part["source_method"] = source_method
 
     return {
         "type": "message.part.updated",
@@ -93,7 +129,10 @@ def build_tool_call_state_event(params: dict[str, Any]) -> dict[str, Any] | None
     if thread_id is None or not isinstance(item, dict):
         return None
 
-    payload = tool_call_state_payload_from_item(item)
+    normalized_item = _normalize_tool_call_item(item)
+    if normalized_item is None:
+        return None
+    payload = tool_call_state_payload_from_item(normalized_item)
     if payload is None:
         return None
 
@@ -117,13 +156,13 @@ def build_tool_call_state_event(params: dict[str, Any]) -> dict[str, Any] | None
     }
     call_id = payload_data.get("call_id")
     if isinstance(call_id, str) and call_id:
-        part["callID"] = call_id
+        part["call_id"] = call_id
     tool = payload_data.get("tool")
     if isinstance(tool, str) and tool:
         part["tool"] = tool
     source_method = payload_data.get("source_method")
     if isinstance(source_method, str) and source_method:
-        part["sourceMethod"] = source_method
+        part["source_method"] = source_method
     if state_payload:
         part["state"] = state_payload
 

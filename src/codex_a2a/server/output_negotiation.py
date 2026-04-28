@@ -16,6 +16,8 @@ from a2a.types import (
     TaskState,
     TaskStatusUpdateEvent,
 )
+from google.protobuf.message import Message as ProtoMessage  # type: ignore[import-untyped]
+from google.protobuf.struct_pb2 import Struct  # type: ignore[import-untyped]
 
 from codex_a2a.a2a_proto import (
     is_data_part,
@@ -26,6 +28,7 @@ from codex_a2a.a2a_proto import (
     part_text,
     proto_to_python,
     proto_with_updates,
+    to_struct,
 )
 from codex_a2a.media_modes import (
     APPLICATION_JSON_MEDIA_MODE,
@@ -54,45 +57,48 @@ def normalize_accepted_output_modes(
 
 def build_output_negotiation_metadata(
     accepted_output_modes: Iterable[str] | None,
-) -> dict[str, Any] | None:
+) -> Struct | None:
     normalized = normalize_accepted_output_modes(accepted_output_modes)
     if normalized is None:
         return None
-    return {
-        "codex": {
-            OUTPUT_NEGOTIATION_METADATA_KEY: {
-                OUTPUT_NEGOTIATION_ACCEPTED_OUTPUT_MODES_FIELD: sorted(normalized),
+    return to_struct(
+        {
+            "codex": {
+                OUTPUT_NEGOTIATION_METADATA_KEY: {
+                    OUTPUT_NEGOTIATION_ACCEPTED_OUTPUT_MODES_FIELD: sorted(normalized),
+                }
             }
         }
-    }
+    )
 
 
 def merge_output_negotiation_metadata(
-    metadata: dict[str, Any] | None,
+    metadata: ProtoMessage | None,
     accepted_output_modes: Iterable[str] | None,
-) -> dict[str, Any] | None:
+) -> Struct | None:
     negotiation_metadata = build_output_negotiation_metadata(accepted_output_modes)
     if negotiation_metadata is None:
         return metadata
 
-    merged = dict(metadata) if metadata else {}
+    merged = _proto_message_to_dict(metadata) or {}
     codex_metadata = merged.get("codex")
     if not isinstance(codex_metadata, dict):
         codex_metadata = {}
     else:
         codex_metadata = dict(codex_metadata)
 
+    negotiation_dict = _proto_message_to_dict(negotiation_metadata) or {}
     codex_metadata[OUTPUT_NEGOTIATION_METADATA_KEY] = dict(
-        cast(dict[str, Any], negotiation_metadata["codex"][OUTPUT_NEGOTIATION_METADATA_KEY])
+        cast(dict[str, Any], negotiation_dict["codex"][OUTPUT_NEGOTIATION_METADATA_KEY])
     )
     merged["codex"] = codex_metadata
-    return merged
+    return to_struct(merged)
 
 
 def extract_accepted_output_modes_from_metadata(
-    metadata: dict[str, Any] | None,
+    metadata: ProtoMessage | None,
 ) -> frozenset[str] | None:
-    metadata_map = _metadata_to_python(metadata)
+    metadata_map = _proto_message_to_dict(metadata)
     if metadata_map is None:
         return None
     codex_metadata = metadata_map.get("codex")
@@ -115,7 +121,7 @@ def annotate_output_negotiation_metadata(
     if normalized is None:
         return payload
     merged_metadata = merge_output_negotiation_metadata(
-        _metadata_to_python(getattr(payload, "metadata", None)),
+        getattr(payload, "metadata", None),
         normalized,
     )
 
@@ -189,7 +195,9 @@ class NegotiatingResultAggregator(ResultAggregator):
         merged_metadata = merge_output_negotiation_metadata(task.metadata, accepted_output_modes)
         if merged_metadata == task.metadata:
             return
-        task.metadata = merged_metadata
+        task.ClearField("metadata")
+        if merged_metadata is not None:
+            task.metadata.CopyFrom(merged_metadata)
         await self.task_manager._save_task(task)
 
     async def consume_and_emit(self, consumer: EventConsumer):  # noqa: ANN201
@@ -374,12 +382,8 @@ def _part_text_fallback(part: Any) -> str | None:
     return None
 
 
-def _metadata_to_python(metadata: Any) -> dict[str, Any] | None:
+def _proto_message_to_dict(metadata: ProtoMessage | None) -> dict[str, Any] | None:
     if metadata is None:
-        return None
-    if isinstance(metadata, dict):
-        return dict(metadata)
-    if not metadata:
         return None
     converted = proto_to_python(metadata)
     return converted if isinstance(converted, dict) else None

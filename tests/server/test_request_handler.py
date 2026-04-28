@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from types import SimpleNamespace
 from typing import cast
 from unittest.mock import AsyncMock, MagicMock
 
@@ -71,6 +72,60 @@ def _make_message_send_params() -> SendMessageRequest:
     )
 
 
+class _StubActiveTask:
+    def __init__(
+        self,
+        *,
+        events: list[object] | None = None,
+        current_task: Task | Message | None = None,
+        subscribe_error: Exception | None = None,
+    ) -> None:
+        self._events = list(events or [])
+        self._current_task = current_task
+        self._subscribe_error = subscribe_error
+
+    async def subscribe(
+        self,
+        *,
+        request,
+        include_initial_task=False,
+        replace_status_update_with_task=False,
+    ):
+        del request, include_initial_task, replace_status_update_with_task
+        if self._subscribe_error is not None:
+            raise self._subscribe_error
+        for event in self._events:
+            yield event
+
+    async def get_task(self):
+        if self._current_task is None:
+            raise AssertionError("current_task not configured")
+        return self._current_task
+
+
+class _StubActiveTaskHandler(CodexRequestHandler):
+    def __init__(
+        self,
+        *,
+        active_task: _StubActiveTask,
+        task_store=None,
+    ) -> None:
+        super().__init__(
+            agent_executor=MagicMock(),
+            task_store=task_store or InMemoryTaskStore(),
+            agent_card=_make_agent_card(),
+        )
+        self._active_task = active_task
+        self.setup_called = False
+
+    async def _setup_active_task(self, params, context=None):  # noqa: ANN001
+        del context
+        self.setup_called = True
+        task_id = getattr(getattr(params, "message", None), "task_id", None) or "task-1"
+        self._remember_task_output_modes(task_id, self._accepted_output_modes_from_params(params))
+        return self._active_task, SimpleNamespace(task_id=task_id)
+
+
 @pytest.mark.asyncio
 async def test_cancel_is_idempotent_for_already_canceled_task() -> None:
     task_store = InMemoryTaskStore()
@@ -133,45 +188,6 @@ async def test_resubscribe_task_store_failure_maps_to_stable_server_error() -> N
 
 @pytest.mark.asyncio
 async def test_message_send_returns_failed_task_for_task_store_error() -> None:
-    class _Aggregator:
-        async def consume_and_break_on_interrupt(self, _consumer, *, blocking, event_callback):
-            del _consumer, blocking, event_callback
-            raise TaskStoreOperationError("save", "task-1")
-
-    class _Handler(CodexRequestHandler):
-        def __init__(self) -> None:
-            super().__init__(
-                agent_executor=MagicMock(),
-                task_store=MagicMock(),
-                agent_card=_make_agent_card(),
-            )
-            self.queue = AsyncMock()
-            self.producer = MagicMock()
-
-        async def _setup_message_execution(self, params, context=None):  # noqa: ANN001
-            del context
-            aggregator = NegotiatingResultAggregator(
-                MagicMock(),
-                params.configuration.accepted_output_modes if params.configuration else None,
-            )
-            aggregator.consume_and_break_on_interrupt = _Aggregator().consume_and_break_on_interrupt
-            return (
-                MagicMock(),
-                "task-1",
-                self.queue,
-                aggregator,
-                self.producer,
-            )
-
-        async def _cleanup_producer(self, producer_task, task_id):  # noqa: ANN001
-            del producer_task, task_id
-
-        async def _send_push_notification_if_needed(self, task_id, result_aggregator):  # noqa: ANN001
-            del task_id, result_aggregator
-
-        def _track_background_task(self, task):  # noqa: ANN001
-            task.cancel()
-
     params = SendMessageRequest(
         message=Message(
             message_id="m-1",
@@ -181,7 +197,11 @@ async def test_message_send_returns_failed_task_for_task_store_error() -> None:
             context_id="ctx-1",
         )
     )
-    result = await _Handler().on_message_send(params)
+    handler = _StubActiveTaskHandler(
+        active_task=_StubActiveTask(subscribe_error=TaskStoreOperationError("save", "task-1")),
+        task_store=MagicMock(),
+    )
+    result = await handler.on_message_send(params)
 
     assert result.status.state == TaskState.TASK_STATE_FAILED
     assert result.metadata == {
@@ -271,51 +291,6 @@ async def test_background_interrupt_resolution_updates_task_snapshot_for_get_and
 
 @pytest.mark.asyncio
 async def test_message_send_stream_emits_failed_events_for_task_store_error() -> None:
-    class _Aggregator:
-        def consume_and_emit(self, _consumer):
-            del _consumer
-            return self
-
-        def __aiter__(self):
-            return self
-
-        async def __anext__(self):
-            raise TaskStoreOperationError("save", "task-1")
-
-    class _Handler(CodexRequestHandler):
-        def __init__(self) -> None:
-            super().__init__(
-                agent_executor=MagicMock(),
-                task_store=MagicMock(),
-                agent_card=_make_agent_card(),
-            )
-            self.queue = AsyncMock()
-            self.producer = MagicMock()
-
-        async def _setup_message_execution(self, params, context=None):  # noqa: ANN001
-            del context
-            aggregator = NegotiatingResultAggregator(
-                MagicMock(),
-                params.configuration.accepted_output_modes if params.configuration else None,
-            )
-            aggregator.consume_and_emit = _Aggregator().consume_and_emit
-            return (
-                MagicMock(),
-                "task-1",
-                self.queue,
-                aggregator,
-                self.producer,
-            )
-
-        async def _cleanup_producer(self, producer_task, task_id):  # noqa: ANN001
-            del producer_task, task_id
-
-        async def _send_push_notification_if_needed(self, task_id, result_aggregator):  # noqa: ANN001
-            del task_id, result_aggregator
-
-        def _track_background_task(self, task):  # noqa: ANN001
-            task.cancel()
-
     params = SendMessageRequest(
         message=Message(
             message_id="m-1",
@@ -325,7 +300,11 @@ async def test_message_send_stream_emits_failed_events_for_task_store_error() ->
             context_id="ctx-1",
         )
     )
-    events = [event async for event in _Handler().on_message_send_stream(params)]
+    handler = _StubActiveTaskHandler(
+        active_task=_StubActiveTask(subscribe_error=TaskStoreOperationError("save", "task-1")),
+        task_store=MagicMock(),
+    )
+    events = [event async for event in handler.on_message_send_stream(params)]
 
     assert len(events) == 2
     assert events[-1].status.state == TaskState.TASK_STATE_FAILED
@@ -341,21 +320,7 @@ async def test_message_send_stream_emits_failed_events_for_task_store_error() ->
 
 @pytest.mark.asyncio
 async def test_message_send_rejects_json_only_output_modes_before_execution() -> None:
-    class _Handler(CodexRequestHandler):
-        def __init__(self) -> None:
-            super().__init__(
-                agent_executor=MagicMock(),
-                task_store=InMemoryTaskStore(),
-                agent_card=_make_agent_card(),
-            )
-            self.setup_called = False
-
-        async def _setup_message_execution(self, params, context=None):  # noqa: ANN001
-            del params, context
-            self.setup_called = True
-            raise AssertionError("_setup_message_execution should not be called")
-
-    handler = _Handler()
+    handler = _StubActiveTaskHandler(active_task=_StubActiveTask())
     params = SendMessageRequest(
         message=Message(
             message_id="m-1",
@@ -380,21 +345,7 @@ async def test_message_send_rejects_json_only_output_modes_before_execution() ->
 
 @pytest.mark.asyncio
 async def test_message_send_stream_rejects_incompatible_output_modes_before_execution() -> None:
-    class _Handler(CodexRequestHandler):
-        def __init__(self) -> None:
-            super().__init__(
-                agent_executor=MagicMock(),
-                task_store=InMemoryTaskStore(),
-                agent_card=_make_agent_card(),
-            )
-            self.setup_called = False
-
-        async def _setup_message_execution(self, params, context=None):  # noqa: ANN001
-            del params, context
-            self.setup_called = True
-            raise AssertionError("_setup_message_execution should not be called")
-
-    handler = _Handler()
+    handler = _StubActiveTaskHandler(active_task=_StubActiveTask())
     params = SendMessageRequest(
         message=Message(
             message_id="m-1",
@@ -419,51 +370,15 @@ async def test_message_send_stream_rejects_incompatible_output_modes_before_exec
 
 @pytest.mark.asyncio
 async def test_message_send_accepts_case_insensitive_output_modes() -> None:
-    class _Aggregator:
-        async def consume_and_break_on_interrupt(self, _consumer, *, blocking, event_callback):
-            del _consumer, blocking, event_callback
-            return (
-                Task(
-                    id="task-1",
-                    context_id="ctx-1",
-                    status=TaskStatus(state=TaskState.TASK_STATE_COMPLETED),
-                ),
-                False,
-                None,
-            )
-
-    class _Handler(CodexRequestHandler):
-        def __init__(self) -> None:
-            super().__init__(
-                agent_executor=MagicMock(),
-                task_store=MagicMock(),
-                agent_card=_make_agent_card(),
-            )
-            self.queue = AsyncMock()
-            self.producer = MagicMock()
-            self.setup_called = False
-
-        async def _setup_message_execution(self, params, context=None):  # noqa: ANN001
-            del params, context
-            self.setup_called = True
-            return (
-                MagicMock(),
-                "task-1",
-                self.queue,
-                _Aggregator(),
-                self.producer,
-            )
-
-        async def _cleanup_producer(self, producer_task, task_id):  # noqa: ANN001
-            del producer_task, task_id
-
-        async def _send_push_notification_if_needed(self, task_id, result_aggregator):  # noqa: ANN001
-            del task_id, result_aggregator
-
-        def _track_background_task(self, task):  # noqa: ANN001
-            task.cancel()
-
-    handler = _Handler()
+    completed_task = Task(
+        id="task-1",
+        context_id="ctx-1",
+        status=TaskStatus(state=TaskState.TASK_STATE_COMPLETED),
+    )
+    handler = _StubActiveTaskHandler(
+        active_task=_StubActiveTask(events=[completed_task], current_task=completed_task),
+        task_store=MagicMock(),
+    )
 
     params = SendMessageRequest(
         message=Message(
@@ -484,38 +399,32 @@ async def test_message_send_accepts_case_insensitive_output_modes() -> None:
 
 
 @pytest.mark.asyncio
-async def test_stream_disconnect_cancels_producer() -> None:
-    class _FakeAggregator:
-        async def consume_and_emit(self, _consumer):
-            task = Task(
-                id="task-1",
-                context_id="ctx-1",
-                status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
-            )
-            yield task
-            await asyncio.sleep(10)
+async def test_stream_disconnect_closes_active_task_generator() -> None:
+    class _BlockingActiveTask(_StubActiveTask):
+        def __init__(self) -> None:
+            super().__init__()
+            self.closed = asyncio.Event()
 
-    class _TestHandler(CodexRequestHandler):
-        async def _setup_message_execution(self, params, context=None):  # noqa: ANN001
-            del params, context
-            queue = AsyncMock()
-            producer_task = asyncio.create_task(asyncio.sleep(10))
-            self._producer_task = producer_task
-            self._queue = queue
-            return MagicMock(), "task-1", queue, _FakeAggregator(), producer_task
-
-        async def _cleanup_producer(self, producer_task, task_id):  # noqa: ANN001
-            del task_id
+        async def subscribe(
+            self,
+            *,
+            request,
+            include_initial_task=False,
+            replace_status_update_with_task=False,
+        ):
+            del request, include_initial_task, replace_status_update_with_task
             try:
-                await producer_task
-            except asyncio.CancelledError:
-                pass
+                yield Task(
+                    id="task-1",
+                    context_id="ctx-1",
+                    status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
+                )
+                await asyncio.sleep(10)
+            finally:
+                self.closed.set()
 
-    handler = _TestHandler(
-        agent_executor=MagicMock(),
-        task_store=InMemoryTaskStore(),
-        agent_card=_make_agent_card(),
-    )
+    active_task = _BlockingActiveTask()
+    handler = _StubActiveTaskHandler(active_task=active_task)
 
     stream = handler.on_message_send_stream(_make_message_send_params())
     first_event = await stream.__anext__()
@@ -524,8 +433,7 @@ async def test_stream_disconnect_cancels_producer() -> None:
     await stream.aclose()
     await asyncio.sleep(0)
 
-    assert handler._producer_task.cancelled()
-    handler._queue.close.assert_awaited_once_with(immediate=True)
+    assert active_task.closed.is_set()
 
 
 @pytest.mark.asyncio
@@ -562,40 +470,6 @@ async def test_message_send_filters_unaccepted_output_parts_to_text() -> None:
         ],
     )
 
-    class _Aggregator(NegotiatingResultAggregator):
-        async def consume_and_break_on_interrupt(self, _consumer, *, blocking, event_callback):
-            del _consumer, blocking, event_callback
-            return self._transform_event(task), False, None
-
-    class _Handler(CodexRequestHandler):
-        def __init__(self) -> None:
-            super().__init__(
-                agent_executor=MagicMock(),
-                task_store=MagicMock(),
-                agent_card=_make_agent_card(),
-            )
-            self.queue = AsyncMock()
-            self.producer = MagicMock()
-
-        async def _setup_message_execution(self, params, context=None):  # noqa: ANN001
-            del context
-            return (
-                MagicMock(),
-                "task-1",
-                self.queue,
-                _Aggregator(MagicMock(), params.configuration.accepted_output_modes),
-                self.producer,
-            )
-
-        async def _cleanup_producer(self, producer_task, task_id):  # noqa: ANN001
-            del producer_task, task_id
-
-        async def _send_push_notification_if_needed(self, task_id, result_aggregator):  # noqa: ANN001
-            del task_id, result_aggregator
-
-        def _track_background_task(self, task):  # noqa: ANN001
-            task.cancel()
-
     params = SendMessageRequest(
         message=Message(
             message_id="m-1",
@@ -606,7 +480,11 @@ async def test_message_send_filters_unaccepted_output_parts_to_text() -> None:
         ),
         configuration=SendMessageConfiguration(accepted_output_modes=["text/plain"]),
     )
-    result = await _Handler().on_message_send(params)
+    handler = _StubActiveTaskHandler(
+        active_task=_StubActiveTask(events=[task], current_task=task),
+        task_store=MagicMock(),
+    )
+    result = await handler.on_message_send(params)
 
     status_part = result.status.message.parts[0]
     artifact_part = result.artifacts[0].parts[0]
@@ -633,49 +511,6 @@ async def test_message_send_stream_filters_unaccepted_output_parts_to_text() -> 
         last_chunk=True,
     )
 
-    class _Aggregator(NegotiatingResultAggregator):
-        def consume_and_emit(self, _consumer):
-            del _consumer
-            return self
-
-        def __aiter__(self):
-            return self
-
-        async def __anext__(self):
-            if getattr(self, "_done", False):
-                raise StopAsyncIteration
-            self._done = True
-            return self._transform_event(update)
-
-    class _Handler(CodexRequestHandler):
-        def __init__(self) -> None:
-            super().__init__(
-                agent_executor=MagicMock(),
-                task_store=MagicMock(),
-                agent_card=_make_agent_card(),
-            )
-            self.queue = AsyncMock()
-            self.producer = MagicMock()
-
-        async def _setup_message_execution(self, params, context=None):  # noqa: ANN001
-            del context
-            return (
-                MagicMock(),
-                "task-1",
-                self.queue,
-                _Aggregator(MagicMock(), params.configuration.accepted_output_modes),
-                self.producer,
-            )
-
-        async def _cleanup_producer(self, producer_task, task_id):  # noqa: ANN001
-            del producer_task, task_id
-
-        async def _send_push_notification_if_needed(self, task_id, result_aggregator):  # noqa: ANN001
-            del task_id, result_aggregator
-
-        def _track_background_task(self, task):  # noqa: ANN001
-            task.cancel()
-
     params = SendMessageRequest(
         message=Message(
             message_id="m-1",
@@ -686,7 +521,11 @@ async def test_message_send_stream_filters_unaccepted_output_parts_to_text() -> 
         ),
         configuration=SendMessageConfiguration(accepted_output_modes=["text/plain"]),
     )
-    events = [event async for event in _Handler().on_message_send_stream(params)]
+    handler = _StubActiveTaskHandler(
+        active_task=_StubActiveTask(events=[update]),
+        task_store=MagicMock(),
+    )
+    events = [event async for event in handler.on_message_send_stream(params)]
 
     assert len(events) == 1
     assert (
@@ -834,37 +673,31 @@ async def test_resubscribe_applies_stored_output_negotiation_to_live_events() ->
 
 @pytest.mark.asyncio
 async def test_stream_disconnect_does_not_leave_unretrieved_loop_exceptions() -> None:
-    class _FakeAggregator:
-        async def consume_and_emit(self, _consumer):
-            task = Task(
-                id="task-1",
-                context_id="ctx-1",
-                status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
-            )
-            yield task
-            await asyncio.sleep(10)
+    class _BlockingActiveTask(_StubActiveTask):
+        def __init__(self) -> None:
+            super().__init__()
+            self.closed = asyncio.Event()
 
-    class _TestHandler(CodexRequestHandler):
-        async def _setup_message_execution(self, params, context=None):  # noqa: ANN001
-            del params, context
-            queue = AsyncMock()
-            producer_task = asyncio.create_task(asyncio.sleep(10))
-            self._producer_task = producer_task
-            self._queue = queue
-            return MagicMock(), "task-1", queue, _FakeAggregator(), producer_task
-
-        async def _cleanup_producer(self, producer_task, task_id):  # noqa: ANN001
-            del task_id
+        async def subscribe(
+            self,
+            *,
+            request,
+            include_initial_task=False,
+            replace_status_update_with_task=False,
+        ):
+            del request, include_initial_task, replace_status_update_with_task
             try:
-                await producer_task
-            except asyncio.CancelledError:
-                pass
+                yield Task(
+                    id="task-1",
+                    context_id="ctx-1",
+                    status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
+                )
+                await asyncio.sleep(10)
+            finally:
+                self.closed.set()
 
-    handler = _TestHandler(
-        agent_executor=MagicMock(),
-        task_store=InMemoryTaskStore(),
-        agent_card=_make_agent_card(),
-    )
+    active_task = _BlockingActiveTask()
+    handler = _StubActiveTaskHandler(active_task=active_task)
     loop = asyncio.get_running_loop()
     loop_exceptions: list[dict] = []
     previous_handler = loop.get_exception_handler()
@@ -881,6 +714,5 @@ async def test_stream_disconnect_does_not_leave_unretrieved_loop_exceptions() ->
     finally:
         loop.set_exception_handler(previous_handler)
 
-    assert handler._producer_task.cancelled()
     assert loop_exceptions == []
-    assert handler._background_tasks == set()
+    assert active_task.closed.is_set()

@@ -232,7 +232,7 @@ async def test_conversation_facade_handles_malformed_thread_responses() -> None:
 
 
 @pytest.mark.asyncio
-async def test_conversation_facade_handles_message_listing_and_prompt_errors() -> None:
+async def test_conversation_facade_handles_message_listing_and_send_errors() -> None:
     responses = iter(
         [
             {"data": "bad"},
@@ -284,11 +284,11 @@ async def test_conversation_facade_handles_message_listing_and_prompt_errors() -
     ]
 
     with pytest.raises(RuntimeError, match="turn/start response missing result object"):
-        await facade.session_prompt_async("thr-1", {"parts": [{"type": "text", "text": "hi"}]})
+        await facade.send_message("thr-1", "hi", timeout_seconds=None)
     with pytest.raises(RuntimeError, match="turn/start response missing turn"):
-        await facade.session_prompt_async("thr-1", {"parts": [{"type": "text", "text": "hi"}]})
+        await facade.send_message("thr-1", "hi", timeout_seconds=None)
     with pytest.raises(RuntimeError, match="turn/start response missing turn id"):
-        await facade.session_prompt_async("thr-1", {"parts": [{"type": "text", "text": "hi"}]})
+        await facade.send_message("thr-1", "hi", timeout_seconds=None)
 
 
 @pytest.mark.asyncio
@@ -311,47 +311,6 @@ async def test_conversation_facade_send_message_cleans_up_after_error_and_timeou
     with pytest.raises(RuntimeError, match="codex turn did not complete before timeout"):
         await facade.send_message("thr-1", "hello", timeout_seconds=0.01)
     assert ("thr-1", "turn-1") not in turn_trackers
-
-
-@pytest.mark.asyncio
-async def test_conversation_facade_session_command_and_shell_errors() -> None:
-    seen: list[tuple[str, dict | None]] = []
-
-    async def fake_rpc_request(method: str, params=None, **_kwargs):
-        seen.append((method, params))
-        if method == "turn/start":
-            return {"turn": {"id": "turn-1"}}
-        return None
-
-    facade, _turn_trackers, tracker_factory = _make_conversation_facade(
-        rpc_request=fake_rpc_request,
-    )
-    facade._loaded_thread_ids.add("thr-1")
-    tracker = tracker_factory("thr-1", "turn-1")
-    tracker.text_chunks.append("ok")
-    tracker.completed.set()
-
-    message = await facade.session_command(
-        "thr-1",
-        {"command": "review", "arguments": "--all"},
-        timeout_seconds=None,
-    )
-
-    assert message.text == "ok"
-    assert seen[0] == (
-        "turn/start",
-        {
-            "threadId": "thr-1",
-            "input": [{"type": "text", "text": "/review --all", "text_elements": []}],
-            "cwd": "/workspace",
-            "model": "gpt-5.2",
-        },
-    )
-
-    with pytest.raises(RuntimeError, match="shell command must not be empty"):
-        await facade.session_shell("thr-1", {"command": "   "})
-    with pytest.raises(RuntimeError, match="command/exec response missing result object"):
-        await facade.session_shell("thr-1", {"command": "pwd"})
 
 
 @pytest.mark.asyncio

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import AliasChoices, Field, ValidationError, field_validator
+from pydantic import ValidationError, field_validator
 
 from codex_a2a.jsonrpc.params_common import (
     JsonRpcParamsValidationError,
@@ -16,11 +16,7 @@ InterruptRecoveryType = Literal["permission", "question", "permissions", "elicit
 
 
 class InterruptRecoveryListParams(_StrictModel):
-    interrupt_type: InterruptRecoveryType | None = Field(
-        default=None,
-        validation_alias=AliasChoices("type", "interrupt_type", "interruptType"),
-        serialization_alias="type",
-    )
+    interrupt_type: InterruptRecoveryType | None = None
 
     @field_validator("interrupt_type", mode="before")
     @classmethod

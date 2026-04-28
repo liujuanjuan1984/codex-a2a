@@ -3,6 +3,7 @@ from unittest.mock import AsyncMock
 import httpx
 import pytest
 
+from codex_a2a.contracts.extensions import EXTENSION_JSONRPC_PATH
 from tests.support.dummy_clients import DummySessionQueryCodexClient as DummyCodexClient
 from tests.support.jsonrpc_errors import (
     error_context as _error_context,
@@ -34,7 +35,7 @@ async def test_thread_lifecycle_extension_routes_control_methods(monkeypatch) ->
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         headers = {"Authorization": "Bearer t-1"}
         fork_response = await client.post(
-            "/",
+            EXTENSION_JSONRPC_PATH,
             headers=headers,
             json={
                 "jsonrpc": "2.0",
@@ -48,7 +49,7 @@ async def test_thread_lifecycle_extension_routes_control_methods(monkeypatch) ->
             },
         )
         archive_response = await client.post(
-            "/",
+            EXTENSION_JSONRPC_PATH,
             headers=headers,
             json={
                 "jsonrpc": "2.0",
@@ -58,7 +59,7 @@ async def test_thread_lifecycle_extension_routes_control_methods(monkeypatch) ->
             },
         )
         unarchive_response = await client.post(
-            "/",
+            EXTENSION_JSONRPC_PATH,
             headers=headers,
             json={
                 "jsonrpc": "2.0",
@@ -68,7 +69,7 @@ async def test_thread_lifecycle_extension_routes_control_methods(monkeypatch) ->
             },
         )
         metadata_response = await client.post(
-            "/",
+            EXTENSION_JSONRPC_PATH,
             headers=headers,
             json={
                 "jsonrpc": "2.0",
@@ -76,7 +77,7 @@ async def test_thread_lifecycle_extension_routes_control_methods(monkeypatch) ->
                 "method": "codex.threads.metadata.update",
                 "params": {
                     "thread_id": "thr-1",
-                    "request": {"gitInfo": {"branch": "feat/thread-lifecycle"}},
+                    "request": {"git_info": {"branch": "feat/thread-lifecycle"}},
                 },
             },
         )
@@ -101,7 +102,7 @@ async def test_thread_lifecycle_extension_routes_control_methods(monkeypatch) ->
     )
     assert dummy.last_thread_metadata_update == {
         "thread_id": "thr-1",
-        "params": {"gitInfo": {"branch": "feat/thread-lifecycle"}},
+        "params": {"git_info": {"branch": "feat/thread-lifecycle"}},
     }
 
 
@@ -124,7 +125,7 @@ async def test_thread_lifecycle_watch_routes_to_runtime(monkeypatch) -> None:
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.post(
-            "/",
+            EXTENSION_JSONRPC_PATH,
             headers={"Authorization": "Bearer t-1"},
             json={
                 "jsonrpc": "2.0",
@@ -133,7 +134,7 @@ async def test_thread_lifecycle_watch_routes_to_runtime(monkeypatch) -> None:
                 "params": {
                     "request": {
                         "events": ["thread.started", "thread.status.changed"],
-                        "threadIds": ["thr-1"],
+                        "thread_ids": ["thr-1"],
                     }
                 },
             },
@@ -145,7 +146,7 @@ async def test_thread_lifecycle_watch_routes_to_runtime(monkeypatch) -> None:
     kwargs = app.state.codex_thread_lifecycle_runtime.start.await_args.kwargs
     assert kwargs["request"] == {
         "events": ["thread.started", "thread.status.changed"],
-        "threadIds": ["thr-1"],
+        "thread_ids": ["thr-1"],
     }
     assert kwargs["context"] is not None
 
@@ -177,7 +178,7 @@ async def test_thread_lifecycle_watch_release_routes_to_runtime(monkeypatch) -> 
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.post(
-            "/",
+            EXTENSION_JSONRPC_PATH,
             headers={"Authorization": "Bearer t-1"},
             json={
                 "jsonrpc": "2.0",
@@ -211,7 +212,7 @@ async def test_thread_lifecycle_extension_rejects_invalid_request_shapes(monkeyp
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         headers = {"Authorization": "Bearer t-1"}
         fork_response = await client.post(
-            "/",
+            EXTENSION_JSONRPC_PATH,
             headers=headers,
             json={
                 "jsonrpc": "2.0",
@@ -221,17 +222,17 @@ async def test_thread_lifecycle_extension_rejects_invalid_request_shapes(monkeyp
             },
         )
         metadata_response = await client.post(
-            "/",
+            EXTENSION_JSONRPC_PATH,
             headers=headers,
             json={
                 "jsonrpc": "2.0",
                 "id": 407,
                 "method": "codex.threads.metadata.update",
-                "params": {"thread_id": "thr-1", "request": {"gitInfo": {}}},
+                "params": {"thread_id": "thr-1", "request": {"git_info": {}}},
             },
         )
         watch_response = await client.post(
-            "/",
+            EXTENSION_JSONRPC_PATH,
             headers=headers,
             json={
                 "jsonrpc": "2.0",
@@ -241,7 +242,7 @@ async def test_thread_lifecycle_extension_rejects_invalid_request_shapes(monkeyp
             },
         )
         watch_release_response = await client.post(
-            "/",
+            EXTENSION_JSONRPC_PATH,
             headers=headers,
             json={
                 "jsonrpc": "2.0",
@@ -279,7 +280,7 @@ async def test_thread_lifecycle_watch_release_maps_not_found_and_forbidden(monke
             side_effect=LookupError("task-404")
         )
         not_found_response = await client.post(
-            "/",
+            EXTENSION_JSONRPC_PATH,
             headers={"Authorization": "Bearer t-1"},
             json={
                 "jsonrpc": "2.0",
@@ -293,7 +294,7 @@ async def test_thread_lifecycle_watch_release_maps_not_found_and_forbidden(monke
             side_effect=PermissionError("task-403")
         )
         forbidden_response = await client.post(
-            "/",
+            EXTENSION_JSONRPC_PATH,
             headers={"Authorization": "Bearer t-1"},
             json={
                 "jsonrpc": "2.0",
@@ -306,9 +307,9 @@ async def test_thread_lifecycle_watch_release_maps_not_found_and_forbidden(monke
     not_found_payload = not_found_response.json()
     assert not_found_payload["error"]["code"] == -32014
     assert _error_reason(not_found_payload) == "WATCH_NOT_FOUND"
-    assert _error_context(not_found_payload)["taskId"] == "task-404"
+    assert _error_context(not_found_payload)["task_id"] == "task-404"
 
     forbidden_payload = forbidden_response.json()
     assert forbidden_payload["error"]["code"] == -32015
     assert _error_reason(forbidden_payload) == "WATCH_FORBIDDEN"
-    assert _error_context(forbidden_payload)["taskId"] == "task-403"
+    assert _error_context(forbidden_payload)["task_id"] == "task-403"

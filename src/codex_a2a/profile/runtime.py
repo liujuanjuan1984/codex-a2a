@@ -178,7 +178,6 @@ class RuntimeProfile:
     profile_id: str
     deployment: DeploymentProfile
     directory_binding: DirectoryBindingProfile
-    session_shell: ConditionalSurfaceProfile
     turn_control: ConditionalSurfaceProfile
     review_control: ConditionalSurfaceProfile
     exec_control: ConditionalSurfaceProfile
@@ -186,10 +185,6 @@ class RuntimeProfile:
     service_features: ServiceFeaturesProfile
     execution_environment: ExecutionEnvironmentProfile
     runtime_context: RuntimeContext
-
-    @property
-    def session_shell_enabled(self) -> bool:
-        return self.session_shell.enabled
 
     @property
     def turn_control_enabled(self) -> bool:
@@ -206,7 +201,6 @@ class RuntimeProfile:
     def runtime_features_dict(self) -> dict[str, Any]:
         return {
             "directory_binding": self.directory_binding.as_dict(),
-            "session_shell": self.session_shell.as_dict(),
             "turn_control": self.turn_control.as_dict(),
             "review_control": self.review_control.as_dict(),
             "exec_control": self.exec_control.as_dict(),
@@ -317,11 +311,6 @@ def build_runtime_profile(settings: Settings) -> RuntimeProfile:
         directory_binding=DirectoryBindingProfile(
             allow_override=settings.a2a_allow_directory_override,
             scope=directory_scope,
-        ),
-        session_shell=ConditionalSurfaceProfile(
-            enabled=settings.a2a_enable_session_shell,
-            availability="enabled" if settings.a2a_enable_session_shell else "disabled",
-            toggle="A2A_ENABLE_SESSION_SHELL",
         ),
         turn_control=ConditionalSurfaceProfile(
             enabled=settings.a2a_enable_turn_control,
