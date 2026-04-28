@@ -77,21 +77,6 @@ def as_a2a_message(session_id: str, item: Any) -> Message | None:
     return message
 
 
-def message_to_item(message: Any) -> dict[str, Any]:
-    if hasattr(message, "message_id") and hasattr(message, "text"):
-        return {
-            "info": {
-                "id": getattr(message, "message_id", None) or "msg-shell",
-                "role": "assistant",
-            },
-            "parts": [{"type": "text", "text": getattr(message, "text", "")}],
-            "raw": getattr(message, "raw", {}),
-        }
-    if isinstance(message, dict):
-        return message
-    raise ValueError("Unsupported session control response payload")
-
-
 def extract_raw_items(raw_result: Any, *, kind: str) -> list[Any]:
     if isinstance(raw_result, list):
         return raw_result

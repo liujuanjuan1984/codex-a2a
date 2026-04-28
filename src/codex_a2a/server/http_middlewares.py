@@ -335,8 +335,6 @@ def install_http_middlewares(
             negotiated = negotiate_protocol_version(
                 header_value=header_value,
                 query_value=query_value,
-                default_protocol_version=settings.a2a_protocol_version,
-                supported_protocol_versions=settings.a2a_supported_protocol_versions,
             )
         except UnsupportedProtocolVersionError as exc:
             request_id: str | int | None = None
@@ -350,15 +348,15 @@ def install_http_middlewares(
 
         _inject_context_protocol_header(
             request,
-            protocol_version=negotiated.negotiated_version,
+            protocol_version=negotiated.protocol_version,
         )
 
-        token = set_current_protocol_version(negotiated.negotiated_version)
+        token = set_current_protocol_version(negotiated.protocol_version)
         try:
             response = await call_next(request)
         finally:
             reset_current_protocol_version(token)
-        response.headers["A2A-Version"] = negotiated.negotiated_version
+        response.headers["A2A-Version"] = negotiated.protocol_version
         return response
 
     @app.middleware("http")

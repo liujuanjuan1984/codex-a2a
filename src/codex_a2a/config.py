@@ -623,7 +623,3 @@ class Settings(BaseSettings):
     def from_env(cls) -> Settings:
         settings_cls: type[BaseSettings] = cls
         return cast(Settings, settings_cls())
-
-    @property
-    def a2a_supported_protocol_versions(self) -> list[str]:
-        return [SUPPORTED_PROTOCOL_VERSION]

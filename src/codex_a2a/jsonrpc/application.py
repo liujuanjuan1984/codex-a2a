@@ -27,7 +27,7 @@ from codex_a2a.jsonrpc.review_control import handle_review_control_request
 from codex_a2a.jsonrpc.session_query import handle_session_query_request
 from codex_a2a.jsonrpc.thread_lifecycle_control import handle_thread_lifecycle_control_request
 from codex_a2a.jsonrpc.turn_control import handle_turn_control_request
-from codex_a2a.protocol_versions import ADVERTISED_PROTOCOL_VERSION, get_current_protocol_version
+from codex_a2a.protocol_versions import get_current_protocol_version
 from codex_a2a.upstream.client import CodexClient
 
 
@@ -216,7 +216,7 @@ class CodexSessionQueryJSONRPCApplication(JsonRpcDispatcher):
         request_id: str | int,
         method: str,
     ) -> JSONResponse:
-        protocol_version = get_current_protocol_version(ADVERTISED_PROTOCOL_VERSION)
+        protocol_version = get_current_protocol_version()
         return self._generate_error_response(
             request_id,
             JSONRPCError(
