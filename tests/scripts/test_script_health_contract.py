@@ -23,6 +23,8 @@ def test_validate_baseline_keeps_local_regression_scope() -> None:
     assert "uv run pytest" in VALIDATE_BASELINE_TEXT
     assert "uv export" in VALIDATE_BASELINE_TEXT
     assert "uv run pip-audit" in VALIDATE_BASELINE_TEXT
+    assert "uv build --no-sources" in VALIDATE_BASELINE_TEXT
+    assert "git fetch --quiet --update-shallow" not in VALIDATE_BASELINE_TEXT
     assert "uv pip list --outdated" not in VALIDATE_BASELINE_TEXT
 
 
