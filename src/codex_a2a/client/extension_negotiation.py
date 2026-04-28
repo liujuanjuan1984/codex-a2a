@@ -153,7 +153,9 @@ def _metadata_sources_for_send_message(
     sources: list[Mapping[str, Any]] = []
     if request_metadata:
         sources.append(dict(request_metadata))
-    message_metadata = _metadata_to_dict(message.metadata if message.HasField("metadata") else None)
+    message_metadata = _proto_metadata_to_dict(
+        message.metadata if message.HasField("metadata") else None
+    )
     if message_metadata:
         sources.append(message_metadata)
     return tuple(sources)
@@ -212,23 +214,18 @@ def _set_filtered_metadata(
     proto: Task | TaskStatusUpdateEvent | TaskArtifactUpdateEvent | Artifact | Message,
     requested_extensions: frozenset[str],
 ) -> None:
-    metadata_dict = _metadata_to_dict(getattr(proto, "metadata", None))
+    metadata_dict = _proto_metadata_to_dict(getattr(proto, "metadata", None))
     filtered_metadata = _filter_metadata_dict(metadata_dict, requested_extensions)
     proto.ClearField("metadata")
     if filtered_metadata:
         proto.metadata.update(filtered_metadata)
 
 
-def _metadata_to_dict(metadata: Mapping[str, Any] | ProtoMessage | None) -> dict[str, Any] | None:
+def _proto_metadata_to_dict(metadata: ProtoMessage | None) -> dict[str, Any] | None:
     if metadata is None:
         return None
-    if isinstance(metadata, ProtoMessage):
-        normalized = proto_to_python(metadata)
-        if isinstance(normalized, dict):
-            return normalized or None
-        return None
-    if isinstance(metadata, Mapping):
-        normalized = dict(metadata)
+    normalized = proto_to_python(metadata)
+    if isinstance(normalized, dict):
         return normalized or None
     return None
 

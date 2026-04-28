@@ -4,7 +4,7 @@ from typing import Any
 
 from a2a.types import Message, Role, Task, TaskState, TaskStatus
 
-from codex_a2a.a2a_proto import new_text_part, proto_to_python
+from codex_a2a.a2a_proto import new_text_part
 from codex_a2a.parts.text import extract_text_from_parts
 
 
@@ -19,7 +19,7 @@ def extract_session_title(session: dict[str, Any]) -> str:
     return title.strip()
 
 
-def as_a2a_session_task(session: Any) -> dict[str, Any] | None:
+def as_a2a_session_task(session: Any) -> Task | None:
     if not isinstance(session, dict):
         return None
     raw_id = session.get("id")
@@ -40,10 +40,10 @@ def as_a2a_session_task(session: Any) -> dict[str, Any] | None:
             "codex": {"raw": session},
         },
     )
-    return proto_to_python(task)
+    return task
 
 
-def as_a2a_message(session_id: str, item: Any) -> dict[str, Any] | None:
+def as_a2a_message(session_id: str, item: Any) -> Message | None:
     if not isinstance(item, dict):
         return None
 
@@ -74,7 +74,7 @@ def as_a2a_message(session_id: str, item: Any) -> dict[str, Any] | None:
             "codex": {"raw": item},
         },
     )
-    return proto_to_python(message)
+    return message
 
 
 def message_to_item(message: Any) -> dict[str, Any]:
