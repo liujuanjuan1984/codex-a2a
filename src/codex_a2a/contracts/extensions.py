@@ -18,6 +18,7 @@ from codex_a2a.protocol_versions import (
     normalize_protocol_version,
 )
 
+from .extension_registry import build_extension_taxonomy_from_registry
 from .extension_specs import *  # noqa: F403
 from .extension_specs import (
     _REQUEST_EXECUTION_PROVIDER_METADATA,
@@ -316,6 +317,8 @@ def build_compatibility_profile_params(
         },
     }
 
+    extension_taxonomy = build_extension_taxonomy_from_registry()
+
     return {
         "profile_id": runtime_profile.profile_id,
         "protocol_version": declared_protocol_version,
@@ -336,23 +339,12 @@ def build_compatibility_profile_params(
             TASKS_RESUBSCRIBE_METHOD: resubscribe_behavior,
         },
         "extension_taxonomy": {
-            "shared_agent_card_extensions": [
-                SESSION_BINDING_EXTENSION_URI,
-                STREAMING_EXTENSION_URI,
+            "shared_agent_card_extensions": extension_taxonomy["shared_agent_card_extensions"],
+            "shared_provider_private_contracts": extension_taxonomy[
+                "shared_provider_private_contracts"
             ],
-            "shared_provider_private_contracts": [
-                INTERRUPT_CALLBACK_EXTENSION_URI,
-            ],
-            "codex_provider_private_contracts": [
-                SESSION_QUERY_EXTENSION_URI,
-                DISCOVERY_EXTENSION_URI,
-                THREAD_LIFECYCLE_EXTENSION_URI,
-                INTERRUPT_RECOVERY_EXTENSION_URI,
-                TURN_CONTROL_EXTENSION_URI,
-                REVIEW_CONTROL_EXTENSION_URI,
-                EXEC_CONTROL_EXTENSION_URI,
-                COMPATIBILITY_PROFILE_EXTENSION_URI,
-                WIRE_CONTRACT_EXTENSION_URI,
+            "codex_provider_private_contracts": extension_taxonomy[
+                "codex_provider_private_contracts"
             ],
             "provider_private_metadata": list(_REQUEST_EXECUTION_PROVIDER_METADATA),
         },

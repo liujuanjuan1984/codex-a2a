@@ -1,6 +1,6 @@
 # Extension Specifications
 
-This document is the stable specification index for the shared-extension and provider-private contract URIs used by `codex-a2a`. It is intentionally a compact URI/spec map, not the main consumer guide. For runtime behavior, request examples, and operational setup, see [guide.md](./guide.md). For compatibility promises and stability expectations, see [compatibility.md](./compatibility.md).
+This document is the stable specification index for the shared-extension and provider-private contract URIs used by `codex-a2a`. It is intentionally a compact URI/spec map, not the main consumer guide. For the phase-1 extension classification and disclosure baseline, see [a2a-extension-baseline.md](./a2a-extension-baseline.md). For runtime behavior, request examples, and operational setup, see [guide.md](./guide.md). For compatibility promises and stability expectations, see [compatibility.md](./compatibility.md).
 
 ## Discovery Surface Note
 
