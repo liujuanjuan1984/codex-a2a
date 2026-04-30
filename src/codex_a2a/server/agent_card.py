@@ -63,8 +63,8 @@ def _build_agent_card_description(
         "(SendMessage, SendStreamingMessage), authenticated extended Agent Card "
         "(GetExtendedAgentCard), task APIs (GetTask, ListTasks, CancelTask, "
         "SubscribeToTask), and shared session-binding plus streaming contracts. "
-        "Provider-private control surfaces are published as authenticated skills "
-        "and OpenAPI contracts rather than as negotiated A2A extensions. "
+        "Provider-private control surfaces are declared through authenticated "
+        "extended Agent Card extensions, authenticated skills, and OpenAPI contracts. "
         f"Provider-private surfaces in this deployment include {codex_surface_summary}, "
         "shared interrupt callback handling, a machine-readable compatibility profile, "
         "and a machine-readable wire contract."
@@ -415,6 +415,7 @@ def _build_agent_card(
             streaming=True,
             extended_agent_card=True,
             extensions=build_agent_extensions(
+                settings=settings,
                 runtime_profile=runtime_profile,
                 include_detailed_contracts=include_detailed_contracts,
             ),

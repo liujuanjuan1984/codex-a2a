@@ -24,8 +24,9 @@ Phase 1 is intentionally internal-facing. It does not change the external extens
 2. Provider-private extensions
 
 - These are adapter-managed `codex.*` or shared-repo callback contracts that remain specific to this deployment family.
-- They are still treated as extensions conceptually, but phase 1 keeps their public disclosure conservative.
-- Their current contract payloads remain machine-readable through OpenAPI and human-discoverable through the authenticated extended Agent Card skill inventory.
+- They are still treated as extensions conceptually, but their public disclosure remains conservative.
+- They should be declared through authenticated extended Agent Card `capabilities.extensions`.
+- Their detailed contract payloads remain machine-readable through OpenAPI and human-discoverable through authenticated skill inventory.
 
 3. Machine-readable contract metadata
 
@@ -45,8 +46,8 @@ Phase 1 is intentionally internal-facing. It does not change the external extens
 ### Authenticated Extended Agent Card
 
 - Authenticated discovery surface with deployment-aware detail.
-- Phase 1 keeps provider-private contracts primarily discoverable through skill inventory and examples.
-- The target steady state for later phases is that provider-private extensions that are truly extensions should also appear here through standard `capabilities.extensions`.
+- Provider-private extensions that are part of the declared contract should appear here through standard `capabilities.extensions`.
+- Skills and examples remain additive discovery aids rather than the primary declaration path.
 
 ### OpenAPI Metadata
 
@@ -81,11 +82,11 @@ That inventory must be reusable by:
 ## Phase 1 Non-Goals
 
 - No migration from `urn:` to HTTPS extension URI yet.
-- No public expansion of provider-private extension declarations yet.
+- No public expansion of provider-private extension declarations.
 - No compatibility shim for A2A 0.3 behavior.
 
 ## Follow-On Phases
 
-Phase 2 will migrate the primary extension identity strategy to stable, resolvable HTTPS URIs and begin publishing real provider-private extensions through the authenticated extended Agent Card.
+Phase 2 will unify request-level negotiation, disclosure layering, and runtime behavior around the authenticated extension declaration model.
 
-Phase 3 will align runtime negotiation, declaration, error semantics, and documentation around that final extension model.
+Canonical URI and spec-hosting strategy remain a separate follow-up track after declaration-path convergence.

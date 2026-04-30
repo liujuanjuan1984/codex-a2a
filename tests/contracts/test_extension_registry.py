@@ -58,17 +58,33 @@ def test_extension_registry_captures_phase1_inventory() -> None:
         descriptor.key for descriptor in descriptors if descriptor.authenticated_agent_card
     ]
     assert public_keys == ["session_binding", "streaming"]
-    assert authenticated_keys == ["session_binding", "streaming"]
+    assert authenticated_keys == [
+        "session_binding",
+        "streaming",
+        "session_query",
+        "discovery",
+        "thread_lifecycle",
+        "interrupt_recovery",
+        "turn_control",
+        "review_control",
+        "exec_control",
+        "interrupt_callback",
+        "wire_contract",
+        "compatibility_profile",
+    ]
 
 
 def test_registry_builds_agent_card_extensions_for_current_phase1_surface() -> None:
-    runtime_profile = build_runtime_profile(make_settings(a2a_bearer_token="test-token"))
+    settings = make_settings(a2a_bearer_token="test-token")
+    runtime_profile = build_runtime_profile(settings)
 
     public_extensions = build_agent_card_extensions_from_registry(
+        settings=settings,
         runtime_profile=runtime_profile,
         include_detailed_contracts=False,
     )
     authenticated_extensions = build_agent_card_extensions_from_registry(
+        settings=settings,
         runtime_profile=runtime_profile,
         include_detailed_contracts=True,
     )
@@ -80,6 +96,16 @@ def test_registry_builds_agent_card_extensions_for_current_phase1_surface() -> N
     assert [extension.uri for extension in authenticated_extensions] == [
         SESSION_BINDING_EXTENSION_URI,
         STREAMING_EXTENSION_URI,
+        SESSION_QUERY_EXTENSION_URI,
+        DISCOVERY_EXTENSION_URI,
+        THREAD_LIFECYCLE_EXTENSION_URI,
+        INTERRUPT_RECOVERY_EXTENSION_URI,
+        TURN_CONTROL_EXTENSION_URI,
+        REVIEW_CONTROL_EXTENSION_URI,
+        EXEC_CONTROL_EXTENSION_URI,
+        INTERRUPT_CALLBACK_EXTENSION_URI,
+        WIRE_CONTRACT_EXTENSION_URI,
+        COMPATIBILITY_PROFILE_EXTENSION_URI,
     ]
 
 

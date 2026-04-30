@@ -4,14 +4,23 @@ from a2a.types import AgentExtension, AgentSkill
 
 from codex_a2a.a2a_proto import proto_to_python
 from codex_a2a.contracts.extensions import (
+    COMPATIBILITY_PROFILE_EXTENSION_URI,
     CORE_JSONRPC_PATH,
+    DISCOVERY_EXTENSION_URI,
+    EXEC_CONTROL_EXTENSION_URI,
     EXTENSION_JSONRPC_PATH,
     INTERRUPT_CALLBACK_EXTENSION_URI,
+    INTERRUPT_RECOVERY_EXTENSION_URI,
     REST_API_PATH_PREFIX,
+    REVIEW_CONTROL_EXTENSION_URI,
     SESSION_BINDING_EXTENSION_URI,
     SESSION_QUERY_DEFAULT_LIMIT,
+    SESSION_QUERY_EXTENSION_URI,
     SESSION_QUERY_MAX_LIMIT,
     STREAMING_EXTENSION_URI,
+    THREAD_LIFECYCLE_EXTENSION_URI,
+    TURN_CONTROL_EXTENSION_URI,
+    WIRE_CONTRACT_EXTENSION_URI,
 )
 from codex_a2a.media_modes import (
     APPLICATION_JSON_MEDIA_MODE,
@@ -29,6 +38,21 @@ from codex_a2a.server.agent_card import (
 )
 from codex_a2a.server.openapi_contract_fragments import build_openapi_codex_contracts
 from tests.support.settings import make_settings
+
+AUTHENTICATED_EXTENSION_URIS = {
+    SESSION_BINDING_EXTENSION_URI,
+    STREAMING_EXTENSION_URI,
+    SESSION_QUERY_EXTENSION_URI,
+    DISCOVERY_EXTENSION_URI,
+    THREAD_LIFECYCLE_EXTENSION_URI,
+    INTERRUPT_RECOVERY_EXTENSION_URI,
+    TURN_CONTROL_EXTENSION_URI,
+    REVIEW_CONTROL_EXTENSION_URI,
+    EXEC_CONTROL_EXTENSION_URI,
+    INTERRUPT_CALLBACK_EXTENSION_URI,
+    WIRE_CONTRACT_EXTENSION_URI,
+    COMPATIBILITY_PROFILE_EXTENSION_URI,
+}
 
 
 def _require_params(extension: AgentExtension) -> dict[str, Any]:
@@ -74,7 +98,7 @@ def test_authenticated_extended_agent_card_description_reflects_detailed_contrac
     assert "SendMessage, SendStreamingMessage" in card.description
     assert "GetTask, ListTasks, CancelTask, SubscribeToTask" in card.description
     assert "GetExtendedAgentCard" in card.description
-    assert "Provider-private control surfaces are published as authenticated skills" in (
+    assert "Provider-private control surfaces are declared through authenticated extended" in (
         card.description
     )
     assert "interactive exec" in card.description
@@ -277,10 +301,7 @@ def test_authenticated_extended_agent_card_injects_profile_into_extensions() -> 
     ext_by_uri = {ext.uri: ext for ext in card.capabilities.extensions or []}
     codex_contracts = _codex_contracts(settings)
 
-    assert set(ext_by_uri) == {
-        SESSION_BINDING_EXTENSION_URI,
-        STREAMING_EXTENSION_URI,
-    }
+    assert set(ext_by_uri) == AUTHENTICATED_EXTENSION_URIS
 
     binding = ext_by_uri[SESSION_BINDING_EXTENSION_URI]
     binding_params = _require_params(binding)
@@ -416,6 +437,7 @@ def test_authenticated_extended_agent_card_injects_profile_into_extensions() -> 
     }
 
     session_query_params = codex_contracts["session_query"]
+    assert _require_params(ext_by_uri[SESSION_QUERY_EXTENSION_URI]) == session_query_params
     assert session_query_params["jsonrpc_endpoint"] == {
         "protocol_binding": "JSON-RPC",
         "url_path": EXTENSION_JSONRPC_PATH,

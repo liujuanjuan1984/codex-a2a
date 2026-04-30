@@ -24,7 +24,7 @@ from .extension_specs import (
     WIRE_CONTRACT_EXTENSION_URI,
 )
 
-AgentCardParamsBuilder = Callable[[RuntimeProfile, bool], dict[str, Any]]
+AgentCardParamsBuilder = Callable[[Settings, RuntimeProfile, bool], dict[str, Any]]
 OpenAPIParamsBuilder = Callable[[Settings | None, RuntimeProfile], dict[str, Any]]
 
 
@@ -92,9 +92,12 @@ def _build_public_streaming_extension_params(params: dict[str, Any]) -> dict[str
 
 
 def _build_session_binding_agent_card_params(
+    settings: Settings,
     runtime_profile: RuntimeProfile,
     include_detailed_contracts: bool,
 ) -> dict[str, Any]:
+    del settings
+
     from .extensions import build_session_binding_extension_params
 
     params = build_session_binding_extension_params(runtime_profile=runtime_profile)
@@ -112,10 +115,11 @@ def _build_session_binding_agent_card_params(
 
 
 def _build_streaming_agent_card_params(
+    settings: Settings,
     runtime_profile: RuntimeProfile,
     include_detailed_contracts: bool,
 ) -> dict[str, Any]:
-    del runtime_profile
+    del settings, runtime_profile
 
     from .extensions import build_streaming_extension_params
 
@@ -123,6 +127,145 @@ def _build_streaming_agent_card_params(
     if include_detailed_contracts:
         return params
     return _build_public_streaming_extension_params(params)
+
+
+def _build_authenticated_extension_params(
+    settings: Settings | None,
+    runtime_profile: RuntimeProfile,
+    builder: OpenAPIParamsBuilder,
+) -> dict[str, Any]:
+    params = builder(settings, runtime_profile)
+    return dict(params)
+
+
+def _build_session_query_agent_card_params(
+    settings: Settings,
+    runtime_profile: RuntimeProfile,
+    include_detailed_contracts: bool,
+) -> dict[str, Any]:
+    del include_detailed_contracts
+    return _build_authenticated_extension_params(
+        settings,
+        runtime_profile,
+        _build_session_query_openapi_params,
+    )
+
+
+def _build_discovery_agent_card_params(
+    settings: Settings,
+    runtime_profile: RuntimeProfile,
+    include_detailed_contracts: bool,
+) -> dict[str, Any]:
+    del include_detailed_contracts
+    return _build_authenticated_extension_params(
+        settings,
+        runtime_profile,
+        _build_discovery_openapi_params,
+    )
+
+
+def _build_thread_lifecycle_agent_card_params(
+    settings: Settings,
+    runtime_profile: RuntimeProfile,
+    include_detailed_contracts: bool,
+) -> dict[str, Any]:
+    del include_detailed_contracts
+    return _build_authenticated_extension_params(
+        settings,
+        runtime_profile,
+        _build_thread_lifecycle_openapi_params,
+    )
+
+
+def _build_interrupt_recovery_agent_card_params(
+    settings: Settings,
+    runtime_profile: RuntimeProfile,
+    include_detailed_contracts: bool,
+) -> dict[str, Any]:
+    del include_detailed_contracts
+    return _build_authenticated_extension_params(
+        settings,
+        runtime_profile,
+        _build_interrupt_recovery_openapi_params,
+    )
+
+
+def _build_turn_control_agent_card_params(
+    settings: Settings,
+    runtime_profile: RuntimeProfile,
+    include_detailed_contracts: bool,
+) -> dict[str, Any]:
+    del include_detailed_contracts
+    return _build_authenticated_extension_params(
+        settings,
+        runtime_profile,
+        _build_turn_control_openapi_params,
+    )
+
+
+def _build_review_control_agent_card_params(
+    settings: Settings,
+    runtime_profile: RuntimeProfile,
+    include_detailed_contracts: bool,
+) -> dict[str, Any]:
+    del include_detailed_contracts
+    return _build_authenticated_extension_params(
+        settings,
+        runtime_profile,
+        _build_review_control_openapi_params,
+    )
+
+
+def _build_exec_control_agent_card_params(
+    settings: Settings,
+    runtime_profile: RuntimeProfile,
+    include_detailed_contracts: bool,
+) -> dict[str, Any]:
+    del include_detailed_contracts
+    return _build_authenticated_extension_params(
+        settings,
+        runtime_profile,
+        _build_exec_control_openapi_params,
+    )
+
+
+def _build_interrupt_callback_agent_card_params(
+    settings: Settings,
+    runtime_profile: RuntimeProfile,
+    include_detailed_contracts: bool,
+) -> dict[str, Any]:
+    del include_detailed_contracts
+    return _build_authenticated_extension_params(
+        settings,
+        runtime_profile,
+        _build_interrupt_callback_openapi_params,
+    )
+
+
+def _build_wire_contract_agent_card_params(
+    settings: Settings,
+    runtime_profile: RuntimeProfile,
+    include_detailed_contracts: bool,
+) -> dict[str, Any]:
+    del include_detailed_contracts
+    return _build_authenticated_extension_params(
+        settings,
+        runtime_profile,
+        _build_wire_contract_openapi_params,
+    )
+
+
+def _build_compatibility_profile_agent_card_params(
+    settings: Settings,
+    runtime_profile: RuntimeProfile,
+    include_detailed_contracts: bool,
+) -> dict[str, Any]:
+    del include_detailed_contracts
+    return _build_authenticated_extension_params(
+        settings,
+        runtime_profile,
+        _build_compatibility_profile_openapi_params,
+    )
 
 
 def _build_session_binding_openapi_params(
@@ -313,9 +456,10 @@ _EXTENSION_CONTRACT_REGISTRY: tuple[ExtensionContractDescriptor, ...] = (
         family="provider_private",
         negotiation_mode="declaration_only",
         public_agent_card=False,
-        authenticated_agent_card=False,
+        authenticated_agent_card=True,
         openapi_group="codex",
         taxonomy_group="codex_provider_private_contracts",
+        agent_card_params_builder=_build_session_query_agent_card_params,
         openapi_params_builder=_build_session_query_openapi_params,
     ),
     ExtensionContractDescriptor(
@@ -326,9 +470,10 @@ _EXTENSION_CONTRACT_REGISTRY: tuple[ExtensionContractDescriptor, ...] = (
         family="provider_private",
         negotiation_mode="declaration_only",
         public_agent_card=False,
-        authenticated_agent_card=False,
+        authenticated_agent_card=True,
         openapi_group="codex",
         taxonomy_group="codex_provider_private_contracts",
+        agent_card_params_builder=_build_discovery_agent_card_params,
         openapi_params_builder=_build_discovery_openapi_params,
     ),
     ExtensionContractDescriptor(
@@ -339,9 +484,10 @@ _EXTENSION_CONTRACT_REGISTRY: tuple[ExtensionContractDescriptor, ...] = (
         family="provider_private",
         negotiation_mode="declaration_only",
         public_agent_card=False,
-        authenticated_agent_card=False,
+        authenticated_agent_card=True,
         openapi_group="codex",
         taxonomy_group="codex_provider_private_contracts",
+        agent_card_params_builder=_build_thread_lifecycle_agent_card_params,
         openapi_params_builder=_build_thread_lifecycle_openapi_params,
     ),
     ExtensionContractDescriptor(
@@ -352,9 +498,10 @@ _EXTENSION_CONTRACT_REGISTRY: tuple[ExtensionContractDescriptor, ...] = (
         family="provider_private",
         negotiation_mode="declaration_only",
         public_agent_card=False,
-        authenticated_agent_card=False,
+        authenticated_agent_card=True,
         openapi_group="codex",
         taxonomy_group="codex_provider_private_contracts",
+        agent_card_params_builder=_build_interrupt_recovery_agent_card_params,
         openapi_params_builder=_build_interrupt_recovery_openapi_params,
     ),
     ExtensionContractDescriptor(
@@ -365,9 +512,10 @@ _EXTENSION_CONTRACT_REGISTRY: tuple[ExtensionContractDescriptor, ...] = (
         family="provider_private",
         negotiation_mode="declaration_only",
         public_agent_card=False,
-        authenticated_agent_card=False,
+        authenticated_agent_card=True,
         openapi_group="codex",
         taxonomy_group="codex_provider_private_contracts",
+        agent_card_params_builder=_build_turn_control_agent_card_params,
         openapi_params_builder=_build_turn_control_openapi_params,
     ),
     ExtensionContractDescriptor(
@@ -378,9 +526,10 @@ _EXTENSION_CONTRACT_REGISTRY: tuple[ExtensionContractDescriptor, ...] = (
         family="provider_private",
         negotiation_mode="declaration_only",
         public_agent_card=False,
-        authenticated_agent_card=False,
+        authenticated_agent_card=True,
         openapi_group="codex",
         taxonomy_group="codex_provider_private_contracts",
+        agent_card_params_builder=_build_review_control_agent_card_params,
         openapi_params_builder=_build_review_control_openapi_params,
     ),
     ExtensionContractDescriptor(
@@ -391,9 +540,10 @@ _EXTENSION_CONTRACT_REGISTRY: tuple[ExtensionContractDescriptor, ...] = (
         family="provider_private",
         negotiation_mode="declaration_only",
         public_agent_card=False,
-        authenticated_agent_card=False,
+        authenticated_agent_card=True,
         openapi_group="codex",
         taxonomy_group="codex_provider_private_contracts",
+        agent_card_params_builder=_build_exec_control_agent_card_params,
         openapi_params_builder=_build_exec_control_openapi_params,
     ),
     ExtensionContractDescriptor(
@@ -404,9 +554,10 @@ _EXTENSION_CONTRACT_REGISTRY: tuple[ExtensionContractDescriptor, ...] = (
         family="provider_private",
         negotiation_mode="declaration_only",
         public_agent_card=False,
-        authenticated_agent_card=False,
+        authenticated_agent_card=True,
         openapi_group="codex",
         taxonomy_group="shared_provider_private_contracts",
+        agent_card_params_builder=_build_interrupt_callback_agent_card_params,
         openapi_params_builder=_build_interrupt_callback_openapi_params,
     ),
     ExtensionContractDescriptor(
@@ -417,9 +568,10 @@ _EXTENSION_CONTRACT_REGISTRY: tuple[ExtensionContractDescriptor, ...] = (
         family="machine_readable",
         negotiation_mode="not_applicable",
         public_agent_card=False,
-        authenticated_agent_card=False,
+        authenticated_agent_card=True,
         openapi_group="codex",
         taxonomy_group="codex_provider_private_contracts",
+        agent_card_params_builder=_build_wire_contract_agent_card_params,
         openapi_params_builder=_build_wire_contract_openapi_params,
     ),
     ExtensionContractDescriptor(
@@ -430,9 +582,10 @@ _EXTENSION_CONTRACT_REGISTRY: tuple[ExtensionContractDescriptor, ...] = (
         family="machine_readable",
         negotiation_mode="not_applicable",
         public_agent_card=False,
-        authenticated_agent_card=False,
+        authenticated_agent_card=True,
         openapi_group="codex",
         taxonomy_group="codex_provider_private_contracts",
+        agent_card_params_builder=_build_compatibility_profile_agent_card_params,
         openapi_params_builder=_build_compatibility_profile_openapi_params,
     ),
 )
@@ -444,6 +597,7 @@ def get_extension_contract_registry() -> tuple[ExtensionContractDescriptor, ...]
 
 def build_agent_card_extensions_from_registry(
     *,
+    settings: Settings,
     runtime_profile: RuntimeProfile,
     include_detailed_contracts: bool,
 ) -> list[AgentExtension]:
@@ -462,6 +616,7 @@ def build_agent_card_extensions_from_registry(
                 required=False,
                 description=descriptor.description,
                 params=descriptor.agent_card_params_builder(
+                    settings,
                     runtime_profile,
                     include_detailed_contracts,
                 ),

@@ -93,7 +93,7 @@ Execution-environment boundary fields are also published through the runtime pro
 ## Extension Stability
 
 - Shared metadata and extension contracts should stay synchronized across Agent Card, OpenAPI, and runtime behavior.
-- Public Agent Card should stay intentionally minimal. Negotiated shared extension params belong in `capabilities.extensions`; provider-private contract payloads belong in OpenAPI `x-codex-contracts`, with the authenticated extended card focused on skill discovery and deployment-aware examples.
+- Public Agent Card should stay intentionally minimal. Negotiated shared extension params belong in public `capabilities.extensions`; provider-private and machine-readable extension contracts belong in authenticated extended card `capabilities.extensions`, with OpenAPI `x-codex-contracts` carrying the full payloads and skill decomposition remaining additive discovery guidance.
 - Product-specific extensions should remain stable within the current major line unless explicitly documented otherwise.
 - Deployment-conditional methods must be declared as conditional rather than silently disappearing.
 - Rich input mapping is compatibility-sensitive across the core A2A message surface and `codex.turns.steer`. Changes to supported part types, `Part(url|raw)` image handling, or `Part(data)` mention/skill mapping should be treated as wire-level behavior changes.
