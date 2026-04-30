@@ -72,6 +72,31 @@ def test_extension_registry_captures_phase1_inventory() -> None:
         "wire_contract",
         "compatibility_profile",
     ]
+    negotiated_keys = [
+        descriptor.key for descriptor in descriptors if descriptor.negotiation_mode == "negotiated"
+    ]
+    declaration_only_keys = [
+        descriptor.key
+        for descriptor in descriptors
+        if descriptor.negotiation_mode == "declaration_only"
+    ]
+    not_applicable_keys = [
+        descriptor.key
+        for descriptor in descriptors
+        if descriptor.negotiation_mode == "not_applicable"
+    ]
+    assert negotiated_keys == ["session_binding", "streaming"]
+    assert declaration_only_keys == [
+        "session_query",
+        "discovery",
+        "thread_lifecycle",
+        "interrupt_recovery",
+        "turn_control",
+        "review_control",
+        "exec_control",
+        "interrupt_callback",
+    ]
+    assert not_applicable_keys == ["wire_contract", "compatibility_profile"]
 
 
 def test_registry_builds_agent_card_extensions_for_current_phase1_surface() -> None:

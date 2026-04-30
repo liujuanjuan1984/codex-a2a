@@ -35,6 +35,9 @@ class ExtensionContractDescriptor:
     title: str
     description: str
     family: Literal["shared", "provider_private", "machine_readable"]
+    # negotiated: request-level activation via A2A-Extensions is meaningful
+    # declaration_only: discover through Agent Card/OpenAPI and invoke directly
+    # not_applicable: descriptive metadata, not an activatable runtime extension
     negotiation_mode: Literal["negotiated", "declaration_only", "not_applicable"]
     public_agent_card: bool
     authenticated_agent_card: bool

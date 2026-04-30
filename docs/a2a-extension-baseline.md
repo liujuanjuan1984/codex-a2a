@@ -58,7 +58,8 @@ Phase 1 is intentionally internal-facing. It does not change the external extens
 ## Negotiation Rules
 
 - Shared request/response extensions are the only extensions treated as negotiated by default in phase 1.
-- Provider-private `codex.*` contracts are treated as declaration and documentation surfaces first; they are not automatically implied to be public Agent Card negotiated extensions.
+- Shared request/response extensions use request-level `A2A-Extensions` activation only when the request depends on that negotiated behavior.
+- Provider-private `codex.*` contracts and shared callback contracts marked `declaration_only` are discovered through the authenticated extended Agent Card and OpenAPI, then used by directly invoking their documented provider-private methods. They do not require a separate `A2A-Extensions` activation header.
 - Compatibility and wire-profile documents are not negotiable extensions.
 
 ## Inventory Rules

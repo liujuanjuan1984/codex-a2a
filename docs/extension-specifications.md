@@ -18,6 +18,12 @@ Provider-private contract note:
 - Prefer discovery, stable projections, and low-risk watch/control bridges before exposing stronger runtime or host-execution controls.
 - When an upstream behavior is highly runtime-internal or host-shaped, the specification should keep it provider-private and should not force it into fake A2A core object semantics.
 
+Negotiation note:
+
+- `urn:a2a:session-binding/v1` and `urn:a2a:stream-hints/v1` are the only current request-level negotiated extensions in this repository family.
+- Provider-private `codex.*` extension URIs and the shared interrupt callback URI are declaration-only contracts. Discover them from the authenticated extended Agent Card or OpenAPI, then invoke the documented JSON-RPC methods directly; no additional `A2A-Extensions` activation header is required for those methods.
+- `wire_contract` and `compatibility_profile` are descriptive metadata contracts, not activatable runtime extensions.
+
 ## Shared Session Binding v1
 
 URI: `urn:a2a:session-binding/v1`
@@ -45,6 +51,7 @@ URI: `urn:codex-a2a:codex-session-query/v1`
 - Scope: provider-private Codex session history and low-risk control methods
 - Discovery surface: authenticated extended card `capabilities.extensions` plus skill inventory, with full payload mirrored in OpenAPI `x-codex-contracts.session_query`
 - Transport: provider-private JSON-RPC methods on `POST /`
+- Negotiation: declaration-only; discover first, then invoke the documented methods directly
 - Note: this URI remains a stable contract identifier and is published only on authenticated discovery surfaces
 
 ## Codex Discovery v1
@@ -54,6 +61,7 @@ URI: `urn:codex-a2a:codex-discovery/v1`
 - Scope: provider-private skills/apps/plugins discovery methods and discovery watch bridge
 - Discovery surface: authenticated extended card `capabilities.extensions` plus skill inventory, with full payload mirrored in OpenAPI `x-codex-contracts.discovery`
 - Transport: provider-private JSON-RPC methods on `POST /`
+- Negotiation: declaration-only; discover first, then invoke the documented methods directly
 - Note: this URI remains a stable contract identifier and is published only on authenticated discovery surfaces
 
 ## Codex Thread Lifecycle v1
@@ -63,6 +71,7 @@ URI: `urn:codex-a2a:codex-thread-lifecycle/v1`
 - Scope: provider-private thread lifecycle control and lifecycle watch bridge
 - Discovery surface: authenticated extended card `capabilities.extensions` plus skill inventory, with full payload mirrored in OpenAPI `x-codex-contracts.thread_lifecycle`
 - Transport: provider-private JSON-RPC methods on `POST /`
+- Negotiation: declaration-only; discover first, then invoke the documented methods directly
 - Note: this URI remains a stable contract identifier and is published only on authenticated discovery surfaces
 
 ## Codex Turn Control v1
@@ -72,6 +81,7 @@ URI: `urn:codex-a2a:codex-turn-control/v1`
 - Scope: provider-private active-turn steering for already-running regular turns
 - Discovery surface: authenticated extended card `capabilities.extensions` plus skill inventory, with full payload mirrored in OpenAPI `x-codex-contracts.turn_control`
 - Transport: provider-private JSON-RPC methods on `POST /`
+- Negotiation: declaration-only; discover first, then invoke the documented methods directly
 - Note: this URI remains a stable contract identifier and is published only on authenticated discovery surfaces
 
 ## Codex Review Control v1
@@ -81,6 +91,7 @@ URI: `urn:codex-a2a:codex-review/v1`
 - Scope: provider-private review-start control and review lifecycle watch bridge for uncommitted changes, branches, commits, and custom reviewer instructions
 - Discovery surface: authenticated extended card `capabilities.extensions` plus skill inventory, with full payload mirrored in OpenAPI `x-codex-contracts.review_control`
 - Transport: provider-private JSON-RPC methods on `POST /`
+- Negotiation: declaration-only; discover first, then invoke the documented methods directly
 - Note: this URI remains a stable contract identifier and is published only on authenticated discovery surfaces
 
 ## Codex Exec v1
@@ -90,6 +101,7 @@ URI: `urn:codex-a2a:codex-exec/v1`
 - Scope: provider-private standalone interactive command execution
 - Discovery surface: authenticated extended card `capabilities.extensions` plus skill inventory, with full payload mirrored in OpenAPI `x-codex-contracts.exec_control`
 - Transport: provider-private JSON-RPC methods on `POST /`
+- Negotiation: declaration-only; discover first, then invoke the documented methods directly
 - Note: this URI remains a stable contract identifier and is published only on authenticated discovery surfaces
 
 ## Shared Interactive Interrupt v1
@@ -99,6 +111,7 @@ URI: `urn:a2a:interactive-interrupt/v1`
 - Scope: shared interrupt callback reply methods
 - Discovery surface: authenticated extended card `capabilities.extensions` plus skill inventory, with full payload mirrored in OpenAPI `x-codex-contracts.interrupt_callback`
 - Transport: provider-private JSON-RPC methods on `POST /`
+- Negotiation: declaration-only; discover first, then invoke the documented methods directly
 - Note: this URI identifies a shared repo-family callback contract and is published on authenticated discovery surfaces
 
 ## A2A Compatibility Profile v1
@@ -108,6 +121,7 @@ URI: `urn:codex-a2a:compatibility-profile/v1`
 - Scope: compatibility profile describing core baselines, extension retention, and declared service behaviors
 - Discovery surface: authenticated extended card `capabilities.extensions`, with full payload mirrored in OpenAPI `x-codex-contracts.compatibility_profile`
 - Transport: provider-private machine-readable contract metadata
+- Negotiation: not applicable; descriptive metadata only
 - Note: this URI remains a stable contract identifier and is published only on authenticated discovery surfaces
 
 ## A2A Wire Contract v1
@@ -117,4 +131,5 @@ URI: `urn:codex-a2a:wire-contract/v1`
 - Scope: wire-level contract for supported methods, endpoints, and error semantics
 - Discovery surface: authenticated extended card `capabilities.extensions`, with full payload mirrored in OpenAPI `x-codex-contracts.wire_contract`
 - Transport: provider-private machine-readable contract metadata
+- Negotiation: not applicable; descriptive metadata only
 - Note: this URI remains a stable contract identifier and is published only on authenticated discovery surfaces
