@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import uuid
 from collections.abc import Awaitable, Callable, Mapping
 from contextlib import suppress
 from dataclasses import dataclass
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from a2a.server.agent_execution import AgentExecutor, RequestContext
@@ -16,16 +18,11 @@ from a2a.types import (
     Task,
     TaskState,
     TaskStatus,
+    TaskStatusUpdateEvent,
 )
 
 from codex_a2a.a2a_proto import new_text_part
 from codex_a2a.client.client import A2AClient
-from codex_a2a.execution.cancellation import (
-    await_cancel_cleanup,
-    emit_canceled_status,
-    prepare_cancel_waitables,
-)
-from codex_a2a.execution.directory_policy import resolve_and_validate_directory
 from codex_a2a.execution.request_metadata import (
     extract_codex_directory,
     extract_codex_execution_options,
@@ -107,7 +104,38 @@ class CodexAgentExecutor(AgentExecutor):
         return self._session_guard_bindings
 
     def _resolve_and_validate_directory(self, requested: str | None) -> str | None:
-        return resolve_and_validate_directory(self._client, requested)
+        """Normalize and validate the directory parameter against workspace boundaries."""
+        base_dir_str = self._client.directory or os.getcwd()
+        base_path = Path(base_dir_str).resolve()
+
+        if requested is not None and not isinstance(requested, str):
+            raise ValueError("Directory must be a string path")
+
+        requested = requested.strip() if requested else requested
+        if not requested:
+            return str(base_path)
+
+        def resolve_requested(path: str) -> Path:
+            candidate = Path(path)
+            if not candidate.is_absolute():
+                candidate = base_path / candidate
+            return candidate.resolve()
+
+        if not self._client.settings.a2a_allow_directory_override:
+            requested_path = resolve_requested(requested)
+            if requested_path == base_path:
+                return str(base_path)
+            raise ValueError("Directory override is disabled by service configuration")
+
+        requested_path = resolve_requested(requested)
+        try:
+            requested_path.relative_to(base_path)
+        except ValueError as err:
+            raise ValueError(
+                f"Directory {requested} is outside the allowed workspace {base_path}"
+            ) from err
+
+        return str(requested_path)
 
     async def execute(self, context: RequestContext, event_queue: EventQueue) -> None:
         task_id = context.task_id
@@ -513,10 +541,12 @@ class CodexAgentExecutor(AgentExecutor):
             call_context = context.call_context
             identity = (call_context.state.get("identity") if call_context else None) or "anonymous"
 
-            await emit_canceled_status(
-                event_queue,
-                task_id=task_id,
-                context_id=context_id,
+            await event_queue.enqueue_event(
+                TaskStatusUpdateEvent(
+                    task_id=task_id,
+                    context_id=context_id,
+                    status=TaskStatus(state=TaskState.TASK_STATE_CANCELED),
+                )
             )
 
             running = await self._session_runtime.cancel_running_request(
@@ -524,14 +554,42 @@ class CodexAgentExecutor(AgentExecutor):
                 context_id=context_id,
                 identity=identity,
             )
-            waitables = prepare_cancel_waitables(running, current_task=asyncio.current_task())
-            await await_cancel_cleanup(
-                waitables,
-                task_id=task_id,
-                context_id=context_id,
-                cancel_abort_timeout_seconds=self._cancel_abort_timeout_seconds,
-                logger=logger,
-            )
+            if running.stop_event is not None:
+                running.stop_event.set()
+
+            waitables: list[asyncio.Task[Any]] = []
+            current_task = asyncio.current_task()
+            if running.task and running.task is not current_task and not running.task.done():
+                running.task.cancel()
+                waitables.append(running.task)
+            if running.inflight_create is not None:
+                running.inflight_create.cancel()
+                waitables.append(running.inflight_create)
+
+            if waitables and self._cancel_abort_timeout_seconds > 0:
+                done, pending = await asyncio.wait(
+                    set(waitables),
+                    timeout=self._cancel_abort_timeout_seconds,
+                )
+                for task in done:
+                    with suppress(asyncio.CancelledError, Exception):
+                        await task
+                if pending:
+                    logger.warning(
+                        "Cancel abort timeout exceeded task_id=%s context_id=%s "
+                        "abort_timeout_seconds=%.3f pending_tasks=%s",
+                        task_id,
+                        context_id,
+                        self._cancel_abort_timeout_seconds,
+                        len(pending),
+                    )
+            elif waitables:
+                logger.debug(
+                    "Cancel abort wait skipped task_id=%s context_id=%s abort_timeout_seconds=%.3f",
+                    task_id,
+                    context_id,
+                    self._cancel_abort_timeout_seconds,
+                )
         except Exception as exc:
             logger.exception("Cancel failed")
             if task_id and context_id:
