@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from a2a.server.routes.common import DefaultServerCallContextBuilder
+from a2a.server.routes.common import DefaultServerCallContextBuilder, StarletteUser
 from fastapi import Request
+from starlette.authentication import SimpleUser
 
 if TYPE_CHECKING:
     from a2a.server.context import ServerCallContext
@@ -39,6 +40,8 @@ class IdentityAwareCallContextBuilder(DefaultServerCallContextBuilder):
         identity = getattr(request.state, "user_identity", None)
         if identity:
             context.state["identity"] = identity
+            if not context.user.user_name:
+                context.user = StarletteUser(SimpleUser(identity))
         credential_id = getattr(request.state, "user_credential_id", None)
         if isinstance(credential_id, str) and credential_id:
             context.state["credential_id"] = credential_id

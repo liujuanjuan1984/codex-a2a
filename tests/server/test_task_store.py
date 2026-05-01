@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from a2a.server.context import ServerCallContext
 from a2a.server.tasks.database_task_store import DatabaseTaskStore
 from a2a.server.tasks.inmemory_task_store import InMemoryTaskStore
 from a2a.server.tasks.task_store import TaskStore
@@ -259,6 +260,46 @@ async def test_guarded_database_task_store_does_not_depend_on_stale_read_before_
     assert restored is not None
     assert restored.status.state == TaskState.TASK_STATE_COMPLETED
     assert proto_to_python(restored.metadata) == {}
+
+
+@pytest.mark.asyncio
+async def test_guarded_database_task_store_normalizes_context_with_identity_only(
+    tmp_path: Path,
+) -> None:
+    database_url = f"sqlite+aiosqlite:///{(tmp_path / 'identity-only-context.db').resolve()}"
+    settings = make_settings(
+        a2a_bearer_token="test-token",
+        a2a_database_url=database_url,
+    )
+    runtime = build_task_store_runtime(settings)
+    await runtime.startup()
+    try:
+        context_user_a = MagicMock(spec=ServerCallContext)
+        context_user_a.state = {"identity": "user-a"}
+        context_user_a.tenant = ""
+        context_user_a.requested_extensions = set()
+
+        context_user_b = MagicMock(spec=ServerCallContext)
+        context_user_b.state = {"identity": "user-b"}
+        context_user_b.tenant = ""
+        context_user_b.requested_extensions = set()
+
+        task = Task(
+            id="task-1",
+            context_id="ctx-1",
+            status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
+        )
+
+        await runtime.task_store.save(task, context_user_a)
+
+        restored = await runtime.task_store.get("task-1", context_user_a)
+        other_identity = await runtime.task_store.get("task-1", context_user_b)
+    finally:
+        await runtime.shutdown()
+
+    assert restored is not None
+    assert restored.id == "task-1"
+    assert other_identity is None
 
 
 class _BrokenTaskStore(TaskStore):

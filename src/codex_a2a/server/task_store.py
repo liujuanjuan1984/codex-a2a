@@ -3,11 +3,13 @@ from __future__ import annotations
 import asyncio
 import logging
 from abc import ABC, abstractmethod
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, MutableMapping
 from dataclasses import dataclass
 from typing import Any
 
+from a2a.auth.user import UnauthenticatedUser, User
 from a2a.server.context import ServerCallContext
+from a2a.server.routes.common import StarletteUser
 from a2a.server.tasks.database_task_store import DatabaseTaskStore
 from a2a.server.tasks.inmemory_task_store import InMemoryTaskStore
 from a2a.server.tasks.task_store import TaskStore
@@ -17,6 +19,7 @@ from sqlalchemy.dialects.postgresql import insert as postgresql_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncEngine
 from sqlalchemy.orm import class_mapper
+from starlette.authentication import SimpleUser
 
 from codex_a2a.a2a_proto import proto_to_python
 from codex_a2a.config import Settings
@@ -43,7 +46,48 @@ _ATOMIC_TERMINAL_GUARD_DIALECTS = frozenset({"postgresql", "sqlite"})
 
 
 def _normalize_context(context: ServerCallContext | None) -> ServerCallContext:
-    return context if isinstance(context, ServerCallContext) else ServerCallContext()
+    if not isinstance(context, ServerCallContext):
+        return ServerCallContext()
+    state = _normalized_context_state(getattr(context, "state", None))
+    identity = _context_identity(state)
+    normalized_user = _normalized_context_user(getattr(context, "user", None), identity=identity)
+    tenant = getattr(context, "tenant", "")
+    requested_extensions = getattr(context, "requested_extensions", ())
+    return ServerCallContext(
+        state=state,
+        user=normalized_user,
+        tenant=tenant if isinstance(tenant, str) else "",
+        requested_extensions={
+            value for value in requested_extensions if isinstance(value, str) and value
+        },
+    )
+
+
+def _normalized_context_state(state: Any) -> MutableMapping[str, Any]:
+    if isinstance(state, MutableMapping):
+        return dict(state)
+    return {}
+
+
+def _context_identity(state: MutableMapping[str, Any]) -> str | None:
+    identity = state.get("identity")
+    if not isinstance(identity, str):
+        return None
+    normalized = identity.strip()
+    return normalized or None
+
+
+def _normalized_context_user(user: Any, *, identity: str | None) -> User:
+    if isinstance(user, User):
+        try:
+            user_name = user.user_name
+        except Exception:
+            user_name = ""
+        if isinstance(user_name, str) and user_name:
+            return user
+    if identity:
+        return StarletteUser(SimpleUser(identity))
+    return UnauthenticatedUser()
 
 
 class TaskStoreOperationError(RuntimeError):
