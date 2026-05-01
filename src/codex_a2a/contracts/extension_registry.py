@@ -60,38 +60,6 @@ def _select_public_extension_params(
     return {key: params[key] for key in keys if key in params}
 
 
-def _build_public_streaming_extension_params(params: dict[str, Any]) -> dict[str, Any]:
-    return {
-        "artifact_metadata_field": params["artifact_metadata_field"],
-        "status_metadata_field": params["status_metadata_field"],
-        "interrupt_metadata_field": params["interrupt_metadata_field"],
-        "session_metadata_field": params["session_metadata_field"],
-        "usage_metadata_field": params["usage_metadata_field"],
-        "block_types": params["block_types"],
-        "block_part_types": params["block_part_types"],
-        "stream_fields": _select_public_extension_params(
-            params["stream_fields"],
-            keys=("block_type", "message_id", "sequence", "source"),
-        ),
-        "status_stream_fields": _select_public_extension_params(
-            params["status_stream_fields"],
-            keys=("type", "status", "source", "event_id"),
-        ),
-        "session_fields": _select_public_extension_params(
-            params["session_fields"],
-            keys=("id", "title"),
-        ),
-        "interrupt_fields": _select_public_extension_params(
-            params["interrupt_fields"],
-            keys=("request_id", "type", "phase", "resolution"),
-        ),
-        "usage_fields": _select_public_extension_params(
-            params["usage_fields"],
-            keys=("input_tokens", "output_tokens", "total_tokens", "reasoning_tokens"),
-        ),
-    }
-
-
 def _build_extension_contract_params(
     descriptor: ExtensionContractDescriptor,
     settings: Settings | None,
@@ -113,23 +81,6 @@ def _build_extension_contract_params(
             runtime_profile=runtime_profile,
         )
     )
-
-
-def _build_agent_card_extension_params(
-    descriptor: ExtensionContractDescriptor,
-    *,
-    settings: Settings,
-    runtime_profile: RuntimeProfile,
-    include_detailed_contracts: bool,
-) -> dict[str, Any]:
-    params = _build_extension_contract_params(descriptor, settings, runtime_profile)
-    if include_detailed_contracts:
-        return params
-    if descriptor.public_params_transform == "streaming_public":
-        return _build_public_streaming_extension_params(params)
-    if descriptor.public_params_keys is not None:
-        return _select_public_extension_params(params, keys=descriptor.public_params_keys)
-    return params
 
 
 EXTENSION_CONTRACT_REGISTRY: tuple[ExtensionContractDescriptor, ...] = (
@@ -335,17 +286,49 @@ def build_agent_card_extensions_from_registry(
         )
         if not include_on_surface:
             continue
+        params = _build_extension_contract_params(descriptor, settings, runtime_profile)
+        if not include_detailed_contracts:
+            if descriptor.public_params_transform == "streaming_public":
+                params = {
+                    "artifact_metadata_field": params["artifact_metadata_field"],
+                    "status_metadata_field": params["status_metadata_field"],
+                    "interrupt_metadata_field": params["interrupt_metadata_field"],
+                    "session_metadata_field": params["session_metadata_field"],
+                    "usage_metadata_field": params["usage_metadata_field"],
+                    "block_types": params["block_types"],
+                    "block_part_types": params["block_part_types"],
+                    "stream_fields": _select_public_extension_params(
+                        params["stream_fields"],
+                        keys=("block_type", "message_id", "sequence", "source"),
+                    ),
+                    "status_stream_fields": _select_public_extension_params(
+                        params["status_stream_fields"],
+                        keys=("type", "status", "source", "event_id"),
+                    ),
+                    "session_fields": _select_public_extension_params(
+                        params["session_fields"],
+                        keys=("id", "title"),
+                    ),
+                    "interrupt_fields": _select_public_extension_params(
+                        params["interrupt_fields"],
+                        keys=("request_id", "type", "phase", "resolution"),
+                    ),
+                    "usage_fields": _select_public_extension_params(
+                        params["usage_fields"],
+                        keys=("input_tokens", "output_tokens", "total_tokens", "reasoning_tokens"),
+                    ),
+                }
+            elif descriptor.public_params_keys is not None:
+                params = _select_public_extension_params(
+                    params,
+                    keys=descriptor.public_params_keys,
+                )
         extensions.append(
             AgentExtension(
                 uri=descriptor.uri,
                 required=False,
                 description=descriptor.description,
-                params=_build_agent_card_extension_params(
-                    descriptor,
-                    settings=settings,
-                    runtime_profile=runtime_profile,
-                    include_detailed_contracts=include_detailed_contracts,
-                ),
+                params=params,
             )
         )
     return extensions

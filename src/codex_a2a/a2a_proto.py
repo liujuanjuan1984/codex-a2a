@@ -9,10 +9,6 @@ from google.protobuf.message import Message as ProtoMessage  # type: ignore[impo
 from google.protobuf.struct_pb2 import Struct, Value  # type: ignore[import-untyped]
 
 
-def to_value(value: Any) -> Value:
-    return ParseDict(value, Value())
-
-
 def to_struct(value: Mapping[str, Any] | None) -> Struct | None:
     if value is None:
         return None
@@ -54,7 +50,7 @@ def new_text_part(text: str) -> Part:
 
 
 def new_data_part(data: Any) -> Part:
-    return Part(data=to_value(data))
+    return Part(data=ParseDict(data, Value()))
 
 
 def new_file_url_part(

@@ -34,21 +34,19 @@ class StaticAuthCredential:
     credential_id: str | None = None
 
 
-def default_capabilities_for_scheme(scheme: str) -> tuple[str, ...]:
-    if scheme == "basic":
-        return (
-            CAPABILITY_EXEC_CONTROL,
-            CAPABILITY_TURN_CONTROL,
-        )
-    return ()
-
-
 def build_static_auth_credentials(settings: Settings) -> tuple[StaticAuthCredential, ...]:
     credentials: list[StaticAuthCredential] = []
     for entry in settings.a2a_static_auth_credentials:
         if not entry.enabled:
             continue
-        capabilities = entry.capabilities or default_capabilities_for_scheme(entry.scheme)
+        capabilities = entry.capabilities or (
+            (
+                CAPABILITY_EXEC_CONTROL,
+                CAPABILITY_TURN_CONTROL,
+            )
+            if entry.scheme == "basic"
+            else ()
+        )
         if entry.scheme == "basic":
             principal = entry.username or OPERATOR_PRINCIPAL
         else:
@@ -98,10 +96,15 @@ def authenticate_static_credential(
     if normalized_scheme != "basic":
         return None
 
-    parsed = decode_basic_credentials(auth_value)
-    if parsed is None:
+    try:
+        decoded = base64.b64decode(auth_value, validate=True).decode("utf-8")
+    except (binascii.Error, UnicodeDecodeError):
         return None
-    username, password = parsed
+    if ":" not in decoded:
+        return None
+    username, password = decoded.split(":", 1)
+    if not username or not password:
+        return None
     for credential in credentials:
         if credential.auth_scheme != "basic":
             continue
@@ -115,28 +118,8 @@ def authenticate_static_credential(
     return None
 
 
-def decode_basic_credentials(value: str) -> tuple[str, str] | None:
-    try:
-        decoded = base64.b64decode(value, validate=True).decode("utf-8")
-    except (binascii.Error, UnicodeDecodeError):
-        return None
-    if ":" not in decoded:
-        return None
-    username, password = decoded.split(":", 1)
-    if not username or not password:
-        return None
-    return username, password
-
-
-def get_authenticated_principal(request: Request) -> AuthenticatedPrincipal | None:
-    principal = getattr(request.state, "authenticated_principal", None)
-    if isinstance(principal, AuthenticatedPrincipal):
-        return principal
-    return None
-
-
 def request_has_capability(request: Request, capability: str) -> bool:
-    principal = get_authenticated_principal(request)
-    if principal is None:
+    principal = getattr(request.state, "authenticated_principal", None)
+    if not isinstance(principal, AuthenticatedPrincipal):
         return False
     return capability in principal.capabilities

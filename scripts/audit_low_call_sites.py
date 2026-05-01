@@ -303,11 +303,7 @@ def filter_low_call_candidates(
     min_calls: int = DEFAULT_MIN_CALLS,
     max_calls: int = DEFAULT_MAX_CALLS,
 ) -> list[FunctionUsage]:
-    return [
-        usage
-        for usage in usages
-        if min_calls <= usage.total_calls <= max_calls
-    ]
+    return [usage for usage in usages if min_calls <= usage.total_calls <= max_calls]
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -327,9 +323,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--search-root",
         action="append",
         default=None,
-        help=(
-            "Python roots to scan for direct call sites. Defaults to src/codex_a2a and tests."
-        ),
+        help=("Python roots to scan for direct call sites. Defaults to src/codex_a2a and tests."),
     )
     parser.add_argument(
         "--min-calls",
@@ -355,9 +349,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 def _format_call_sites(call_sites: tuple[CallSite, ...], *, limit: int) -> str:
     if not call_sites:
         return "-"
-    sample = ", ".join(
-        f"{call.path}:{call.lineno} ({call.caller})" for call in call_sites[:limit]
-    )
+    sample = ", ".join(f"{call.path}:{call.lineno} ({call.caller})" for call in call_sites[:limit])
     remainder = len(call_sites) - min(len(call_sites), limit)
     if remainder > 0:
         return f"{sample}, +{remainder} more"
@@ -390,10 +382,18 @@ def main(argv: list[str] | None = None) -> int:
             f"total={usage.total_calls} src={len(usage.source_calls)} tests={len(usage.test_calls)}"
         )
         print(
-            f"  src callers: {_format_call_sites(usage.source_calls, limit=args.caller_sample_limit)}"
+            "  src callers: "
+            + _format_call_sites(
+                usage.source_calls,
+                limit=args.caller_sample_limit,
+            )
         )
         print(
-            f"  test callers: {_format_call_sites(usage.test_calls, limit=args.caller_sample_limit)}"
+            "  test callers: "
+            + _format_call_sites(
+                usage.test_calls,
+                limit=args.caller_sample_limit,
+            )
         )
     return 0
 

@@ -91,7 +91,11 @@ class A2AClient:
 
         self._config = config
         self._httpx_client = httpx_client or httpx.AsyncClient(
-            timeout=self._build_timeout(),
+            timeout=(
+                None
+                if config.request_timeout_seconds is None
+                else httpx.Timeout(config.request_timeout_seconds)
+            ),
             headers=config.default_headers,
         )
         self._owns_http_client = httpx_client is None
@@ -109,11 +113,6 @@ class A2AClient:
             accepted_output_modes=config.accepted_output_modes,
         )
         self._lock = asyncio.Lock()
-
-    def _build_timeout(self) -> httpx.Timeout | None:
-        if self._config.request_timeout_seconds is None:
-            return None
-        return httpx.Timeout(self._config.request_timeout_seconds)
 
     @property
     def is_closed(self) -> bool:
