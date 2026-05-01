@@ -15,10 +15,6 @@ from codex_a2a.jsonrpc.exec_control_params import (
     ExecStartControlParams,
     ExecTerminateControlParams,
     ExecWriteControlParams,
-    parse_exec_resize_params,
-    parse_exec_start_params,
-    parse_exec_terminate_params,
-    parse_exec_write_params,
 )
 from codex_a2a.jsonrpc.interrupt_params import (
     ElicitationReplyParams,
@@ -29,7 +25,6 @@ from codex_a2a.jsonrpc.interrupt_params import (
 )
 from codex_a2a.jsonrpc.interrupt_recovery_params import (
     InterruptRecoveryListParams,
-    parse_interrupt_recovery_list_params,
 )
 from codex_a2a.jsonrpc.params_common import JsonRpcParamsValidationError, MetadataParams
 from codex_a2a.jsonrpc.query_params import (
@@ -39,8 +34,6 @@ from codex_a2a.jsonrpc.query_params import (
 from codex_a2a.jsonrpc.review_control_params import (
     ReviewStartControlParams,
     ReviewWatchControlParams,
-    parse_review_start_params,
-    parse_review_watch_params,
 )
 from codex_a2a.jsonrpc.thread_lifecycle_params import (
     ThreadArchiveControlParams,
@@ -49,16 +42,9 @@ from codex_a2a.jsonrpc.thread_lifecycle_params import (
     ThreadUnarchiveControlParams,
     ThreadWatchControlParams,
     ThreadWatchReleaseControlParams,
-    parse_thread_archive_params,
-    parse_thread_fork_params,
-    parse_thread_metadata_update_params,
-    parse_thread_unarchive_params,
-    parse_thread_watch_params,
-    parse_thread_watch_release_params,
 )
 from codex_a2a.jsonrpc.turn_control_params import (
     TurnSteerControlParams,
-    parse_turn_steer_params,
 )
 
 __all__ = [
@@ -93,20 +79,6 @@ __all__ = [
     "parse_discovery_plugins_list_params",
     "parse_discovery_skills_list_params",
     "parse_discovery_watch_params",
-    "parse_exec_resize_params",
-    "parse_exec_start_params",
-    "parse_exec_terminate_params",
-    "parse_exec_write_params",
     "parse_get_session_messages_params",
-    "parse_interrupt_recovery_list_params",
     "parse_list_sessions_params",
-    "parse_review_start_params",
-    "parse_review_watch_params",
-    "parse_thread_archive_params",
-    "parse_thread_fork_params",
-    "parse_thread_metadata_update_params",
-    "parse_thread_unarchive_params",
-    "parse_thread_watch_params",
-    "parse_thread_watch_release_params",
-    "parse_turn_steer_params",
 ]

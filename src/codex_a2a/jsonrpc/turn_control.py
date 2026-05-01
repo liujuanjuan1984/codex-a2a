@@ -17,11 +17,14 @@ from codex_a2a.jsonrpc.errors import (
     invalid_params_response,
 )
 from codex_a2a.jsonrpc.owner_guard import validate_thread_owner
-from codex_a2a.jsonrpc.params_common import JsonRpcParamsValidationError
+from codex_a2a.jsonrpc.params_common import (
+    JsonRpcParamsValidationError,
+    validate_params_model,
+)
 from codex_a2a.jsonrpc.request_models import JSONRPCRequestModel as JSONRPCRequest
 from codex_a2a.jsonrpc.turn_control_params import (
     TurnSteerControlParams,
-    parse_turn_steer_params,
+    raise_turn_control_validation_error,
 )
 from codex_a2a.upstream.models import CodexRPCError
 
@@ -42,7 +45,11 @@ async def handle_turn_control_request(
     request: Request,
 ) -> Response:
     try:
-        parsed_params: TurnSteerControlParams = parse_turn_steer_params(params)
+        parsed_params = validate_params_model(
+            TurnSteerControlParams,
+            params,
+            on_error=raise_turn_control_validation_error,
+        )
     except JsonRpcParamsValidationError as exc:
         return invalid_params_response(app, base_request.id, exc)
 

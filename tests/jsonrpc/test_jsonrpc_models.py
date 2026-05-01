@@ -13,6 +13,10 @@ from codex_a2a.jsonrpc.interrupt_params import (
     PermissionsReplyParams,
     raise_interrupt_validation_error,
 )
+from codex_a2a.jsonrpc.interrupt_recovery_params import (
+    InterruptRecoveryListParams,
+    raise_interrupt_recovery_validation_error,
+)
 from codex_a2a.jsonrpc.params import (
     JsonRpcParamsValidationError,
     parse_discovery_apps_list_params,
@@ -21,18 +25,26 @@ from codex_a2a.jsonrpc.params import (
     parse_discovery_skills_list_params,
     parse_discovery_watch_params,
     parse_get_session_messages_params,
-    parse_interrupt_recovery_list_params,
     parse_list_sessions_params,
-    parse_review_start_params,
-    parse_review_watch_params,
-    parse_thread_archive_params,
-    parse_thread_fork_params,
-    parse_thread_metadata_update_params,
-    parse_thread_watch_params,
-    parse_thread_watch_release_params,
-    parse_turn_steer_params,
 )
 from codex_a2a.jsonrpc.params_common import validate_params_model
+from codex_a2a.jsonrpc.review_control_params import (
+    ReviewStartControlParams,
+    ReviewWatchControlParams,
+    raise_review_control_validation_error,
+)
+from codex_a2a.jsonrpc.thread_lifecycle_params import (
+    ThreadArchiveControlParams,
+    ThreadForkControlParams,
+    ThreadMetadataUpdateControlParams,
+    ThreadWatchControlParams,
+    ThreadWatchReleaseControlParams,
+    raise_thread_lifecycle_validation_error,
+)
+from codex_a2a.jsonrpc.turn_control_params import (
+    TurnSteerControlParams,
+    raise_turn_control_validation_error,
+)
 
 ModelT = TypeVar("ModelT", bound=A2ABaseModel)
 
@@ -45,6 +57,44 @@ def _parse_interrupt_reply_params(
         model_type,
         payload,
         on_error=raise_interrupt_validation_error,
+    )
+
+
+def _parse_interrupt_recovery_params(payload: dict[str, object]) -> InterruptRecoveryListParams:
+    return validate_params_model(
+        InterruptRecoveryListParams,
+        payload,
+        on_error=raise_interrupt_recovery_validation_error,
+    )
+
+
+def _parse_thread_lifecycle_params(
+    model_type: type[ModelT],
+    payload: dict[str, object],
+) -> ModelT:
+    return validate_params_model(
+        model_type,
+        payload,
+        on_error=raise_thread_lifecycle_validation_error,
+    )
+
+
+def _parse_turn_control_params(payload: dict[str, object]) -> TurnSteerControlParams:
+    return validate_params_model(
+        TurnSteerControlParams,
+        payload,
+        on_error=raise_turn_control_validation_error,
+    )
+
+
+def _parse_review_control_params(
+    model_type: type[ModelT],
+    payload: dict[str, object],
+) -> ModelT:
+    return validate_params_model(
+        model_type,
+        payload,
+        on_error=raise_review_control_validation_error,
     )
 
 
@@ -104,14 +154,14 @@ def test_parse_list_sessions_params_rejects_non_integer_limit() -> None:
 
 
 def test_parse_interrupt_recovery_list_params_accepts_type_aliases() -> None:
-    payload = parse_interrupt_recovery_list_params({"interrupt_type": "permissions"})
+    payload = _parse_interrupt_recovery_params({"interrupt_type": "permissions"})
 
     assert payload.interrupt_type == "permissions"
 
 
 def test_parse_interrupt_recovery_list_params_rejects_invalid_type() -> None:
     with pytest.raises(JsonRpcParamsValidationError) as exc_info:
-        parse_interrupt_recovery_list_params({"interrupt_type": "unknown"})
+        _parse_interrupt_recovery_params({"interrupt_type": "unknown"})
 
     assert str(exc_info.value) == (
         "type must be one of: permission, question, permissions, elicitation"
@@ -154,28 +204,34 @@ def test_parse_get_session_messages_params_applies_default_limit() -> None:
 
 
 def test_parse_thread_lifecycle_params_preserve_aliases() -> None:
-    fork = parse_thread_fork_params(
+    fork = _parse_thread_lifecycle_params(
+        ThreadForkControlParams,
         {
             "thread_id": "thr-1",
             "request": {"ephemeral": True},
             "metadata": {"codex": {"directory": "/workspace"}},
-        }
+        },
     )
-    metadata_update = parse_thread_metadata_update_params(
+    metadata_update = _parse_thread_lifecycle_params(
+        ThreadMetadataUpdateControlParams,
         {
             "thread_id": "thr-1",
             "request": {"git_info": {"branch": "feat/thread-lifecycle", "origin_url": "https://x"}},
-        }
+        },
     )
-    watch = parse_thread_watch_params(
+    watch = _parse_thread_lifecycle_params(
+        ThreadWatchControlParams,
         {
             "request": {
                 "events": ["thread.started", "thread.status.changed", "thread.started"],
                 "thread_ids": ["thr-1", "thr-2", "thr-1"],
             }
-        }
+        },
     )
-    watch_release = parse_thread_watch_release_params({"task_id": "task-watch-1"})
+    watch_release = _parse_thread_lifecycle_params(
+        ThreadWatchReleaseControlParams,
+        {"task_id": "task-watch-1"},
+    )
 
     assert fork.thread_id == "thr-1"
     assert fork.request is not None
@@ -198,7 +254,7 @@ def test_parse_thread_lifecycle_params_preserve_aliases() -> None:
 
 
 def test_parse_turn_and_review_control_params_use_canonical_shapes() -> None:
-    steer = parse_turn_steer_params(
+    steer = _parse_turn_control_params(
         {
             "thread_id": "thr-1",
             "expected_turn_id": "turn-1",
@@ -208,9 +264,10 @@ def test_parse_turn_and_review_control_params_use_canonical_shapes() -> None:
                     {"type": "mention", "name": "Demo App", "path": "app://demo-app"},
                 ]
             },
-        }
+        },
     )
-    review = parse_review_start_params(
+    review = _parse_review_control_params(
+        ReviewStartControlParams,
         {
             "thread_id": "thr-1",
             "delivery": "detached",
@@ -219,15 +276,16 @@ def test_parse_turn_and_review_control_params_use_canonical_shapes() -> None:
                 "sha": "commit-demo-123",
                 "title": "Polish tui colors",
             },
-        }
+        },
     )
-    review_watch = parse_review_watch_params(
+    review_watch = _parse_review_control_params(
+        ReviewWatchControlParams,
         {
             "thread_id": "thr-1",
             "review_thread_id": "thr-1-review",
             "turn_id": "turn-review-1",
             "request": {"events": ["review.started", "review.completed", "review.started"]},
-        }
+        },
     )
 
     assert steer.thread_id == "thr-1"
@@ -258,25 +316,28 @@ def test_parse_turn_and_review_control_params_use_canonical_shapes() -> None:
     ("parser", "payload", "message", "field"),
     [
         (
-            parse_thread_archive_params,
+            lambda payload: _parse_thread_lifecycle_params(ThreadArchiveControlParams, payload),
             {"thread_id": "   "},
             "Missing required params.thread_id",
             "thread_id",
         ),
         (
-            parse_thread_fork_params,
+            lambda payload: _parse_thread_lifecycle_params(ThreadForkControlParams, payload),
             {"thread_id": "thr-1", "request": {"ephemeral": "yes"}},
             "request.ephemeral must be a boolean",
             "request.ephemeral",
         ),
         (
-            parse_thread_metadata_update_params,
+            lambda payload: _parse_thread_lifecycle_params(
+                ThreadMetadataUpdateControlParams,
+                payload,
+            ),
             {"thread_id": "thr-1", "request": {"git_info": {}}},
             "request.git_info must include at least one field",
             "request.git_info",
         ),
         (
-            parse_thread_watch_params,
+            lambda payload: _parse_thread_lifecycle_params(ThreadWatchControlParams, payload),
             {"request": {"events": ["thread.deleted"]}},
             (
                 "request.events entries must be one of: thread.started, "
@@ -285,13 +346,16 @@ def test_parse_turn_and_review_control_params_use_canonical_shapes() -> None:
             "request.events",
         ),
         (
-            parse_thread_watch_params,
+            lambda payload: _parse_thread_lifecycle_params(ThreadWatchControlParams, payload),
             {"request": {"thread_ids": ["thr-1", "  "]}},
             "request.thread_ids[] must be a non-empty string",
             "request.thread_ids",
         ),
         (
-            parse_thread_watch_release_params,
+            lambda payload: _parse_thread_lifecycle_params(
+                ThreadWatchReleaseControlParams,
+                payload,
+            ),
             {"task_id": "   "},
             "Missing required params.task_id",
             "task_id",
@@ -316,7 +380,7 @@ def test_parse_thread_lifecycle_params_reject_invalid_fields(
     ("parser", "payload", "message", "field"),
     [
         (
-            parse_turn_steer_params,
+            _parse_turn_control_params,
             {
                 "thread_id": "thr-1",
                 "expected_turn_id": "turn-1",
@@ -326,7 +390,7 @@ def test_parse_thread_lifecycle_params_reject_invalid_fields(
             "request.parts",
         ),
         (
-            parse_turn_steer_params,
+            _parse_turn_control_params,
             {
                 "thread_id": "thr-1",
                 "expected_turn_id": "turn-1",
@@ -336,25 +400,25 @@ def test_parse_thread_lifecycle_params_reject_invalid_fields(
             "request.parts[0].type",
         ),
         (
-            parse_review_start_params,
+            lambda payload: _parse_review_control_params(ReviewStartControlParams, payload),
             {"thread_id": "thr-1", "delivery": "queued", "target": {"type": "commit", "sha": "a"}},
             "delivery must be one of: inline, detached",
             "delivery",
         ),
         (
-            parse_review_start_params,
+            lambda payload: _parse_review_control_params(ReviewStartControlParams, payload),
             {"thread_id": "thr-1", "target": {"type": "baseBranch"}},
             "target.branch must be a non-empty string",
             "target.branch",
         ),
         (
-            parse_review_start_params,
+            lambda payload: _parse_review_control_params(ReviewStartControlParams, payload),
             {"thread_id": "thr-1", "target": {"type": "custom", "instructions": "   "}},
             "target.instructions must be a non-empty string",
             "target.instructions",
         ),
         (
-            parse_review_watch_params,
+            lambda payload: _parse_review_control_params(ReviewWatchControlParams, payload),
             {
                 "thread_id": "thr-1",
                 "review_thread_id": "thr-1-review",
@@ -368,7 +432,7 @@ def test_parse_thread_lifecycle_params_reject_invalid_fields(
             "request.events",
         ),
         (
-            parse_review_watch_params,
+            lambda payload: _parse_review_control_params(ReviewWatchControlParams, payload),
             {
                 "thread_id": "thr-1",
                 "review_thread_id": "thr-1-review",

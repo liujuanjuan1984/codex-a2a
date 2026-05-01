@@ -12,7 +12,6 @@ from codex_a2a.jsonrpc.params_common import (
     normalize_non_empty_string,
     strip_optional_string,
     validate_non_empty_parts,
-    validate_params_model,
     validate_required_thread_id,
 )
 
@@ -100,7 +99,7 @@ class TurnSteerControlParams(_StrictModel):
         )
 
 
-def _raise_turn_control_validation_error(exc: ValidationError) -> None:
+def raise_turn_control_validation_error(exc: ValidationError) -> None:
     errors = exc.errors(include_url=False)
     if errors and all(err.get("type") == "extra_forbidden" for err in errors):
         raise map_extra_forbidden(errors)
@@ -146,11 +145,3 @@ def _raise_turn_control_validation_error(exc: ValidationError) -> None:
             data={"type": "INVALID_FIELD", "field": field},
         )
     raise JsonRpcParamsValidationError(message=message_text, data={"type": "INVALID_FIELD"})
-
-
-def parse_turn_steer_params(params: dict[str, Any]) -> TurnSteerControlParams:
-    return validate_params_model(
-        TurnSteerControlParams,
-        params,
-        on_error=_raise_turn_control_validation_error,
-    )

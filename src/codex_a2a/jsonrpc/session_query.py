@@ -39,8 +39,9 @@ async def handle_session_query_request(
     base_request: JSONRPCRequest,
     params: dict[str, Any],
 ) -> Response:
+    is_list_sessions = base_request.method == app._method_list_sessions
     try:
-        if base_request.method == app._method_list_sessions:
+        if is_list_sessions:
             query = parse_list_sessions_params(params)
             session_id: str | None = None
         else:
@@ -55,7 +56,7 @@ async def handle_session_query_request(
             raw_result = await app._codex_client.list_messages(session_id, params=query)
     except httpx.HTTPStatusError as exc:
         upstream_status = exc.response.status_code
-        if upstream_status == 404 and base_request.method == app._method_get_session_messages:
+        if upstream_status == 404 and not is_list_sessions:
             return app._generate_error_response(
                 base_request.id,
                 JSONRPCError(
@@ -97,7 +98,7 @@ async def handle_session_query_request(
         )
 
     try:
-        if base_request.method == app._method_list_sessions:
+        if is_list_sessions:
             raw_items = extract_raw_items(raw_result, kind="sessions")
         else:
             raw_items = extract_raw_items(raw_result, kind="messages")
@@ -112,7 +113,7 @@ async def handle_session_query_request(
             ),
         )
 
-    if base_request.method == app._method_list_sessions:
+    if is_list_sessions:
         items = [task for item in raw_items if (task := as_a2a_session_task(item)) is not None]
     else:
         assert session_id is not None

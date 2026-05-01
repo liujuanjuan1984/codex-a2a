@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import httpx
 from a2a.server.jsonrpc_models import InternalError, JSONRPCError
@@ -14,7 +14,7 @@ from codex_a2a.jsonrpc.errors import (
     upstream_unreachable_response,
 )
 from codex_a2a.jsonrpc.owner_guard import validate_thread_owner
-from codex_a2a.jsonrpc.params_common import JsonRpcParamsValidationError
+from codex_a2a.jsonrpc.params_common import JsonRpcParamsValidationError, validate_params_model
 from codex_a2a.jsonrpc.request_models import JSONRPCRequestModel as JSONRPCRequest
 from codex_a2a.jsonrpc.thread_lifecycle_params import (
     ThreadArchiveControlParams,
@@ -23,12 +23,7 @@ from codex_a2a.jsonrpc.thread_lifecycle_params import (
     ThreadUnarchiveControlParams,
     ThreadWatchControlParams,
     ThreadWatchReleaseControlParams,
-    parse_thread_archive_params,
-    parse_thread_fork_params,
-    parse_thread_metadata_update_params,
-    parse_thread_unarchive_params,
-    parse_thread_watch_params,
-    parse_thread_watch_release_params,
+    raise_thread_lifecycle_validation_error,
 )
 
 if TYPE_CHECKING:
@@ -60,24 +55,45 @@ async def handle_thread_lifecycle_control_request(
     thread_id: str | None = None
     task_id: str | None = None
 
+    model_type = (
+        ThreadForkControlParams
+        if base_request.method == app._method_thread_fork
+        else ThreadArchiveControlParams
+        if base_request.method == app._method_thread_archive
+        else ThreadUnarchiveControlParams
+        if base_request.method == app._method_thread_unarchive
+        else ThreadMetadataUpdateControlParams
+        if base_request.method == app._method_thread_metadata_update
+        else ThreadWatchReleaseControlParams
+        if base_request.method == app._method_thread_watch_release
+        else ThreadWatchControlParams
+    )
     try:
-        if base_request.method == app._method_thread_fork:
-            parsed_params = parse_thread_fork_params(params)
+        parsed_params = cast(
+            ThreadForkControlParams
+            | ThreadArchiveControlParams
+            | ThreadUnarchiveControlParams
+            | ThreadMetadataUpdateControlParams
+            | ThreadWatchControlParams
+            | ThreadWatchReleaseControlParams,
+            validate_params_model(
+                model_type,
+                params,
+                on_error=raise_thread_lifecycle_validation_error,
+            ),
+        )
+        if isinstance(
+            parsed_params,
+            (
+                ThreadForkControlParams,
+                ThreadArchiveControlParams,
+                ThreadUnarchiveControlParams,
+                ThreadMetadataUpdateControlParams,
+            ),
+        ):
             thread_id = parsed_params.thread_id
-        elif base_request.method == app._method_thread_archive:
-            parsed_params = parse_thread_archive_params(params)
-            thread_id = parsed_params.thread_id
-        elif base_request.method == app._method_thread_unarchive:
-            parsed_params = parse_thread_unarchive_params(params)
-            thread_id = parsed_params.thread_id
-        elif base_request.method == app._method_thread_metadata_update:
-            parsed_params = parse_thread_metadata_update_params(params)
-            thread_id = parsed_params.thread_id
-        elif base_request.method == app._method_thread_watch_release:
-            parsed_params = parse_thread_watch_release_params(params)
+        elif isinstance(parsed_params, ThreadWatchReleaseControlParams):
             task_id = parsed_params.task_id
-        else:
-            parsed_params = parse_thread_watch_params(params)
     except JsonRpcParamsValidationError as exc:
         return invalid_params_response(app, base_request.id, exc)
 
@@ -95,72 +111,45 @@ async def handle_thread_lifecycle_control_request(
             return owner_error
 
     try:
-        if base_request.method == app._method_thread_watch:
+        if isinstance(parsed_params, ThreadWatchControlParams):
             call_context = app._context_builder.build(request)
-            watch_params = (
-                parsed_params if isinstance(parsed_params, ThreadWatchControlParams) else None
-            )
             result = await app._thread_lifecycle_runtime.start(
                 request=(
                     None
-                    if watch_params is None or watch_params.request is None
-                    else watch_params.request.model_dump(
+                    if parsed_params.request is None
+                    else parsed_params.request.model_dump(
                         by_alias=False,
                         exclude_none=True,
                     )
                 ),
                 context=call_context,
             )
-        elif base_request.method == app._method_thread_watch_release:
+        elif isinstance(parsed_params, ThreadWatchReleaseControlParams):
             call_context = app._context_builder.build(request)
-            watch_release_params = (
-                parsed_params
-                if isinstance(parsed_params, ThreadWatchReleaseControlParams)
-                else None
-            )
-            assert watch_release_params is not None
             result = await app._thread_lifecycle_runtime.release(
-                task_id=watch_release_params.task_id,
+                task_id=parsed_params.task_id,
                 context=call_context,
             )
-        elif base_request.method == app._method_thread_fork:
-            fork_params = (
-                parsed_params if isinstance(parsed_params, ThreadForkControlParams) else None
-            )
-            assert fork_params is not None
+        elif isinstance(parsed_params, ThreadForkControlParams):
             thread = await app._codex_client.thread_fork(
-                fork_params.thread_id,
+                parsed_params.thread_id,
                 params=(
                     None
-                    if fork_params.request is None
-                    else fork_params.request.model_dump(exclude_none=True)
+                    if parsed_params.request is None
+                    else parsed_params.request.model_dump(exclude_none=True)
                 ),
             )
             result = {"ok": True, "thread_id": thread["id"], "thread": thread}
-        elif base_request.method == app._method_thread_archive:
-            archive_params = (
-                parsed_params if isinstance(parsed_params, ThreadArchiveControlParams) else None
-            )
-            assert archive_params is not None
-            await app._codex_client.thread_archive(archive_params.thread_id)
-            result = {"ok": True, "thread_id": archive_params.thread_id}
-        elif base_request.method == app._method_thread_unarchive:
-            unarchive_params = (
-                parsed_params if isinstance(parsed_params, ThreadUnarchiveControlParams) else None
-            )
-            assert unarchive_params is not None
-            thread = await app._codex_client.thread_unarchive(unarchive_params.thread_id)
+        elif isinstance(parsed_params, ThreadArchiveControlParams):
+            await app._codex_client.thread_archive(parsed_params.thread_id)
+            result = {"ok": True, "thread_id": parsed_params.thread_id}
+        elif isinstance(parsed_params, ThreadUnarchiveControlParams):
+            thread = await app._codex_client.thread_unarchive(parsed_params.thread_id)
             result = {"ok": True, "thread_id": thread["id"], "thread": thread}
         else:
-            metadata_params = (
-                parsed_params
-                if isinstance(parsed_params, ThreadMetadataUpdateControlParams)
-                else None
-            )
-            assert metadata_params is not None
             thread = await app._codex_client.thread_metadata_update(
-                metadata_params.thread_id,
-                params=metadata_params.request.model_dump(
+                parsed_params.thread_id,
+                params=parsed_params.request.model_dump(
                     by_alias=False,
                     exclude_none=False,
                     exclude_unset=True,

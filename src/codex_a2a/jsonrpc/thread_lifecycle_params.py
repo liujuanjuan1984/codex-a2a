@@ -14,7 +14,6 @@ from codex_a2a.jsonrpc.params_common import (
     metadata_validation_error,
     normalize_non_empty_string,
     strip_optional_string,
-    validate_params_model,
     validate_required_thread_id,
 )
 
@@ -140,7 +139,7 @@ class ThreadWatchReleaseControlParams(_StrictModel):
         return normalize_non_empty_string(value, message="Missing required params.task_id")
 
 
-def _raise_thread_lifecycle_validation_error(exc: ValidationError) -> None:
+def raise_thread_lifecycle_validation_error(exc: ValidationError) -> None:
     errors = exc.errors(include_url=False)
     if errors and all(err.get("type") == "extra_forbidden" for err in errors):
         raise map_extra_forbidden(errors)
@@ -217,53 +216,3 @@ def _raise_thread_lifecycle_validation_error(exc: ValidationError) -> None:
             data={"type": "INVALID_FIELD", "field": field},
         )
     raise JsonRpcParamsValidationError(message=message_text, data={"type": "INVALID_FIELD"})
-
-
-def parse_thread_fork_params(params: dict[str, Any]) -> ThreadForkControlParams:
-    return validate_params_model(
-        ThreadForkControlParams,
-        params,
-        on_error=_raise_thread_lifecycle_validation_error,
-    )
-
-
-def parse_thread_archive_params(params: dict[str, Any]) -> ThreadArchiveControlParams:
-    return validate_params_model(
-        ThreadArchiveControlParams,
-        params,
-        on_error=_raise_thread_lifecycle_validation_error,
-    )
-
-
-def parse_thread_unarchive_params(params: dict[str, Any]) -> ThreadUnarchiveControlParams:
-    return validate_params_model(
-        ThreadUnarchiveControlParams,
-        params,
-        on_error=_raise_thread_lifecycle_validation_error,
-    )
-
-
-def parse_thread_metadata_update_params(
-    params: dict[str, Any],
-) -> ThreadMetadataUpdateControlParams:
-    return validate_params_model(
-        ThreadMetadataUpdateControlParams,
-        params,
-        on_error=_raise_thread_lifecycle_validation_error,
-    )
-
-
-def parse_thread_watch_params(params: dict[str, Any]) -> ThreadWatchControlParams:
-    return validate_params_model(
-        ThreadWatchControlParams,
-        params,
-        on_error=_raise_thread_lifecycle_validation_error,
-    )
-
-
-def parse_thread_watch_release_params(params: dict[str, Any]) -> ThreadWatchReleaseControlParams:
-    return validate_params_model(
-        ThreadWatchReleaseControlParams,
-        params,
-        on_error=_raise_thread_lifecycle_validation_error,
-    )

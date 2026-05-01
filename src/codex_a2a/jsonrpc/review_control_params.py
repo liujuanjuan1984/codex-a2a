@@ -12,7 +12,6 @@ from codex_a2a.jsonrpc.params_common import (
     map_extra_forbidden,
     normalize_non_empty_string,
     strip_optional_string,
-    validate_params_model,
     validate_required_thread_id,
 )
 
@@ -113,7 +112,7 @@ class ReviewWatchControlParams(_StrictModel):
         return normalize_non_empty_string(value, message=f"Missing required params.{field_name}")
 
 
-def _raise_review_control_validation_error(exc: ValidationError) -> None:
+def raise_review_control_validation_error(exc: ValidationError) -> None:
     errors = exc.errors(include_url=False)
     if errors and all(err.get("type") == "extra_forbidden" for err in errors):
         raise map_extra_forbidden(errors)
@@ -183,19 +182,3 @@ def _raise_review_control_validation_error(exc: ValidationError) -> None:
             data={"type": "INVALID_FIELD", "field": field},
         )
     raise JsonRpcParamsValidationError(message=message_text, data={"type": "INVALID_FIELD"})
-
-
-def parse_review_start_params(params: dict[str, Any]) -> ReviewStartControlParams:
-    return validate_params_model(
-        ReviewStartControlParams,
-        params,
-        on_error=_raise_review_control_validation_error,
-    )
-
-
-def parse_review_watch_params(params: dict[str, Any]) -> ReviewWatchControlParams:
-    return validate_params_model(
-        ReviewWatchControlParams,
-        params,
-        on_error=_raise_review_control_validation_error,
-    )

@@ -78,13 +78,14 @@ async def handle_interrupt_callback_request(
     if metadata_error is not None:
         return metadata_error
 
-    if base_request.method == app._method_reject_question:
-        expected_interrupt_type = "question"
-    else:
-        expected_interrupt_type = interrupt_expected_type(
+    expected_interrupt_type = (
+        "question"
+        if isinstance(parsed_params, QuestionRejectParams)
+        else interrupt_expected_type(
             base_request.method,
             interrupt_methods_by_type=app._interrupt_methods_by_type,
         )
+    )
     binding, binding_error = await resolve_interrupt_binding(
         app,
         request_id=request_id,
@@ -105,10 +106,9 @@ async def handle_interrupt_callback_request(
         return owner_error
 
     try:
-        if base_request.method == app._method_reply_permission:
-            permission_params = cast(PermissionReplyParams, parsed_params)
-            reply = permission_params.reply
-            message = permission_params.message
+        if isinstance(parsed_params, PermissionReplyParams):
+            reply = parsed_params.reply
+            message = parsed_params.message
             await app._codex_client.permission_reply(
                 request_id,
                 reply=reply,
@@ -116,22 +116,20 @@ async def handle_interrupt_callback_request(
                 directory=directory,
             )
             result: dict[str, object] = {"ok": True, "request_id": request_id, "reply": reply}
-        elif base_request.method == app._method_reply_question:
-            question_params = cast(QuestionReplyParams, parsed_params)
-            answers = question_params.answers
+        elif isinstance(parsed_params, QuestionReplyParams):
+            answers = parsed_params.answers
             await app._codex_client.question_reply(
                 request_id,
                 answers=answers,
                 directory=directory,
             )
             result = {"ok": True, "request_id": request_id, "answers": answers}
-        elif base_request.method == app._method_reject_question:
+        elif isinstance(parsed_params, QuestionRejectParams):
             await app._codex_client.question_reject(request_id, directory=directory)
             result = {"ok": True, "request_id": request_id}
-        elif base_request.method == app._method_reply_permissions:
-            permissions_params = cast(PermissionsReplyParams, parsed_params)
-            permissions = permissions_params.permissions
-            scope = permissions_params.scope
+        elif isinstance(parsed_params, PermissionsReplyParams):
+            permissions = parsed_params.permissions
+            scope = parsed_params.scope
             await app._codex_client.permissions_reply(
                 request_id,
                 permissions=permissions,

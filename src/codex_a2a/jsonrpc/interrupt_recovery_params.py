@@ -10,7 +10,6 @@ from codex_a2a.jsonrpc.params_common import (
     format_loc,
     map_extra_forbidden,
     strip_optional_string,
-    validate_params_model,
 )
 
 InterruptRecoveryType = Literal["permission", "question", "permissions", "elicitation"]
@@ -30,7 +29,7 @@ class InterruptRecoveryListParams(_StrictModel):
         return normalized
 
 
-def _raise_interrupt_recovery_validation_error(exc: ValidationError) -> None:
+def raise_interrupt_recovery_validation_error(exc: ValidationError) -> None:
     errors = exc.errors(include_url=False)
     if errors and all(err.get("type") == "extra_forbidden" for err in errors):
         raise map_extra_forbidden(errors)
@@ -42,12 +41,4 @@ def _raise_interrupt_recovery_validation_error(exc: ValidationError) -> None:
     raise JsonRpcParamsValidationError(
         message=message_text,
         data={"type": "INVALID_FIELD", "field": field},
-    )
-
-
-def parse_interrupt_recovery_list_params(params: dict[str, Any]) -> InterruptRecoveryListParams:
-    return validate_params_model(
-        InterruptRecoveryListParams,
-        params,
-        on_error=_raise_interrupt_recovery_validation_error,
     )
