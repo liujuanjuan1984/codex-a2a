@@ -307,7 +307,7 @@ class PolicyAwareTaskStore(TaskStoreDecorator):
         task: Task,
         context: ServerCallContext | None = None,
     ) -> bool:
-        await task_store._ensure_initialized()
+        await task_store.initialize()
         owner = task_store.owner_resolver(
             context if isinstance(context, ServerCallContext) else ServerCallContext()
         )
@@ -328,7 +328,7 @@ class PolicyAwareTaskStore(TaskStoreDecorator):
         task_id: str,
         context: ServerCallContext | None = None,
     ) -> Task | None:
-        await task_store._ensure_initialized()
+        await task_store.initialize()
         owner = task_store.owner_resolver(
             context if isinstance(context, ServerCallContext) else ServerCallContext()
         )
