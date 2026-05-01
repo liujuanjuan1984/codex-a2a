@@ -10,6 +10,7 @@ from codex_a2a.jsonrpc.params_common import (
     format_loc,
     normalize_session_query_limit,
     validate_limit_param,
+    validate_params_model,
     validate_required_session_id,
 )
 
@@ -66,22 +67,11 @@ def _raise_query_validation_error(exc: ValidationError) -> None:
     )
 
 
-def parse_list_sessions_params(params: dict[str, Any]) -> dict[str, Any]:
-    try:
-        parsed = SessionListParams.model_validate(params)
-    except ValidationError as exc:
-        _raise_query_validation_error(exc)
-
-    query_model = parsed.query
-    if parsed.cursor is not None or parsed.page is not None or parsed.size is not None:
-        raise JsonRpcParamsValidationError(
-            message="Only limit pagination is supported",
-            data={
-                "type": "INVALID_PAGINATION_MODE",
-                "supported": ["limit"],
-                "unsupported": ["cursor", "page", "size"],
-            },
-        )
+def _normalize_query_payload(
+    *,
+    limit: int | None,
+    query_model: SessionQueryQueryParams | None,
+) -> dict[str, Any]:
     if query_model and (
         query_model.cursor is not None
         or query_model.page is not None
@@ -95,12 +85,16 @@ def parse_list_sessions_params(params: dict[str, Any]) -> dict[str, Any]:
                 "unsupported": ["cursor", "page", "size"],
             },
         )
-    if parsed.limit is not None and query_model and query_model.limit is not None:
-        if parsed.limit != query_model.limit:
-            raise JsonRpcParamsValidationError(
-                message="limit is ambiguous between params.limit and params.query.limit",
-                data={"type": "INVALID_FIELD", "field": "limit"},
-            )
+    if (
+        limit is not None
+        and query_model
+        and query_model.limit is not None
+        and limit != query_model.limit
+    ):
+        raise JsonRpcParamsValidationError(
+            message="limit is ambiguous between params.limit and params.query.limit",
+            data={"type": "INVALID_FIELD", "field": "limit"},
+        )
 
     query: dict[str, Any] = {}
     if query_model is not None:
@@ -109,17 +103,18 @@ def parse_list_sessions_params(params: dict[str, Any]) -> dict[str, Any]:
         query.pop("cursor", None)
         query.pop("page", None)
         query.pop("size", None)
-    if parsed.limit is not None:
-        query["limit"] = parsed.limit
+    if limit is not None:
+        query["limit"] = limit
     return normalize_session_query_limit(query)
 
 
-def parse_get_session_messages_params(params: dict[str, Any]) -> tuple[str, dict[str, Any]]:
-    try:
-        parsed = SessionMessagesParams.model_validate(params)
-    except ValidationError as exc:
-        _raise_query_validation_error(exc)
-    query_model = parsed.query
+def parse_list_sessions_params(params: dict[str, Any]) -> dict[str, Any]:
+    parsed = validate_params_model(
+        SessionListParams,
+        params,
+        on_error=_raise_query_validation_error,
+    )
+
     if parsed.cursor is not None or parsed.page is not None or parsed.size is not None:
         raise JsonRpcParamsValidationError(
             message="Only limit pagination is supported",
@@ -129,11 +124,16 @@ def parse_get_session_messages_params(params: dict[str, Any]) -> tuple[str, dict
                 "unsupported": ["cursor", "page", "size"],
             },
         )
-    if query_model and (
-        query_model.cursor is not None
-        or query_model.page is not None
-        or query_model.size is not None
-    ):
+    return _normalize_query_payload(limit=parsed.limit, query_model=parsed.query)
+
+
+def parse_get_session_messages_params(params: dict[str, Any]) -> tuple[str, dict[str, Any]]:
+    parsed = validate_params_model(
+        SessionMessagesParams,
+        params,
+        on_error=_raise_query_validation_error,
+    )
+    if parsed.cursor is not None or parsed.page is not None or parsed.size is not None:
         raise JsonRpcParamsValidationError(
             message="Only limit pagination is supported",
             data={
@@ -142,20 +142,4 @@ def parse_get_session_messages_params(params: dict[str, Any]) -> tuple[str, dict
                 "unsupported": ["cursor", "page", "size"],
             },
         )
-    if parsed.limit is not None and query_model and query_model.limit is not None:
-        if parsed.limit != query_model.limit:
-            raise JsonRpcParamsValidationError(
-                message="limit is ambiguous between params.limit and params.query.limit",
-                data={"type": "INVALID_FIELD", "field": "limit"},
-            )
-
-    query: dict[str, Any] = {}
-    if query_model is not None:
-        query.update(query_model.model_dump(exclude_none=True))
-        query.update(query_model.model_extra or {})
-        query.pop("cursor", None)
-        query.pop("page", None)
-        query.pop("size", None)
-    if parsed.limit is not None:
-        query["limit"] = parsed.limit
-    return parsed.session_id, normalize_session_query_limit(query)
+    return parsed.session_id, _normalize_query_payload(limit=parsed.limit, query_model=parsed.query)

@@ -15,12 +15,12 @@ def coerce_request_execution_options(
     return replace(execution_options)
 
 
-def apply_thread_start_execution_options(
+def _apply_effective_model(
     params: dict[str, Any],
     *,
     execution_options: RequestExecutionOptions | None,
     default_model_id: str | None,
-) -> dict[str, Any]:
+) -> None:
     effective_model = (
         execution_options.model
         if execution_options is not None and execution_options.model is not None
@@ -28,6 +28,32 @@ def apply_thread_start_execution_options(
     )
     if effective_model:
         params["model"] = effective_model
+
+
+def _project_present_fields(
+    params: dict[str, Any] | None,
+    field_map: tuple[tuple[str, str], ...],
+) -> dict[str, Any]:
+    if not isinstance(params, dict):
+        return {}
+    projected: dict[str, Any] = {}
+    for source_key, target_key in field_map:
+        if source_key in params:
+            projected[target_key] = params[source_key]
+    return projected
+
+
+def apply_thread_start_execution_options(
+    params: dict[str, Any],
+    *,
+    execution_options: RequestExecutionOptions | None,
+    default_model_id: str | None,
+) -> dict[str, Any]:
+    _apply_effective_model(
+        params,
+        execution_options=execution_options,
+        default_model_id=default_model_id,
+    )
     if execution_options is None:
         return params
     if execution_options.personality is not None:
@@ -41,13 +67,11 @@ def apply_turn_start_execution_options(
     execution_options: RequestExecutionOptions | None,
     default_model_id: str | None,
 ) -> dict[str, Any]:
-    effective_model = (
-        execution_options.model
-        if execution_options is not None and execution_options.model is not None
-        else default_model_id
+    _apply_effective_model(
+        params,
+        execution_options=execution_options,
+        default_model_id=default_model_id,
     )
-    if effective_model:
-        params["model"] = effective_model
     if execution_options is None:
         return params
     if execution_options.effort is not None:
@@ -123,40 +147,35 @@ def build_discovery_skills_params(params: dict[str, Any] | None) -> dict[str, An
 
 
 def build_discovery_apps_params(params: dict[str, Any] | None) -> dict[str, Any]:
-    if not isinstance(params, dict):
-        return {}
-    rpc_params: dict[str, Any] = {}
-    if "cursor" in params:
-        rpc_params["cursor"] = params["cursor"]
-    if "limit" in params:
-        rpc_params["limit"] = params["limit"]
-    if "thread_id" in params:
-        rpc_params["threadId"] = params["thread_id"]
-    if "force_refetch" in params:
-        rpc_params["forceRefetch"] = params["force_refetch"]
-    return rpc_params
+    return _project_present_fields(
+        params,
+        (
+            ("cursor", "cursor"),
+            ("limit", "limit"),
+            ("thread_id", "threadId"),
+            ("force_refetch", "forceRefetch"),
+        ),
+    )
 
 
 def build_discovery_plugins_params(params: dict[str, Any] | None) -> dict[str, Any]:
-    if not isinstance(params, dict):
-        return {}
-    rpc_params: dict[str, Any] = {}
-    if "cwds" in params:
-        rpc_params["cwds"] = params["cwds"]
-    if "force_remote_sync" in params:
-        rpc_params["forceRemoteSync"] = params["force_remote_sync"]
-    return rpc_params
+    return _project_present_fields(
+        params,
+        (
+            ("cwds", "cwds"),
+            ("force_remote_sync", "forceRemoteSync"),
+        ),
+    )
 
 
 def build_discovery_plugin_read_params(params: dict[str, Any] | None) -> dict[str, Any]:
-    if not isinstance(params, dict):
-        return {}
-    rpc_params: dict[str, Any] = {}
-    if "marketplace_path" in params:
-        rpc_params["marketplacePath"] = params["marketplace_path"]
-    if "plugin_name" in params:
-        rpc_params["pluginName"] = params["plugin_name"]
-    return rpc_params
+    return _project_present_fields(
+        params,
+        (
+            ("marketplace_path", "marketplacePath"),
+            ("plugin_name", "pluginName"),
+        ),
+    )
 
 
 def build_thread_rpc_params(
@@ -166,20 +185,25 @@ def build_thread_rpc_params(
     rpc_params: dict[str, Any] = {"threadId": thread_id}
     if not isinstance(params, dict):
         return rpc_params
-    for key, value in params.items():
-        if key == "directory" or value is None:
-            continue
-        if key == "git_info" and isinstance(value, dict):
-            git_info = {
-                "branch": value.get("branch"),
-                "sha": value.get("sha"),
-                "originUrl": value.get("origin_url"),
-            }
-            rpc_params["gitInfo"] = {
-                field: item for field, item in git_info.items() if item is not None
-            }
-            continue
-        rpc_params[key] = value
+    rpc_params.update(
+        {
+            key: value
+            for key, value in params.items()
+            if key not in {"directory", "git_info"} and value is not None
+        }
+    )
+    git_info = params.get("git_info")
+    if isinstance(git_info, dict):
+        normalized_git_info = _project_present_fields(
+            git_info,
+            (
+                ("branch", "branch"),
+                ("sha", "sha"),
+                ("origin_url", "originUrl"),
+            ),
+        )
+        if normalized_git_info:
+            rpc_params["gitInfo"] = normalized_git_info
     return rpc_params
 
 

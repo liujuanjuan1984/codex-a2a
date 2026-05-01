@@ -158,16 +158,11 @@ class CodexClient:
             return self._request_timeout
         return timeout_seconds
 
-    def _query_params(self, directory: str | None = None) -> dict[str, str]:
-        d = directory or self._workspace_root
-        if not d:
-            return {}
-        return {"directory": d}
-
     def _merge_params(
         self, extra: dict[str, Any] | None, *, directory: str | None = None
     ) -> dict[str, Any]:
-        params: dict[str, Any] = dict(self._query_params(directory=directory))
+        resolved_directory = directory or self._workspace_root
+        params: dict[str, Any] = {"directory": resolved_directory} if resolved_directory else {}
         if not extra:
             return params
         for key, value in extra.items():

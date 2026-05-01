@@ -12,6 +12,7 @@ from codex_a2a.jsonrpc.params_common import (
     map_extra_forbidden,
     metadata_validation_error,
     strip_optional_string,
+    validate_params_model,
     validate_required_request_id,
 )
 
@@ -215,40 +216,40 @@ def _raise_interrupt_validation_error(exc: ValidationError) -> None:
 
 
 def parse_permission_reply_params(params: dict[str, Any]) -> PermissionReplyParams:
-    try:
-        return PermissionReplyParams.model_validate(params)
-    except ValidationError as exc:
-        _raise_interrupt_validation_error(exc)
-        raise AssertionError("unreachable") from exc
+    return validate_params_model(
+        PermissionReplyParams,
+        params,
+        on_error=_raise_interrupt_validation_error,
+    )
 
 
 def parse_question_reply_params(params: dict[str, Any]) -> QuestionReplyParams:
-    try:
-        return QuestionReplyParams.model_validate(params)
-    except ValidationError as exc:
-        _raise_interrupt_validation_error(exc)
-        raise AssertionError("unreachable") from exc
+    return validate_params_model(
+        QuestionReplyParams,
+        params,
+        on_error=_raise_interrupt_validation_error,
+    )
 
 
 def parse_question_reject_params(params: dict[str, Any]) -> QuestionRejectParams:
-    try:
-        return QuestionRejectParams.model_validate(params)
-    except ValidationError as exc:
-        _raise_interrupt_validation_error(exc)
-        raise AssertionError("unreachable") from exc
+    return validate_params_model(
+        QuestionRejectParams,
+        params,
+        on_error=_raise_interrupt_validation_error,
+    )
 
 
 def parse_permissions_reply_params(params: dict[str, Any]) -> PermissionsReplyParams:
-    try:
-        return PermissionsReplyParams.model_validate(params)
-    except ValidationError as exc:
-        _raise_interrupt_validation_error(exc)
-        raise AssertionError("unreachable") from exc
+    return validate_params_model(
+        PermissionsReplyParams,
+        params,
+        on_error=_raise_interrupt_validation_error,
+    )
 
 
 def parse_elicitation_reply_params(params: dict[str, Any]) -> ElicitationReplyParams:
-    try:
-        return ElicitationReplyParams.model_validate(params)
-    except ValidationError as exc:
-        _raise_interrupt_validation_error(exc)
-        raise AssertionError("unreachable") from exc
+    return validate_params_model(
+        ElicitationReplyParams,
+        params,
+        on_error=_raise_interrupt_validation_error,
+    )

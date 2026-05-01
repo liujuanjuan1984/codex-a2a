@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
-from typing import Any
+from collections.abc import Callable, Mapping, Sequence
+from typing import Any, TypeVar
 
 from a2a._base import A2ABaseModel
 from pydantic import ConfigDict, ValidationError, field_validator
@@ -38,6 +38,22 @@ class _PermissiveModel(A2ABaseModel):
         validate_by_alias=False,
         serialize_by_alias=False,
     )
+
+
+ModelT = TypeVar("ModelT", bound=A2ABaseModel)
+
+
+def validate_params_model(
+    model_type: type[ModelT],
+    params: dict[str, Any],
+    *,
+    on_error: Callable[[ValidationError], None],
+) -> ModelT:
+    try:
+        return model_type.model_validate(params)
+    except ValidationError as exc:
+        on_error(exc)
+        raise AssertionError("unreachable") from exc
 
 
 def strip_optional_string(value: Any) -> str | None:

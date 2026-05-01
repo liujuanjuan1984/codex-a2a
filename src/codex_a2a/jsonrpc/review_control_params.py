@@ -12,6 +12,7 @@ from codex_a2a.jsonrpc.params_common import (
     map_extra_forbidden,
     normalize_non_empty_string,
     strip_optional_string,
+    validate_params_model,
     validate_required_thread_id,
 )
 
@@ -185,16 +186,16 @@ def _raise_review_control_validation_error(exc: ValidationError) -> None:
 
 
 def parse_review_start_params(params: dict[str, Any]) -> ReviewStartControlParams:
-    try:
-        return ReviewStartControlParams.model_validate(params)
-    except ValidationError as exc:
-        _raise_review_control_validation_error(exc)
-        raise AssertionError("unreachable") from exc
+    return validate_params_model(
+        ReviewStartControlParams,
+        params,
+        on_error=_raise_review_control_validation_error,
+    )
 
 
 def parse_review_watch_params(params: dict[str, Any]) -> ReviewWatchControlParams:
-    try:
-        return ReviewWatchControlParams.model_validate(params)
-    except ValidationError as exc:
-        _raise_review_control_validation_error(exc)
-        raise AssertionError("unreachable") from exc
+    return validate_params_model(
+        ReviewWatchControlParams,
+        params,
+        on_error=_raise_review_control_validation_error,
+    )
