@@ -142,7 +142,39 @@ class A2AClient:
         self._card = None
 
     async def get_agent_card(self) -> AgentCard:
-        return await self._get_agent_card()
+        if self._card is not None:
+            return self._card
+
+        if self._closed:
+            raise A2AClientLifecycleError("client is closed")
+
+        cached_card = self._extract_sdk_client_card()
+        if cached_card is not None:
+            self._card = cached_card
+            return self._card
+
+        async with self._lock:
+            if self._card is not None:
+                return self._card
+
+            cached_card = self._extract_sdk_client_card()
+            if cached_card is not None:
+                self._card = cached_card
+                return self._card
+
+            endpoint = resolve_agent_card_endpoint(self._config)
+            resolver = self._card_resolver_factory(
+                self._httpx_client,
+                endpoint.base_url,
+                endpoint.agent_card_path,
+            )
+            try:
+                self._card = await resolver.get_agent_card(
+                    http_kwargs=build_agent_card_request_kwargs(self._config)
+                )
+            except Exception as exc:
+                raise map_a2a_sdk_error(exc, operation="agent_card") from exc
+        return cast(AgentCard, self._card)
 
     async def send_message(
         self,
@@ -255,41 +287,6 @@ class A2AClient:
     def extract_text(event: StreamResponse) -> str:
         extracted = extract_text_from_payload(event)
         return extracted or ""
-
-    async def _get_agent_card(self) -> AgentCard:
-        if self._card is not None:
-            return self._card
-
-        if self._closed:
-            raise A2AClientLifecycleError("client is closed")
-
-        cached_card = self._extract_sdk_client_card()
-        if cached_card is not None:
-            self._card = cached_card
-            return self._card
-
-        async with self._lock:
-            if self._card is not None:
-                return self._card
-
-            cached_card = self._extract_sdk_client_card()
-            if cached_card is not None:
-                self._card = cached_card
-                return self._card
-
-            endpoint = resolve_agent_card_endpoint(self._config)
-            resolver = self._card_resolver_factory(
-                self._httpx_client,
-                endpoint.base_url,
-                endpoint.agent_card_path,
-            )
-            try:
-                self._card = await resolver.get_agent_card(
-                    http_kwargs=build_agent_card_request_kwargs(self._config)
-                )
-            except Exception as exc:
-                raise map_a2a_sdk_error(exc, operation="agent_card") from exc
-        return cast(AgentCard, self._card)
 
     async def _get_client(self) -> _SDKClientProtocol:
         if self._closed:

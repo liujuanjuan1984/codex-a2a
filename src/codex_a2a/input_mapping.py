@@ -114,12 +114,6 @@ def build_turn_input_from_normalized_items(items: list[dict[str, Any]]) -> list[
     return converted
 
 
-def convert_request_parts_to_turn_input(request: dict[str, Any]) -> list[dict[str, Any]]:
-    return build_turn_input_from_normalized_items(
-        normalize_prompt_request_parts(request.get("parts"))
-    )
-
-
 def map_a2a_message_parts_to_normalized_items(parts: Any) -> list[dict[str, Any]]:
     if parts is None:
         return []

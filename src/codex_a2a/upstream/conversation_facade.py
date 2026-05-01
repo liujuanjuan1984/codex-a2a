@@ -8,7 +8,7 @@ from typing import Any
 from codex_a2a.execution.request_overrides import RequestExecutionOptions
 from codex_a2a.input_mapping import (
     build_turn_input_from_normalized_items,
-    convert_request_parts_to_turn_input,
+    normalize_prompt_request_parts,
 )
 from codex_a2a.upstream.models import (
     CodexMessage,
@@ -364,7 +364,9 @@ class CodexConversationFacade:
             "turn/steer",
             {
                 "threadId": thread_id,
-                "input": convert_request_parts_to_turn_input(request),
+                "input": build_turn_input_from_normalized_items(
+                    normalize_prompt_request_parts(request.get("parts"))
+                ),
                 "expectedTurnId": expected_turn_id,
             },
         )

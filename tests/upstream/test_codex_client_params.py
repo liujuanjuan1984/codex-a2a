@@ -14,15 +14,20 @@ from codex_a2a.upstream.client import (
     CodexClient,
     CodexStartupPrerequisiteError,
     InterruptRequestBinding,
-    _PendingInterruptRequest,
-    _PendingRpcRequest,
 )
-from codex_a2a.upstream.models import CodexRPCError
+from codex_a2a.upstream.interrupts import _PendingInterruptRequest
+from codex_a2a.upstream.models import CodexRPCError, _PendingRpcRequest
 from tests.support.fixtures import (
     replay_codex_jsonrpc_line_fixture,
     replay_codex_notification_fixture,
 )
 from tests.support.settings import make_settings
+
+
+def _bind_rpc_request(client: CodexClient, rpc_request) -> None:  # noqa: ANN001
+    client._rpc_request = rpc_request
+    client._conversation_facade._rpc_request = rpc_request
+    client._exec_facade._rpc_request = rpc_request
 
 
 @pytest.mark.asyncio
@@ -45,7 +50,7 @@ async def test_list_calls_use_expected_rpc_params() -> None:
             return {"thread": {"turns": []}}
         return {}
 
-    client._rpc_request = fake_rpc_request
+    _bind_rpc_request(client, fake_rpc_request)
 
     sessions = await client.list_sessions(params={"directory": "/evil", "limit": 1, "roots": True})
     assert sessions == [
@@ -77,7 +82,7 @@ async def test_create_session_uses_model_id_override_not_startup_default() -> No
         seen.append((method, params))
         return {"thread": {"id": "thr-1"}}
 
-    client._rpc_request = fake_rpc_request
+    _bind_rpc_request(client, fake_rpc_request)
 
     session_id = await client.create_session(directory="/safe/project")
 
@@ -110,7 +115,7 @@ async def test_create_session_request_execution_options_override_default_model()
         seen.append((method, params))
         return {"thread": {"id": "thr-override"}}
 
-    client._rpc_request = fake_rpc_request
+    _bind_rpc_request(client, fake_rpc_request)
 
     session_id = await client.create_session(
         directory="/safe/project",
@@ -150,7 +155,7 @@ async def test_create_session_relies_on_startup_default_model_when_model_id_unse
         seen.append((method, params))
         return {"thread": {"id": "thr-2"}}
 
-    client._rpc_request = fake_rpc_request
+    _bind_rpc_request(client, fake_rpc_request)
 
     session_id = await client.create_session()
 
@@ -174,7 +179,7 @@ async def test_create_session_passes_session_title_to_thread_start_name() -> Non
         seen.append((method, params))
         return {"thread": {"id": "thr-3"}}
 
-    client._rpc_request = fake_rpc_request
+    _bind_rpc_request(client, fake_rpc_request)
 
     session_id = await client.create_session(title="Demo Session")
 
@@ -214,7 +219,7 @@ async def test_list_messages_applies_limit_locally_after_mapping() -> None:
             }
         }
 
-    client._rpc_request = fake_rpc_request
+    _bind_rpc_request(client, fake_rpc_request)
 
     messages = await client.list_messages("thr-1", params={"limit": 2})
 
@@ -237,9 +242,9 @@ async def test_send_message_maps_rich_input_parts_to_turn_start() -> None:
         seen.append((method, params))
         return {"turn": {"id": "turn-42"}}
 
-    client._rpc_request = fake_rpc_request
+    _bind_rpc_request(client, fake_rpc_request)
     client._conversation_facade._loaded_thread_ids.add("thr-1")
-    tracker = client._get_or_create_tracker("thr-1", "turn-42")
+    tracker = client._stream_bridge.get_or_create_tracker("thr-1", "turn-42")
     tracker.text_chunks.append("ok")
     tracker.message_id = "m-42"
     tracker.completed.set()
@@ -307,8 +312,8 @@ async def test_send_message_resumes_unloaded_thread_before_turn_start() -> None:
             return {"thread": {"id": "thr-1"}}
         return {"turn": {"id": "turn-42"}}
 
-    client._rpc_request = fake_rpc_request
-    tracker = client._get_or_create_tracker("thr-1", "turn-42")
+    _bind_rpc_request(client, fake_rpc_request)
+    tracker = client._stream_bridge.get_or_create_tracker("thr-1", "turn-42")
     tracker.text_chunks.append("ok")
     tracker.message_id = "m-42"
     tracker.completed.set()
@@ -356,9 +361,9 @@ async def test_send_message_retries_turn_start_after_thread_not_found() -> None:
             return {"thread": {"id": "thr-1"}}
         return {}
 
-    client._rpc_request = fake_rpc_request
+    _bind_rpc_request(client, fake_rpc_request)
     client._conversation_facade._loaded_thread_ids.add("thr-1")
-    tracker = client._get_or_create_tracker("thr-1", "turn-43")
+    tracker = client._stream_bridge.get_or_create_tracker("thr-1", "turn-43")
     tracker.text_chunks.append("ok")
     tracker.message_id = "m-43"
     tracker.completed.set()
@@ -410,7 +415,7 @@ async def test_exec_start_uses_interactive_command_exec_params() -> None:
         seen.append((method, params, timeout_override))
         return {"stdout": "", "stderr": "", "exitCode": 0}
 
-    client._rpc_request = fake_rpc_request
+    _bind_rpc_request(client, fake_rpc_request)
 
     result = await client.exec_start(
         {
@@ -464,7 +469,7 @@ async def test_exec_control_methods_forward_expected_rpc_calls() -> None:
         seen.append((method, params))
         return {}
 
-    client._rpc_request = fake_rpc_request
+    _bind_rpc_request(client, fake_rpc_request)
 
     await client.exec_write(process_id="exec-1", delta_base64="cHdkCg==", close_stdin=False)
     await client.exec_resize(process_id="exec-1", rows=40, cols=120)
@@ -503,7 +508,7 @@ async def test_thread_lifecycle_methods_forward_expected_rpc_calls() -> None:
             return {"thread": {"id": "thr-1", "preview": "Thread 1"}}
         return {}
 
-    client._rpc_request = fake_rpc_request
+    _bind_rpc_request(client, fake_rpc_request)
 
     fork = await client.thread_fork("thr-1", params={"ephemeral": True})
     await client.thread_archive("thr-1")
@@ -548,7 +553,7 @@ async def test_command_exec_output_delta_notification_maps_to_exec_stream_event(
     async def fake_enqueue(event: dict) -> None:
         events.append(event)
 
-    client._enqueue_stream_event = fake_enqueue
+    client._stream_bridge.enqueue_stream_event = fake_enqueue
 
     await client._handle_notification(
         {
@@ -583,7 +588,7 @@ async def test_discovery_notifications_map_to_stream_events() -> None:
     async def fake_enqueue(event: dict) -> None:
         events.append(event)
 
-    client._enqueue_stream_event = fake_enqueue
+    client._stream_bridge.enqueue_stream_event = fake_enqueue
 
     await client._handle_notification({"method": "skills/changed", "params": {}})
     await client._handle_notification(
@@ -648,7 +653,7 @@ async def test_thread_lifecycle_notifications_map_to_stream_events() -> None:
     async def fake_enqueue(event: dict) -> None:
         events.append(event)
 
-    client._enqueue_stream_event = fake_enqueue
+    client._stream_bridge.enqueue_stream_event = fake_enqueue
 
     await client._handle_notification(
         {
@@ -731,7 +736,7 @@ async def test_turn_lifecycle_notifications_map_to_stream_events() -> None:
     async def fake_enqueue(event: dict) -> None:
         events.append(event)
 
-    client._enqueue_stream_event = fake_enqueue
+    client._stream_bridge.enqueue_stream_event = fake_enqueue
 
     await client._handle_notification(
         {
@@ -788,7 +793,7 @@ async def test_turn_lifecycle_notifications_map_to_stream_events() -> None:
 @pytest.mark.asyncio
 async def test_permission_reply_maps_to_codex_decision() -> None:
     client = CodexClient(make_settings(a2a_bearer_token="t-1", codex_timeout=1.0))
-    client._pending_server_requests["100"] = _PendingInterruptRequest(
+    client._interrupt_bridge.pending_server_requests["100"] = _PendingInterruptRequest(
         binding=InterruptRequestBinding(
             request_id="100",
             interrupt_type="permission",
@@ -808,8 +813,8 @@ async def test_permission_reply_maps_to_codex_decision() -> None:
     async def fake_enqueue(event: dict) -> None:
         events.append(event)
 
-    client._send_json_message = fake_send_json
-    client._enqueue_stream_event = fake_enqueue
+    client._transport.send_json_message = fake_send_json
+    client._stream_bridge.enqueue_stream_event = fake_enqueue
 
     ok = await client.permission_reply("100", reply="always")
     assert ok is True
@@ -817,13 +822,13 @@ async def test_permission_reply_maps_to_codex_decision() -> None:
     assert events[-1]["type"] == "permission.replied"
     assert events[-1]["properties"]["id"] == "100"
     assert events[-1]["properties"]["requestID"] == "100"
-    assert "100" not in client._pending_server_requests
+    assert "100" not in client._interrupt_bridge.pending_server_requests
 
 
 @pytest.mark.asyncio
 async def test_question_reply_builds_answer_map() -> None:
     client = CodexClient(make_settings(a2a_bearer_token="t-1", codex_timeout=1.0))
-    client._pending_server_requests["200"] = _PendingInterruptRequest(
+    client._interrupt_bridge.pending_server_requests["200"] = _PendingInterruptRequest(
         binding=InterruptRequestBinding(
             request_id="200",
             interrupt_type="question",
@@ -848,8 +853,8 @@ async def test_question_reply_builds_answer_map() -> None:
     async def fake_enqueue(_event: dict) -> None:
         return None
 
-    client._send_json_message = fake_send_json
-    client._enqueue_stream_event = fake_enqueue
+    client._transport.send_json_message = fake_send_json
+    client._stream_bridge.enqueue_stream_event = fake_enqueue
 
     ok = await client.question_reply("200", answers=[["A"], ["B", "C"]])
     assert ok is True
@@ -869,7 +874,7 @@ async def test_question_reply_builds_answer_map() -> None:
 @pytest.mark.asyncio
 async def test_permissions_reply_maps_to_granted_subset_and_scope() -> None:
     client = CodexClient(make_settings(a2a_bearer_token="t-1", codex_timeout=1.0))
-    client._pending_server_requests["210"] = _PendingInterruptRequest(
+    client._interrupt_bridge.pending_server_requests["210"] = _PendingInterruptRequest(
         binding=InterruptRequestBinding(
             request_id="210",
             interrupt_type="permissions",
@@ -889,8 +894,8 @@ async def test_permissions_reply_maps_to_granted_subset_and_scope() -> None:
     async def fake_enqueue(event: dict) -> None:
         events.append(event)
 
-    client._send_json_message = fake_send_json
-    client._enqueue_stream_event = fake_enqueue
+    client._transport.send_json_message = fake_send_json
+    client._stream_bridge.enqueue_stream_event = fake_enqueue
 
     ok = await client.permissions_reply(
         "210",
@@ -909,13 +914,13 @@ async def test_permissions_reply_maps_to_granted_subset_and_scope() -> None:
     ]
     assert events[-1]["type"] == "permissions.replied"
     assert events[-1]["properties"]["id"] == "210"
-    assert "210" not in client._pending_server_requests
+    assert "210" not in client._interrupt_bridge.pending_server_requests
 
 
 @pytest.mark.asyncio
 async def test_elicitation_reply_maps_to_action_and_content() -> None:
     client = CodexClient(make_settings(a2a_bearer_token="t-1", codex_timeout=1.0))
-    client._pending_server_requests["220"] = _PendingInterruptRequest(
+    client._interrupt_bridge.pending_server_requests["220"] = _PendingInterruptRequest(
         binding=InterruptRequestBinding(
             request_id="220",
             interrupt_type="elicitation",
@@ -935,8 +940,8 @@ async def test_elicitation_reply_maps_to_action_and_content() -> None:
     async def fake_enqueue(event: dict) -> None:
         events.append(event)
 
-    client._send_json_message = fake_send_json
-    client._enqueue_stream_event = fake_enqueue
+    client._transport.send_json_message = fake_send_json
+    client._stream_bridge.enqueue_stream_event = fake_enqueue
 
     ok = await client.elicitation_reply(
         "220",
@@ -955,7 +960,7 @@ async def test_elicitation_reply_maps_to_action_and_content() -> None:
     ]
     assert events[-1]["type"] == "elicitation.replied"
     assert events[-1]["properties"]["id"] == "220"
-    assert "220" not in client._pending_server_requests
+    assert "220" not in client._interrupt_bridge.pending_server_requests
 
 
 @pytest.mark.asyncio
@@ -967,7 +972,7 @@ async def test_interrupt_request_status_uses_configured_ttl(monkeypatch) -> None
             a2a_interrupt_request_ttl_seconds=5,
         )
     )
-    client._pending_server_requests["req-1"] = _PendingInterruptRequest(
+    client._interrupt_bridge.pending_server_requests["req-1"] = _PendingInterruptRequest(
         binding=InterruptRequestBinding(
             request_id="req-1",
             interrupt_type="permission",
@@ -990,7 +995,7 @@ async def test_interrupt_request_status_uses_configured_ttl(monkeypatch) -> None
     monkeypatch.setattr("codex_a2a.upstream.client.time.time", lambda: 616.0)
     monkeypatch.setattr("codex_a2a.upstream.interrupts.time.time", lambda: 616.0)
     assert (await client.resolve_interrupt_request("req-1"))[0] == "missing"
-    assert "req-1" not in client._pending_server_requests
+    assert "req-1" not in client._interrupt_bridge.pending_server_requests
 
 
 @pytest.mark.asyncio
@@ -1016,12 +1021,12 @@ async def test_stream_events_broadcasts_to_all_consumers() -> None:
     task_2 = asyncio.create_task(consume(stop_2, seen_2))
 
     for _ in range(20):
-        if len(client._event_subscribers) == 2:
+        if len(client._stream_bridge.event_subscribers) == 2:
             break
         await asyncio.sleep(0)
 
     payload = {"type": "message.part.updated", "properties": {"sessionID": "thr-1"}}
-    await client._enqueue_stream_event(payload)
+    await client._stream_bridge.enqueue_stream_event(payload)
     await asyncio.wait_for(asyncio.gather(task_1, task_2), timeout=1.0)
 
     assert seen_1 == [payload]
@@ -1036,7 +1041,7 @@ async def test_handle_notification_normalizes_tool_output_delta_payload() -> Non
     async def fake_enqueue(event: dict) -> None:
         events.append(event)
 
-    client._enqueue_stream_event = fake_enqueue
+    client._stream_bridge.enqueue_stream_event = fake_enqueue
 
     await client._handle_notification(
         {
@@ -1084,7 +1089,7 @@ async def test_handle_notification_normalizes_file_change_output_delta_payload()
     async def fake_enqueue(event: dict) -> None:
         events.append(event)
 
-    client._enqueue_stream_event = fake_enqueue
+    client._stream_bridge.enqueue_stream_event = fake_enqueue
 
     await client._handle_notification(
         {
@@ -1127,7 +1132,7 @@ async def test_handle_notification_normalizes_command_execution_started_state() 
     async def fake_enqueue(event: dict) -> None:
         events.append(event)
 
-    client._enqueue_stream_event = fake_enqueue
+    client._stream_bridge.enqueue_stream_event = fake_enqueue
 
     await client._handle_notification(
         {
@@ -1183,7 +1188,7 @@ async def test_handle_notification_normalizes_file_change_completed_state() -> N
     async def fake_enqueue(event: dict) -> None:
         events.append(event)
 
-    client._enqueue_stream_event = fake_enqueue
+    client._stream_bridge.enqueue_stream_event = fake_enqueue
 
     await client._handle_notification(
         {
@@ -1426,8 +1431,8 @@ async def test_send_message_timeout_override_none_disables_wait_timeout() -> Non
     async def fake_rpc_request(_method: str, _params: dict | None = None):
         return {"turn": {"id": "turn-1"}}
 
-    client._rpc_request = fake_rpc_request
-    tracker = client._get_or_create_tracker("thr-1", "turn-1")
+    _bind_rpc_request(client, fake_rpc_request)
+    tracker = client._stream_bridge.get_or_create_tracker("thr-1", "turn-1")
 
     async def finish_turn() -> None:
         await asyncio.sleep(0.05)
@@ -1442,7 +1447,7 @@ async def test_send_message_timeout_override_none_disables_wait_timeout() -> Non
     await finisher
 
     assert message.text == "done"
-    assert ("thr-1", "turn-1") not in client._turn_trackers
+    assert ("thr-1", "turn-1") not in client._stream_bridge.turn_trackers
 
 
 @pytest.mark.asyncio
@@ -1457,9 +1462,9 @@ async def test_send_message_uses_structured_input_items_when_provided() -> None:
         seen.append((method, params))
         return {"turn": {"id": "turn-1"}}
 
-    client._rpc_request = fake_rpc_request
+    _bind_rpc_request(client, fake_rpc_request)
     client._conversation_facade._loaded_thread_ids.add("thr-1")
-    tracker = client._get_or_create_tracker("thr-1", "turn-1")
+    tracker = client._stream_bridge.get_or_create_tracker("thr-1", "turn-1")
     tracker.text_chunks.append("done")
     tracker.completed.set()
 
@@ -1509,9 +1514,9 @@ async def test_send_message_request_execution_options_are_forwarded_to_turn_star
         seen.append((method, params))
         return {"turn": {"id": "turn-1"}}
 
-    client._rpc_request = fake_rpc_request
+    _bind_rpc_request(client, fake_rpc_request)
     client._conversation_facade._loaded_thread_ids.add("thr-1")
-    tracker = client._get_or_create_tracker("thr-1", "turn-1")
+    tracker = client._stream_bridge.get_or_create_tracker("thr-1", "turn-1")
     tracker.text_chunks.append("done")
     tracker.completed.set()
 
@@ -1551,7 +1556,7 @@ async def test_unsupported_server_request_returns_jsonrpc_error() -> None:
     async def fake_send_json(payload: dict) -> None:
         sent.append(payload)
 
-    client._send_json_message = fake_send_json
+    client._transport.send_json_message = fake_send_json
 
     await client._handle_server_request({"id": 300, "method": "item/tool/call", "params": {}})
 
@@ -1574,7 +1579,7 @@ async def test_permission_request_emits_shared_message_and_patterns() -> None:
     async def fake_enqueue(event: dict) -> None:
         events.append(event)
 
-    client._enqueue_stream_event = fake_enqueue
+    client._stream_bridge.enqueue_stream_event = fake_enqueue
 
     await client._handle_server_request(
         {
@@ -1615,7 +1620,7 @@ async def test_question_request_emits_shared_questions_and_display_message() -> 
     async def fake_enqueue(event: dict) -> None:
         events.append(event)
 
-    client._enqueue_stream_event = fake_enqueue
+    client._stream_bridge.enqueue_stream_event = fake_enqueue
 
     await client._handle_server_request(
         {
@@ -1658,7 +1663,7 @@ async def test_permissions_request_emits_shared_permissions_details() -> None:
     async def fake_enqueue(event: dict) -> None:
         events.append(event)
 
-    client._enqueue_stream_event = fake_enqueue
+    client._stream_bridge.enqueue_stream_event = fake_enqueue
 
     await client._handle_server_request(
         {
@@ -1694,7 +1699,7 @@ async def test_elicitation_request_emits_shared_elicitation_details() -> None:
     async def fake_enqueue(event: dict) -> None:
         events.append(event)
 
-    client._enqueue_stream_event = fake_enqueue
+    client._stream_bridge.enqueue_stream_event = fake_enqueue
 
     await client._handle_server_request(
         {
@@ -1736,7 +1741,7 @@ async def test_permission_request_promotes_nested_request_message() -> None:
     async def fake_enqueue(event: dict) -> None:
         events.append(event)
 
-    client._enqueue_stream_event = fake_enqueue
+    client._stream_bridge.enqueue_stream_event = fake_enqueue
 
     await client._handle_server_request(
         {
@@ -1778,7 +1783,7 @@ async def test_question_request_promotes_nested_context_details() -> None:
     async def fake_enqueue(event: dict) -> None:
         events.append(event)
 
-    client._enqueue_stream_event = fake_enqueue
+    client._stream_bridge.enqueue_stream_event = fake_enqueue
 
     await client._handle_server_request(
         {
@@ -1807,7 +1812,7 @@ async def test_question_request_promotes_nested_context_details() -> None:
 
 
 @pytest.mark.asyncio
-async def test_ensure_started_passes_runtime_overrides_to_codex_cli() -> None:
+async def test_ensure_started_passes_runtime_overrides_to_codex_cli(monkeypatch) -> None:  # noqa: ANN001
     client = CodexClient(
         make_settings(
             a2a_bearer_token="t-1",
@@ -1874,11 +1879,13 @@ async def test_ensure_started_passes_runtime_overrides_to_codex_cli() -> None:
     async def fake_stderr_loop() -> None:
         return None
 
-    client._rpc_request = fake_rpc_request
-    client._send_json_message = fake_send_json
-    client._read_stdout_loop = fake_stdout_loop
-    client._read_stderr_loop = fake_stderr_loop
-    client._resolve_cli_bin = lambda: "codex-custom"
+    _bind_rpc_request(client, fake_rpc_request)
+    client._transport.send_json_message = fake_send_json
+    client._transport.read_stdout_loop = lambda *, dispatch_message: fake_stdout_loop()
+    client._transport.read_stderr_loop = fake_stderr_loop
+    monkeypatch.setattr(
+        "codex_a2a.upstream.client.resolve_cli_bin", lambda _cli_bin: "codex-custom"
+    )
 
     original = asyncio.create_subprocess_exec
     asyncio.create_subprocess_exec = fake_create_subprocess_exec
@@ -1982,7 +1989,7 @@ async def test_read_stdout_loop_handles_very_long_json_line() -> None:
             encoded[140_000:],
         ]
     )
-    client._process = process
+    client._transport.process = process
 
     seen: list[dict] = []
 
@@ -1991,7 +1998,7 @@ async def test_read_stdout_loop_handles_very_long_json_line() -> None:
 
     client._dispatch_message = fake_dispatch
 
-    await client._read_stdout_loop()
+    await client._transport.read_stdout_loop(dispatch_message=client._dispatch_message)
 
     assert len(seen) == 1
     assert seen[0]["method"] == "event/test"
@@ -2003,7 +2010,7 @@ async def test_dispatch_message_logs_with_pending_request_correlation_id(caplog)
     client = CodexClient(make_settings(a2a_bearer_token="t-1", codex_timeout=1.0))
     loop = asyncio.get_running_loop()
     future: asyncio.Future[object] = loop.create_future()
-    client._pending_requests["7"] = _PendingRpcRequest(
+    client._transport.pending_requests["7"] = _PendingRpcRequest(
         request_id="7",
         method="thread/list",
         future=future,
