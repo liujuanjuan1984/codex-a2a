@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from typing import Any
 
 from a2a.helpers import get_artifact_text, get_message_text, get_stream_response_text
@@ -9,15 +10,20 @@ from codex_a2a.a2a_proto import is_text_part, part_text
 
 
 def _extract_from_parts(parts: Any) -> str | None:
-    if not isinstance(parts, (list, tuple)):
+    if isinstance(parts, str | bytes | bytearray) or not isinstance(parts, Iterable):
         return None
-    if all(isinstance(part, Part) for part in parts):
-        sdk_text = "\n".join(text for part in parts if (text := part_text(part)) and text.strip())
+    normalized_parts = list(parts)
+    if not normalized_parts:
+        return None
+    if all(isinstance(part, Part) for part in normalized_parts):
+        sdk_text = "\n".join(
+            text for part in normalized_parts if (text := part_text(part)) and text.strip()
+        )
         if sdk_text:
             return sdk_text
 
     collected: list[str] = []
-    for part in parts:
+    for part in normalized_parts:
         if isinstance(part, Part) and is_text_part(part):
             if part.text:
                 collected.append(part.text)

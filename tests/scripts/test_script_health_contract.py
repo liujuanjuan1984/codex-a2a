@@ -6,6 +6,7 @@ HEALTH_COMMON_TEXT = Path("scripts/health_common.sh").read_text()
 SCRIPTS_INDEX_TEXT = Path("scripts/README.md").read_text()
 DOCTOR_TEXT = Path("scripts/doctor.sh").read_text()
 VALIDATE_BASELINE_TEXT = Path("scripts/validate_baseline.sh").read_text()
+CHECK_DEAD_CODE_TEXT = Path("scripts/check_dead_code.py").read_text()
 DEPENDABOT_TEXT = Path(".github/dependabot.yml").read_text()
 
 
@@ -19,13 +20,23 @@ def test_shared_repo_health_prerequisites_live_in_common_helper() -> None:
 
 def test_validate_baseline_keeps_local_regression_scope() -> None:
     assert "uv run pre-commit run --all-files" in VALIDATE_BASELINE_TEXT
+    assert "uv run python scripts/check_dead_code.py" in VALIDATE_BASELINE_TEXT
     assert "uv run mypy --config-file mypy.ini" in VALIDATE_BASELINE_TEXT
     assert "uv run pytest" in VALIDATE_BASELINE_TEXT
     assert "uv export" in VALIDATE_BASELINE_TEXT
-    assert "uv run pip-audit" in VALIDATE_BASELINE_TEXT
+    assert 'run_pip_audit "${runtime_requirements}"' in VALIDATE_BASELINE_TEXT
+    assert "pip-audit failed on attempt" in VALIDATE_BASELINE_TEXT
     assert "uv build --no-sources" in VALIDATE_BASELINE_TEXT
     assert "git fetch --quiet --update-shallow" not in VALIDATE_BASELINE_TEXT
     assert "uv pip list --outdated" not in VALIDATE_BASELINE_TEXT
+
+
+def test_dead_code_check_stays_conservative_and_private_only() -> None:
+    assert "High-confidence private dead code candidates detected" in CHECK_DEAD_CODE_TEXT
+    assert "DEFAULT_PROJECT_ROOTS" in CHECK_DEAD_CODE_TEXT
+    assert "DEFAULT_SEARCH_ROOTS" in CHECK_DEAD_CODE_TEXT
+    assert "PRIVATE_NAME_PATTERN" in CHECK_DEAD_CODE_TEXT
+    assert "node.decorator_list" in CHECK_DEAD_CODE_TEXT
 
 
 def test_doctor_is_thin_default_regression_alias() -> None:

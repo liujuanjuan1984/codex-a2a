@@ -651,7 +651,7 @@ def test_authenticated_extended_agent_card_injects_profile_into_extensions() -> 
     assert interrupt_params["elicitation_reply_contract"]["action"] == (
         "accept, decline, or cancel"
     )
-    assert interrupt_params["errors"]["business_codes"]["INTERRUPT_REQUEST_EXPIRED"] == -32007
+    assert interrupt_params["errors"]["business_codes"]["INTERRUPT_REQUEST_EXPIRED"] == -32010
     assert interrupt_params["errors"]["business_codes"]["INTERRUPT_TYPE_MISMATCH"] == -32008
     assert "expected_interrupt_type" in interrupt_params["errors"]["error_data_fields"]
     assert "actual_interrupt_type" in interrupt_params["errors"]["error_data_fields"]
