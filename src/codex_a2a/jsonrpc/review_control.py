@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from a2a.server.jsonrpc_models import InternalError, InvalidParamsError, JSONRPCError
 from starlette.requests import Request
@@ -9,13 +9,12 @@ from starlette.responses import Response
 
 from codex_a2a.jsonrpc.errors import invalid_params_response
 from codex_a2a.jsonrpc.owner_guard import validate_thread_owner
-from codex_a2a.jsonrpc.params_common import JsonRpcParamsValidationError
+from codex_a2a.jsonrpc.params_common import JsonRpcParamsValidationError, validate_params_model
 from codex_a2a.jsonrpc.request_models import JSONRPCRequestModel as JSONRPCRequest
 from codex_a2a.jsonrpc.review_control_params import (
     ReviewStartControlParams,
     ReviewWatchControlParams,
-    parse_review_start_params,
-    parse_review_watch_params,
+    raise_review_control_validation_error,
 )
 from codex_a2a.upstream.models import CodexRPCError
 
@@ -35,13 +34,20 @@ async def handle_review_control_request(
     *,
     request: Request,
 ) -> Response:
+    model_type = (
+        ReviewWatchControlParams
+        if base_request.method == app._method_review_watch
+        else ReviewStartControlParams
+    )
     try:
-        if base_request.method == app._method_review_watch:
-            parsed_params: ReviewStartControlParams | ReviewWatchControlParams = (
-                parse_review_watch_params(params)
-            )
-        else:
-            parsed_params = parse_review_start_params(params)
+        parsed_params: ReviewStartControlParams | ReviewWatchControlParams = cast(
+            ReviewStartControlParams | ReviewWatchControlParams,
+            validate_params_model(
+                model_type,
+                params,
+                on_error=raise_review_control_validation_error,
+            ),
+        )
     except JsonRpcParamsValidationError as exc:
         return invalid_params_response(app, base_request.id, exc)
 

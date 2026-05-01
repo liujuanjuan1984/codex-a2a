@@ -7,9 +7,7 @@ from pydantic import field_validator, model_validator
 from codex_a2a.jsonrpc.params_common import (
     MetadataParams,
     _StrictModel,
-    raise_control_validation_error,
     strip_optional_string,
-    validate_params_model,
     validate_request_command,
     validate_required_process_id,
 )
@@ -132,35 +130,3 @@ class ExecResizeControlParams(_StrictModel):
 class ExecTerminateControlParams(_StrictModel):
     request: ExecTerminateRequestParams
     metadata: MetadataParams | None = None
-
-
-def parse_exec_start_params(params: dict[str, Any]) -> ExecStartControlParams:
-    return validate_params_model(
-        ExecStartControlParams,
-        params,
-        on_error=raise_control_validation_error,
-    )
-
-
-def parse_exec_write_params(params: dict[str, Any]) -> ExecWriteControlParams:
-    return validate_params_model(
-        ExecWriteControlParams,
-        params,
-        on_error=raise_control_validation_error,
-    )
-
-
-def parse_exec_resize_params(params: dict[str, Any]) -> ExecResizeControlParams:
-    return validate_params_model(
-        ExecResizeControlParams,
-        params,
-        on_error=raise_control_validation_error,
-    )
-
-
-def parse_exec_terminate_params(params: dict[str, Any]) -> ExecTerminateControlParams:
-    return validate_params_model(
-        ExecTerminateControlParams,
-        params,
-        on_error=raise_control_validation_error,
-    )

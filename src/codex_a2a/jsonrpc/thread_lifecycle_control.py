@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import httpx
 from a2a.server.jsonrpc_models import InternalError, JSONRPCError
@@ -14,7 +14,7 @@ from codex_a2a.jsonrpc.errors import (
     upstream_unreachable_response,
 )
 from codex_a2a.jsonrpc.owner_guard import validate_thread_owner
-from codex_a2a.jsonrpc.params_common import JsonRpcParamsValidationError
+from codex_a2a.jsonrpc.params_common import JsonRpcParamsValidationError, validate_params_model
 from codex_a2a.jsonrpc.request_models import JSONRPCRequestModel as JSONRPCRequest
 from codex_a2a.jsonrpc.thread_lifecycle_params import (
     ThreadArchiveControlParams,
@@ -23,12 +23,7 @@ from codex_a2a.jsonrpc.thread_lifecycle_params import (
     ThreadUnarchiveControlParams,
     ThreadWatchControlParams,
     ThreadWatchReleaseControlParams,
-    parse_thread_archive_params,
-    parse_thread_fork_params,
-    parse_thread_metadata_update_params,
-    parse_thread_unarchive_params,
-    parse_thread_watch_params,
-    parse_thread_watch_release_params,
+    raise_thread_lifecycle_validation_error,
 )
 
 if TYPE_CHECKING:
@@ -60,24 +55,43 @@ async def handle_thread_lifecycle_control_request(
     thread_id: str | None = None
     task_id: str | None = None
 
+    model_type = (
+        ThreadForkControlParams
+        if base_request.method == app._method_thread_fork
+        else ThreadArchiveControlParams
+        if base_request.method == app._method_thread_archive
+        else ThreadUnarchiveControlParams
+        if base_request.method == app._method_thread_unarchive
+        else ThreadMetadataUpdateControlParams
+        if base_request.method == app._method_thread_metadata_update
+        else ThreadWatchReleaseControlParams
+        if base_request.method == app._method_thread_watch_release
+        else ThreadWatchControlParams
+    )
     try:
+        parsed_params = cast(
+            ThreadForkControlParams
+            | ThreadArchiveControlParams
+            | ThreadUnarchiveControlParams
+            | ThreadMetadataUpdateControlParams
+            | ThreadWatchControlParams
+            | ThreadWatchReleaseControlParams,
+            validate_params_model(
+                model_type,
+                params,
+                on_error=raise_thread_lifecycle_validation_error,
+            ),
+        )
         if base_request.method == app._method_thread_fork:
-            parsed_params = parse_thread_fork_params(params)
-            thread_id = parsed_params.thread_id
+            thread_id = cast(ThreadForkControlParams, parsed_params).thread_id
         elif base_request.method == app._method_thread_archive:
-            parsed_params = parse_thread_archive_params(params)
-            thread_id = parsed_params.thread_id
+            thread_id = cast(ThreadArchiveControlParams, parsed_params).thread_id
         elif base_request.method == app._method_thread_unarchive:
-            parsed_params = parse_thread_unarchive_params(params)
-            thread_id = parsed_params.thread_id
+            thread_id = cast(ThreadUnarchiveControlParams, parsed_params).thread_id
         elif base_request.method == app._method_thread_metadata_update:
-            parsed_params = parse_thread_metadata_update_params(params)
-            thread_id = parsed_params.thread_id
+            thread_id = cast(ThreadMetadataUpdateControlParams, parsed_params).thread_id
         elif base_request.method == app._method_thread_watch_release:
-            parsed_params = parse_thread_watch_release_params(params)
-            task_id = parsed_params.task_id
-        else:
-            parsed_params = parse_thread_watch_params(params)
+            task_id = cast(ThreadWatchReleaseControlParams, parsed_params).task_id
     except JsonRpcParamsValidationError as exc:
         return invalid_params_response(app, base_request.id, exc)
 

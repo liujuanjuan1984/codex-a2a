@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import httpx
 from a2a.server.jsonrpc_models import InternalError, JSONRPCError
@@ -25,12 +25,12 @@ from codex_a2a.jsonrpc.exec_control_params import (
     ExecStartControlParams,
     ExecTerminateControlParams,
     ExecWriteControlParams,
-    parse_exec_resize_params,
-    parse_exec_start_params,
-    parse_exec_terminate_params,
-    parse_exec_write_params,
 )
-from codex_a2a.jsonrpc.params_common import JsonRpcParamsValidationError
+from codex_a2a.jsonrpc.params_common import (
+    JsonRpcParamsValidationError,
+    raise_control_validation_error,
+    validate_params_model,
+)
 from codex_a2a.jsonrpc.request_models import JSONRPCRequestModel as JSONRPCRequest
 
 if TYPE_CHECKING:
@@ -56,15 +56,27 @@ async def handle_exec_control_request(
         | ExecResizeControlParams
         | ExecTerminateControlParams
     )
+    model_type = (
+        ExecStartControlParams
+        if base_request.method == app._method_exec_start
+        else ExecWriteControlParams
+        if base_request.method == app._method_exec_write
+        else ExecResizeControlParams
+        if base_request.method == app._method_exec_resize
+        else ExecTerminateControlParams
+    )
     try:
-        if base_request.method == app._method_exec_start:
-            parsed_params = parse_exec_start_params(params)
-        elif base_request.method == app._method_exec_write:
-            parsed_params = parse_exec_write_params(params)
-        elif base_request.method == app._method_exec_resize:
-            parsed_params = parse_exec_resize_params(params)
-        else:
-            parsed_params = parse_exec_terminate_params(params)
+        parsed_params = cast(
+            ExecStartControlParams
+            | ExecWriteControlParams
+            | ExecResizeControlParams
+            | ExecTerminateControlParams,
+            validate_params_model(
+                model_type,
+                params,
+                on_error=raise_control_validation_error,
+            ),
+        )
     except JsonRpcParamsValidationError as exc:
         return invalid_params_response(app, base_request.id, exc)
 

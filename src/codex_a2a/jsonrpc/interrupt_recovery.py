@@ -8,9 +8,9 @@ from starlette.responses import Response
 from codex_a2a.jsonrpc.errors import invalid_params_response
 from codex_a2a.jsonrpc.interrupt_recovery_params import (
     InterruptRecoveryListParams,
-    parse_interrupt_recovery_list_params,
+    raise_interrupt_recovery_validation_error,
 )
-from codex_a2a.jsonrpc.params_common import JsonRpcParamsValidationError
+from codex_a2a.jsonrpc.params_common import JsonRpcParamsValidationError, validate_params_model
 from codex_a2a.jsonrpc.request_models import JSONRPCRequestModel as JSONRPCRequest
 
 if TYPE_CHECKING:
@@ -25,7 +25,11 @@ async def handle_interrupt_recovery_request(
     request: Request,
 ) -> Response:
     try:
-        parsed_params: InterruptRecoveryListParams = parse_interrupt_recovery_list_params(params)
+        parsed_params = validate_params_model(
+            InterruptRecoveryListParams,
+            params,
+            on_error=raise_interrupt_recovery_validation_error,
+        )
     except JsonRpcParamsValidationError as exc:
         return invalid_params_response(app, base_request.id, exc)
 
