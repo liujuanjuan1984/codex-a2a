@@ -65,32 +65,24 @@ async def handle_review_control_request(
         return owner_error
 
     try:
-        if base_request.method == app._method_review_watch:
-            watch_params = (
-                parsed_params if isinstance(parsed_params, ReviewWatchControlParams) else None
-            )
-            assert watch_params is not None
+        if isinstance(parsed_params, ReviewWatchControlParams):
             call_context = app._context_builder.build(request)
             result = await app._review_runtime.start(
-                thread_id=watch_params.thread_id,
-                review_thread_id=watch_params.review_thread_id,
-                turn_id=watch_params.turn_id,
+                thread_id=parsed_params.thread_id,
+                review_thread_id=parsed_params.review_thread_id,
+                turn_id=parsed_params.turn_id,
                 request=(
                     None
-                    if watch_params.request is None
-                    else watch_params.request.model_dump(exclude_none=True)
+                    if parsed_params.request is None
+                    else parsed_params.request.model_dump(exclude_none=True)
                 ),
                 context=call_context,
             )
         else:
-            start_params = (
-                parsed_params if isinstance(parsed_params, ReviewStartControlParams) else None
-            )
-            assert start_params is not None
             result = await app._codex_client.review_start(
                 thread_id,
-                target=start_params.target.model_dump(exclude_none=True),
-                delivery=start_params.delivery,
+                target=parsed_params.target.model_dump(exclude_none=True),
+                delivery=parsed_params.delivery,
             )
     except PermissionError:
         return app._generate_error_response(

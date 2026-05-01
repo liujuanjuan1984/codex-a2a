@@ -114,21 +114,21 @@ async def handle_exec_control_request(
     )
 
     try:
-        if base_request.method == app._method_exec_start:
+        if isinstance(parsed_params, ExecStartControlParams):
             result = await app._exec_runtime.start(
                 request=request_payload,
                 directory=directory,
                 context=call_context,
                 owner_identity=owner_identity,
             )
-        elif base_request.method == app._method_exec_write:
+        elif isinstance(parsed_params, ExecWriteControlParams):
             result = await app._exec_runtime.write(
                 process_id=str(request_payload["process_id"]).strip(),
                 delta_base64=request_payload.get("delta_base64"),
                 close_stdin=request_payload.get("close_stdin"),
                 owner_identity=owner_identity,
             )
-        elif base_request.method == app._method_exec_resize:
+        elif isinstance(parsed_params, ExecResizeControlParams):
             result = await app._exec_runtime.resize(
                 process_id=str(request_payload["process_id"]).strip(),
                 rows=int(request_payload["rows"]),

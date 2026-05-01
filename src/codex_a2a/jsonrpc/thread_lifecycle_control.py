@@ -82,16 +82,18 @@ async def handle_thread_lifecycle_control_request(
                 on_error=raise_thread_lifecycle_validation_error,
             ),
         )
-        if base_request.method == app._method_thread_fork:
-            thread_id = cast(ThreadForkControlParams, parsed_params).thread_id
-        elif base_request.method == app._method_thread_archive:
-            thread_id = cast(ThreadArchiveControlParams, parsed_params).thread_id
-        elif base_request.method == app._method_thread_unarchive:
-            thread_id = cast(ThreadUnarchiveControlParams, parsed_params).thread_id
-        elif base_request.method == app._method_thread_metadata_update:
-            thread_id = cast(ThreadMetadataUpdateControlParams, parsed_params).thread_id
-        elif base_request.method == app._method_thread_watch_release:
-            task_id = cast(ThreadWatchReleaseControlParams, parsed_params).task_id
+        if isinstance(
+            parsed_params,
+            (
+                ThreadForkControlParams,
+                ThreadArchiveControlParams,
+                ThreadUnarchiveControlParams,
+                ThreadMetadataUpdateControlParams,
+            ),
+        ):
+            thread_id = parsed_params.thread_id
+        elif isinstance(parsed_params, ThreadWatchReleaseControlParams):
+            task_id = parsed_params.task_id
     except JsonRpcParamsValidationError as exc:
         return invalid_params_response(app, base_request.id, exc)
 
@@ -109,72 +111,45 @@ async def handle_thread_lifecycle_control_request(
             return owner_error
 
     try:
-        if base_request.method == app._method_thread_watch:
+        if isinstance(parsed_params, ThreadWatchControlParams):
             call_context = app._context_builder.build(request)
-            watch_params = (
-                parsed_params if isinstance(parsed_params, ThreadWatchControlParams) else None
-            )
             result = await app._thread_lifecycle_runtime.start(
                 request=(
                     None
-                    if watch_params is None or watch_params.request is None
-                    else watch_params.request.model_dump(
+                    if parsed_params.request is None
+                    else parsed_params.request.model_dump(
                         by_alias=False,
                         exclude_none=True,
                     )
                 ),
                 context=call_context,
             )
-        elif base_request.method == app._method_thread_watch_release:
+        elif isinstance(parsed_params, ThreadWatchReleaseControlParams):
             call_context = app._context_builder.build(request)
-            watch_release_params = (
-                parsed_params
-                if isinstance(parsed_params, ThreadWatchReleaseControlParams)
-                else None
-            )
-            assert watch_release_params is not None
             result = await app._thread_lifecycle_runtime.release(
-                task_id=watch_release_params.task_id,
+                task_id=parsed_params.task_id,
                 context=call_context,
             )
-        elif base_request.method == app._method_thread_fork:
-            fork_params = (
-                parsed_params if isinstance(parsed_params, ThreadForkControlParams) else None
-            )
-            assert fork_params is not None
+        elif isinstance(parsed_params, ThreadForkControlParams):
             thread = await app._codex_client.thread_fork(
-                fork_params.thread_id,
+                parsed_params.thread_id,
                 params=(
                     None
-                    if fork_params.request is None
-                    else fork_params.request.model_dump(exclude_none=True)
+                    if parsed_params.request is None
+                    else parsed_params.request.model_dump(exclude_none=True)
                 ),
             )
             result = {"ok": True, "thread_id": thread["id"], "thread": thread}
-        elif base_request.method == app._method_thread_archive:
-            archive_params = (
-                parsed_params if isinstance(parsed_params, ThreadArchiveControlParams) else None
-            )
-            assert archive_params is not None
-            await app._codex_client.thread_archive(archive_params.thread_id)
-            result = {"ok": True, "thread_id": archive_params.thread_id}
-        elif base_request.method == app._method_thread_unarchive:
-            unarchive_params = (
-                parsed_params if isinstance(parsed_params, ThreadUnarchiveControlParams) else None
-            )
-            assert unarchive_params is not None
-            thread = await app._codex_client.thread_unarchive(unarchive_params.thread_id)
+        elif isinstance(parsed_params, ThreadArchiveControlParams):
+            await app._codex_client.thread_archive(parsed_params.thread_id)
+            result = {"ok": True, "thread_id": parsed_params.thread_id}
+        elif isinstance(parsed_params, ThreadUnarchiveControlParams):
+            thread = await app._codex_client.thread_unarchive(parsed_params.thread_id)
             result = {"ok": True, "thread_id": thread["id"], "thread": thread}
         else:
-            metadata_params = (
-                parsed_params
-                if isinstance(parsed_params, ThreadMetadataUpdateControlParams)
-                else None
-            )
-            assert metadata_params is not None
             thread = await app._codex_client.thread_metadata_update(
-                metadata_params.thread_id,
-                params=metadata_params.request.model_dump(
+                parsed_params.thread_id,
+                params=parsed_params.request.model_dump(
                     by_alias=False,
                     exclude_none=False,
                     exclude_unset=True,
