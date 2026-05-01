@@ -15,7 +15,6 @@ from codex_a2a.jsonrpc.params_common import (
     normalize_string_enum,
     normalize_validation_message,
     strip_optional_string,
-    validate_params_model,
     validate_required_request_id,
 )
 
@@ -131,7 +130,7 @@ def _field_error_message(
     return normalize_validation_message(first_error.get("msg"), default=default)
 
 
-def _raise_interrupt_validation_error(exc: ValidationError) -> None:
+def raise_interrupt_validation_error(exc: ValidationError) -> None:
     errors = exc.errors(include_url=False)
     if errors and all(err.get("type") == "extra_forbidden" for err in errors):
         raise map_extra_forbidden(errors)
@@ -200,44 +199,4 @@ def _raise_interrupt_validation_error(exc: ValidationError) -> None:
     raise JsonRpcParamsValidationError(
         message=str(first.get("msg", "Invalid params")),
         data={"type": "INVALID_FIELD"},
-    )
-
-
-def parse_permission_reply_params(params: dict[str, Any]) -> PermissionReplyParams:
-    return validate_params_model(
-        PermissionReplyParams,
-        params,
-        on_error=_raise_interrupt_validation_error,
-    )
-
-
-def parse_question_reply_params(params: dict[str, Any]) -> QuestionReplyParams:
-    return validate_params_model(
-        QuestionReplyParams,
-        params,
-        on_error=_raise_interrupt_validation_error,
-    )
-
-
-def parse_question_reject_params(params: dict[str, Any]) -> QuestionRejectParams:
-    return validate_params_model(
-        QuestionRejectParams,
-        params,
-        on_error=_raise_interrupt_validation_error,
-    )
-
-
-def parse_permissions_reply_params(params: dict[str, Any]) -> PermissionsReplyParams:
-    return validate_params_model(
-        PermissionsReplyParams,
-        params,
-        on_error=_raise_interrupt_validation_error,
-    )
-
-
-def parse_elicitation_reply_params(params: dict[str, Any]) -> ElicitationReplyParams:
-    return validate_params_model(
-        ElicitationReplyParams,
-        params,
-        on_error=_raise_interrupt_validation_error,
     )

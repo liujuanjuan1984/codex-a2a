@@ -28,13 +28,10 @@ from codex_a2a.jsonrpc.interrupt_params import (
     PermissionsReplyParams,
     QuestionRejectParams,
     QuestionReplyParams,
-    parse_elicitation_reply_params,
-    parse_permission_reply_params,
-    parse_permissions_reply_params,
-    parse_question_reject_params,
-    parse_question_reply_params,
+    _InterruptReplyParams,
+    raise_interrupt_validation_error,
 )
-from codex_a2a.jsonrpc.params_common import JsonRpcParamsValidationError
+from codex_a2a.jsonrpc.params_common import JsonRpcParamsValidationError, validate_params_model
 from codex_a2a.jsonrpc.request_models import JSONRPCRequestModel as JSONRPCRequest
 from codex_a2a.upstream.interrupts import InterruptRequestError
 
@@ -51,24 +48,24 @@ async def handle_interrupt_callback_request(
     *,
     request: Request,
 ) -> Response:
-    parsed_params: (
+    parsed_params: _InterruptReplyParams
+    model_type = (
         PermissionReplyParams
-        | QuestionReplyParams
-        | QuestionRejectParams
-        | PermissionsReplyParams
-        | ElicitationReplyParams
+        if base_request.method == app._method_reply_permission
+        else QuestionReplyParams
+        if base_request.method == app._method_reply_question
+        else QuestionRejectParams
+        if base_request.method == app._method_reject_question
+        else PermissionsReplyParams
+        if base_request.method == app._method_reply_permissions
+        else ElicitationReplyParams
     )
     try:
-        if base_request.method == app._method_reply_permission:
-            parsed_params = parse_permission_reply_params(params)
-        elif base_request.method == app._method_reply_question:
-            parsed_params = parse_question_reply_params(params)
-        elif base_request.method == app._method_reject_question:
-            parsed_params = parse_question_reject_params(params)
-        elif base_request.method == app._method_reply_permissions:
-            parsed_params = parse_permissions_reply_params(params)
-        else:
-            parsed_params = parse_elicitation_reply_params(params)
+        parsed_params = validate_params_model(
+            model_type,
+            params,
+            on_error=raise_interrupt_validation_error,
+        )
     except JsonRpcParamsValidationError as exc:
         return invalid_params_response(app, base_request.id, exc)
 
