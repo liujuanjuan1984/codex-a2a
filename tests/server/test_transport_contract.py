@@ -264,14 +264,18 @@ async def test_create_app_shares_database_engine_across_runtime_components(monke
     shared_engine = SimpleNamespace(dispose=AsyncMock())
     state_store = object()
     task_store = object()
+    push_config_store = object()
     runtime_startup = AsyncMock()
     runtime_shutdown = AsyncMock()
     task_startup = AsyncMock()
     task_shutdown = AsyncMock()
+    push_config_startup = AsyncMock()
+    push_config_shutdown = AsyncMock()
     captured: dict[str, object | None] = {
         "database_engine_settings": None,
         "runtime_engine": None,
         "task_engine": None,
+        "push_config_engine": None,
     }
 
     monkeypatch.setattr(
@@ -296,8 +300,19 @@ async def test_create_app_shares_database_engine_across_runtime_components(monke
             shutdown=task_shutdown,
         )
 
+    def _build_push_config_store_runtime(_settings, *, engine=None):  # noqa: ANN001
+        captured["push_config_engine"] = engine
+        return SimpleNamespace(
+            push_config_store=push_config_store,
+            startup=push_config_startup,
+            shutdown=push_config_shutdown,
+        )
+
     monkeypatch.setattr(app_module, "build_runtime_state_runtime", _build_runtime_state_runtime)
     monkeypatch.setattr(app_module, "build_task_store_runtime", _build_task_store_runtime)
+    monkeypatch.setattr(
+        app_module, "build_push_config_store_runtime", _build_push_config_store_runtime
+    )
     monkeypatch.setattr(app_module, "CodexClient", DummyChatCodexClient)
 
     app = app_module.create_app(settings)
@@ -305,14 +320,17 @@ async def test_create_app_shares_database_engine_across_runtime_components(monke
     assert captured["database_engine_settings"] is settings
     assert captured["runtime_engine"] is shared_engine
     assert captured["task_engine"] is shared_engine
+    assert captured["push_config_engine"] is shared_engine
 
     async with app.router.lifespan_context(app):
         pass
 
     runtime_startup.assert_awaited_once()
     task_startup.assert_awaited_once()
+    push_config_startup.assert_awaited_once()
     runtime_shutdown.assert_awaited_once()
     task_shutdown.assert_awaited_once()
+    push_config_shutdown.assert_awaited_once()
     shared_engine.dispose.assert_awaited_once()
 
 
