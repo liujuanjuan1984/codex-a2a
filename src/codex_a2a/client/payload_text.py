@@ -38,7 +38,15 @@ def extract_text_from_payload(payload: Any) -> str | None:
         sdk_text = get_stream_response_text(payload).strip()
         if sdk_text:
             return sdk_text
-        return _extract_from_stream_response(payload)
+        if payload.HasField("artifact_update"):
+            return extract_text_from_payload(payload.artifact_update.artifact)
+        if payload.HasField("message"):
+            return extract_text_from_payload(payload.message)
+        if payload.HasField("task"):
+            return extract_text_from_payload(payload.task)
+        if payload.HasField("status_update") and payload.status_update.status.message is not None:
+            return extract_text_from_payload(payload.status_update.status.message)
+        return None
 
     if isinstance(payload, Message):
         sdk_text = get_message_text(payload).strip()
@@ -64,16 +72,4 @@ def extract_text_from_payload(payload: Any) -> str | None:
             return sdk_text
         return _extract_from_parts(payload.parts)
 
-    return None
-
-
-def _extract_from_stream_response(payload: StreamResponse) -> str | None:
-    if payload.HasField("artifact_update"):
-        return extract_text_from_payload(payload.artifact_update.artifact)
-    if payload.HasField("message"):
-        return extract_text_from_payload(payload.message)
-    if payload.HasField("task"):
-        return extract_text_from_payload(payload.task)
-    if payload.HasField("status_update") and payload.status_update.status.message is not None:
-        return extract_text_from_payload(payload.status_update.status.message)
     return None

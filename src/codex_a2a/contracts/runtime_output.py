@@ -66,13 +66,6 @@ class SharedOutputMetadata(_StrictContractModel):
     interrupt: InterruptMetadata | None = None
 
 
-def _model_dump_if_present(model: _StrictContractModel | None) -> dict[str, Any] | None:
-    if model is None:
-        return None
-    payload = model.model_dump(mode="json", by_alias=False, exclude_none=True)
-    return payload or None
-
-
 def build_status_stream_metadata(
     *,
     source: str,
@@ -128,7 +121,7 @@ def build_output_metadata(
         else None,
     )
     metadata: dict[str, Any] = {}
-    shared_payload = _model_dump_if_present(shared)
+    shared_payload = shared.model_dump(mode="json", by_alias=False, exclude_none=True) or None
     if shared_payload:
         metadata[SHARED_METADATA_NAMESPACE] = shared_payload
     if codex_private:

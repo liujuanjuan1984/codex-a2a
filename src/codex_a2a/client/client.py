@@ -339,11 +339,18 @@ class A2AClient:
             metadata_extensions,
         )
         normalized_request = self._with_request_metadata(request, request_metadata)
-        self._validate_extension_requirements(
-            request_metadata=request_metadata,
-            message=normalized_request.message,
-            requested_extensions=requested_extensions,
+        missing_requirements = missing_extension_requirements(
+            required_extensions_for_send_message(
+                request_metadata=request_metadata,
+                message=normalized_request.message,
+            ),
+            requested_extensions,
         )
+        if missing_requirements:
+            raise A2AClientConfigError(
+                "Request metadata requires explicit A2A extension negotiation via A2A-Extensions: "
+                + ", ".join(requirement.field for requirement in missing_requirements)
+            )
         try:
             async for item in sdk_client.send_message(
                 normalized_request,
@@ -425,25 +432,4 @@ class A2AClient:
             task_id=task_id,
             parts=outbound_parts,
             metadata=None,
-        )
-
-    def _validate_extension_requirements(
-        self,
-        *,
-        request_metadata: Mapping[str, Any] | None,
-        message: Message,
-        requested_extensions: tuple[str, ...] | None,
-    ) -> None:
-        missing_requirements = missing_extension_requirements(
-            required_extensions_for_send_message(
-                request_metadata=request_metadata,
-                message=message,
-            ),
-            requested_extensions,
-        )
-        if not missing_requirements:
-            return
-        raise A2AClientConfigError(
-            "Request metadata requires explicit A2A extension negotiation via A2A-Extensions: "
-            + ", ".join(requirement.field for requirement in missing_requirements)
         )

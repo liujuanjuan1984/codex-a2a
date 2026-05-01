@@ -13,29 +13,17 @@ BASIC_AUTH_FORMAT_ERROR = (
 )
 
 
-def validate_basic_auth(value: str) -> None:
-    if ":" in value:
-        return
-    decoded = _decode_basic_auth(value)
-    if b":" not in decoded:
-        raise ValueError(BASIC_AUTH_FORMAT_ERROR)
-
-
 def encode_basic_auth(value: str) -> str:
     if ":" in value:
         return b64encode(value.encode()).decode()
-    decoded = _decode_basic_auth(value)
+    padded_value = value + ("=" * (-len(value) % 4))
+    try:
+        decoded = b64decode(padded_value, validate=True)
+    except (BinasciiError, ValueError) as exc:
+        raise ValueError(BASIC_AUTH_FORMAT_ERROR) from exc
     if b":" not in decoded:
         raise ValueError(BASIC_AUTH_FORMAT_ERROR)
     return b64encode(decoded).decode()
-
-
-def _decode_basic_auth(value: str) -> bytes:
-    padded_value = value + ("=" * (-len(value) % 4))
-    try:
-        return b64decode(padded_value, validate=True)
-    except (BinasciiError, ValueError) as exc:
-        raise ValueError(BASIC_AUTH_FORMAT_ERROR) from exc
 
 
 class StaticCredentialService(CredentialService):

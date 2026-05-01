@@ -76,18 +76,30 @@ def required_extensions_for_send_message(
     request_metadata: Mapping[str, Any] | None,
     message: Message,
 ) -> tuple[ExtensionRequirement, ...]:
-    sources = _metadata_sources_for_send_message(
-        request_metadata=request_metadata,
-        message=message,
+    sources: list[Mapping[str, Any]] = []
+    if request_metadata:
+        sources.append(dict(request_metadata))
+    message_metadata = _proto_metadata_to_dict(
+        message.metadata if message.HasField("metadata") else None
     )
+    if message_metadata:
+        sources.append(message_metadata)
     requirements: list[ExtensionRequirement] = []
-    if _metadata_field_present(sources, path=("shared", "session", "id")):
-        requirements.append(
-            ExtensionRequirement(
-                extension_uri=SESSION_BINDING_EXTENSION_URI,
-                field="metadata.shared.session.id",
+    for source in sources:
+        current: Any = source
+        for segment in ("shared", "session", "id"):
+            if not isinstance(current, Mapping) or segment not in current:
+                current = None
+                break
+            current = current[segment]
+        if current is not None:
+            requirements.append(
+                ExtensionRequirement(
+                    extension_uri=SESSION_BINDING_EXTENSION_URI,
+                    field="metadata.shared.session.id",
+                )
             )
-        )
+            break
     return tuple(requirements)
 
 
@@ -120,11 +132,15 @@ def filter_negotiated_extensions_from_stream_response(
     if updated.HasField("task"):
         updated.task.CopyFrom(_filter_task(updated.task, requested))
     if updated.HasField("status_update"):
-        updated.status_update.CopyFrom(_filter_status_update(updated.status_update, requested))
+        status_update = cast(TaskStatusUpdateEvent, proto_clone(updated.status_update))
+        _set_filtered_metadata(status_update, requested)
+        if status_update.status.HasField("message"):
+            _set_filtered_metadata(status_update.status.message, requested)
+        updated.status_update.CopyFrom(status_update)
     if updated.HasField("artifact_update"):
-        updated.artifact_update.CopyFrom(
-            _filter_artifact_update(updated.artifact_update, requested)
-        )
+        artifact_update = cast(TaskArtifactUpdateEvent, proto_clone(updated.artifact_update))
+        _set_filtered_metadata(artifact_update.artifact, requested)
+        updated.artifact_update.CopyFrom(artifact_update)
     return updated
 
 
@@ -145,39 +161,6 @@ def _normalize_requested_extensions(
     )
 
 
-def _metadata_sources_for_send_message(
-    *,
-    request_metadata: Mapping[str, Any] | None,
-    message: Message,
-) -> tuple[Mapping[str, Any], ...]:
-    sources: list[Mapping[str, Any]] = []
-    if request_metadata:
-        sources.append(dict(request_metadata))
-    message_metadata = _proto_metadata_to_dict(
-        message.metadata if message.HasField("metadata") else None
-    )
-    if message_metadata:
-        sources.append(message_metadata)
-    return tuple(sources)
-
-
-def _metadata_field_present(
-    sources: Iterable[Mapping[str, Any]],
-    *,
-    path: tuple[str, ...],
-) -> bool:
-    for source in sources:
-        current: Any = source
-        for segment in path:
-            if not isinstance(current, Mapping) or segment not in current:
-                current = None
-                break
-            current = current[segment]
-        if current is not None:
-            return True
-    return False
-
-
 def _filter_task(task: Task, requested_extensions: frozenset[str]) -> Task:
     updated = cast(Task, proto_clone(task))
     _set_filtered_metadata(updated, requested_extensions)
@@ -187,26 +170,6 @@ def _filter_task(task: Task, requested_extensions: frozenset[str]) -> Task:
         _set_filtered_metadata(history_item, requested_extensions)
     for artifact in updated.artifacts:
         _set_filtered_metadata(artifact, requested_extensions)
-    return updated
-
-
-def _filter_status_update(
-    event: TaskStatusUpdateEvent,
-    requested_extensions: frozenset[str],
-) -> TaskStatusUpdateEvent:
-    updated = cast(TaskStatusUpdateEvent, proto_clone(event))
-    _set_filtered_metadata(updated, requested_extensions)
-    if updated.status.HasField("message"):
-        _set_filtered_metadata(updated.status.message, requested_extensions)
-    return updated
-
-
-def _filter_artifact_update(
-    event: TaskArtifactUpdateEvent,
-    requested_extensions: frozenset[str],
-) -> TaskArtifactUpdateEvent:
-    updated = cast(TaskArtifactUpdateEvent, proto_clone(event))
-    _set_filtered_metadata(updated.artifact, requested_extensions)
     return updated
 
 
