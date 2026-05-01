@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
-from typing import Any, TypeVar
+from typing import Any, Literal, TypeVar, overload
 
 from a2a._base import A2ABaseModel
 from pydantic import ConfigDict, ValidationError, field_validator
@@ -59,6 +59,52 @@ def strip_optional_string(value: Any) -> str | None:
     if not isinstance(value, str):
         raise ValueError("must be a string")
     return value
+
+
+def normalize_validation_message(message: Any, *, default: str) -> str:
+    return str(message if message is not None else default).removeprefix("Value error, ")
+
+
+@overload
+def normalize_string_enum(
+    value: Any,
+    *,
+    allowed: tuple[str, ...],
+    invalid_value_message: str,
+    invalid_type_message: str | None = None,
+    allow_none: Literal[False] = False,
+) -> str: ...
+
+
+@overload
+def normalize_string_enum(
+    value: Any,
+    *,
+    allowed: tuple[str, ...],
+    invalid_value_message: str,
+    invalid_type_message: str | None = None,
+    allow_none: Literal[True],
+) -> str | None: ...
+
+
+def normalize_string_enum(
+    value: Any,
+    *,
+    allowed: tuple[str, ...],
+    invalid_value_message: str,
+    invalid_type_message: str | None = None,
+    allow_none: bool = False,
+) -> str | None:
+    if value is None:
+        if allow_none:
+            return None
+        raise ValueError(invalid_type_message or invalid_value_message)
+    if not isinstance(value, str):
+        raise ValueError(invalid_type_message or invalid_value_message)
+    normalized = value.strip().lower()
+    if normalized not in allowed:
+        raise ValueError(invalid_value_message)
+    return normalized
 
 
 def normalize_non_empty_string(value: Any, *, message: str) -> str:
@@ -276,7 +322,7 @@ def raise_control_validation_error(exc: ValidationError) -> None:
 
     first = errors[0]
     loc = tuple(first.get("loc", ()))
-    message_text = str(first.get("msg", "Invalid params")).removeprefix("Value error, ")
+    message_text = normalize_validation_message(first.get("msg"), default="Invalid params")
     if message_text == "request.rows and request.cols must be provided together":
         raise JsonRpcParamsValidationError(
             message=message_text,
