@@ -7,6 +7,7 @@ SCRIPTS_INDEX_TEXT = Path("scripts/README.md").read_text()
 DOCTOR_TEXT = Path("scripts/doctor.sh").read_text()
 VALIDATE_BASELINE_TEXT = Path("scripts/validate_baseline.sh").read_text()
 CHECK_DEAD_CODE_TEXT = Path("scripts/check_dead_code.py").read_text()
+AUDIT_LOW_CALL_SITES_TEXT = Path("scripts/audit_low_call_sites.py").read_text()
 DEPENDABOT_TEXT = Path(".github/dependabot.yml").read_text()
 
 
@@ -37,6 +38,14 @@ def test_dead_code_check_stays_conservative_and_private_only() -> None:
     assert "DEFAULT_SEARCH_ROOTS" in CHECK_DEAD_CODE_TEXT
     assert "PRIVATE_NAME_PATTERN" in CHECK_DEAD_CODE_TEXT
     assert "node.decorator_list" in CHECK_DEAD_CODE_TEXT
+
+
+def test_low_call_audit_stays_manual_and_non_blocking() -> None:
+    assert "manual review only" in AUDIT_LOW_CALL_SITES_TEXT
+    assert "DEFAULT_MIN_CALLS" in AUDIT_LOW_CALL_SITES_TEXT
+    assert "DEFAULT_MAX_CALLS" in AUDIT_LOW_CALL_SITES_TEXT
+    assert "dynamic dispatch is intentionally unresolved" in AUDIT_LOW_CALL_SITES_TEXT
+    assert "No low-call-count function wrappers detected" in AUDIT_LOW_CALL_SITES_TEXT
 
 
 def test_doctor_is_thin_default_regression_alias() -> None:
@@ -73,6 +82,7 @@ def test_dependency_health_keeps_dependency_review_scope() -> None:
 def test_scripts_index_documents_split_health_entrypoints() -> None:
     assert "doctor.sh" in SCRIPTS_INDEX_TEXT
     assert "conformance.sh" in SCRIPTS_INDEX_TEXT
+    assert "audit_low_call_sites.py" in SCRIPTS_INDEX_TEXT
     assert "shortest maintainer entrypoint" in SCRIPTS_INDEX_TEXT
     assert "outside the default regression gate" in SCRIPTS_INDEX_TEXT
     assert "default local validation baseline used by contributors and CI" in SCRIPTS_INDEX_TEXT
