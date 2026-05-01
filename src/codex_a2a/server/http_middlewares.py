@@ -20,11 +20,7 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 
 from codex_a2a.auth import authenticate_static_credential, build_static_auth_credentials
 from codex_a2a.config import Settings
-from codex_a2a.contracts.extensions import (
-    CORE_JSONRPC_PATH,
-    EXTENSION_JSONRPC_PATH,
-    REST_API_PATH_PREFIX,
-)
+from codex_a2a.contracts import extensions as extension_contracts
 from codex_a2a.jsonrpc.errors import (
     adapt_jsonrpc_error,
     build_http_error_body,
@@ -50,14 +46,14 @@ _PUBLIC_AGENT_CARD_PATHS = {
     "/.well-known/agent-card.json",
 }
 _AUTHENTICATED_EXTENDED_CARD_PATHS = {
-    f"{REST_API_PATH_PREFIX}/extendedAgentCard",
+    f"{extension_contracts.REST_API_PATH_PREFIX}/extendedAgentCard",
 }
 _OPENAPI_PATHS = {
     "/openapi.json",
 }
 _REST_MESSAGE_PATHS = {
-    f"{REST_API_PATH_PREFIX}/message:send",
-    f"{REST_API_PATH_PREFIX}/message:stream",
+    f"{extension_contracts.REST_API_PATH_PREFIX}/message:send",
+    f"{extension_contracts.REST_API_PATH_PREFIX}/message:stream",
 }
 GZIP_COMPRESSIBLE_PATHS = (
     _PUBLIC_AGENT_CARD_PATHS | _AUTHENTICATED_EXTENDED_CARD_PATHS | _OPENAPI_PATHS
@@ -204,14 +200,17 @@ def _looks_like_jsonrpc_envelope(payload: dict | None) -> bool:
 
 
 def _is_jsonrpc_path(path: str) -> bool:
-    return path in {CORE_JSONRPC_PATH, EXTENSION_JSONRPC_PATH}
+    return path in {
+        extension_contracts.CORE_JSONRPC_PATH,
+        extension_contracts.EXTENSION_JSONRPC_PATH,
+    }
 
 
 def _requires_protocol_negotiation(request: Request) -> bool:
     path = request.url.path
     if request.method == "OPTIONS":
         return False
-    return _is_jsonrpc_path(path) or path.startswith(f"{REST_API_PATH_PREFIX}/")
+    return _is_jsonrpc_path(path) or path.startswith(f"{extension_contracts.REST_API_PATH_PREFIX}/")
 
 
 def _jsonrpc_request_id(payload: dict | None) -> str | int | None:
@@ -417,7 +416,8 @@ def install_http_middlewares(
                     "error": (
                         "Invalid HTTP+JSON payload for REST endpoint. "
                         "Use an A2A 1.0 request body with message.parts, or call "
-                        f"POST {CORE_JSONRPC_PATH} with JSON-RPC method=SendMessage or "
+                        f"POST {extension_contracts.CORE_JSONRPC_PATH} "
+                        "with JSON-RPC method=SendMessage or "
                         "method=SendStreamingMessage."
                     )
                 },

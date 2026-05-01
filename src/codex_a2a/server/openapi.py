@@ -9,14 +9,7 @@ from codex_a2a.contracts.extension_registry import build_openapi_extension_contr
 from codex_a2a.contracts.extensions import CORE_JSONRPC_PATH
 from codex_a2a.profile.runtime import RuntimeProfile
 
-from .openapi_contract_fragments import (
-    build_core_jsonrpc_openapi_description,
-    build_core_jsonrpc_openapi_examples,
-    build_extension_jsonrpc_openapi_description,
-    build_extension_jsonrpc_openapi_examples,
-    build_openapi_security,
-    build_rest_message_openapi_examples,
-)
+from . import openapi_contract_fragments
 
 
 def _ensure_object_schema(
@@ -166,7 +159,7 @@ def patch_openapi_contract(
         _ensure_minimal_a2a_schemas(schema)
         components = schema.setdefault("components", {})
         if isinstance(components, dict):
-            security_schemes, security = build_openapi_security(settings)
+            security_schemes, security = openapi_contract_fragments.build_openapi_security(settings)
             if security_schemes:
                 components["securitySchemes"] = security_schemes
             if security:
@@ -179,8 +172,10 @@ def patch_openapi_contract(
             post["summary"] = "Handle Shared A2A and Codex JSON-RPC Requests"
             post["description"] = "\n\n".join(
                 [
-                    build_core_jsonrpc_openapi_description(),
-                    build_extension_jsonrpc_openapi_description(runtime_profile=runtime_profile),
+                    openapi_contract_fragments.build_core_jsonrpc_openapi_description(),
+                    openapi_contract_fragments.build_extension_jsonrpc_openapi_description(
+                        runtime_profile=runtime_profile
+                    ),
                 ]
             )
             post["x-a2a-extension-contracts"] = a2a_extension_contracts
@@ -199,8 +194,8 @@ def patch_openapi_contract(
                             {"$ref": "#/components/schemas/A2AJsonRpcRequest"},
                         )
                         app_json["examples"] = {
-                            **build_core_jsonrpc_openapi_examples(),
-                            **build_extension_jsonrpc_openapi_examples(
+                            **openapi_contract_fragments.build_core_jsonrpc_openapi_examples(),
+                            **openapi_contract_fragments.build_extension_jsonrpc_openapi_examples(
                                 runtime_profile=runtime_profile
                             ),
                         }
@@ -233,7 +228,7 @@ def patch_openapi_contract(
                     },
                 },
             }
-            rest_examples = build_rest_message_openapi_examples()
+            rest_examples = openapi_contract_fragments.build_rest_message_openapi_examples()
             for rest_path, contract in rest_post_contracts.items():
                 rest_post = _ensure_path_item(paths, rest_path, "post")
 

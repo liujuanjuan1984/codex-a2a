@@ -5,10 +5,7 @@ from __future__ import annotations
 import asyncio
 
 from codex_a2a.config import Settings
-from codex_a2a.contracts.extensions import (
-    SESSION_BINDING_EXTENSION_URI,
-    STREAMING_EXTENSION_URI,
-)
+from codex_a2a.contracts import extensions as extension_contracts
 
 from .client import A2AClient
 from .config import A2AClientConfig
@@ -50,8 +47,8 @@ class A2AClientManager:
                     supported_transports=list(self._settings.a2a_client_supported_transports),
                     accepted_output_modes=["text/plain"],
                     extensions=[
-                        SESSION_BINDING_EXTENSION_URI,
-                        STREAMING_EXTENSION_URI,
+                        extension_contracts.SESSION_BINDING_EXTENSION_URI,
+                        extension_contracts.STREAMING_EXTENSION_URI,
                     ],
                 )
             )

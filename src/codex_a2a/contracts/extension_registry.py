@@ -8,20 +8,7 @@ from a2a.types import AgentExtension
 from codex_a2a.config import Settings
 from codex_a2a.profile.runtime import RuntimeProfile
 
-from .extension_specs import (
-    COMPATIBILITY_PROFILE_EXTENSION_URI,
-    DISCOVERY_EXTENSION_URI,
-    EXEC_CONTROL_EXTENSION_URI,
-    INTERRUPT_CALLBACK_EXTENSION_URI,
-    INTERRUPT_RECOVERY_EXTENSION_URI,
-    REVIEW_CONTROL_EXTENSION_URI,
-    SESSION_BINDING_EXTENSION_URI,
-    SESSION_QUERY_EXTENSION_URI,
-    STREAMING_EXTENSION_URI,
-    THREAD_LIFECYCLE_EXTENSION_URI,
-    TURN_CONTROL_EXTENSION_URI,
-    WIRE_CONTRACT_EXTENSION_URI,
-)
+from . import extension_specs
 
 
 @dataclass(frozen=True)
@@ -86,7 +73,7 @@ def _build_extension_contract_params(
 EXTENSION_CONTRACT_REGISTRY: tuple[ExtensionContractDescriptor, ...] = (
     ExtensionContractDescriptor(
         key="session_binding",
-        uri=SESSION_BINDING_EXTENSION_URI,
+        uri=extension_specs.SESSION_BINDING_EXTENSION_URI,
         title="Shared Session Binding v1",
         description=(
             "Shared contract to bind A2A messages to an existing Codex session "
@@ -112,7 +99,7 @@ EXTENSION_CONTRACT_REGISTRY: tuple[ExtensionContractDescriptor, ...] = (
     ),
     ExtensionContractDescriptor(
         key="streaming",
-        uri=STREAMING_EXTENSION_URI,
+        uri=extension_specs.STREAMING_EXTENSION_URI,
         title="Shared Stream Hints v1",
         description=(
             "Shared streaming metadata contract for canonical block hints, "
@@ -130,7 +117,7 @@ EXTENSION_CONTRACT_REGISTRY: tuple[ExtensionContractDescriptor, ...] = (
     ),
     ExtensionContractDescriptor(
         key="session_query",
-        uri=SESSION_QUERY_EXTENSION_URI,
+        uri=extension_specs.SESSION_QUERY_EXTENSION_URI,
         title="Codex Session Query v1",
         description="Provider-private Codex session history and low-risk control methods.",
         family="provider_private",
@@ -144,7 +131,7 @@ EXTENSION_CONTRACT_REGISTRY: tuple[ExtensionContractDescriptor, ...] = (
     ),
     ExtensionContractDescriptor(
         key="discovery",
-        uri=DISCOVERY_EXTENSION_URI,
+        uri=extension_specs.DISCOVERY_EXTENSION_URI,
         title="Codex Discovery v1",
         description="Provider-private skills, apps, plugins, and watch bridge methods.",
         family="provider_private",
@@ -158,7 +145,7 @@ EXTENSION_CONTRACT_REGISTRY: tuple[ExtensionContractDescriptor, ...] = (
     ),
     ExtensionContractDescriptor(
         key="thread_lifecycle",
-        uri=THREAD_LIFECYCLE_EXTENSION_URI,
+        uri=extension_specs.THREAD_LIFECYCLE_EXTENSION_URI,
         title="Codex Thread Lifecycle v1",
         description="Provider-private thread lifecycle control and watch bridge methods.",
         family="provider_private",
@@ -172,7 +159,7 @@ EXTENSION_CONTRACT_REGISTRY: tuple[ExtensionContractDescriptor, ...] = (
     ),
     ExtensionContractDescriptor(
         key="interrupt_recovery",
-        uri=INTERRUPT_RECOVERY_EXTENSION_URI,
+        uri=extension_specs.INTERRUPT_RECOVERY_EXTENSION_URI,
         title="Codex Interrupt Recovery v1",
         description="Provider-private interrupt rediscovery contract for authenticated callers.",
         family="provider_private",
@@ -186,7 +173,7 @@ EXTENSION_CONTRACT_REGISTRY: tuple[ExtensionContractDescriptor, ...] = (
     ),
     ExtensionContractDescriptor(
         key="turn_control",
-        uri=TURN_CONTROL_EXTENSION_URI,
+        uri=extension_specs.TURN_CONTROL_EXTENSION_URI,
         title="Codex Turn Control v1",
         description="Provider-private active-turn steering for already-running regular turns.",
         family="provider_private",
@@ -200,7 +187,7 @@ EXTENSION_CONTRACT_REGISTRY: tuple[ExtensionContractDescriptor, ...] = (
     ),
     ExtensionContractDescriptor(
         key="review_control",
-        uri=REVIEW_CONTROL_EXTENSION_URI,
+        uri=extension_specs.REVIEW_CONTROL_EXTENSION_URI,
         title="Codex Review Control v1",
         description="Provider-private review control and lifecycle watch bridge.",
         family="provider_private",
@@ -214,7 +201,7 @@ EXTENSION_CONTRACT_REGISTRY: tuple[ExtensionContractDescriptor, ...] = (
     ),
     ExtensionContractDescriptor(
         key="exec_control",
-        uri=EXEC_CONTROL_EXTENSION_URI,
+        uri=extension_specs.EXEC_CONTROL_EXTENSION_URI,
         title="Codex Exec v1",
         description="Provider-private standalone interactive command execution.",
         family="provider_private",
@@ -228,7 +215,7 @@ EXTENSION_CONTRACT_REGISTRY: tuple[ExtensionContractDescriptor, ...] = (
     ),
     ExtensionContractDescriptor(
         key="interrupt_callback",
-        uri=INTERRUPT_CALLBACK_EXTENSION_URI,
+        uri=extension_specs.INTERRUPT_CALLBACK_EXTENSION_URI,
         title="Shared Interactive Interrupt v1",
         description="Shared repo-family interrupt callback reply methods.",
         family="provider_private",
@@ -242,7 +229,7 @@ EXTENSION_CONTRACT_REGISTRY: tuple[ExtensionContractDescriptor, ...] = (
     ),
     ExtensionContractDescriptor(
         key="wire_contract",
-        uri=WIRE_CONTRACT_EXTENSION_URI,
+        uri=extension_specs.WIRE_CONTRACT_EXTENSION_URI,
         title="A2A Wire Contract v1",
         description="Machine-readable wire-level contract metadata.",
         family="machine_readable",
@@ -256,7 +243,7 @@ EXTENSION_CONTRACT_REGISTRY: tuple[ExtensionContractDescriptor, ...] = (
     ),
     ExtensionContractDescriptor(
         key="compatibility_profile",
-        uri=COMPATIBILITY_PROFILE_EXTENSION_URI,
+        uri=extension_specs.COMPATIBILITY_PROFILE_EXTENSION_URI,
         title="A2A Compatibility Profile v1",
         description="Machine-readable compatibility profile metadata.",
         family="machine_readable",

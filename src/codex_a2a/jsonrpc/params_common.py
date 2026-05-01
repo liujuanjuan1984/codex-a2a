@@ -6,10 +6,7 @@ from typing import Any, TypeVar
 from a2a._base import A2ABaseModel
 from pydantic import ConfigDict, ValidationError, field_validator
 
-from codex_a2a.contracts.extensions import (
-    SESSION_QUERY_DEFAULT_LIMIT,
-    SESSION_QUERY_MAX_LIMIT,
-)
+from codex_a2a.contracts import extensions as extension_contracts
 from codex_a2a.execution.request_overrides import (
     RequestExecutionOptions,
     build_request_execution_options,
@@ -151,13 +148,13 @@ def format_loc(parts: tuple[Any, ...]) -> str:
 def normalize_session_query_limit(query: dict[str, Any]) -> dict[str, Any]:
     limit = query.get("limit")
     if limit is None:
-        query["limit"] = SESSION_QUERY_DEFAULT_LIMIT
+        query["limit"] = extension_contracts.SESSION_QUERY_DEFAULT_LIMIT
         return query
 
     normalized_limit = int(limit)
-    if normalized_limit > SESSION_QUERY_MAX_LIMIT:
+    if normalized_limit > extension_contracts.SESSION_QUERY_MAX_LIMIT:
         raise JsonRpcParamsValidationError(
-            message=f"limit must be <= {SESSION_QUERY_MAX_LIMIT}",
+            message=f"limit must be <= {extension_contracts.SESSION_QUERY_MAX_LIMIT}",
             data={"type": "INVALID_FIELD", "field": "limit"},
         )
 

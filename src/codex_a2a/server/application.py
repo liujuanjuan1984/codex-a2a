@@ -11,19 +11,7 @@ from fastapi import FastAPI
 
 from codex_a2a.client.manager import A2AClientManager
 from codex_a2a.config import Settings
-from codex_a2a.contracts.extensions import (
-    CORE_JSONRPC_PATH,
-    DISCOVERY_METHODS,
-    EXEC_CONTROL_METHODS,
-    INTERRUPT_CALLBACK_METHODS,
-    INTERRUPT_RECOVERY_METHODS,
-    REST_API_PATH_PREFIX,
-    REVIEW_CONTROL_METHODS,
-    SESSION_QUERY_METHODS,
-    THREAD_LIFECYCLE_METHODS,
-    TURN_CONTROL_METHODS,
-    build_capability_snapshot,
-)
+from codex_a2a.contracts import extensions as extension_contracts
 from codex_a2a.execution.discovery_runtime import CodexDiscoveryRuntime
 from codex_a2a.execution.exec_runtime import CodexExecRuntime
 from codex_a2a.execution.executor import CodexAgentExecutor
@@ -79,7 +67,9 @@ def create_app(settings: Settings) -> FastAPI:
     task_store_runtime = build_task_store_runtime(settings, engine=shared_database_engine)
     task_store = task_store_runtime.task_store
     runtime_profile = build_runtime_profile(settings)
-    capability_snapshot = build_capability_snapshot(runtime_profile=runtime_profile)
+    capability_snapshot = extension_contracts.build_capability_snapshot(
+        runtime_profile=runtime_profile
+    )
     agent_card = build_agent_card(settings, runtime_profile=runtime_profile)
     extended_agent_card = build_authenticated_extended_agent_card(
         settings,
@@ -128,24 +118,24 @@ def create_app(settings: Settings) -> FastAPI:
 
     context_builder = IdentityAwareCallContextBuilder()
     jsonrpc_methods = {
-        **SESSION_QUERY_METHODS,
-        **DISCOVERY_METHODS,
-        "thread_fork": THREAD_LIFECYCLE_METHODS["fork"],
-        "thread_archive": THREAD_LIFECYCLE_METHODS["archive"],
-        "thread_unarchive": THREAD_LIFECYCLE_METHODS["unarchive"],
-        "thread_metadata_update": THREAD_LIFECYCLE_METHODS["metadata_update"],
-        "thread_watch": THREAD_LIFECYCLE_METHODS["watch"],
-        "thread_watch_release": THREAD_LIFECYCLE_METHODS["watch_release"],
-        "interrupts_list": INTERRUPT_RECOVERY_METHODS["list"],
-        **INTERRUPT_CALLBACK_METHODS,
+        **extension_contracts.SESSION_QUERY_METHODS,
+        **extension_contracts.DISCOVERY_METHODS,
+        "thread_fork": extension_contracts.THREAD_LIFECYCLE_METHODS["fork"],
+        "thread_archive": extension_contracts.THREAD_LIFECYCLE_METHODS["archive"],
+        "thread_unarchive": extension_contracts.THREAD_LIFECYCLE_METHODS["unarchive"],
+        "thread_metadata_update": extension_contracts.THREAD_LIFECYCLE_METHODS["metadata_update"],
+        "thread_watch": extension_contracts.THREAD_LIFECYCLE_METHODS["watch"],
+        "thread_watch_release": extension_contracts.THREAD_LIFECYCLE_METHODS["watch_release"],
+        "interrupts_list": extension_contracts.INTERRUPT_RECOVERY_METHODS["list"],
+        **extension_contracts.INTERRUPT_CALLBACK_METHODS,
     }
     if capability_snapshot.turn_control_methods:
-        jsonrpc_methods["turn_steer"] = TURN_CONTROL_METHODS["steer"]
+        jsonrpc_methods["turn_steer"] = extension_contracts.TURN_CONTROL_METHODS["steer"]
     if capability_snapshot.review_control_methods:
-        jsonrpc_methods["review_start"] = REVIEW_CONTROL_METHODS["start"]
-        jsonrpc_methods["review_watch"] = REVIEW_CONTROL_METHODS["watch"]
+        jsonrpc_methods["review_start"] = extension_contracts.REVIEW_CONTROL_METHODS["start"]
+        jsonrpc_methods["review_watch"] = extension_contracts.REVIEW_CONTROL_METHODS["watch"]
     if capability_snapshot.exec_control_methods:
-        jsonrpc_methods.update(EXEC_CONTROL_METHODS)
+        jsonrpc_methods.update(extension_contracts.EXEC_CONTROL_METHODS)
     bindings = executor.session_guard_bindings
     session_guard_hooks = SessionGuardHooks(
         directory_resolver=bindings.directory_resolver,
@@ -178,7 +168,7 @@ def create_app(settings: Settings) -> FastAPI:
             methods=jsonrpc_methods,
             supported_methods=supported_extension_jsonrpc_methods,
             guard_hooks=session_guard_hooks,
-            rpc_url=CORE_JSONRPC_PATH,
+            rpc_url=extension_contracts.CORE_JSONRPC_PATH,
             dispatcher_factory=CodexSessionQueryJSONRPCApplication,
         )
     )
@@ -186,7 +176,7 @@ def create_app(settings: Settings) -> FastAPI:
         create_rest_routes(
             request_handler=handler,
             context_builder=context_builder,
-            path_prefix=REST_API_PATH_PREFIX,
+            path_prefix=extension_contracts.REST_API_PATH_PREFIX,
         )
     )
     app.state.codex_client = client

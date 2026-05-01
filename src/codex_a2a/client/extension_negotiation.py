@@ -16,10 +16,7 @@ from a2a.types import (
 from google.protobuf.message import Message as ProtoMessage  # type: ignore[import-untyped]
 
 from codex_a2a.a2a_proto import proto_clone, proto_to_python
-from codex_a2a.contracts.extensions import (
-    SESSION_BINDING_EXTENSION_URI,
-    STREAMING_EXTENSION_URI,
-)
+from codex_a2a.contracts import extensions as extension_contracts
 
 _STREAMING_SHARED_METADATA_KEYS = frozenset({"stream", "progress", "interrupt", "usage"})
 
@@ -95,7 +92,7 @@ def required_extensions_for_send_message(
         if current is not None:
             requirements.append(
                 ExtensionRequirement(
-                    extension_uri=SESSION_BINDING_EXTENSION_URI,
+                    extension_uri=extension_contracts.SESSION_BINDING_EXTENSION_URI,
                     field="metadata.shared.session.id",
                 )
             )
@@ -204,11 +201,11 @@ def _filter_metadata_dict(
     if isinstance(shared_metadata, Mapping):
         filtered_shared = dict(shared_metadata)
         if (
-            SESSION_BINDING_EXTENSION_URI not in requested_extensions
-            and STREAMING_EXTENSION_URI not in requested_extensions
+            extension_contracts.SESSION_BINDING_EXTENSION_URI not in requested_extensions
+            and extension_contracts.STREAMING_EXTENSION_URI not in requested_extensions
         ):
             filtered_shared.pop("session", None)
-        if STREAMING_EXTENSION_URI not in requested_extensions:
+        if extension_contracts.STREAMING_EXTENSION_URI not in requested_extensions:
             for key in _STREAMING_SHARED_METADATA_KEYS:
                 filtered_shared.pop(key, None)
         if filtered_shared:

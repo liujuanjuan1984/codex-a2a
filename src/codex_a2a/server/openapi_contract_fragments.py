@@ -4,18 +4,7 @@ from typing import Any
 
 from codex_a2a.auth import has_configured_auth_scheme
 from codex_a2a.config import Settings
-from codex_a2a.contracts.extensions import (
-    CORE_JSONRPC_PATH,
-    DISCOVERY_METHODS,
-    EXEC_CONTROL_METHODS,
-    INTERRUPT_CALLBACK_METHODS,
-    INTERRUPT_RECOVERY_METHODS,
-    REVIEW_CONTROL_METHODS,
-    SESSION_QUERY_DEFAULT_LIMIT,
-    SESSION_QUERY_METHODS,
-    THREAD_LIFECYCLE_METHODS,
-    TURN_CONTROL_METHODS,
-)
+from codex_a2a.contracts import extensions as extension_contracts
 from codex_a2a.profile.runtime import RuntimeProfile
 
 
@@ -48,7 +37,8 @@ def build_core_jsonrpc_openapi_description() -> str:
         "(SendMessage, SendStreamingMessage, GetTask, CancelTask, "
         "ListTasks, CreateTaskPushNotificationConfig, GetTaskPushNotificationConfig, "
         "ListTaskPushNotificationConfigs, DeleteTaskPushNotificationConfig, "
-        f"SubscribeToTask, GetExtendedAgentCard) on POST {CORE_JSONRPC_PATH}.\n\n"
+        "SubscribeToTask, GetExtendedAgentCard) on POST "
+        f"{extension_contracts.CORE_JSONRPC_PATH}.\n\n"
         "Provider-private Codex methods share the same public JSON-RPC endpoint and "
         "are distinguished by method name plus the published compatibility contracts."
     )
@@ -56,30 +46,31 @@ def build_core_jsonrpc_openapi_description() -> str:
 
 def build_extension_jsonrpc_openapi_description(*, runtime_profile: RuntimeProfile) -> str:
     session_methods: list[str] = [
-        SESSION_QUERY_METHODS["list_sessions"],
-        SESSION_QUERY_METHODS["get_session_messages"],
+        extension_contracts.SESSION_QUERY_METHODS["list_sessions"],
+        extension_contracts.SESSION_QUERY_METHODS["get_session_messages"],
     ]
-    discovery_methods = ", ".join(DISCOVERY_METHODS.values())
-    thread_lifecycle_methods = ", ".join(THREAD_LIFECYCLE_METHODS.values())
-    interrupt_recovery_methods = ", ".join(INTERRUPT_RECOVERY_METHODS.values())
+    discovery_methods = ", ".join(extension_contracts.DISCOVERY_METHODS.values())
+    thread_lifecycle_methods = ", ".join(extension_contracts.THREAD_LIFECYCLE_METHODS.values())
+    interrupt_recovery_methods = ", ".join(extension_contracts.INTERRUPT_RECOVERY_METHODS.values())
     turn_methods = (
-        ", ".join(TURN_CONTROL_METHODS.values())
+        ", ".join(extension_contracts.TURN_CONTROL_METHODS.values())
         if runtime_profile.turn_control_enabled
         else "(disabled)"
     )
     review_methods = (
-        ", ".join(REVIEW_CONTROL_METHODS.values())
+        ", ".join(extension_contracts.REVIEW_CONTROL_METHODS.values())
         if runtime_profile.review_control_enabled
         else "(disabled)"
     )
     exec_methods = (
-        ", ".join(EXEC_CONTROL_METHODS.values())
+        ", ".join(extension_contracts.EXEC_CONTROL_METHODS.values())
         if runtime_profile.exec_control_enabled
         else "(disabled)"
     )
-    interrupt_methods = ", ".join(sorted(INTERRUPT_CALLBACK_METHODS.values()))
+    interrupt_methods = ", ".join(sorted(extension_contracts.INTERRUPT_CALLBACK_METHODS.values()))
     return (
-        f"Provider-private Codex JSON-RPC methods also use POST {CORE_JSONRPC_PATH}. "
+        "Provider-private Codex JSON-RPC methods also use POST "
+        f"{extension_contracts.CORE_JSONRPC_PATH}. "
         "Supports Codex session extensions, Codex thread lifecycle extensions, "
         "interrupt recovery extensions, active-turn control extensions, review "
         "control extensions, Codex discovery extensions, interactive exec "
@@ -152,8 +143,8 @@ def build_extension_jsonrpc_openapi_examples(
             "value": {
                 "jsonrpc": "2.0",
                 "id": 1,
-                "method": SESSION_QUERY_METHODS["list_sessions"],
-                "params": {"limit": SESSION_QUERY_DEFAULT_LIMIT},
+                "method": extension_contracts.SESSION_QUERY_METHODS["list_sessions"],
+                "params": {"limit": extension_contracts.SESSION_QUERY_DEFAULT_LIMIT},
             },
         },
         "session_messages": {
@@ -161,8 +152,11 @@ def build_extension_jsonrpc_openapi_examples(
             "value": {
                 "jsonrpc": "2.0",
                 "id": 2,
-                "method": SESSION_QUERY_METHODS["get_session_messages"],
-                "params": {"session_id": "s-1", "limit": SESSION_QUERY_DEFAULT_LIMIT},
+                "method": extension_contracts.SESSION_QUERY_METHODS["get_session_messages"],
+                "params": {
+                    "session_id": "s-1",
+                    "limit": extension_contracts.SESSION_QUERY_DEFAULT_LIMIT,
+                },
             },
         },
         "discovery_skills_list": {
@@ -170,7 +164,7 @@ def build_extension_jsonrpc_openapi_examples(
             "value": {
                 "jsonrpc": "2.0",
                 "id": 23,
-                "method": DISCOVERY_METHODS["list_skills"],
+                "method": extension_contracts.DISCOVERY_METHODS["list_skills"],
                 "params": {"cwds": ["/workspace/project"], "force_reload": True},
             },
         },
@@ -179,7 +173,7 @@ def build_extension_jsonrpc_openapi_examples(
             "value": {
                 "jsonrpc": "2.0",
                 "id": 24,
-                "method": DISCOVERY_METHODS["list_apps"],
+                "method": extension_contracts.DISCOVERY_METHODS["list_apps"],
                 "params": {"limit": 20, "force_refetch": False},
             },
         },
@@ -188,7 +182,7 @@ def build_extension_jsonrpc_openapi_examples(
             "value": {
                 "jsonrpc": "2.0",
                 "id": 25,
-                "method": DISCOVERY_METHODS["list_plugins"],
+                "method": extension_contracts.DISCOVERY_METHODS["list_plugins"],
                 "params": {"cwds": ["/workspace/project"], "force_remote_sync": False},
             },
         },
@@ -197,7 +191,7 @@ def build_extension_jsonrpc_openapi_examples(
             "value": {
                 "jsonrpc": "2.0",
                 "id": 26,
-                "method": DISCOVERY_METHODS["read_plugin"],
+                "method": extension_contracts.DISCOVERY_METHODS["read_plugin"],
                 "params": {
                     "marketplace_path": "/workspace/project/.codex/plugins/marketplace.json",
                     "plugin_name": "sample",
@@ -209,7 +203,7 @@ def build_extension_jsonrpc_openapi_examples(
             "value": {
                 "jsonrpc": "2.0",
                 "id": 27,
-                "method": DISCOVERY_METHODS["watch"],
+                "method": extension_contracts.DISCOVERY_METHODS["watch"],
                 "params": {"request": {"events": ["skills.changed", "apps.updated"]}},
             },
         },
@@ -218,7 +212,7 @@ def build_extension_jsonrpc_openapi_examples(
             "value": {
                 "jsonrpc": "2.0",
                 "id": 271,
-                "method": THREAD_LIFECYCLE_METHODS["fork"],
+                "method": extension_contracts.THREAD_LIFECYCLE_METHODS["fork"],
                 "params": {"thread_id": "thr-1", "request": {"ephemeral": True}},
             },
         },
@@ -227,7 +221,7 @@ def build_extension_jsonrpc_openapi_examples(
             "value": {
                 "jsonrpc": "2.0",
                 "id": 272,
-                "method": THREAD_LIFECYCLE_METHODS["archive"],
+                "method": extension_contracts.THREAD_LIFECYCLE_METHODS["archive"],
                 "params": {"thread_id": "thr-1"},
             },
         },
@@ -236,7 +230,7 @@ def build_extension_jsonrpc_openapi_examples(
             "value": {
                 "jsonrpc": "2.0",
                 "id": 273,
-                "method": THREAD_LIFECYCLE_METHODS["unarchive"],
+                "method": extension_contracts.THREAD_LIFECYCLE_METHODS["unarchive"],
                 "params": {"thread_id": "thr-1"},
             },
         },
@@ -245,7 +239,7 @@ def build_extension_jsonrpc_openapi_examples(
             "value": {
                 "jsonrpc": "2.0",
                 "id": 274,
-                "method": THREAD_LIFECYCLE_METHODS["metadata_update"],
+                "method": extension_contracts.THREAD_LIFECYCLE_METHODS["metadata_update"],
                 "params": {
                     "thread_id": "thr-1",
                     "request": {"git_info": {"branch": "feature/thread-lifecycle"}},
@@ -257,7 +251,7 @@ def build_extension_jsonrpc_openapi_examples(
             "value": {
                 "jsonrpc": "2.0",
                 "id": 275,
-                "method": THREAD_LIFECYCLE_METHODS["watch"],
+                "method": extension_contracts.THREAD_LIFECYCLE_METHODS["watch"],
                 "params": {
                     "request": {
                         "events": ["thread.started", "thread.status.changed"],
@@ -271,7 +265,7 @@ def build_extension_jsonrpc_openapi_examples(
             "value": {
                 "jsonrpc": "2.0",
                 "id": 276,
-                "method": THREAD_LIFECYCLE_METHODS["watch_release"],
+                "method": extension_contracts.THREAD_LIFECYCLE_METHODS["watch_release"],
                 "params": {"task_id": "task-thread-watch-1"},
             },
         },
@@ -280,7 +274,7 @@ def build_extension_jsonrpc_openapi_examples(
             "value": {
                 "jsonrpc": "2.0",
                 "id": 277,
-                "method": INTERRUPT_RECOVERY_METHODS["list"],
+                "method": extension_contracts.INTERRUPT_RECOVERY_METHODS["list"],
                 "params": {"type": "permission"},
             },
         },
@@ -289,7 +283,7 @@ def build_extension_jsonrpc_openapi_examples(
             "value": {
                 "jsonrpc": "2.0",
                 "id": 31,
-                "method": INTERRUPT_CALLBACK_METHODS["reply_permission"],
+                "method": extension_contracts.INTERRUPT_CALLBACK_METHODS["reply_permission"],
                 "params": {"request_id": "req-1", "reply": "once"},
             },
         },
@@ -298,7 +292,7 @@ def build_extension_jsonrpc_openapi_examples(
             "value": {
                 "jsonrpc": "2.0",
                 "id": 32,
-                "method": INTERRUPT_CALLBACK_METHODS["reply_question"],
+                "method": extension_contracts.INTERRUPT_CALLBACK_METHODS["reply_question"],
                 "params": {"request_id": "req-2", "answers": [["answer"]]},
             },
         },
@@ -307,7 +301,7 @@ def build_extension_jsonrpc_openapi_examples(
             "value": {
                 "jsonrpc": "2.0",
                 "id": 33,
-                "method": INTERRUPT_CALLBACK_METHODS["reject_question"],
+                "method": extension_contracts.INTERRUPT_CALLBACK_METHODS["reject_question"],
                 "params": {"request_id": "req-3"},
             },
         },
@@ -316,7 +310,7 @@ def build_extension_jsonrpc_openapi_examples(
             "value": {
                 "jsonrpc": "2.0",
                 "id": 34,
-                "method": INTERRUPT_CALLBACK_METHODS["reply_permissions"],
+                "method": extension_contracts.INTERRUPT_CALLBACK_METHODS["reply_permissions"],
                 "params": {
                     "request_id": "req-4",
                     "permissions": {"fileSystem": {"write": ["/workspace/project"]}},
@@ -329,7 +323,7 @@ def build_extension_jsonrpc_openapi_examples(
             "value": {
                 "jsonrpc": "2.0",
                 "id": 35,
-                "method": INTERRUPT_CALLBACK_METHODS["reply_elicitation"],
+                "method": extension_contracts.INTERRUPT_CALLBACK_METHODS["reply_elicitation"],
                 "params": {
                     "request_id": "req-5",
                     "action": "accept",
@@ -344,7 +338,7 @@ def build_extension_jsonrpc_openapi_examples(
             "value": {
                 "jsonrpc": "2.0",
                 "id": 276,
-                "method": TURN_CONTROL_METHODS["steer"],
+                "method": extension_contracts.TURN_CONTROL_METHODS["steer"],
                 "params": {
                     "thread_id": "thr-1",
                     "expected_turn_id": "turn-9",
@@ -360,7 +354,7 @@ def build_extension_jsonrpc_openapi_examples(
             "value": {
                 "jsonrpc": "2.0",
                 "id": 277,
-                "method": REVIEW_CONTROL_METHODS["start"],
+                "method": extension_contracts.REVIEW_CONTROL_METHODS["start"],
                 "params": {
                     "thread_id": "thr-1",
                     "delivery": "inline",
@@ -377,7 +371,7 @@ def build_extension_jsonrpc_openapi_examples(
             "value": {
                 "jsonrpc": "2.0",
                 "id": 278,
-                "method": REVIEW_CONTROL_METHODS["watch"],
+                "method": extension_contracts.REVIEW_CONTROL_METHODS["watch"],
                 "params": {
                     "thread_id": "thr-1",
                     "review_thread_id": "thr-1-review",
@@ -392,7 +386,7 @@ def build_extension_jsonrpc_openapi_examples(
             "value": {
                 "jsonrpc": "2.0",
                 "id": 28,
-                "method": EXEC_CONTROL_METHODS["exec_start"],
+                "method": extension_contracts.EXEC_CONTROL_METHODS["exec_start"],
                 "params": {
                     "request": {
                         "command": "bash",
@@ -410,7 +404,7 @@ def build_extension_jsonrpc_openapi_examples(
             "value": {
                 "jsonrpc": "2.0",
                 "id": 29,
-                "method": EXEC_CONTROL_METHODS["exec_write"],
+                "method": extension_contracts.EXEC_CONTROL_METHODS["exec_write"],
                 "params": {"request": {"process_id": "exec-1", "delta_base64": "cHdkCg=="}},
             },
         }
@@ -419,7 +413,7 @@ def build_extension_jsonrpc_openapi_examples(
             "value": {
                 "jsonrpc": "2.0",
                 "id": 30,
-                "method": EXEC_CONTROL_METHODS["exec_resize"],
+                "method": extension_contracts.EXEC_CONTROL_METHODS["exec_resize"],
                 "params": {"request": {"process_id": "exec-1", "rows": 40, "cols": 120}},
             },
         }
@@ -428,7 +422,7 @@ def build_extension_jsonrpc_openapi_examples(
             "value": {
                 "jsonrpc": "2.0",
                 "id": 31,
-                "method": EXEC_CONTROL_METHODS["exec_terminate"],
+                "method": extension_contracts.EXEC_CONTROL_METHODS["exec_terminate"],
                 "params": {"request": {"process_id": "exec-1"}},
             },
         }
