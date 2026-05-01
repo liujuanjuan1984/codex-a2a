@@ -1,26 +1,8 @@
 from codex_a2a import a2a_proto
 
 
-def test_a2a_proto_declares_explicit_public_exports() -> None:
-    expected_exports = {
-        "to_value",
-        "to_struct",
-        "proto_to_python",
-        "proto_clone",
-        "proto_with_updates",
-        "new_text_part",
-        "new_data_part",
-        "new_file_url_part",
-        "new_file_bytes_part",
-        "part_kind",
-        "is_text_part",
-        "is_data_part",
-        "is_file_part",
-        "part_text",
-        "part_data",
-    }
-
-    assert set(a2a_proto.__all__) == expected_exports
+def test_a2a_proto_does_not_expose_legacy_aliases_or_module_level_export_list() -> None:
+    assert not hasattr(a2a_proto, "__all__")
     for deprecated_alias in (
         "ROLE_AGENT",
         "ROLE_USER",
