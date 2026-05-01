@@ -3,16 +3,6 @@ from codex_a2a import a2a_proto
 
 def test_a2a_proto_declares_explicit_public_exports() -> None:
     expected_exports = {
-        "ROLE_AGENT",
-        "ROLE_USER",
-        "TASK_STATE_SUBMITTED",
-        "TASK_STATE_WORKING",
-        "TASK_STATE_COMPLETED",
-        "TASK_STATE_FAILED",
-        "TASK_STATE_CANCELED",
-        "TASK_STATE_INPUT_REQUIRED",
-        "TASK_STATE_REJECTED",
-        "TASK_STATE_AUTH_REQUIRED",
         "to_value",
         "to_struct",
         "proto_to_python",
@@ -31,3 +21,16 @@ def test_a2a_proto_declares_explicit_public_exports() -> None:
     }
 
     assert set(a2a_proto.__all__) == expected_exports
+    for deprecated_alias in (
+        "ROLE_AGENT",
+        "ROLE_USER",
+        "TASK_STATE_SUBMITTED",
+        "TASK_STATE_WORKING",
+        "TASK_STATE_COMPLETED",
+        "TASK_STATE_FAILED",
+        "TASK_STATE_CANCELED",
+        "TASK_STATE_INPUT_REQUIRED",
+        "TASK_STATE_REJECTED",
+        "TASK_STATE_AUTH_REQUIRED",
+    ):
+        assert not hasattr(a2a_proto, deprecated_alias)
