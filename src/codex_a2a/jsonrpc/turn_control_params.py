@@ -12,6 +12,7 @@ from codex_a2a.jsonrpc.params_common import (
     normalize_non_empty_string,
     strip_optional_string,
     validate_non_empty_parts,
+    validate_params_model,
     validate_required_thread_id,
 )
 
@@ -148,8 +149,8 @@ def _raise_turn_control_validation_error(exc: ValidationError) -> None:
 
 
 def parse_turn_steer_params(params: dict[str, Any]) -> TurnSteerControlParams:
-    try:
-        return TurnSteerControlParams.model_validate(params)
-    except ValidationError as exc:
-        _raise_turn_control_validation_error(exc)
-        raise AssertionError("unreachable") from exc
+    return validate_params_model(
+        TurnSteerControlParams,
+        params,
+        on_error=_raise_turn_control_validation_error,
+    )

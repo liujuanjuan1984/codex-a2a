@@ -91,7 +91,11 @@ class A2AClient:
 
         self._config = config
         self._httpx_client = httpx_client or httpx.AsyncClient(
-            timeout=self._build_timeout(),
+            timeout=(
+                None
+                if config.request_timeout_seconds is None
+                else httpx.Timeout(config.request_timeout_seconds)
+            ),
             headers=config.default_headers,
         )
         self._owns_http_client = httpx_client is None
@@ -109,11 +113,6 @@ class A2AClient:
             accepted_output_modes=config.accepted_output_modes,
         )
         self._lock = asyncio.Lock()
-
-    def _build_timeout(self) -> httpx.Timeout | None:
-        if self._config.request_timeout_seconds is None:
-            return None
-        return httpx.Timeout(self._config.request_timeout_seconds)
 
     @property
     def is_closed(self) -> bool:
@@ -142,7 +141,39 @@ class A2AClient:
         self._card = None
 
     async def get_agent_card(self) -> AgentCard:
-        return await self._get_agent_card()
+        if self._card is not None:
+            return self._card
+
+        if self._closed:
+            raise A2AClientLifecycleError("client is closed")
+
+        cached_card = self._extract_sdk_client_card()
+        if cached_card is not None:
+            self._card = cached_card
+            return self._card
+
+        async with self._lock:
+            if self._card is not None:
+                return self._card
+
+            cached_card = self._extract_sdk_client_card()
+            if cached_card is not None:
+                self._card = cached_card
+                return self._card
+
+            endpoint = resolve_agent_card_endpoint(self._config)
+            resolver = self._card_resolver_factory(
+                self._httpx_client,
+                endpoint.base_url,
+                endpoint.agent_card_path,
+            )
+            try:
+                self._card = await resolver.get_agent_card(
+                    http_kwargs=build_agent_card_request_kwargs(self._config)
+                )
+            except Exception as exc:
+                raise map_a2a_sdk_error(exc, operation="agent_card") from exc
+        return cast(AgentCard, self._card)
 
     async def send_message(
         self,
@@ -256,41 +287,6 @@ class A2AClient:
         extracted = extract_text_from_payload(event)
         return extracted or ""
 
-    async def _get_agent_card(self) -> AgentCard:
-        if self._card is not None:
-            return self._card
-
-        if self._closed:
-            raise A2AClientLifecycleError("client is closed")
-
-        cached_card = self._extract_sdk_client_card()
-        if cached_card is not None:
-            self._card = cached_card
-            return self._card
-
-        async with self._lock:
-            if self._card is not None:
-                return self._card
-
-            cached_card = self._extract_sdk_client_card()
-            if cached_card is not None:
-                self._card = cached_card
-                return self._card
-
-            endpoint = resolve_agent_card_endpoint(self._config)
-            resolver = self._card_resolver_factory(
-                self._httpx_client,
-                endpoint.base_url,
-                endpoint.agent_card_path,
-            )
-            try:
-                self._card = await resolver.get_agent_card(
-                    http_kwargs=build_agent_card_request_kwargs(self._config)
-                )
-            except Exception as exc:
-                raise map_a2a_sdk_error(exc, operation="agent_card") from exc
-        return cast(AgentCard, self._card)
-
     async def _get_client(self) -> _SDKClientProtocol:
         if self._closed:
             raise A2AClientLifecycleError("client is closed")
@@ -343,11 +339,18 @@ class A2AClient:
             metadata_extensions,
         )
         normalized_request = self._with_request_metadata(request, request_metadata)
-        self._validate_extension_requirements(
-            request_metadata=request_metadata,
-            message=normalized_request.message,
-            requested_extensions=requested_extensions,
+        missing_requirements = missing_extension_requirements(
+            required_extensions_for_send_message(
+                request_metadata=request_metadata,
+                message=normalized_request.message,
+            ),
+            requested_extensions,
         )
+        if missing_requirements:
+            raise A2AClientConfigError(
+                "Request metadata requires explicit A2A extension negotiation via A2A-Extensions: "
+                + ", ".join(requirement.field for requirement in missing_requirements)
+            )
         try:
             async for item in sdk_client.send_message(
                 normalized_request,
@@ -429,25 +432,4 @@ class A2AClient:
             task_id=task_id,
             parts=outbound_parts,
             metadata=None,
-        )
-
-    def _validate_extension_requirements(
-        self,
-        *,
-        request_metadata: Mapping[str, Any] | None,
-        message: Message,
-        requested_extensions: tuple[str, ...] | None,
-    ) -> None:
-        missing_requirements = missing_extension_requirements(
-            required_extensions_for_send_message(
-                request_metadata=request_metadata,
-                message=message,
-            ),
-            requested_extensions,
-        )
-        if not missing_requirements:
-            return
-        raise A2AClientConfigError(
-            "Request metadata requires explicit A2A extension negotiation via A2A-Extensions: "
-            + ", ".join(requirement.field for requirement in missing_requirements)
         )

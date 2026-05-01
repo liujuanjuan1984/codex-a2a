@@ -10,24 +10,25 @@ from codex_a2a.a2a_proto import (
 )
 from codex_a2a.input_mapping import (
     UnsupportedInputError,
-    convert_request_parts_to_turn_input,
+    build_turn_input_from_normalized_items,
     extract_text_from_normalized_items,
     is_text_only_normalized_input,
     map_a2a_message_parts_to_normalized_items,
+    normalize_prompt_request_parts,
     summarize_normalized_items,
 )
 
 
 def test_convert_request_parts_to_turn_input_supports_rich_inputs() -> None:
-    result = convert_request_parts_to_turn_input(
-        {
-            "parts": [
+    result = build_turn_input_from_normalized_items(
+        normalize_prompt_request_parts(
+            [
                 {"type": "text", "text": "Review this."},
                 {"type": "image", "bytes": "YWJj", "mime_type": "image/png"},
                 {"type": "mention", "name": "Demo App", "path": "app://demo-app"},
                 {"type": "skill", "name": "skill-creator", "path": "/tmp/SKILL.md"},
             ]
-        }
+        )
     )
 
     assert result == [
@@ -56,7 +57,7 @@ def test_convert_request_parts_to_turn_input_rejects_legacy_image_aliases(
     message: str,
 ) -> None:
     with pytest.raises(UnsupportedInputError, match=message):
-        convert_request_parts_to_turn_input(request_payload)
+        normalize_prompt_request_parts(request_payload.get("parts"))
 
 
 @pytest.mark.parametrize(
@@ -92,7 +93,7 @@ def test_convert_request_parts_to_turn_input_rejects_invalid_shapes(
     message: str,
 ) -> None:
     with pytest.raises(UnsupportedInputError, match=message):
-        convert_request_parts_to_turn_input(request_payload)
+        normalize_prompt_request_parts(request_payload.get("parts"))
 
 
 def test_map_a2a_message_parts_supports_v1_parts_and_image_variants() -> None:

@@ -10,6 +10,7 @@ from codex_a2a.jsonrpc.params_common import (
     format_loc,
     map_extra_forbidden,
     strip_optional_string,
+    validate_params_model,
 )
 
 InterruptRecoveryType = Literal["permission", "question", "permissions", "elicitation"]
@@ -45,8 +46,8 @@ def _raise_interrupt_recovery_validation_error(exc: ValidationError) -> None:
 
 
 def parse_interrupt_recovery_list_params(params: dict[str, Any]) -> InterruptRecoveryListParams:
-    try:
-        return InterruptRecoveryListParams.model_validate(params)
-    except ValidationError as exc:
-        _raise_interrupt_recovery_validation_error(exc)
-        raise AssertionError("unreachable") from exc
+    return validate_params_model(
+        InterruptRecoveryListParams,
+        params,
+        on_error=_raise_interrupt_recovery_validation_error,
+    )

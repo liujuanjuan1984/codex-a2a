@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from typing import Any
 
 from a2a.helpers import get_artifact_text, get_message_text, get_stream_response_text
@@ -9,15 +10,20 @@ from codex_a2a.a2a_proto import is_text_part, part_text
 
 
 def _extract_from_parts(parts: Any) -> str | None:
-    if not isinstance(parts, (list, tuple)):
+    if isinstance(parts, str | bytes | bytearray) or not isinstance(parts, Iterable):
         return None
-    if all(isinstance(part, Part) for part in parts):
-        sdk_text = "\n".join(text for part in parts if (text := part_text(part)) and text.strip())
+    normalized_parts = list(parts)
+    if not normalized_parts:
+        return None
+    if all(isinstance(part, Part) for part in normalized_parts):
+        sdk_text = "\n".join(
+            text for part in normalized_parts if (text := part_text(part)) and text.strip()
+        )
         if sdk_text:
             return sdk_text
 
     collected: list[str] = []
-    for part in parts:
+    for part in normalized_parts:
         if isinstance(part, Part) and is_text_part(part):
             if part.text:
                 collected.append(part.text)
@@ -32,7 +38,15 @@ def extract_text_from_payload(payload: Any) -> str | None:
         sdk_text = get_stream_response_text(payload).strip()
         if sdk_text:
             return sdk_text
-        return _extract_from_stream_response(payload)
+        if payload.HasField("artifact_update"):
+            return extract_text_from_payload(payload.artifact_update.artifact)
+        if payload.HasField("message"):
+            return extract_text_from_payload(payload.message)
+        if payload.HasField("task"):
+            return extract_text_from_payload(payload.task)
+        if payload.HasField("status_update") and payload.status_update.status.message is not None:
+            return extract_text_from_payload(payload.status_update.status.message)
+        return None
 
     if isinstance(payload, Message):
         sdk_text = get_message_text(payload).strip()
@@ -58,16 +72,4 @@ def extract_text_from_payload(payload: Any) -> str | None:
             return sdk_text
         return _extract_from_parts(payload.parts)
 
-    return None
-
-
-def _extract_from_stream_response(payload: StreamResponse) -> str | None:
-    if payload.HasField("artifact_update"):
-        return extract_text_from_payload(payload.artifact_update.artifact)
-    if payload.HasField("message"):
-        return extract_text_from_payload(payload.message)
-    if payload.HasField("task"):
-        return extract_text_from_payload(payload.task)
-    if payload.HasField("status_update") and payload.status_update.status.message is not None:
-        return extract_text_from_payload(payload.status_update.status.message)
     return None

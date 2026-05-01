@@ -13,6 +13,7 @@ from codex_a2a.jsonrpc.params_common import (
     strip_optional_string,
     validate_cwds,
     validate_limit_param,
+    validate_params_model,
 )
 
 
@@ -138,40 +139,45 @@ def _raise_discovery_validation_error(exc: ValidationError) -> None:
 
 
 def parse_discovery_skills_list_params(params: dict[str, Any]) -> dict[str, Any]:
-    try:
-        parsed = DiscoverySkillsListParams.model_validate(params)
-    except ValidationError as exc:
-        _raise_discovery_validation_error(exc)
+    parsed = validate_params_model(
+        DiscoverySkillsListParams,
+        params,
+        on_error=_raise_discovery_validation_error,
+    )
     return parsed.model_dump(exclude_none=True)
 
 
 def parse_discovery_apps_list_params(params: dict[str, Any]) -> dict[str, Any]:
-    try:
-        parsed = DiscoveryAppsListParams.model_validate(params)
-    except ValidationError as exc:
-        _raise_discovery_validation_error(exc)
+    parsed = validate_params_model(
+        DiscoveryAppsListParams,
+        params,
+        on_error=_raise_discovery_validation_error,
+    )
     return parsed.model_dump(exclude_none=True)
 
 
 def parse_discovery_plugins_list_params(params: dict[str, Any]) -> dict[str, Any]:
-    try:
-        parsed = DiscoveryPluginsListParams.model_validate(params)
-    except ValidationError as exc:
-        _raise_discovery_validation_error(exc)
+    parsed = validate_params_model(
+        DiscoveryPluginsListParams,
+        params,
+        on_error=_raise_discovery_validation_error,
+    )
     return parsed.model_dump(exclude_none=True)
 
 
 def parse_discovery_plugin_read_params(params: dict[str, Any]) -> dict[str, Any]:
-    try:
-        parsed = DiscoveryPluginReadParams.model_validate(params)
-    except ValidationError as exc:
-        _raise_discovery_validation_error(exc)
+    parsed = validate_params_model(
+        DiscoveryPluginReadParams,
+        params,
+        on_error=_raise_discovery_validation_error,
+    )
     return parsed.model_dump(exclude_none=True)
 
 
 def parse_discovery_watch_params(params: dict[str, Any]) -> dict[str, Any]:
-    try:
-        parsed = DiscoveryWatchParams.model_validate(params)
-    except ValidationError as exc:
-        _raise_discovery_validation_error(exc)
+    parsed = validate_params_model(
+        DiscoveryWatchParams,
+        params,
+        on_error=_raise_discovery_validation_error,
+    )
     return parsed.model_dump(exclude_none=True)

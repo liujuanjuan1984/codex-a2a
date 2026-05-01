@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any, Literal
 
 from pydantic import ValidationError, field_validator
+from pydantic_core import ErrorDetails
 
 from codex_a2a.jsonrpc.params_common import (
     JsonRpcParamsValidationError,
@@ -11,30 +12,35 @@ from codex_a2a.jsonrpc.params_common import (
     format_loc,
     map_extra_forbidden,
     metadata_validation_error,
+    normalize_string_enum,
+    normalize_validation_message,
     strip_optional_string,
     validate_required_request_id,
 )
 
 
-class PermissionReplyParams(_StrictModel):
+class _InterruptReplyParams(_StrictModel):
     request_id: str
-    reply: Literal["once", "always", "reject"]
-    message: str | None = None
     metadata: MetadataParams | None = None
 
     _validate_request_id = field_validator("request_id", mode="before")(
         validate_required_request_id
     )
 
+
+class PermissionReplyParams(_InterruptReplyParams):
+    reply: Literal["once", "always", "reject"]
+    message: str | None = None
+
     @field_validator("reply", mode="before")
     @classmethod
     def _validate_reply(cls, value: Any) -> str:
-        if not isinstance(value, str):
-            raise ValueError("reply must be a string")
-        normalized = value.strip().lower()
-        if normalized not in {"once", "always", "reject"}:
-            raise ValueError("reply must be one of: once, always, reject")
-        return normalized
+        return normalize_string_enum(
+            value,
+            allowed=("once", "always", "reject"),
+            invalid_type_message="reply must be a string",
+            invalid_value_message="reply must be one of: once, always, reject",
+        )
 
     @field_validator("message", mode="before")
     @classmethod
@@ -42,14 +48,8 @@ class PermissionReplyParams(_StrictModel):
         return strip_optional_string(value)
 
 
-class QuestionReplyParams(_StrictModel):
-    request_id: str
+class QuestionReplyParams(_InterruptReplyParams):
     answers: list[list[str]]
-    metadata: MetadataParams | None = None
-
-    _validate_request_id = field_validator("request_id", mode="before")(
-        validate_required_request_id
-    )
 
     @field_validator("answers", mode="before")
     @classmethod
@@ -71,24 +71,13 @@ class QuestionReplyParams(_StrictModel):
         return answers
 
 
-class QuestionRejectParams(_StrictModel):
-    request_id: str
-    metadata: MetadataParams | None = None
-
-    _validate_request_id = field_validator("request_id", mode="before")(
-        validate_required_request_id
-    )
+class QuestionRejectParams(_InterruptReplyParams):
+    pass
 
 
-class PermissionsReplyParams(_StrictModel):
-    request_id: str
+class PermissionsReplyParams(_InterruptReplyParams):
     permissions: dict[str, Any]
     scope: Literal["turn", "session"] | None = None
-    metadata: MetadataParams | None = None
-
-    _validate_request_id = field_validator("request_id", mode="before")(
-        validate_required_request_id
-    )
 
     @field_validator("permissions", mode="before")
     @classmethod
@@ -100,35 +89,26 @@ class PermissionsReplyParams(_StrictModel):
     @field_validator("scope", mode="before")
     @classmethod
     def _validate_scope(cls, value: Any) -> str | None:
-        if value is None:
-            return None
-        if not isinstance(value, str):
-            raise ValueError("scope must be one of: turn, session")
-        normalized = value.strip().lower()
-        if normalized not in {"turn", "session"}:
-            raise ValueError("scope must be one of: turn, session")
-        return normalized
+        return normalize_string_enum(
+            value,
+            allowed=("turn", "session"),
+            invalid_value_message="scope must be one of: turn, session",
+            allow_none=True,
+        )
 
 
-class ElicitationReplyParams(_StrictModel):
-    request_id: str
+class ElicitationReplyParams(_InterruptReplyParams):
     action: Literal["accept", "decline", "cancel"]
     content: Any = None
-    metadata: MetadataParams | None = None
-
-    _validate_request_id = field_validator("request_id", mode="before")(
-        validate_required_request_id
-    )
 
     @field_validator("action", mode="before")
     @classmethod
     def _validate_action(cls, value: Any) -> str:
-        if not isinstance(value, str):
-            raise ValueError("action must be one of: accept, decline, cancel")
-        normalized = value.strip().lower()
-        if normalized not in {"accept", "decline", "cancel"}:
-            raise ValueError("action must be one of: accept, decline, cancel")
-        return normalized
+        return normalize_string_enum(
+            value,
+            allowed=("accept", "decline", "cancel"),
+            invalid_value_message="action must be one of: accept, decline, cancel",
+        )
 
     @field_validator("content")
     @classmethod
@@ -139,7 +119,18 @@ class ElicitationReplyParams(_StrictModel):
         return value
 
 
-def _raise_interrupt_validation_error(exc: ValidationError) -> None:
+def _field_error_message(
+    first_error: ErrorDetails,
+    *,
+    default: str,
+    missing: str | None = None,
+) -> str:
+    if first_error.get("type") == "missing":
+        return missing or default
+    return normalize_validation_message(first_error.get("msg"), default=default)
+
+
+def raise_interrupt_validation_error(exc: ValidationError) -> None:
     errors = exc.errors(include_url=False)
     if errors and all(err.get("type") == "extra_forbidden" for err in errors):
         raise map_extra_forbidden(errors)
@@ -152,11 +143,11 @@ def _raise_interrupt_validation_error(exc: ValidationError) -> None:
             data={"type": "MISSING_FIELD", "field": "request_id"},
         )
     if loc == ("reply",):
-        message = str(first.get("msg", "reply must be a string")).removeprefix("Value error, ")
-        if first.get("type") == "missing":
-            message = "reply must be a string"
         raise JsonRpcParamsValidationError(
-            message=message,
+            message=_field_error_message(
+                first,
+                default="reply must be a string",
+            ),
             data={"type": "INVALID_FIELD", "field": "reply"},
         )
     if loc == ("message",):
@@ -165,21 +156,19 @@ def _raise_interrupt_validation_error(exc: ValidationError) -> None:
             data={"type": "INVALID_FIELD", "field": "message"},
         )
     if loc == ("answers",):
-        message = str(first.get("msg", "answers must be an array")).removeprefix("Value error, ")
-        if first.get("type") == "missing":
-            message = "answers must be an array"
         raise JsonRpcParamsValidationError(
-            message=message,
+            message=_field_error_message(
+                first,
+                default="answers must be an array",
+            ),
             data={"type": "INVALID_FIELD", "field": "answers"},
         )
     if loc == ("permissions",):
-        message = str(first.get("msg", "permissions must be an object")).removeprefix(
-            "Value error, "
-        )
-        if first.get("type") == "missing":
-            message = "permissions must be an object"
         raise JsonRpcParamsValidationError(
-            message=message,
+            message=_field_error_message(
+                first,
+                default="permissions must be an object",
+            ),
             data={"type": "INVALID_FIELD", "field": "permissions"},
         )
     if loc == ("scope",):
@@ -188,12 +177,11 @@ def _raise_interrupt_validation_error(exc: ValidationError) -> None:
             data={"type": "INVALID_FIELD", "field": "scope"},
         )
     if loc == ("action",):
-        message = str(first.get("msg", "action must be one of: accept, decline, cancel"))
-        message = message.removeprefix("Value error, ")
-        if first.get("type") == "missing":
-            message = "action must be one of: accept, decline, cancel"
         raise JsonRpcParamsValidationError(
-            message=message,
+            message=_field_error_message(
+                first,
+                default="action must be one of: accept, decline, cancel",
+            ),
             data={"type": "INVALID_FIELD", "field": "action"},
         )
     if loc == ("content",):
@@ -205,50 +193,10 @@ def _raise_interrupt_validation_error(exc: ValidationError) -> None:
         raise metadata_error
     if loc:
         raise JsonRpcParamsValidationError(
-            message=str(first.get("msg", "Invalid params")).removeprefix("Value error, "),
+            message=normalize_validation_message(first.get("msg"), default="Invalid params"),
             data={"type": "INVALID_FIELD", "field": format_loc(loc)},
         )
     raise JsonRpcParamsValidationError(
         message=str(first.get("msg", "Invalid params")),
         data={"type": "INVALID_FIELD"},
     )
-
-
-def parse_permission_reply_params(params: dict[str, Any]) -> PermissionReplyParams:
-    try:
-        return PermissionReplyParams.model_validate(params)
-    except ValidationError as exc:
-        _raise_interrupt_validation_error(exc)
-        raise AssertionError("unreachable") from exc
-
-
-def parse_question_reply_params(params: dict[str, Any]) -> QuestionReplyParams:
-    try:
-        return QuestionReplyParams.model_validate(params)
-    except ValidationError as exc:
-        _raise_interrupt_validation_error(exc)
-        raise AssertionError("unreachable") from exc
-
-
-def parse_question_reject_params(params: dict[str, Any]) -> QuestionRejectParams:
-    try:
-        return QuestionRejectParams.model_validate(params)
-    except ValidationError as exc:
-        _raise_interrupt_validation_error(exc)
-        raise AssertionError("unreachable") from exc
-
-
-def parse_permissions_reply_params(params: dict[str, Any]) -> PermissionsReplyParams:
-    try:
-        return PermissionsReplyParams.model_validate(params)
-    except ValidationError as exc:
-        _raise_interrupt_validation_error(exc)
-        raise AssertionError("unreachable") from exc
-
-
-def parse_elicitation_reply_params(params: dict[str, Any]) -> ElicitationReplyParams:
-    try:
-        return ElicitationReplyParams.model_validate(params)
-    except ValidationError as exc:
-        _raise_interrupt_validation_error(exc)
-        raise AssertionError("unreachable") from exc

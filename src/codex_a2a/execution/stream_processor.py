@@ -9,12 +9,7 @@ from typing import Any
 from a2a.server.events.event_queue import EventQueue
 from a2a.types import TaskState, TaskStatus, TaskStatusUpdateEvent
 
-from codex_a2a.a2a_proto import (
-    TASK_STATE_INPUT_REQUIRED,
-    TASK_STATE_WORKING,
-    is_text_part,
-    part_text,
-)
+from codex_a2a.a2a_proto import is_text_part, part_text
 from codex_a2a.contracts.runtime_output import (
     build_interrupt_metadata,
     build_output_metadata,
@@ -345,7 +340,7 @@ class StreamEventProcessor:
                 request_id = asked["request_id"]
                 if self._stream_state.mark_interrupt_pending(request_id):
                     await self._emit_interrupt_status(
-                        state=TASK_STATE_INPUT_REQUIRED,
+                        state=TaskState.TASK_STATE_INPUT_REQUIRED,
                         request_id=request_id,
                         interrupt_type=asked["interrupt_type"],
                         details=asked["details"],
@@ -355,7 +350,7 @@ class StreamEventProcessor:
             if resolved is not None:
                 if self._stream_state.clear_interrupt_pending(resolved["request_id"]):
                     await self._emit_interrupt_status(
-                        state=TASK_STATE_WORKING,
+                        state=TaskState.TASK_STATE_WORKING,
                         request_id=resolved["request_id"],
                         interrupt_type=resolved["interrupt_type"],
                         details={},

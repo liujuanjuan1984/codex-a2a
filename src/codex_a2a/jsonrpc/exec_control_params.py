@@ -2,13 +2,14 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import ValidationError, field_validator, model_validator
+from pydantic import field_validator, model_validator
 
 from codex_a2a.jsonrpc.params_common import (
     MetadataParams,
     _StrictModel,
     raise_control_validation_error,
     strip_optional_string,
+    validate_params_model,
     validate_request_command,
     validate_required_process_id,
 )
@@ -134,32 +135,32 @@ class ExecTerminateControlParams(_StrictModel):
 
 
 def parse_exec_start_params(params: dict[str, Any]) -> ExecStartControlParams:
-    try:
-        return ExecStartControlParams.model_validate(params)
-    except ValidationError as exc:
-        raise_control_validation_error(exc)
-        raise AssertionError("unreachable") from exc
+    return validate_params_model(
+        ExecStartControlParams,
+        params,
+        on_error=raise_control_validation_error,
+    )
 
 
 def parse_exec_write_params(params: dict[str, Any]) -> ExecWriteControlParams:
-    try:
-        return ExecWriteControlParams.model_validate(params)
-    except ValidationError as exc:
-        raise_control_validation_error(exc)
-        raise AssertionError("unreachable") from exc
+    return validate_params_model(
+        ExecWriteControlParams,
+        params,
+        on_error=raise_control_validation_error,
+    )
 
 
 def parse_exec_resize_params(params: dict[str, Any]) -> ExecResizeControlParams:
-    try:
-        return ExecResizeControlParams.model_validate(params)
-    except ValidationError as exc:
-        raise_control_validation_error(exc)
-        raise AssertionError("unreachable") from exc
+    return validate_params_model(
+        ExecResizeControlParams,
+        params,
+        on_error=raise_control_validation_error,
+    )
 
 
 def parse_exec_terminate_params(params: dict[str, Any]) -> ExecTerminateControlParams:
-    try:
-        return ExecTerminateControlParams.model_validate(params)
-    except ValidationError as exc:
-        raise_control_validation_error(exc)
-        raise AssertionError("unreachable") from exc
+    return validate_params_model(
+        ExecTerminateControlParams,
+        params,
+        on_error=raise_control_validation_error,
+    )

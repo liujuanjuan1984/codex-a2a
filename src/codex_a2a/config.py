@@ -97,17 +97,6 @@ def _parse_str_list(value: Any) -> Any:
     return value
 
 
-def _normalize_client_transport(value: str) -> str:
-    normalized = value.strip().upper()
-    if normalized in {"JSONRPC", "JSON-RPC", "JSON_RPC"}:
-        return "JSONRPC"
-    if normalized in {"HTTP+JSON", "HTTP_JSON", "HTTP-JSON", "HTTPJSON"}:
-        return "HTTP+JSON"
-    if normalized in {"GRPC"}:
-        return "GRPC"
-    return normalized
-
-
 def _normalize_client_transports(value: Any) -> Any:
     if value is None:
         return ["JSONRPC", "HTTP+JSON"]
@@ -118,7 +107,19 @@ def _normalize_client_transports(value: Any) -> Any:
     else:
         raise ValueError("A2A_CLIENT_SUPPORTED_TRANSPORTS must be a comma-separated string or list")
 
-    normalized = [_normalize_client_transport(item) for item in raw_values]
+    normalized: list[str] = []
+    for item in raw_values:
+        upper_value = item.strip().upper()
+        if upper_value in {"JSONRPC", "JSON-RPC", "JSON_RPC"}:
+            normalized.append("JSONRPC")
+            continue
+        if upper_value in {"HTTP+JSON", "HTTP_JSON", "HTTP-JSON", "HTTPJSON"}:
+            normalized.append("HTTP+JSON")
+            continue
+        if upper_value == "GRPC":
+            normalized.append("GRPC")
+            continue
+        normalized.append(upper_value)
     parsed = [transport for transport in normalized if transport]
     for transport in parsed:
         if transport not in {"JSONRPC", "HTTP+JSON", "GRPC"}:
@@ -599,9 +600,9 @@ class Settings(BaseSettings):
     def validate_a2a_client_basic_auth(cls, value: str | None) -> str | None:
         if value is None:
             return value
-        from codex_a2a.client.auth import validate_basic_auth
+        from codex_a2a.client.auth import encode_basic_auth
 
-        validate_basic_auth(value)
+        encode_basic_auth(value)
         return value
 
     @model_validator(mode="after")

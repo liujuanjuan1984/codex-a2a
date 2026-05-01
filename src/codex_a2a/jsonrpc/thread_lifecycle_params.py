@@ -14,6 +14,7 @@ from codex_a2a.jsonrpc.params_common import (
     metadata_validation_error,
     normalize_non_empty_string,
     strip_optional_string,
+    validate_params_model,
     validate_required_thread_id,
 )
 
@@ -219,50 +220,50 @@ def _raise_thread_lifecycle_validation_error(exc: ValidationError) -> None:
 
 
 def parse_thread_fork_params(params: dict[str, Any]) -> ThreadForkControlParams:
-    try:
-        return ThreadForkControlParams.model_validate(params)
-    except ValidationError as exc:
-        _raise_thread_lifecycle_validation_error(exc)
-        raise AssertionError("unreachable") from exc
+    return validate_params_model(
+        ThreadForkControlParams,
+        params,
+        on_error=_raise_thread_lifecycle_validation_error,
+    )
 
 
 def parse_thread_archive_params(params: dict[str, Any]) -> ThreadArchiveControlParams:
-    try:
-        return ThreadArchiveControlParams.model_validate(params)
-    except ValidationError as exc:
-        _raise_thread_lifecycle_validation_error(exc)
-        raise AssertionError("unreachable") from exc
+    return validate_params_model(
+        ThreadArchiveControlParams,
+        params,
+        on_error=_raise_thread_lifecycle_validation_error,
+    )
 
 
 def parse_thread_unarchive_params(params: dict[str, Any]) -> ThreadUnarchiveControlParams:
-    try:
-        return ThreadUnarchiveControlParams.model_validate(params)
-    except ValidationError as exc:
-        _raise_thread_lifecycle_validation_error(exc)
-        raise AssertionError("unreachable") from exc
+    return validate_params_model(
+        ThreadUnarchiveControlParams,
+        params,
+        on_error=_raise_thread_lifecycle_validation_error,
+    )
 
 
 def parse_thread_metadata_update_params(
     params: dict[str, Any],
 ) -> ThreadMetadataUpdateControlParams:
-    try:
-        return ThreadMetadataUpdateControlParams.model_validate(params)
-    except ValidationError as exc:
-        _raise_thread_lifecycle_validation_error(exc)
-        raise AssertionError("unreachable") from exc
+    return validate_params_model(
+        ThreadMetadataUpdateControlParams,
+        params,
+        on_error=_raise_thread_lifecycle_validation_error,
+    )
 
 
 def parse_thread_watch_params(params: dict[str, Any]) -> ThreadWatchControlParams:
-    try:
-        return ThreadWatchControlParams.model_validate(params)
-    except ValidationError as exc:
-        _raise_thread_lifecycle_validation_error(exc)
-        raise AssertionError("unreachable") from exc
+    return validate_params_model(
+        ThreadWatchControlParams,
+        params,
+        on_error=_raise_thread_lifecycle_validation_error,
+    )
 
 
 def parse_thread_watch_release_params(params: dict[str, Any]) -> ThreadWatchReleaseControlParams:
-    try:
-        return ThreadWatchReleaseControlParams.model_validate(params)
-    except ValidationError as exc:
-        _raise_thread_lifecycle_validation_error(exc)
-        raise AssertionError("unreachable") from exc
+    return validate_params_model(
+        ThreadWatchReleaseControlParams,
+        params,
+        on_error=_raise_thread_lifecycle_validation_error,
+    )

@@ -7,7 +7,29 @@ if ! command -v uv >/dev/null 2>&1; then
   exit 1
 fi
 
+run_pip_audit() {
+  local requirement_file="$1"
+  local attempt=1
+  local max_attempts=3
+  local status=0
+
+  while true; do
+    if uv run pip-audit --requirement "${requirement_file}"; then
+      return 0
+    fi
+    status=$?
+    if [[ "${attempt}" -ge "${max_attempts}" ]]; then
+      echo "pip-audit failed after ${attempt} attempts" >&2
+      return "${status}"
+    fi
+    echo "pip-audit failed on attempt ${attempt}/${max_attempts}; retrying..." >&2
+    attempt=$((attempt + 1))
+    sleep 2
+  done
+}
+
 uv run pre-commit run --all-files
+uv run python scripts/check_dead_code.py
 uv run mypy --config-file mypy.ini
 uv run pytest
 
@@ -21,7 +43,7 @@ uv export \
   --no-emit-project \
   --output-file "${runtime_requirements}" >/dev/null
 
-uv run pip-audit --requirement "${runtime_requirements}"
+run_pip_audit "${runtime_requirements}"
 
 rm -f dist/codex_a2a-*.whl dist/codex_a2a-*.tar.gz
 uv build --no-sources

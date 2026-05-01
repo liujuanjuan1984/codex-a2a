@@ -27,7 +27,7 @@ async def replay_codex_notification_fixture(
     async def fake_enqueue(event: dict) -> None:
         events.append(event)
 
-    client._enqueue_stream_event = fake_enqueue
+    client._stream_bridge.enqueue_stream_event = fake_enqueue
     for notification in fixture["notifications"]:
         await client._handle_notification(notification)
     return fixture, events
@@ -46,7 +46,7 @@ async def replay_codex_jsonrpc_line_fixture(
     async def fake_enqueue(event: dict) -> None:
         events.append(event)
 
-    client._enqueue_stream_event = fake_enqueue
+    client._stream_bridge.enqueue_stream_event = fake_enqueue
 
     raw_lines: list[bytes] = []
     if prefix_lines:
@@ -83,7 +83,7 @@ async def replay_codex_jsonrpc_line_fixture(
 
     process = MagicMock()
     process.stdout = _ChunkedStream(chunks)
-    client._process = process
+    client._transport.process = process
 
-    await client._read_stdout_loop()
+    await client._transport.read_stdout_loop(dispatch_message=client._dispatch_message)
     return fixture, events

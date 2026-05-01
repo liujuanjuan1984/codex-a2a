@@ -3,26 +3,10 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping
 from typing import Any
 
-from a2a.types import Part, Role, TaskState
+from a2a.types import Part
 from google.protobuf.json_format import MessageToDict, ParseDict  # type: ignore[import-untyped]
 from google.protobuf.message import Message as ProtoMessage  # type: ignore[import-untyped]
 from google.protobuf.struct_pb2 import Struct, Value  # type: ignore[import-untyped]
-
-ROLE_AGENT = Role.ROLE_AGENT
-ROLE_USER = Role.ROLE_USER
-
-TASK_STATE_SUBMITTED = TaskState.TASK_STATE_SUBMITTED
-TASK_STATE_WORKING = TaskState.TASK_STATE_WORKING
-TASK_STATE_COMPLETED = TaskState.TASK_STATE_COMPLETED
-TASK_STATE_FAILED = TaskState.TASK_STATE_FAILED
-TASK_STATE_CANCELED = TaskState.TASK_STATE_CANCELED
-TASK_STATE_INPUT_REQUIRED = TaskState.TASK_STATE_INPUT_REQUIRED
-TASK_STATE_REJECTED = TaskState.TASK_STATE_REJECTED
-TASK_STATE_AUTH_REQUIRED = TaskState.TASK_STATE_AUTH_REQUIRED
-
-
-def to_value(value: Any) -> Value:
-    return ParseDict(value, Value())
 
 
 def to_struct(value: Mapping[str, Any] | None) -> Struct | None:
@@ -66,7 +50,7 @@ def new_text_part(text: str) -> Part:
 
 
 def new_data_part(data: Any) -> Part:
-    return Part(data=to_value(data))
+    return Part(data=ParseDict(data, Value()))
 
 
 def new_file_url_part(

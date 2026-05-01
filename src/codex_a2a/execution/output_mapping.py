@@ -7,9 +7,7 @@ from a2a.helpers import new_text_message
 from a2a.server.agent_execution import RequestContext
 from a2a.server.events.event_queue import EventQueue
 from a2a.server.tasks import TaskUpdater
-from a2a.types import Artifact, Message, Part, TaskArtifactUpdateEvent
-
-from codex_a2a.a2a_proto import ROLE_AGENT
+from a2a.types import Artifact, Message, Part, Role, TaskArtifactUpdateEvent
 
 
 def build_assistant_message(
@@ -19,7 +17,7 @@ def build_assistant_message(
     *,
     message_id: str | None = None,
 ) -> Message:
-    message = new_text_message(text, context_id=context_id, task_id=task_id, role=ROLE_AGENT)
+    message = new_text_message(text, context_id=context_id, task_id=task_id, role=Role.ROLE_AGENT)
     if message_id is not None:
         message.message_id = message_id
     return message

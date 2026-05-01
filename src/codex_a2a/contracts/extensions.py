@@ -1,4 +1,3 @@
-# ruff: noqa: F403,F405
 from __future__ import annotations
 
 from typing import Any
@@ -11,6 +10,7 @@ from codex_a2a.contracts.runtime_output import (
     build_usage_contract_params,
 )
 from codex_a2a.execution.tool_call_payloads import build_tool_call_payload_contract_params
+from codex_a2a.profile.runtime import RuntimeProfile
 from codex_a2a.protocol_versions import (
     ADVERTISED_PROTOCOL_VERSION,
     SUPPORTED_PROTOCOL_VERSIONS,
@@ -18,16 +18,39 @@ from codex_a2a.protocol_versions import (
     normalize_protocol_version,
 )
 
-from .extension_specs import *  # noqa: F403
-from .extension_specs import (
-    _REQUEST_EXECUTION_PROVIDER_METADATA,
-    _build_method_contract_params,
-    _build_request_execution_options_contract,
-)
+from . import extension_specs
+from .extension_registry import build_extension_taxonomy_from_registry
 
 CORE_JSONRPC_PATH = "/"
 EXTENSION_JSONRPC_PATH = CORE_JSONRPC_PATH
 REST_API_PATH_PREFIX = "/v1"
+
+# Explicit re-exports preserve the public contracts surface without wildcard imports.
+COMPATIBILITY_PROFILE_EXTENSION_URI = extension_specs.COMPATIBILITY_PROFILE_EXTENSION_URI
+WIRE_CONTRACT_EXTENSION_URI = extension_specs.WIRE_CONTRACT_EXTENSION_URI
+SESSION_BINDING_EXTENSION_URI = extension_specs.SESSION_BINDING_EXTENSION_URI
+STREAMING_EXTENSION_URI = extension_specs.STREAMING_EXTENSION_URI
+SESSION_QUERY_EXTENSION_URI = extension_specs.SESSION_QUERY_EXTENSION_URI
+DISCOVERY_EXTENSION_URI = extension_specs.DISCOVERY_EXTENSION_URI
+THREAD_LIFECYCLE_EXTENSION_URI = extension_specs.THREAD_LIFECYCLE_EXTENSION_URI
+INTERRUPT_RECOVERY_EXTENSION_URI = extension_specs.INTERRUPT_RECOVERY_EXTENSION_URI
+TURN_CONTROL_EXTENSION_URI = extension_specs.TURN_CONTROL_EXTENSION_URI
+REVIEW_CONTROL_EXTENSION_URI = extension_specs.REVIEW_CONTROL_EXTENSION_URI
+EXEC_CONTROL_EXTENSION_URI = extension_specs.EXEC_CONTROL_EXTENSION_URI
+INTERRUPT_CALLBACK_EXTENSION_URI = extension_specs.INTERRUPT_CALLBACK_EXTENSION_URI
+SESSION_QUERY_DEFAULT_LIMIT = extension_specs.SESSION_QUERY_DEFAULT_LIMIT
+SESSION_QUERY_MAX_LIMIT = extension_specs.SESSION_QUERY_MAX_LIMIT
+SESSION_QUERY_METHODS = extension_specs.SESSION_QUERY_METHODS
+DISCOVERY_METHODS = extension_specs.DISCOVERY_METHODS
+THREAD_LIFECYCLE_METHODS = extension_specs.THREAD_LIFECYCLE_METHODS
+THREAD_LIFECYCLE_SUPPORTED_EVENTS = extension_specs.THREAD_LIFECYCLE_SUPPORTED_EVENTS
+INTERRUPT_RECOVERY_METHODS = extension_specs.INTERRUPT_RECOVERY_METHODS
+TURN_CONTROL_METHODS = extension_specs.TURN_CONTROL_METHODS
+REVIEW_CONTROL_METHODS = extension_specs.REVIEW_CONTROL_METHODS
+REVIEW_CONTROL_SUPPORTED_EVENTS = extension_specs.REVIEW_CONTROL_SUPPORTED_EVENTS
+EXEC_CONTROL_METHODS = extension_specs.EXEC_CONTROL_METHODS
+INTERRUPT_CALLBACK_METHODS = extension_specs.INTERRUPT_CALLBACK_METHODS
+build_capability_snapshot = extension_specs.build_capability_snapshot
 
 
 def _extension_jsonrpc_endpoint_contract() -> dict[str, Any]:
@@ -46,11 +69,11 @@ def build_wire_contract_extension_params(
     declared_default_protocol_version = normalize_protocol_version(ADVERTISED_PROTOCOL_VERSION)
     declared_supported_protocol_versions = SUPPORTED_PROTOCOL_VERSIONS
     protocol_compatibility = build_protocol_compatibility_summary()
-    snapshot = build_capability_snapshot(runtime_profile=runtime_profile)
+    snapshot = extension_specs.build_capability_snapshot(runtime_profile=runtime_profile)
     resubscribe_behavior = {
         "scope": "service-level",
-        "jsonrpc_method": TASKS_RESUBSCRIBE_METHOD,
-        "http_endpoint": TASKS_SUBSCRIBE_HTTP_ENDPOINT,
+        "jsonrpc_method": extension_specs.TASKS_RESUBSCRIBE_METHOD,
+        "http_endpoint": extension_specs.TASKS_SUBSCRIBE_HTTP_ENDPOINT,
         "non_terminal_behavior": "stream_live_updates",
         "terminal_behavior": "replay_once_then_close",
         "notes": [
@@ -87,8 +110,8 @@ def build_wire_contract_extension_params(
                 "protocol_version": declared_protocol_version,
                 "url_path": CORE_JSONRPC_PATH,
             },
-            "jsonrpc_methods": list(CORE_JSONRPC_METHODS),
-            "http_endpoints": list(CORE_HTTP_ENDPOINTS),
+            "jsonrpc_methods": list(extension_specs.CORE_JSONRPC_METHODS),
+            "http_endpoints": list(extension_specs.CORE_HTTP_ENDPOINTS),
         },
         "extensions": {
             "jsonrpc_endpoint": {
@@ -99,16 +122,16 @@ def build_wire_contract_extension_params(
             "jsonrpc_methods": list(snapshot.extension_jsonrpc_methods),
             "conditionally_available_methods": dict(snapshot.conditional_methods),
             "extension_uris": [
-                SESSION_BINDING_EXTENSION_URI,
-                STREAMING_EXTENSION_URI,
-                SESSION_QUERY_EXTENSION_URI,
-                DISCOVERY_EXTENSION_URI,
-                THREAD_LIFECYCLE_EXTENSION_URI,
-                INTERRUPT_RECOVERY_EXTENSION_URI,
-                TURN_CONTROL_EXTENSION_URI,
-                REVIEW_CONTROL_EXTENSION_URI,
-                EXEC_CONTROL_EXTENSION_URI,
-                INTERRUPT_CALLBACK_EXTENSION_URI,
+                extension_specs.SESSION_BINDING_EXTENSION_URI,
+                extension_specs.STREAMING_EXTENSION_URI,
+                extension_specs.SESSION_QUERY_EXTENSION_URI,
+                extension_specs.DISCOVERY_EXTENSION_URI,
+                extension_specs.THREAD_LIFECYCLE_EXTENSION_URI,
+                extension_specs.INTERRUPT_RECOVERY_EXTENSION_URI,
+                extension_specs.TURN_CONTROL_EXTENSION_URI,
+                extension_specs.REVIEW_CONTROL_EXTENSION_URI,
+                extension_specs.EXEC_CONTROL_EXTENSION_URI,
+                extension_specs.INTERRUPT_CALLBACK_EXTENSION_URI,
             ],
         },
         "all_jsonrpc_methods": list(snapshot.supported_jsonrpc_methods),
@@ -123,11 +146,11 @@ def build_wire_contract_extension_params(
                 "endpoint": EXTENSION_JSONRPC_PATH,
                 "code": -32601,
                 "message": "Method not found",
-                "data_fields": list(WIRE_CONTRACT_UNSUPPORTED_METHOD_DATA_FIELDS),
+                "data_fields": list(extension_specs.WIRE_CONTRACT_UNSUPPORTED_METHOD_DATA_FIELDS),
             },
         },
         "service_behaviors": {
-            TASKS_RESUBSCRIBE_METHOD: resubscribe_behavior,
+            extension_specs.TASKS_RESUBSCRIBE_METHOD: resubscribe_behavior,
         },
     }
 
@@ -141,11 +164,11 @@ def build_compatibility_profile_params(
     declared_default_protocol_version = normalize_protocol_version(ADVERTISED_PROTOCOL_VERSION)
     declared_supported_protocol_versions = SUPPORTED_PROTOCOL_VERSIONS
     protocol_compatibility = build_protocol_compatibility_summary()
-    snapshot = build_capability_snapshot(runtime_profile=runtime_profile)
+    snapshot = extension_specs.build_capability_snapshot(runtime_profile=runtime_profile)
     resubscribe_behavior = {
         "scope": "service-level",
-        "jsonrpc_method": TASKS_RESUBSCRIBE_METHOD,
-        "http_endpoint": TASKS_SUBSCRIBE_HTTP_ENDPOINT,
+        "jsonrpc_method": extension_specs.TASKS_RESUBSCRIBE_METHOD,
+        "http_endpoint": extension_specs.TASKS_SUBSCRIBE_HTTP_ENDPOINT,
         "non_terminal_behavior": "stream_live_updates",
         "terminal_behavior": "replay_once_then_close",
         "notes": [
@@ -166,7 +189,7 @@ def build_compatibility_profile_params(
             "availability": "always",
             "retention": "required",
         }
-        for method in CORE_JSONRPC_METHODS
+        for method in extension_specs.CORE_JSONRPC_METHODS
     }
     method_retention.update(
         {
@@ -174,7 +197,7 @@ def build_compatibility_profile_params(
                 "surface": "extension",
                 "availability": "always",
                 "retention": "stable",
-                "extension_uri": DISCOVERY_EXTENSION_URI,
+                "extension_uri": extension_specs.DISCOVERY_EXTENSION_URI,
             }
             for method in snapshot.discovery_methods
         }
@@ -185,7 +208,7 @@ def build_compatibility_profile_params(
                 "surface": "extension",
                 "availability": "always",
                 "retention": "stable",
-                "extension_uri": THREAD_LIFECYCLE_EXTENSION_URI,
+                "extension_uri": extension_specs.THREAD_LIFECYCLE_EXTENSION_URI,
             }
             for method in snapshot.thread_lifecycle_methods
         }
@@ -196,7 +219,7 @@ def build_compatibility_profile_params(
                 "surface": "extension",
                 "availability": "always",
                 "retention": "stable",
-                "extension_uri": INTERRUPT_RECOVERY_EXTENSION_URI,
+                "extension_uri": extension_specs.INTERRUPT_RECOVERY_EXTENSION_URI,
             }
             for method in snapshot.interrupt_recovery_methods
         }
@@ -207,10 +230,10 @@ def build_compatibility_profile_params(
                 "surface": "extension",
                 "availability": runtime_profile.turn_control.availability,
                 "retention": "deployment-conditional",
-                "extension_uri": TURN_CONTROL_EXTENSION_URI,
+                "extension_uri": extension_specs.TURN_CONTROL_EXTENSION_URI,
                 "toggle": runtime_profile.turn_control.toggle,
             }
-            for method in TURN_CONTROL_METHODS.values()
+            for method in extension_specs.TURN_CONTROL_METHODS.values()
         }
     )
     method_retention.update(
@@ -219,10 +242,10 @@ def build_compatibility_profile_params(
                 "surface": "extension",
                 "availability": runtime_profile.review_control.availability,
                 "retention": "deployment-conditional",
-                "extension_uri": REVIEW_CONTROL_EXTENSION_URI,
+                "extension_uri": extension_specs.REVIEW_CONTROL_EXTENSION_URI,
                 "toggle": runtime_profile.review_control.toggle,
             }
-            for method in REVIEW_CONTROL_METHODS.values()
+            for method in extension_specs.REVIEW_CONTROL_METHODS.values()
         }
     )
     method_retention.update(
@@ -231,7 +254,7 @@ def build_compatibility_profile_params(
                 "surface": "extension",
                 "availability": "always",
                 "retention": "stable",
-                "extension_uri": SESSION_QUERY_EXTENSION_URI,
+                "extension_uri": extension_specs.SESSION_QUERY_EXTENSION_URI,
             }
             for method in snapshot.session_query_methods
         }
@@ -242,10 +265,10 @@ def build_compatibility_profile_params(
                 "surface": "extension",
                 "availability": runtime_profile.exec_control.availability,
                 "retention": "deployment-conditional",
-                "extension_uri": EXEC_CONTROL_EXTENSION_URI,
+                "extension_uri": extension_specs.EXEC_CONTROL_EXTENSION_URI,
                 "toggle": runtime_profile.exec_control.toggle,
             }
-            for method in EXEC_CONTROL_METHODS.values()
+            for method in extension_specs.EXEC_CONTROL_METHODS.values()
         }
     )
     method_retention.update(
@@ -254,67 +277,69 @@ def build_compatibility_profile_params(
                 "surface": "extension",
                 "availability": "always",
                 "retention": "stable",
-                "extension_uri": INTERRUPT_CALLBACK_EXTENSION_URI,
+                "extension_uri": extension_specs.INTERRUPT_CALLBACK_EXTENSION_URI,
             }
-            for method in INTERRUPT_CALLBACK_METHODS.values()
+            for method in extension_specs.INTERRUPT_CALLBACK_METHODS.values()
         }
     )
 
     extension_retention = {
-        SESSION_BINDING_EXTENSION_URI: {
+        extension_specs.SESSION_BINDING_EXTENSION_URI: {
             "surface": "core-runtime-metadata",
             "availability": "always",
             "retention": "required",
         },
-        STREAMING_EXTENSION_URI: {
+        extension_specs.STREAMING_EXTENSION_URI: {
             "surface": "core-runtime-metadata",
             "availability": "always",
             "retention": "required",
         },
-        SESSION_QUERY_EXTENSION_URI: {
+        extension_specs.SESSION_QUERY_EXTENSION_URI: {
             "surface": "jsonrpc-extension",
             "availability": "always",
             "retention": "stable",
         },
-        DISCOVERY_EXTENSION_URI: {
+        extension_specs.DISCOVERY_EXTENSION_URI: {
             "surface": "jsonrpc-extension",
             "availability": "always",
             "retention": "stable",
         },
-        THREAD_LIFECYCLE_EXTENSION_URI: {
+        extension_specs.THREAD_LIFECYCLE_EXTENSION_URI: {
             "surface": "jsonrpc-extension",
             "availability": "always",
             "retention": "stable",
         },
-        INTERRUPT_RECOVERY_EXTENSION_URI: {
+        extension_specs.INTERRUPT_RECOVERY_EXTENSION_URI: {
             "surface": "jsonrpc-extension",
             "availability": "always",
             "retention": "stable",
         },
-        TURN_CONTROL_EXTENSION_URI: {
+        extension_specs.TURN_CONTROL_EXTENSION_URI: {
             "surface": "jsonrpc-extension",
             "availability": runtime_profile.turn_control.availability,
             "retention": "deployment-conditional",
             "toggle": runtime_profile.turn_control.toggle,
         },
-        REVIEW_CONTROL_EXTENSION_URI: {
+        extension_specs.REVIEW_CONTROL_EXTENSION_URI: {
             "surface": "jsonrpc-extension",
             "availability": runtime_profile.review_control.availability,
             "retention": "deployment-conditional",
             "toggle": runtime_profile.review_control.toggle,
         },
-        EXEC_CONTROL_EXTENSION_URI: {
+        extension_specs.EXEC_CONTROL_EXTENSION_URI: {
             "surface": "jsonrpc-extension",
             "availability": runtime_profile.exec_control.availability,
             "retention": "deployment-conditional",
             "toggle": runtime_profile.exec_control.toggle,
         },
-        INTERRUPT_CALLBACK_EXTENSION_URI: {
+        extension_specs.INTERRUPT_CALLBACK_EXTENSION_URI: {
             "surface": "jsonrpc-extension",
             "availability": "always",
             "retention": "stable",
         },
     }
+
+    extension_taxonomy = build_extension_taxonomy_from_registry()
 
     return {
         "profile_id": runtime_profile.profile_id,
@@ -326,35 +351,24 @@ def build_compatibility_profile_params(
         "runtime_features": runtime_profile.runtime_features_dict(),
         "core": {
             "jsonrpc_endpoint": CORE_JSONRPC_PATH,
-            "jsonrpc_methods": list(CORE_JSONRPC_METHODS),
-            "http_endpoints": list(CORE_HTTP_ENDPOINTS),
+            "jsonrpc_methods": list(extension_specs.CORE_JSONRPC_METHODS),
+            "http_endpoints": list(extension_specs.CORE_HTTP_ENDPOINTS),
         },
         "extension_transport": {
             "jsonrpc_endpoint": EXTENSION_JSONRPC_PATH,
         },
         "service_behaviors": {
-            TASKS_RESUBSCRIBE_METHOD: resubscribe_behavior,
+            extension_specs.TASKS_RESUBSCRIBE_METHOD: resubscribe_behavior,
         },
         "extension_taxonomy": {
-            "shared_agent_card_extensions": [
-                SESSION_BINDING_EXTENSION_URI,
-                STREAMING_EXTENSION_URI,
+            "shared_agent_card_extensions": extension_taxonomy["shared_agent_card_extensions"],
+            "shared_provider_private_contracts": extension_taxonomy[
+                "shared_provider_private_contracts"
             ],
-            "shared_provider_private_contracts": [
-                INTERRUPT_CALLBACK_EXTENSION_URI,
+            "codex_provider_private_contracts": extension_taxonomy[
+                "codex_provider_private_contracts"
             ],
-            "codex_provider_private_contracts": [
-                SESSION_QUERY_EXTENSION_URI,
-                DISCOVERY_EXTENSION_URI,
-                THREAD_LIFECYCLE_EXTENSION_URI,
-                INTERRUPT_RECOVERY_EXTENSION_URI,
-                TURN_CONTROL_EXTENSION_URI,
-                REVIEW_CONTROL_EXTENSION_URI,
-                EXEC_CONTROL_EXTENSION_URI,
-                COMPATIBILITY_PROFILE_EXTENSION_URI,
-                WIRE_CONTRACT_EXTENSION_URI,
-            ],
-            "provider_private_metadata": list(_REQUEST_EXECUTION_PROVIDER_METADATA),
+            "provider_private_metadata": list(extension_specs._REQUEST_EXECUTION_PROVIDER_METADATA),
         },
         "extension_retention": extension_retention,
         "method_retention": method_retention,
@@ -437,15 +451,15 @@ def build_session_binding_extension_params(
     runtime_profile: RuntimeProfile,
 ) -> dict[str, Any]:
     return {
-        "metadata_field": SHARED_SESSION_BINDING_FIELD,
+        "metadata_field": extension_specs.SHARED_SESSION_BINDING_FIELD,
         "behavior": "prefer_metadata_binding_else_create_session",
         "supported_metadata": [
             "shared.session.id",
             "codex.directory",
             "codex.execution",
         ],
-        "provider_private_metadata": list(_REQUEST_EXECUTION_PROVIDER_METADATA),
-        "request_execution_options": _build_request_execution_options_contract(),
+        "provider_private_metadata": list(extension_specs._REQUEST_EXECUTION_PROVIDER_METADATA),
+        "request_execution_options": extension_specs._build_request_execution_options_contract(),
         "profile": runtime_profile.summary_dict(),
         "notes": [
             (
@@ -467,26 +481,26 @@ def build_session_binding_extension_params(
 
 def build_streaming_extension_params() -> dict[str, Any]:
     artifact_stream_contract = build_artifact_stream_contract_params(
-        field_path=SHARED_STREAM_METADATA_FIELD,
+        field_path=extension_specs.SHARED_STREAM_METADATA_FIELD,
     )
     status_stream_contract = build_status_stream_contract_params(
-        field_path=SHARED_STREAM_METADATA_FIELD,
+        field_path=extension_specs.SHARED_STREAM_METADATA_FIELD,
     )
     interrupt_contract = build_interrupt_contract_params(
-        field_path=SHARED_INTERRUPT_METADATA_FIELD,
+        field_path=extension_specs.SHARED_INTERRUPT_METADATA_FIELD,
     )
     session_contract = build_session_contract_params(
-        field_path=SHARED_SESSION_METADATA_FIELD,
+        field_path=extension_specs.SHARED_SESSION_METADATA_FIELD,
     )
     usage_contract = build_usage_contract_params(
-        field_path=SHARED_USAGE_METADATA_FIELD,
+        field_path=extension_specs.SHARED_USAGE_METADATA_FIELD,
     )
     return {
-        "artifact_metadata_field": SHARED_STREAM_METADATA_FIELD,
-        "status_metadata_field": SHARED_STREAM_METADATA_FIELD,
-        "interrupt_metadata_field": SHARED_INTERRUPT_METADATA_FIELD,
-        "session_metadata_field": SHARED_SESSION_METADATA_FIELD,
-        "usage_metadata_field": SHARED_USAGE_METADATA_FIELD,
+        "artifact_metadata_field": extension_specs.SHARED_STREAM_METADATA_FIELD,
+        "status_metadata_field": extension_specs.SHARED_STREAM_METADATA_FIELD,
+        "interrupt_metadata_field": extension_specs.SHARED_INTERRUPT_METADATA_FIELD,
+        "session_metadata_field": extension_specs.SHARED_SESSION_METADATA_FIELD,
+        "usage_metadata_field": extension_specs.SHARED_USAGE_METADATA_FIELD,
         "block_types": ["text", "reasoning", "tool_call"],
         "block_part_types": {
             "text": "Part(text)",
@@ -511,10 +525,10 @@ def build_session_query_extension_params(
     *,
     runtime_profile: RuntimeProfile,
 ) -> dict[str, Any]:
-    snapshot = build_capability_snapshot(runtime_profile=runtime_profile)
+    snapshot = extension_specs.build_capability_snapshot(runtime_profile=runtime_profile)
     active_method_contracts = {
         key: contract
-        for key, contract in SESSION_QUERY_METHOD_CONTRACTS.items()
+        for key, contract in extension_specs.SESSION_QUERY_METHOD_CONTRACTS.items()
         if key in snapshot.session_query_method_keys
     }
     active_query_methods = {
@@ -525,7 +539,7 @@ def build_session_query_extension_params(
     pagination_behavior_by_method: dict[str, str] = {}
 
     for method_contract in active_method_contracts.values():
-        params_contract = _build_method_contract_params(
+        params_contract = extension_specs._build_method_contract_params(
             required=method_contract.required_params,
             optional=method_contract.optional_params,
             unsupported=method_contract.unsupported_params,
@@ -556,20 +570,23 @@ def build_session_query_extension_params(
             contract_doc["notes"] = list(method_contract.notes)
         method_contracts[method_contract.method] = contract_doc
 
-        if method_contract.pagination_mode == SESSION_QUERY_PAGINATION_MODE:
+        if method_contract.pagination_mode == extension_specs.SESSION_QUERY_PAGINATION_MODE:
             pagination_applies_to.append(method_contract.method)
-            if method_contract.method == SESSION_QUERY_METHODS["list_sessions"]:
+            if method_contract.method == extension_specs.SESSION_QUERY_METHODS["list_sessions"]:
                 pagination_behavior_by_method[method_contract.method] = "upstream_passthrough"
-            elif method_contract.method == SESSION_QUERY_METHODS["get_session_messages"]:
+            elif (
+                method_contract.method
+                == extension_specs.SESSION_QUERY_METHODS["get_session_messages"]
+            ):
                 pagination_behavior_by_method[method_contract.method] = "local_tail_slice"
 
     return {
         "jsonrpc_endpoint": _extension_jsonrpc_endpoint_contract(),
         "methods": active_query_methods,
         "profile": runtime_profile.summary_dict(),
-        "supported_metadata": list(_REQUEST_EXECUTION_PROVIDER_METADATA),
-        "provider_private_metadata": list(_REQUEST_EXECUTION_PROVIDER_METADATA),
-        "request_execution_options": _build_request_execution_options_contract(),
+        "supported_metadata": list(extension_specs._REQUEST_EXECUTION_PROVIDER_METADATA),
+        "provider_private_metadata": list(extension_specs._REQUEST_EXECUTION_PROVIDER_METADATA),
+        "request_execution_options": extension_specs._build_request_execution_options_contract(),
         "rich_input": {
             "supported_part_types": ["text", "image", "mention", "skill"],
             "part_contracts": {
@@ -610,12 +627,12 @@ def build_session_query_extension_params(
             ],
         },
         "pagination": {
-            "mode": SESSION_QUERY_PAGINATION_MODE,
-            "default_limit": SESSION_QUERY_DEFAULT_LIMIT,
-            "max_limit": SESSION_QUERY_MAX_LIMIT,
-            "behavior": SESSION_QUERY_PAGINATION_BEHAVIOR,
+            "mode": extension_specs.SESSION_QUERY_PAGINATION_MODE,
+            "default_limit": extension_specs.SESSION_QUERY_DEFAULT_LIMIT,
+            "max_limit": extension_specs.SESSION_QUERY_MAX_LIMIT,
+            "behavior": extension_specs.SESSION_QUERY_PAGINATION_BEHAVIOR,
             "by_method": pagination_behavior_by_method,
-            "params": list(SESSION_QUERY_PAGINATION_PARAMS),
+            "params": list(extension_specs.SESSION_QUERY_PAGINATION_PARAMS),
             "applies_to": pagination_applies_to,
             "notes": [
                 "codex.sessions.list forwards limit upstream to Codex thread/list",
@@ -627,14 +644,16 @@ def build_session_query_extension_params(
         },
         "method_contracts": method_contracts,
         "errors": {
-            "business_codes": dict(SESSION_QUERY_ERROR_BUSINESS_CODES),
-            "error_data_fields": list(SESSION_QUERY_ERROR_DATA_FIELDS),
-            "invalid_params_data_fields": list(SESSION_QUERY_INVALID_PARAMS_DATA_FIELDS),
+            "business_codes": dict(extension_specs.SESSION_QUERY_ERROR_BUSINESS_CODES),
+            "error_data_fields": list(extension_specs.SESSION_QUERY_ERROR_DATA_FIELDS),
+            "invalid_params_data_fields": list(
+                extension_specs.SESSION_QUERY_INVALID_PARAMS_DATA_FIELDS
+            ),
         },
         "result_envelope": {},
         "context_semantics": {
             "a2a_context_id_field": "contextId",
-            "upstream_session_id_field": SHARED_SESSION_BINDING_FIELD,
+            "upstream_session_id_field": extension_specs.SHARED_SESSION_BINDING_FIELD,
             "context_id_strategy": "equals_upstream_session_id",
             "notes": [
                 (
@@ -651,17 +670,17 @@ def build_discovery_extension_params(
     *,
     runtime_profile: RuntimeProfile,
 ) -> dict[str, Any]:
-    snapshot = build_capability_snapshot(runtime_profile=runtime_profile)
+    snapshot = extension_specs.build_capability_snapshot(runtime_profile=runtime_profile)
     active_method_contracts = {
         key: contract
-        for key, contract in DISCOVERY_METHOD_CONTRACTS.items()
+        for key, contract in extension_specs.DISCOVERY_METHOD_CONTRACTS.items()
         if contract.method in snapshot.discovery_methods
     }
     method_contracts: dict[str, Any] = {}
 
     for contract in active_method_contracts.values():
         method_contract_doc: dict[str, Any] = {
-            "params": _build_method_contract_params(
+            "params": extension_specs._build_method_contract_params(
                 required=contract.required_params,
                 optional=contract.optional_params,
                 unsupported=(),
@@ -682,7 +701,7 @@ def build_discovery_extension_params(
 
     return {
         "jsonrpc_endpoint": _extension_jsonrpc_endpoint_contract(),
-        "methods": dict(DISCOVERY_METHODS),
+        "methods": dict(extension_specs.DISCOVERY_METHODS),
         "profile": runtime_profile.summary_dict(),
         "method_contracts": method_contracts,
         "stable_item_fields": {
@@ -744,9 +763,9 @@ def build_discovery_extension_params(
             ],
         },
         "task_streaming": {
-            "task_stream_method": TASKS_RESUBSCRIBE_METHOD,
-            "http_subscribe_endpoint": TASKS_SUBSCRIBE_HTTP_ENDPOINT,
-            "watch_method": DISCOVERY_METHODS["watch"],
+            "task_stream_method": extension_specs.TASKS_RESUBSCRIBE_METHOD,
+            "http_subscribe_endpoint": extension_specs.TASKS_SUBSCRIBE_HTTP_ENDPOINT,
+            "watch_method": extension_specs.DISCOVERY_METHODS["watch"],
             "supported_events": ["skills.changed", "apps.updated"],
             "data_part_payloads": {
                 "skills.changed": {"kind": "skills_changed", "source": "skills/changed"},
@@ -769,9 +788,11 @@ def build_discovery_extension_params(
             ),
         ],
         "errors": {
-            "business_codes": dict(DISCOVERY_ERROR_BUSINESS_CODES),
-            "error_data_fields": list(DISCOVERY_ERROR_DATA_FIELDS),
-            "invalid_params_data_fields": list(DISCOVERY_INVALID_PARAMS_DATA_FIELDS),
+            "business_codes": dict(extension_specs.DISCOVERY_ERROR_BUSINESS_CODES),
+            "error_data_fields": list(extension_specs.DISCOVERY_ERROR_DATA_FIELDS),
+            "invalid_params_data_fields": list(
+                extension_specs.DISCOVERY_INVALID_PARAMS_DATA_FIELDS
+            ),
         },
     }
 
@@ -780,17 +801,17 @@ def build_thread_lifecycle_extension_params(
     *,
     runtime_profile: RuntimeProfile,
 ) -> dict[str, Any]:
-    snapshot = build_capability_snapshot(runtime_profile=runtime_profile)
+    snapshot = extension_specs.build_capability_snapshot(runtime_profile=runtime_profile)
     active_method_contracts = {
         key: contract
-        for key, contract in THREAD_LIFECYCLE_METHOD_CONTRACTS.items()
+        for key, contract in extension_specs.THREAD_LIFECYCLE_METHOD_CONTRACTS.items()
         if contract.method in snapshot.thread_lifecycle_methods
     }
     method_contracts: dict[str, Any] = {}
 
     for contract in active_method_contracts.values():
         method_contract_doc: dict[str, Any] = {
-            "params": _build_method_contract_params(
+            "params": extension_specs._build_method_contract_params(
                 required=contract.required_params,
                 optional=contract.optional_params,
                 unsupported=(),
@@ -807,7 +828,7 @@ def build_thread_lifecycle_extension_params(
 
     return {
         "jsonrpc_endpoint": _extension_jsonrpc_endpoint_contract(),
-        "methods": dict(THREAD_LIFECYCLE_METHODS),
+        "methods": dict(extension_specs.THREAD_LIFECYCLE_METHODS),
         "method_contracts": method_contracts,
         "profile": runtime_profile.summary_dict(),
         "supported_metadata": ["codex.directory"],
@@ -840,10 +861,10 @@ def build_thread_lifecycle_extension_params(
             ],
         },
         "task_streaming": {
-            "task_stream_method": TASKS_RESUBSCRIBE_METHOD,
-            "http_subscribe_endpoint": TASKS_SUBSCRIBE_HTTP_ENDPOINT,
-            "watch_method": THREAD_LIFECYCLE_METHODS["watch"],
-            "supported_events": list(THREAD_LIFECYCLE_SUPPORTED_EVENTS),
+            "task_stream_method": extension_specs.TASKS_RESUBSCRIBE_METHOD,
+            "http_subscribe_endpoint": extension_specs.TASKS_SUBSCRIBE_HTTP_ENDPOINT,
+            "watch_method": extension_specs.THREAD_LIFECYCLE_METHODS["watch"],
+            "supported_events": list(extension_specs.THREAD_LIFECYCLE_SUPPORTED_EVENTS),
             "data_part_payloads": {
                 "thread.started": {
                     "kind": "thread_started",
@@ -881,9 +902,11 @@ def build_thread_lifecycle_extension_params(
             ),
         ],
         "errors": {
-            "business_codes": dict(THREAD_LIFECYCLE_ERROR_BUSINESS_CODES),
-            "error_data_fields": list(THREAD_LIFECYCLE_ERROR_DATA_FIELDS),
-            "invalid_params_data_fields": list(THREAD_LIFECYCLE_INVALID_PARAMS_DATA_FIELDS),
+            "business_codes": dict(extension_specs.THREAD_LIFECYCLE_ERROR_BUSINESS_CODES),
+            "error_data_fields": list(extension_specs.THREAD_LIFECYCLE_ERROR_DATA_FIELDS),
+            "invalid_params_data_fields": list(
+                extension_specs.THREAD_LIFECYCLE_INVALID_PARAMS_DATA_FIELDS
+            ),
         },
     }
 
@@ -893,9 +916,9 @@ def build_interrupt_recovery_extension_params(
     runtime_profile: RuntimeProfile,
 ) -> dict[str, Any]:
     method_contracts: dict[str, Any] = {}
-    for contract in INTERRUPT_RECOVERY_METHOD_CONTRACTS.values():
+    for contract in extension_specs.INTERRUPT_RECOVERY_METHOD_CONTRACTS.values():
         method_contract_doc: dict[str, Any] = {
-            "params": _build_method_contract_params(
+            "params": extension_specs._build_method_contract_params(
                 required=contract.required_params,
                 optional=contract.optional_params,
                 unsupported=(),
@@ -916,10 +939,10 @@ def build_interrupt_recovery_extension_params(
 
     return {
         "jsonrpc_endpoint": _extension_jsonrpc_endpoint_contract(),
-        "methods": dict(INTERRUPT_RECOVERY_METHODS),
+        "methods": dict(extension_specs.INTERRUPT_RECOVERY_METHODS),
         "method_contracts": method_contracts,
-        "supported_interrupt_types": list(INTERRUPT_RECOVERY_INTERRUPT_TYPES),
-        "result_item_fields": list(INTERRUPT_RECOVERY_RESULT_ITEM_FIELDS),
+        "supported_interrupt_types": list(extension_specs.INTERRUPT_RECOVERY_INTERRUPT_TYPES),
+        "result_item_fields": list(extension_specs.INTERRUPT_RECOVERY_RESULT_ITEM_FIELDS),
         "identity_scope": "authenticated_caller",
         "supported_metadata": [],
         "provider_private_metadata": [],
@@ -934,7 +957,9 @@ def build_interrupt_recovery_extension_params(
             ),
         ],
         "errors": {
-            "invalid_params_data_fields": list(INTERRUPT_RECOVERY_INVALID_PARAMS_DATA_FIELDS),
+            "invalid_params_data_fields": list(
+                extension_specs.INTERRUPT_RECOVERY_INVALID_PARAMS_DATA_FIELDS
+            ),
         },
         "profile": runtime_profile.summary_dict(),
     }
@@ -944,13 +969,15 @@ def build_turn_control_extension_params(
     *,
     runtime_profile: RuntimeProfile,
 ) -> dict[str, Any]:
-    active_methods = dict(TURN_CONTROL_METHODS) if runtime_profile.turn_control_enabled else {}
+    active_methods = (
+        dict(extension_specs.TURN_CONTROL_METHODS) if runtime_profile.turn_control_enabled else {}
+    )
     method_contracts: dict[str, Any] = {}
-    for key, contract in TURN_CONTROL_METHOD_CONTRACTS.items():
+    for key, contract in extension_specs.TURN_CONTROL_METHOD_CONTRACTS.items():
         if key not in active_methods:
             continue
         method_contract_doc: dict[str, Any] = {
-            "params": _build_method_contract_params(
+            "params": extension_specs._build_method_contract_params(
                 required=contract.required_params,
                 optional=contract.optional_params,
                 unsupported=contract.unsupported_params,
@@ -990,9 +1017,11 @@ def build_turn_control_extension_params(
             ),
         ],
         "errors": {
-            "business_codes": dict(TURN_CONTROL_ERROR_BUSINESS_CODES),
-            "error_data_fields": list(TURN_CONTROL_ERROR_DATA_FIELDS),
-            "invalid_params_data_fields": list(TURN_CONTROL_INVALID_PARAMS_DATA_FIELDS),
+            "business_codes": dict(extension_specs.TURN_CONTROL_ERROR_BUSINESS_CODES),
+            "error_data_fields": list(extension_specs.TURN_CONTROL_ERROR_DATA_FIELDS),
+            "invalid_params_data_fields": list(
+                extension_specs.TURN_CONTROL_INVALID_PARAMS_DATA_FIELDS
+            ),
         },
     }
 
@@ -1001,13 +1030,17 @@ def build_review_control_extension_params(
     *,
     runtime_profile: RuntimeProfile,
 ) -> dict[str, Any]:
-    active_methods = dict(REVIEW_CONTROL_METHODS) if runtime_profile.review_control_enabled else {}
+    active_methods = (
+        dict(extension_specs.REVIEW_CONTROL_METHODS)
+        if runtime_profile.review_control_enabled
+        else {}
+    )
     method_contracts: dict[str, Any] = {}
-    for key, contract in REVIEW_CONTROL_METHOD_CONTRACTS.items():
+    for key, contract in extension_specs.REVIEW_CONTROL_METHOD_CONTRACTS.items():
         if key not in active_methods:
             continue
         method_contract_doc: dict[str, Any] = {
-            "params": _build_method_contract_params(
+            "params": extension_specs._build_method_contract_params(
                 required=contract.required_params,
                 optional=contract.optional_params,
                 unsupported=contract.unsupported_params,
@@ -1058,10 +1091,10 @@ def build_review_control_extension_params(
             ],
         },
         "task_streaming": {
-            "task_stream_method": TASKS_RESUBSCRIBE_METHOD,
-            "http_subscribe_endpoint": TASKS_SUBSCRIBE_HTTP_ENDPOINT,
-            "watch_method": REVIEW_CONTROL_METHODS["watch"],
-            "supported_events": list(REVIEW_CONTROL_SUPPORTED_EVENTS),
+            "task_stream_method": extension_specs.TASKS_RESUBSCRIBE_METHOD,
+            "http_subscribe_endpoint": extension_specs.TASKS_SUBSCRIBE_HTTP_ENDPOINT,
+            "watch_method": extension_specs.REVIEW_CONTROL_METHODS["watch"],
+            "supported_events": list(extension_specs.REVIEW_CONTROL_SUPPORTED_EVENTS),
             "data_part_payloads": {
                 "review.started": {
                     "kind": "review_started",
@@ -1098,9 +1131,11 @@ def build_review_control_extension_params(
             ),
         ],
         "errors": {
-            "business_codes": dict(REVIEW_CONTROL_ERROR_BUSINESS_CODES),
-            "error_data_fields": list(REVIEW_CONTROL_ERROR_DATA_FIELDS),
-            "invalid_params_data_fields": list(REVIEW_CONTROL_INVALID_PARAMS_DATA_FIELDS),
+            "business_codes": dict(extension_specs.REVIEW_CONTROL_ERROR_BUSINESS_CODES),
+            "error_data_fields": list(extension_specs.REVIEW_CONTROL_ERROR_DATA_FIELDS),
+            "invalid_params_data_fields": list(
+                extension_specs.REVIEW_CONTROL_INVALID_PARAMS_DATA_FIELDS
+            ),
         },
     }
 
@@ -1109,13 +1144,15 @@ def build_exec_control_extension_params(
     *,
     runtime_profile: RuntimeProfile,
 ) -> dict[str, Any]:
-    active_methods = dict(EXEC_CONTROL_METHODS) if runtime_profile.exec_control_enabled else {}
+    active_methods = (
+        dict(extension_specs.EXEC_CONTROL_METHODS) if runtime_profile.exec_control_enabled else {}
+    )
     method_contracts: dict[str, Any] = {}
-    for key, contract in EXEC_CONTROL_METHOD_CONTRACTS.items():
+    for key, contract in extension_specs.EXEC_CONTROL_METHOD_CONTRACTS.items():
         if key not in active_methods:
             continue
         method_contract_doc: dict[str, Any] = {
-            "params": _build_method_contract_params(
+            "params": extension_specs._build_method_contract_params(
                 required=contract.required_params,
                 optional=contract.optional_params,
                 unsupported=(),
@@ -1144,7 +1181,7 @@ def build_exec_control_extension_params(
         "task_streaming": {
             "start_result_fields": ["ok", "task_id", "context_id", "process_id"],
             "task_status_source": "tasks/get",
-            "task_stream_method": TASKS_RESUBSCRIBE_METHOD,
+            "task_stream_method": extension_specs.TASKS_RESUBSCRIBE_METHOD,
             "terminal_delivery": "result_artifact_plus_terminal_status",
             "notes": [
                 (
@@ -1158,9 +1195,11 @@ def build_exec_control_extension_params(
             ],
         },
         "errors": {
-            "business_codes": dict(EXEC_CONTROL_ERROR_BUSINESS_CODES),
-            "error_data_fields": list(EXEC_CONTROL_ERROR_DATA_FIELDS),
-            "invalid_params_data_fields": list(EXEC_CONTROL_INVALID_PARAMS_DATA_FIELDS),
+            "business_codes": dict(extension_specs.EXEC_CONTROL_ERROR_BUSINESS_CODES),
+            "error_data_fields": list(extension_specs.EXEC_CONTROL_ERROR_DATA_FIELDS),
+            "invalid_params_data_fields": list(
+                extension_specs.EXEC_CONTROL_INVALID_PARAMS_DATA_FIELDS
+            ),
         },
     }
 
@@ -1170,14 +1209,14 @@ def build_interrupt_callback_extension_params(
     runtime_profile: RuntimeProfile,
 ) -> dict[str, Any]:
     method_contracts: dict[str, Any] = {}
-    for contract in INTERRUPT_CALLBACK_METHOD_CONTRACTS.values():
+    for contract in extension_specs.INTERRUPT_CALLBACK_METHOD_CONTRACTS.values():
         method_contract_doc: dict[str, Any] = {
-            "params": _build_method_contract_params(
+            "params": extension_specs._build_method_contract_params(
                 required=contract.required_params,
                 optional=contract.optional_params,
                 unsupported=(),
             ),
-            "result": {"fields": list(INTERRUPT_SUCCESS_RESULT_FIELDS)},
+            "result": {"fields": list(extension_specs.INTERRUPT_SUCCESS_RESULT_FIELDS)},
         }
         if contract.notification_response_status is not None:
             method_contract_doc["notification_response_status"] = (
@@ -1187,7 +1226,7 @@ def build_interrupt_callback_extension_params(
 
     return {
         "jsonrpc_endpoint": _extension_jsonrpc_endpoint_contract(),
-        "methods": dict(INTERRUPT_CALLBACK_METHODS),
+        "methods": dict(extension_specs.INTERRUPT_CALLBACK_METHODS),
         "method_contracts": method_contracts,
         "supported_interrupt_events": [
             "permission.asked",
@@ -1209,18 +1248,20 @@ def build_interrupt_callback_extension_params(
                 "structured response payload for accepted elicitations; null for decline/cancel"
             ),
         },
-        "request_id_field": f"{SHARED_INTERRUPT_METADATA_FIELD}.request_id",
+        "request_id_field": f"{extension_specs.SHARED_INTERRUPT_METADATA_FIELD}.request_id",
         "supported_metadata": ["codex.directory"],
         "provider_private_metadata": ["codex.directory"],
         "context_fields": {
-            "directory": CODEX_DIRECTORY_METADATA_FIELD,
+            "directory": extension_specs.CODEX_DIRECTORY_METADATA_FIELD,
         },
-        "success_result_fields": list(INTERRUPT_SUCCESS_RESULT_FIELDS),
+        "success_result_fields": list(extension_specs.INTERRUPT_SUCCESS_RESULT_FIELDS),
         "errors": {
-            "business_codes": dict(INTERRUPT_ERROR_BUSINESS_CODES),
-            "error_types": list(INTERRUPT_ERROR_TYPES),
-            "error_data_fields": list(INTERRUPT_ERROR_DATA_FIELDS),
-            "invalid_params_data_fields": list(INTERRUPT_INVALID_PARAMS_DATA_FIELDS),
+            "business_codes": dict(extension_specs.INTERRUPT_ERROR_BUSINESS_CODES),
+            "error_types": list(extension_specs.INTERRUPT_ERROR_TYPES),
+            "error_data_fields": list(extension_specs.INTERRUPT_ERROR_DATA_FIELDS),
+            "invalid_params_data_fields": list(
+                extension_specs.INTERRUPT_INVALID_PARAMS_DATA_FIELDS
+            ),
         },
         "profile": runtime_profile.summary_dict(),
     }

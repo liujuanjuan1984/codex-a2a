@@ -13,9 +13,21 @@ from sse_starlette.sse import EventSourceResponse
 from starlette.requests import Request
 
 from codex_a2a.contracts.extensions import (
+    COMPATIBILITY_PROFILE_EXTENSION_URI,
     CORE_JSONRPC_PATH,
+    DISCOVERY_EXTENSION_URI,
+    EXEC_CONTROL_EXTENSION_URI,
     EXTENSION_JSONRPC_PATH,
+    INTERRUPT_CALLBACK_EXTENSION_URI,
+    INTERRUPT_RECOVERY_EXTENSION_URI,
     REST_API_PATH_PREFIX,
+    REVIEW_CONTROL_EXTENSION_URI,
+    SESSION_BINDING_EXTENSION_URI,
+    SESSION_QUERY_EXTENSION_URI,
+    STREAMING_EXTENSION_URI,
+    THREAD_LIFECYCLE_EXTENSION_URI,
+    TURN_CONTROL_EXTENSION_URI,
+    WIRE_CONTRACT_EXTENSION_URI,
 )
 from codex_a2a.server.agent_card import build_agent_card
 from codex_a2a.server.application import create_app
@@ -27,6 +39,21 @@ from codex_a2a.server.task_store import TaskStoreOperationError, TaskStoreRuntim
 from tests.support.dummy_clients import DummyChatCodexClient
 from tests.support.http_auth import basic_auth_header as _basic_auth_header
 from tests.support.settings import make_settings
+
+AUTHENTICATED_EXTENSION_URIS = {
+    SESSION_BINDING_EXTENSION_URI,
+    STREAMING_EXTENSION_URI,
+    SESSION_QUERY_EXTENSION_URI,
+    DISCOVERY_EXTENSION_URI,
+    THREAD_LIFECYCLE_EXTENSION_URI,
+    INTERRUPT_RECOVERY_EXTENSION_URI,
+    TURN_CONTROL_EXTENSION_URI,
+    REVIEW_CONTROL_EXTENSION_URI,
+    EXEC_CONTROL_EXTENSION_URI,
+    INTERRUPT_CALLBACK_EXTENSION_URI,
+    WIRE_CONTRACT_EXTENSION_URI,
+    COMPATIBILITY_PROFILE_EXTENSION_URI,
+}
 
 
 async def _empty_async_stream():
@@ -438,13 +465,10 @@ async def test_agent_card_routes_split_public_and_authenticated_extended_contrac
             item["uri"]: item for item in extended_card.json()["capabilities"]["extensions"]
         }
         assert set(public_extensions) == {
-            "urn:a2a:session-binding/v1",
-            "urn:a2a:stream-hints/v1",
+            SESSION_BINDING_EXTENSION_URI,
+            STREAMING_EXTENSION_URI,
         }
-        assert set(extended_extensions) == {
-            "urn:a2a:session-binding/v1",
-            "urn:a2a:stream-hints/v1",
-        }
+        assert set(extended_extensions) == AUTHENTICATED_EXTENSION_URIS
         assert len(public_card.content) < len(extended_card.content)
         public_skill_ids = {item["id"] for item in public_card.json()["skills"]}
         extended_skill_ids = {item["id"] for item in extended_card.json()["skills"]}
@@ -465,10 +489,7 @@ async def test_agent_card_routes_split_public_and_authenticated_extended_contrac
         rpc_extensions = {
             item["uri"]: item for item in rpc_card.json()["result"]["capabilities"]["extensions"]
         }
-        assert set(rpc_extensions) == {
-            "urn:a2a:session-binding/v1",
-            "urn:a2a:stream-hints/v1",
-        }
+        assert set(rpc_extensions) == AUTHENTICATED_EXTENSION_URIS
 
 
 @pytest.mark.asyncio

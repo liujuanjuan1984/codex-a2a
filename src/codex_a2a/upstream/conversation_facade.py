@@ -8,7 +8,7 @@ from typing import Any
 from codex_a2a.execution.request_overrides import RequestExecutionOptions
 from codex_a2a.input_mapping import (
     build_turn_input_from_normalized_items,
-    convert_request_parts_to_turn_input,
+    normalize_prompt_request_parts,
 )
 from codex_a2a.upstream.models import (
     CodexMessage,
@@ -100,7 +100,7 @@ class CodexConversationFacade:
     async def thread_fork(self, thread_id: str, *, params: dict[str, Any] | None = None) -> Any:
         result = await self._rpc_request(
             "thread/fork",
-            self._merge_thread_params(thread_id, params),
+            build_thread_rpc_params(thread_id, params),
         )
         if not isinstance(result, dict):
             raise RuntimeError("codex thread/fork response missing result object")
@@ -134,7 +134,7 @@ class CodexConversationFacade:
     ) -> Any:
         result = await self._rpc_request(
             "thread/metadata/update",
-            self._merge_thread_params(thread_id, params),
+            build_thread_rpc_params(thread_id, params),
         )
         if not isinstance(result, dict):
             raise RuntimeError("codex thread/metadata/update response missing result object")
@@ -364,7 +364,9 @@ class CodexConversationFacade:
             "turn/steer",
             {
                 "threadId": thread_id,
-                "input": convert_request_parts_to_turn_input(request),
+                "input": build_turn_input_from_normalized_items(
+                    normalize_prompt_request_parts(request.get("parts"))
+                ),
                 "expectedTurnId": expected_turn_id,
             },
         )
@@ -406,10 +408,3 @@ class CodexConversationFacade:
             "turn_id": turn_id.strip(),
             "review_thread_id": review_thread_id.strip(),
         }
-
-    @staticmethod
-    def _merge_thread_params(
-        thread_id: str,
-        params: dict[str, Any] | None,
-    ) -> dict[str, Any]:
-        return build_thread_rpc_params(thread_id, params)

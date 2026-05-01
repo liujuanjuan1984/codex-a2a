@@ -14,6 +14,8 @@ This document only explains the remaining repository-local maintainer scripts. U
 
 - [`scripts/doctor.sh`](./doctor.sh): run the default local validation baseline through the shortest maintainer entrypoint.
 - [`scripts/validate_baseline.sh`](./validate_baseline.sh): run the default local validation baseline used by contributors and CI.
+- [`scripts/check_dead_code.py`](./check_dead_code.py): run the conservative private dead-code guard used by the default validation baseline.
+- [`scripts/audit_low_call_sites.py`](./audit_low_call_sites.py): report low-call-count function and method candidates for manual wrapper/abstraction review.
 - [`scripts/validate_runtime_matrix.sh`](./validate_runtime_matrix.sh): run the reduced runtime-only validation used by the multi-version CI matrix.
 - [`scripts/conformance.sh`](./conformance.sh): run the official A2A TCK as a local/manual external compatibility experiment.
 - [`scripts/dependency_health.sh`](./dependency_health.sh): run the standalone dependency review flow (`sync`/`pip check`, outdated package listing, and dev vulnerability audit).
@@ -33,6 +35,8 @@ The `Publish` workflow now separates build, PyPI publish, and GitHub Release syn
 - `doctor.sh` is a thin alias for the default local regression baseline; `validate_baseline.sh` remains the CI-facing script name.
 - `conformance.sh` intentionally stays outside the default regression gate. Use it to gather external compatibility evidence, then triage results in [`docs/conformance-triage.md`](../docs/conformance-triage.md).
 - `validate_baseline.sh` and `dependency_health.sh` intentionally remain separate entrypoints and share common prerequisites through [`health_common.sh`](./health_common.sh).
+- `validate_baseline.sh` now includes a conservative private dead-code check before type-checking and test execution.
+- `audit_low_call_sites.py` is intentionally advisory only. Use it to surface low-call-count candidates, then inspect the actual consumer chain before removing an abstraction.
 - `validate_baseline.sh` now blocks on runtime dependency vulnerability audit, while `dependency_health.sh` remains focused on broader dependency review (`outdated` + dev audit).
 - [`.github/dependabot.yml`](../.github/dependabot.yml) prefers a single weekly grouped Dependabot PR for `uv`, while the repository scripts remain the explicit audit and validation entrypoints.
 - End-user runtime startup does not use repository scripts. Prefer the published CLI command documented in [README.md](../README.md) and [docs/guide.md](../docs/guide.md).

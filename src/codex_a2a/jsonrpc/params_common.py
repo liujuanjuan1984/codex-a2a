@@ -1,15 +1,12 @@
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
-from typing import Any
+from collections.abc import Callable, Mapping, Sequence
+from typing import Any, Literal, TypeVar, overload
 
 from a2a._base import A2ABaseModel
 from pydantic import ConfigDict, ValidationError, field_validator
 
-from codex_a2a.contracts.extensions import (
-    SESSION_QUERY_DEFAULT_LIMIT,
-    SESSION_QUERY_MAX_LIMIT,
-)
+from codex_a2a.contracts import extensions as extension_contracts
 from codex_a2a.execution.request_overrides import (
     RequestExecutionOptions,
     build_request_execution_options,
@@ -40,12 +37,74 @@ class _PermissiveModel(A2ABaseModel):
     )
 
 
+ModelT = TypeVar("ModelT", bound=A2ABaseModel)
+
+
+def validate_params_model(
+    model_type: type[ModelT],
+    params: dict[str, Any],
+    *,
+    on_error: Callable[[ValidationError], None],
+) -> ModelT:
+    try:
+        return model_type.model_validate(params)
+    except ValidationError as exc:
+        on_error(exc)
+        raise AssertionError("unreachable") from exc
+
+
 def strip_optional_string(value: Any) -> str | None:
     if value is None:
         return None
     if not isinstance(value, str):
         raise ValueError("must be a string")
     return value
+
+
+def normalize_validation_message(message: Any, *, default: str) -> str:
+    return str(message if message is not None else default).removeprefix("Value error, ")
+
+
+@overload
+def normalize_string_enum(
+    value: Any,
+    *,
+    allowed: tuple[str, ...],
+    invalid_value_message: str,
+    invalid_type_message: str | None = None,
+    allow_none: Literal[False] = False,
+) -> str: ...
+
+
+@overload
+def normalize_string_enum(
+    value: Any,
+    *,
+    allowed: tuple[str, ...],
+    invalid_value_message: str,
+    invalid_type_message: str | None = None,
+    allow_none: Literal[True],
+) -> str | None: ...
+
+
+def normalize_string_enum(
+    value: Any,
+    *,
+    allowed: tuple[str, ...],
+    invalid_value_message: str,
+    invalid_type_message: str | None = None,
+    allow_none: bool = False,
+) -> str | None:
+    if value is None:
+        if allow_none:
+            return None
+        raise ValueError(invalid_type_message or invalid_value_message)
+    if not isinstance(value, str):
+        raise ValueError(invalid_type_message or invalid_value_message)
+    normalized = value.strip().lower()
+    if normalized not in allowed:
+        raise ValueError(invalid_value_message)
+    return normalized
 
 
 def normalize_non_empty_string(value: Any, *, message: str) -> str:
@@ -135,13 +194,13 @@ def format_loc(parts: tuple[Any, ...]) -> str:
 def normalize_session_query_limit(query: dict[str, Any]) -> dict[str, Any]:
     limit = query.get("limit")
     if limit is None:
-        query["limit"] = SESSION_QUERY_DEFAULT_LIMIT
+        query["limit"] = extension_contracts.SESSION_QUERY_DEFAULT_LIMIT
         return query
 
     normalized_limit = int(limit)
-    if normalized_limit > SESSION_QUERY_MAX_LIMIT:
+    if normalized_limit > extension_contracts.SESSION_QUERY_MAX_LIMIT:
         raise JsonRpcParamsValidationError(
-            message=f"limit must be <= {SESSION_QUERY_MAX_LIMIT}",
+            message=f"limit must be <= {extension_contracts.SESSION_QUERY_MAX_LIMIT}",
             data={"type": "INVALID_FIELD", "field": "limit"},
         )
 
@@ -263,7 +322,7 @@ def raise_control_validation_error(exc: ValidationError) -> None:
 
     first = errors[0]
     loc = tuple(first.get("loc", ()))
-    message_text = str(first.get("msg", "Invalid params")).removeprefix("Value error, ")
+    message_text = normalize_validation_message(first.get("msg"), default="Invalid params")
     if message_text == "request.rows and request.cols must be provided together":
         raise JsonRpcParamsValidationError(
             message=message_text,

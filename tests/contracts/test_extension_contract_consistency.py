@@ -3,12 +3,23 @@ from pathlib import Path
 import httpx
 import pytest
 
+from codex_a2a.contracts.extension_registry import build_openapi_extension_contracts_from_registry
 from codex_a2a.contracts.extensions import (
+    COMPATIBILITY_PROFILE_EXTENSION_URI,
     CORE_JSONRPC_PATH,
+    DISCOVERY_EXTENSION_URI,
+    EXEC_CONTROL_EXTENSION_URI,
     EXTENSION_JSONRPC_PATH,
+    INTERRUPT_CALLBACK_EXTENSION_URI,
+    INTERRUPT_RECOVERY_EXTENSION_URI,
+    REVIEW_CONTROL_EXTENSION_URI,
     SESSION_BINDING_EXTENSION_URI,
     SESSION_QUERY_DEFAULT_LIMIT,
+    SESSION_QUERY_EXTENSION_URI,
     STREAMING_EXTENSION_URI,
+    THREAD_LIFECYCLE_EXTENSION_URI,
+    TURN_CONTROL_EXTENSION_URI,
+    WIRE_CONTRACT_EXTENSION_URI,
     build_capability_snapshot,
     build_compatibility_profile_params,
     build_discovery_extension_params,
@@ -26,9 +37,6 @@ from codex_a2a.contracts.extensions import (
 from codex_a2a.profile.runtime import build_runtime_profile
 from codex_a2a.server.agent_card import build_authenticated_extended_agent_card
 from codex_a2a.server.application import create_app
-from codex_a2a.server.openapi_contract_fragments import (
-    build_openapi_codex_contracts,
-)
 from tests.support.dummy_clients import DummySessionQueryCodexClient as DummyCodexClient
 from tests.support.settings import make_settings
 
@@ -57,9 +65,10 @@ def _example_params_include_field(payload: object, dotted_field: str) -> bool:
 
 def _codex_contracts(settings) -> dict[str, dict[str, object]]:  # noqa: ANN001
     runtime_profile = build_runtime_profile(settings)
-    return build_openapi_codex_contracts(
+    return build_openapi_extension_contracts_from_registry(
         settings=settings,
         runtime_profile=runtime_profile,
+        group="codex",
     )
 
 
@@ -310,7 +319,49 @@ def test_openapi_and_agent_card_contract_partitions_match() -> None:
 
     assert core_contract["session_binding"] == ext_by_uri[SESSION_BINDING_EXTENSION_URI].params
     assert core_contract["streaming"] == ext_by_uri[STREAMING_EXTENSION_URI].params
-    assert set(ext_by_uri) == {SESSION_BINDING_EXTENSION_URI, STREAMING_EXTENSION_URI}
+    assert (
+        extension_codex_contract["session_query"] == ext_by_uri[SESSION_QUERY_EXTENSION_URI].params
+    )
+    assert extension_codex_contract["discovery"] == ext_by_uri[DISCOVERY_EXTENSION_URI].params
+    assert (
+        extension_codex_contract["thread_lifecycle"]
+        == ext_by_uri[THREAD_LIFECYCLE_EXTENSION_URI].params
+    )
+    assert (
+        extension_codex_contract["interrupt_recovery"]
+        == ext_by_uri[INTERRUPT_RECOVERY_EXTENSION_URI].params
+    )
+    assert extension_codex_contract["turn_control"] == ext_by_uri[TURN_CONTROL_EXTENSION_URI].params
+    assert (
+        extension_codex_contract["review_control"]
+        == ext_by_uri[REVIEW_CONTROL_EXTENSION_URI].params
+    )
+    assert extension_codex_contract["exec_control"] == ext_by_uri[EXEC_CONTROL_EXTENSION_URI].params
+    assert (
+        extension_codex_contract["interrupt_callback"]
+        == ext_by_uri[INTERRUPT_CALLBACK_EXTENSION_URI].params
+    )
+    assert (
+        extension_codex_contract["wire_contract"] == ext_by_uri[WIRE_CONTRACT_EXTENSION_URI].params
+    )
+    assert (
+        extension_codex_contract["compatibility_profile"]
+        == ext_by_uri[COMPATIBILITY_PROFILE_EXTENSION_URI].params
+    )
+    assert set(ext_by_uri) == {
+        SESSION_BINDING_EXTENSION_URI,
+        STREAMING_EXTENSION_URI,
+        SESSION_QUERY_EXTENSION_URI,
+        DISCOVERY_EXTENSION_URI,
+        THREAD_LIFECYCLE_EXTENSION_URI,
+        INTERRUPT_RECOVERY_EXTENSION_URI,
+        TURN_CONTROL_EXTENSION_URI,
+        REVIEW_CONTROL_EXTENSION_URI,
+        EXEC_CONTROL_EXTENSION_URI,
+        INTERRUPT_CALLBACK_EXTENSION_URI,
+        WIRE_CONTRACT_EXTENSION_URI,
+        COMPATIBILITY_PROFILE_EXTENSION_URI,
+    }
     assert core_codex_contract["wire_contract"] == extension_codex_contract["wire_contract"]
     assert (
         core_codex_contract["compatibility_profile"]

@@ -31,7 +31,7 @@ Open-source consumption guidance:
 - Treat the Agent Card `supported_interfaces[].url` value as the shared service discovery root. For `HTTP+JSON`, this repository uses that URL as the REST base root rather than as a concrete method path.
 - Treat `POST /` as the shared JSON-RPC surface for both core A2A methods and provider-private extension methods.
 - Treat `urn:a2a:*` entries in this repository as shared repo-family conventions, not as claims that they are part of the A2A core baseline.
-- Treat `a2a.interrupt.*` reply methods as a shared provider-private callback contract on `POST /`, not as core A2A methods or Agent Card-negotiated extensions.
+- Treat `a2a.interrupt.*` reply methods as a shared provider-private callback contract on `POST /`, declared on authenticated discovery surfaces but not activated through `A2A-Extensions`.
 - Treat `codex.*` methods plus `metadata.codex.directory` and `metadata.codex.execution` as a Codex-specific control plane layered on top of the portable A2A surface.
 - Treat [extension-specifications.md](./extension-specifications.md) as the stable URI/spec index, not as the main usage guide.
 
@@ -93,7 +93,8 @@ Execution-environment boundary fields are also published through the runtime pro
 ## Extension Stability
 
 - Shared metadata and extension contracts should stay synchronized across Agent Card, OpenAPI, and runtime behavior.
-- Public Agent Card should stay intentionally minimal. Negotiated shared extension params belong in `capabilities.extensions`; provider-private contract payloads belong in OpenAPI `x-codex-contracts`, with the authenticated extended card focused on skill discovery and deployment-aware examples.
+- Public Agent Card should stay intentionally minimal. Negotiated shared extension params belong in public `capabilities.extensions`; provider-private and machine-readable extension contracts belong in authenticated extended card `capabilities.extensions`, with OpenAPI `x-codex-contracts` carrying the full payloads and skill decomposition remaining additive discovery guidance.
+- Only shared request/response extensions currently participate in request-level `A2A-Extensions` negotiation. Provider-private extension URIs declared on the authenticated extended card are declaration-only unless explicitly documented otherwise; clients discover them there and then invoke their documented methods directly.
 - Product-specific extensions should remain stable within the current major line unless explicitly documented otherwise.
 - Deployment-conditional methods must be declared as conditional rather than silently disappearing.
 - Rich input mapping is compatibility-sensitive across the core A2A message surface and `codex.turns.steer`. Changes to supported part types, `Part(url|raw)` image handling, or `Part(data)` mention/skill mapping should be treated as wire-level behavior changes.
@@ -167,7 +168,7 @@ Discovery note:
 - `codex.review.watch` is the declared review lifecycle watch-task bridge for `review.started`, `review.status.changed`, `review.completed`, and `review.failed`.
 - `codex.review.start` remains a control-handle surface; clients should use `codex.review.watch` plus `SubscribeToTask` for review lifecycle observation.
 - `codex.interrupts.list` is always-on but adapter-local and identity-scoped. `codex.turns.steer`, `codex.review.*`, and `codex.exec.*` remain deployment-conditional surfaces and should be discovered from machine-readable contracts before use.
-- `a2a.interrupt.*` reply methods remain shared repo-family callback contracts, but they are published through provider-private OpenAPI contracts rather than Agent Card extension negotiation.
+- `a2a.interrupt.*` reply methods remain shared repo-family callback contracts. They are declared on authenticated discovery surfaces, mirrored in OpenAPI, and used directly rather than through `A2A-Extensions` activation.
 - `thread/unsubscribe` is intentionally excluded from the stable public contract until this service exposes connection-safe subscription ownership.
 - This repository does not claim a generic standalone server-push JSON-RPC transport for those notifications; the compatibility contract is the watch-task bridge published through Agent Card and OpenAPI.
 

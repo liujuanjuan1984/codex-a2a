@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import logging
 import uuid
 
@@ -101,13 +100,6 @@ class CodexRequestHandler(DefaultRequestHandler):
         self._queue_manager: QueueManager = _InMemoryQueueManager()
         self._producer_tasks: dict[str, asyncio.Task] = {}
 
-    async def _send_push_notification_if_needed(  # noqa: ANN001
-        self,
-        task_id: str,
-        result_aggregator,
-    ) -> None:
-        del task_id, result_aggregator
-
     def _track_background_task(self, task: asyncio.Task) -> None:
         self._background_tasks.add(task)
 
@@ -118,13 +110,6 @@ class CodexRequestHandler(DefaultRequestHandler):
 
     async def _register_producer(self, task_id: str, producer_task: asyncio.Task) -> None:
         self._producer_tasks[task_id] = producer_task
-
-    async def _cleanup_producer(self, producer_task: asyncio.Task, task_id: str) -> None:
-        current = self._producer_tasks.get(task_id)
-        if current is producer_task:
-            self._producer_tasks.pop(task_id, None)
-        with contextlib.suppress(asyncio.CancelledError):
-            await producer_task
 
     async def on_get_task(
         self,
