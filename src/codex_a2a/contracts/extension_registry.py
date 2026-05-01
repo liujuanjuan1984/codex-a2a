@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Literal
 
@@ -23,9 +22,6 @@ from .extension_specs import (
     TURN_CONTROL_EXTENSION_URI,
     WIRE_CONTRACT_EXTENSION_URI,
 )
-
-AgentCardParamsBuilder = Callable[[Settings, RuntimeProfile, bool], dict[str, Any]]
-OpenAPIParamsBuilder = Callable[[Settings | None, RuntimeProfile], dict[str, Any]]
 
 
 @dataclass(frozen=True)
@@ -50,8 +46,10 @@ class ExtensionContractDescriptor:
         ]
         | None
     )
-    agent_card_params_builder: AgentCardParamsBuilder | None = None
-    openapi_params_builder: OpenAPIParamsBuilder | None = None
+    params_builder_name: str
+    params_builder_signature: Literal["no_args", "runtime_profile", "protocol_version"]
+    public_params_keys: tuple[str, ...] | None = None
+    public_params_transform: Literal["streaming_public"] | None = None
 
 
 def _select_public_extension_params(
@@ -94,326 +92,47 @@ def _build_public_streaming_extension_params(params: dict[str, Any]) -> dict[str
     }
 
 
-def _build_session_binding_agent_card_params(
+def _build_extension_contract_params(
+    descriptor: ExtensionContractDescriptor,
+    settings: Settings | None,
+    runtime_profile: RuntimeProfile,
+) -> dict[str, Any]:
+    from . import extensions as contract_extensions
+
+    builder = getattr(contract_extensions, descriptor.params_builder_name)
+    if descriptor.params_builder_signature == "no_args":
+        return dict(builder())
+    if descriptor.params_builder_signature == "runtime_profile":
+        return dict(builder(runtime_profile=runtime_profile))
+    if settings is None:
+        msg = f"settings are required to build {descriptor.key}"
+        raise ValueError(msg)
+    return dict(
+        builder(
+            protocol_version=settings.a2a_protocol_version,
+            runtime_profile=runtime_profile,
+        )
+    )
+
+
+def _build_agent_card_extension_params(
+    descriptor: ExtensionContractDescriptor,
+    *,
     settings: Settings,
     runtime_profile: RuntimeProfile,
     include_detailed_contracts: bool,
 ) -> dict[str, Any]:
-    del settings
-
-    from .extensions import build_session_binding_extension_params
-
-    params = build_session_binding_extension_params(runtime_profile=runtime_profile)
+    params = _build_extension_contract_params(descriptor, settings, runtime_profile)
     if include_detailed_contracts:
         return params
-    return _select_public_extension_params(
-        params,
-        keys=(
-            "metadata_field",
-            "behavior",
-            "supported_metadata",
-            "provider_private_metadata",
-        ),
-    )
+    if descriptor.public_params_transform == "streaming_public":
+        return _build_public_streaming_extension_params(params)
+    if descriptor.public_params_keys is not None:
+        return _select_public_extension_params(params, keys=descriptor.public_params_keys)
+    return params
 
 
-def _build_streaming_agent_card_params(
-    settings: Settings,
-    runtime_profile: RuntimeProfile,
-    include_detailed_contracts: bool,
-) -> dict[str, Any]:
-    del settings, runtime_profile
-
-    from .extensions import build_streaming_extension_params
-
-    params = build_streaming_extension_params()
-    if include_detailed_contracts:
-        return params
-    return _build_public_streaming_extension_params(params)
-
-
-def _build_authenticated_extension_params(
-    settings: Settings | None,
-    runtime_profile: RuntimeProfile,
-    builder: OpenAPIParamsBuilder,
-) -> dict[str, Any]:
-    params = builder(settings, runtime_profile)
-    return dict(params)
-
-
-def _build_session_query_agent_card_params(
-    settings: Settings,
-    runtime_profile: RuntimeProfile,
-    include_detailed_contracts: bool,
-) -> dict[str, Any]:
-    del include_detailed_contracts
-    return _build_authenticated_extension_params(
-        settings,
-        runtime_profile,
-        _build_session_query_openapi_params,
-    )
-
-
-def _build_discovery_agent_card_params(
-    settings: Settings,
-    runtime_profile: RuntimeProfile,
-    include_detailed_contracts: bool,
-) -> dict[str, Any]:
-    del include_detailed_contracts
-    return _build_authenticated_extension_params(
-        settings,
-        runtime_profile,
-        _build_discovery_openapi_params,
-    )
-
-
-def _build_thread_lifecycle_agent_card_params(
-    settings: Settings,
-    runtime_profile: RuntimeProfile,
-    include_detailed_contracts: bool,
-) -> dict[str, Any]:
-    del include_detailed_contracts
-    return _build_authenticated_extension_params(
-        settings,
-        runtime_profile,
-        _build_thread_lifecycle_openapi_params,
-    )
-
-
-def _build_interrupt_recovery_agent_card_params(
-    settings: Settings,
-    runtime_profile: RuntimeProfile,
-    include_detailed_contracts: bool,
-) -> dict[str, Any]:
-    del include_detailed_contracts
-    return _build_authenticated_extension_params(
-        settings,
-        runtime_profile,
-        _build_interrupt_recovery_openapi_params,
-    )
-
-
-def _build_turn_control_agent_card_params(
-    settings: Settings,
-    runtime_profile: RuntimeProfile,
-    include_detailed_contracts: bool,
-) -> dict[str, Any]:
-    del include_detailed_contracts
-    return _build_authenticated_extension_params(
-        settings,
-        runtime_profile,
-        _build_turn_control_openapi_params,
-    )
-
-
-def _build_review_control_agent_card_params(
-    settings: Settings,
-    runtime_profile: RuntimeProfile,
-    include_detailed_contracts: bool,
-) -> dict[str, Any]:
-    del include_detailed_contracts
-    return _build_authenticated_extension_params(
-        settings,
-        runtime_profile,
-        _build_review_control_openapi_params,
-    )
-
-
-def _build_exec_control_agent_card_params(
-    settings: Settings,
-    runtime_profile: RuntimeProfile,
-    include_detailed_contracts: bool,
-) -> dict[str, Any]:
-    del include_detailed_contracts
-    return _build_authenticated_extension_params(
-        settings,
-        runtime_profile,
-        _build_exec_control_openapi_params,
-    )
-
-
-def _build_interrupt_callback_agent_card_params(
-    settings: Settings,
-    runtime_profile: RuntimeProfile,
-    include_detailed_contracts: bool,
-) -> dict[str, Any]:
-    del include_detailed_contracts
-    return _build_authenticated_extension_params(
-        settings,
-        runtime_profile,
-        _build_interrupt_callback_openapi_params,
-    )
-
-
-def _build_wire_contract_agent_card_params(
-    settings: Settings,
-    runtime_profile: RuntimeProfile,
-    include_detailed_contracts: bool,
-) -> dict[str, Any]:
-    del include_detailed_contracts
-    return _build_authenticated_extension_params(
-        settings,
-        runtime_profile,
-        _build_wire_contract_openapi_params,
-    )
-
-
-def _build_compatibility_profile_agent_card_params(
-    settings: Settings,
-    runtime_profile: RuntimeProfile,
-    include_detailed_contracts: bool,
-) -> dict[str, Any]:
-    del include_detailed_contracts
-    return _build_authenticated_extension_params(
-        settings,
-        runtime_profile,
-        _build_compatibility_profile_openapi_params,
-    )
-
-
-def _build_session_binding_openapi_params(
-    settings: Settings | None,
-    runtime_profile: RuntimeProfile,
-) -> dict[str, Any]:
-    del settings
-
-    from .extensions import build_session_binding_extension_params
-
-    return build_session_binding_extension_params(runtime_profile=runtime_profile)
-
-
-def _build_streaming_openapi_params(
-    settings: Settings | None,
-    runtime_profile: RuntimeProfile,
-) -> dict[str, Any]:
-    del settings, runtime_profile
-
-    from .extensions import build_streaming_extension_params
-
-    return build_streaming_extension_params()
-
-
-def _build_session_query_openapi_params(
-    settings: Settings | None,
-    runtime_profile: RuntimeProfile,
-) -> dict[str, Any]:
-    del settings
-
-    from .extensions import build_session_query_extension_params
-
-    return build_session_query_extension_params(runtime_profile=runtime_profile)
-
-
-def _build_discovery_openapi_params(
-    settings: Settings | None,
-    runtime_profile: RuntimeProfile,
-) -> dict[str, Any]:
-    del settings
-
-    from .extensions import build_discovery_extension_params
-
-    return build_discovery_extension_params(runtime_profile=runtime_profile)
-
-
-def _build_thread_lifecycle_openapi_params(
-    settings: Settings | None,
-    runtime_profile: RuntimeProfile,
-) -> dict[str, Any]:
-    del settings
-
-    from .extensions import build_thread_lifecycle_extension_params
-
-    return build_thread_lifecycle_extension_params(runtime_profile=runtime_profile)
-
-
-def _build_interrupt_recovery_openapi_params(
-    settings: Settings | None,
-    runtime_profile: RuntimeProfile,
-) -> dict[str, Any]:
-    del settings
-
-    from .extensions import build_interrupt_recovery_extension_params
-
-    return build_interrupt_recovery_extension_params(runtime_profile=runtime_profile)
-
-
-def _build_turn_control_openapi_params(
-    settings: Settings | None,
-    runtime_profile: RuntimeProfile,
-) -> dict[str, Any]:
-    del settings
-
-    from .extensions import build_turn_control_extension_params
-
-    return build_turn_control_extension_params(runtime_profile=runtime_profile)
-
-
-def _build_review_control_openapi_params(
-    settings: Settings | None,
-    runtime_profile: RuntimeProfile,
-) -> dict[str, Any]:
-    del settings
-
-    from .extensions import build_review_control_extension_params
-
-    return build_review_control_extension_params(runtime_profile=runtime_profile)
-
-
-def _build_exec_control_openapi_params(
-    settings: Settings | None,
-    runtime_profile: RuntimeProfile,
-) -> dict[str, Any]:
-    del settings
-
-    from .extensions import build_exec_control_extension_params
-
-    return build_exec_control_extension_params(runtime_profile=runtime_profile)
-
-
-def _build_interrupt_callback_openapi_params(
-    settings: Settings | None,
-    runtime_profile: RuntimeProfile,
-) -> dict[str, Any]:
-    del settings
-
-    from .extensions import build_interrupt_callback_extension_params
-
-    return build_interrupt_callback_extension_params(runtime_profile=runtime_profile)
-
-
-def _build_wire_contract_openapi_params(
-    settings: Settings | None,
-    runtime_profile: RuntimeProfile,
-) -> dict[str, Any]:
-    if settings is None:
-        msg = "settings are required to build the wire contract"
-        raise ValueError(msg)
-
-    from .extensions import build_wire_contract_extension_params
-
-    return build_wire_contract_extension_params(
-        protocol_version=settings.a2a_protocol_version,
-        runtime_profile=runtime_profile,
-    )
-
-
-def _build_compatibility_profile_openapi_params(
-    settings: Settings | None,
-    runtime_profile: RuntimeProfile,
-) -> dict[str, Any]:
-    if settings is None:
-        msg = "settings are required to build the compatibility profile"
-        raise ValueError(msg)
-
-    from .extensions import build_compatibility_profile_params
-
-    return build_compatibility_profile_params(
-        protocol_version=settings.a2a_protocol_version,
-        runtime_profile=runtime_profile,
-    )
-
-
-_EXTENSION_CONTRACT_REGISTRY: tuple[ExtensionContractDescriptor, ...] = (
+EXTENSION_CONTRACT_REGISTRY: tuple[ExtensionContractDescriptor, ...] = (
     ExtensionContractDescriptor(
         key="session_binding",
         uri=SESSION_BINDING_EXTENSION_URI,
@@ -431,8 +150,14 @@ _EXTENSION_CONTRACT_REGISTRY: tuple[ExtensionContractDescriptor, ...] = (
         authenticated_agent_card=True,
         openapi_group="a2a",
         taxonomy_group="shared_agent_card_extensions",
-        agent_card_params_builder=_build_session_binding_agent_card_params,
-        openapi_params_builder=_build_session_binding_openapi_params,
+        params_builder_name="build_session_binding_extension_params",
+        params_builder_signature="runtime_profile",
+        public_params_keys=(
+            "metadata_field",
+            "behavior",
+            "supported_metadata",
+            "provider_private_metadata",
+        ),
     ),
     ExtensionContractDescriptor(
         key="streaming",
@@ -448,8 +173,9 @@ _EXTENSION_CONTRACT_REGISTRY: tuple[ExtensionContractDescriptor, ...] = (
         authenticated_agent_card=True,
         openapi_group="a2a",
         taxonomy_group="shared_agent_card_extensions",
-        agent_card_params_builder=_build_streaming_agent_card_params,
-        openapi_params_builder=_build_streaming_openapi_params,
+        params_builder_name="build_streaming_extension_params",
+        params_builder_signature="no_args",
+        public_params_transform="streaming_public",
     ),
     ExtensionContractDescriptor(
         key="session_query",
@@ -462,8 +188,8 @@ _EXTENSION_CONTRACT_REGISTRY: tuple[ExtensionContractDescriptor, ...] = (
         authenticated_agent_card=True,
         openapi_group="codex",
         taxonomy_group="codex_provider_private_contracts",
-        agent_card_params_builder=_build_session_query_agent_card_params,
-        openapi_params_builder=_build_session_query_openapi_params,
+        params_builder_name="build_session_query_extension_params",
+        params_builder_signature="runtime_profile",
     ),
     ExtensionContractDescriptor(
         key="discovery",
@@ -476,8 +202,8 @@ _EXTENSION_CONTRACT_REGISTRY: tuple[ExtensionContractDescriptor, ...] = (
         authenticated_agent_card=True,
         openapi_group="codex",
         taxonomy_group="codex_provider_private_contracts",
-        agent_card_params_builder=_build_discovery_agent_card_params,
-        openapi_params_builder=_build_discovery_openapi_params,
+        params_builder_name="build_discovery_extension_params",
+        params_builder_signature="runtime_profile",
     ),
     ExtensionContractDescriptor(
         key="thread_lifecycle",
@@ -490,8 +216,8 @@ _EXTENSION_CONTRACT_REGISTRY: tuple[ExtensionContractDescriptor, ...] = (
         authenticated_agent_card=True,
         openapi_group="codex",
         taxonomy_group="codex_provider_private_contracts",
-        agent_card_params_builder=_build_thread_lifecycle_agent_card_params,
-        openapi_params_builder=_build_thread_lifecycle_openapi_params,
+        params_builder_name="build_thread_lifecycle_extension_params",
+        params_builder_signature="runtime_profile",
     ),
     ExtensionContractDescriptor(
         key="interrupt_recovery",
@@ -504,8 +230,8 @@ _EXTENSION_CONTRACT_REGISTRY: tuple[ExtensionContractDescriptor, ...] = (
         authenticated_agent_card=True,
         openapi_group="codex",
         taxonomy_group="codex_provider_private_contracts",
-        agent_card_params_builder=_build_interrupt_recovery_agent_card_params,
-        openapi_params_builder=_build_interrupt_recovery_openapi_params,
+        params_builder_name="build_interrupt_recovery_extension_params",
+        params_builder_signature="runtime_profile",
     ),
     ExtensionContractDescriptor(
         key="turn_control",
@@ -518,8 +244,8 @@ _EXTENSION_CONTRACT_REGISTRY: tuple[ExtensionContractDescriptor, ...] = (
         authenticated_agent_card=True,
         openapi_group="codex",
         taxonomy_group="codex_provider_private_contracts",
-        agent_card_params_builder=_build_turn_control_agent_card_params,
-        openapi_params_builder=_build_turn_control_openapi_params,
+        params_builder_name="build_turn_control_extension_params",
+        params_builder_signature="runtime_profile",
     ),
     ExtensionContractDescriptor(
         key="review_control",
@@ -532,8 +258,8 @@ _EXTENSION_CONTRACT_REGISTRY: tuple[ExtensionContractDescriptor, ...] = (
         authenticated_agent_card=True,
         openapi_group="codex",
         taxonomy_group="codex_provider_private_contracts",
-        agent_card_params_builder=_build_review_control_agent_card_params,
-        openapi_params_builder=_build_review_control_openapi_params,
+        params_builder_name="build_review_control_extension_params",
+        params_builder_signature="runtime_profile",
     ),
     ExtensionContractDescriptor(
         key="exec_control",
@@ -546,8 +272,8 @@ _EXTENSION_CONTRACT_REGISTRY: tuple[ExtensionContractDescriptor, ...] = (
         authenticated_agent_card=True,
         openapi_group="codex",
         taxonomy_group="codex_provider_private_contracts",
-        agent_card_params_builder=_build_exec_control_agent_card_params,
-        openapi_params_builder=_build_exec_control_openapi_params,
+        params_builder_name="build_exec_control_extension_params",
+        params_builder_signature="runtime_profile",
     ),
     ExtensionContractDescriptor(
         key="interrupt_callback",
@@ -560,8 +286,8 @@ _EXTENSION_CONTRACT_REGISTRY: tuple[ExtensionContractDescriptor, ...] = (
         authenticated_agent_card=True,
         openapi_group="codex",
         taxonomy_group="shared_provider_private_contracts",
-        agent_card_params_builder=_build_interrupt_callback_agent_card_params,
-        openapi_params_builder=_build_interrupt_callback_openapi_params,
+        params_builder_name="build_interrupt_callback_extension_params",
+        params_builder_signature="runtime_profile",
     ),
     ExtensionContractDescriptor(
         key="wire_contract",
@@ -574,8 +300,8 @@ _EXTENSION_CONTRACT_REGISTRY: tuple[ExtensionContractDescriptor, ...] = (
         authenticated_agent_card=True,
         openapi_group="codex",
         taxonomy_group="codex_provider_private_contracts",
-        agent_card_params_builder=_build_wire_contract_agent_card_params,
-        openapi_params_builder=_build_wire_contract_openapi_params,
+        params_builder_name="build_wire_contract_extension_params",
+        params_builder_signature="protocol_version",
     ),
     ExtensionContractDescriptor(
         key="compatibility_profile",
@@ -588,14 +314,10 @@ _EXTENSION_CONTRACT_REGISTRY: tuple[ExtensionContractDescriptor, ...] = (
         authenticated_agent_card=True,
         openapi_group="codex",
         taxonomy_group="codex_provider_private_contracts",
-        agent_card_params_builder=_build_compatibility_profile_agent_card_params,
-        openapi_params_builder=_build_compatibility_profile_openapi_params,
+        params_builder_name="build_compatibility_profile_params",
+        params_builder_signature="protocol_version",
     ),
 )
-
-
-def get_extension_contract_registry() -> tuple[ExtensionContractDescriptor, ...]:
-    return _EXTENSION_CONTRACT_REGISTRY
 
 
 def build_agent_card_extensions_from_registry(
@@ -605,23 +327,24 @@ def build_agent_card_extensions_from_registry(
     include_detailed_contracts: bool,
 ) -> list[AgentExtension]:
     extensions: list[AgentExtension] = []
-    for descriptor in get_extension_contract_registry():
+    for descriptor in EXTENSION_CONTRACT_REGISTRY:
         include_on_surface = (
             descriptor.authenticated_agent_card
             if include_detailed_contracts
             else descriptor.public_agent_card
         )
-        if not include_on_surface or descriptor.agent_card_params_builder is None:
+        if not include_on_surface:
             continue
         extensions.append(
             AgentExtension(
                 uri=descriptor.uri,
                 required=False,
                 description=descriptor.description,
-                params=descriptor.agent_card_params_builder(
-                    settings,
-                    runtime_profile,
-                    include_detailed_contracts,
+                params=_build_agent_card_extension_params(
+                    descriptor,
+                    settings=settings,
+                    runtime_profile=runtime_profile,
+                    include_detailed_contracts=include_detailed_contracts,
                 ),
             )
         )
@@ -635,10 +358,14 @@ def build_openapi_extension_contracts_from_registry(
     group: Literal["a2a", "codex"],
 ) -> dict[str, dict[str, Any]]:
     contracts: dict[str, dict[str, Any]] = {}
-    for descriptor in get_extension_contract_registry():
-        if descriptor.openapi_group != group or descriptor.openapi_params_builder is None:
+    for descriptor in EXTENSION_CONTRACT_REGISTRY:
+        if descriptor.openapi_group != group:
             continue
-        contracts[descriptor.key] = descriptor.openapi_params_builder(settings, runtime_profile)
+        contracts[descriptor.key] = _build_extension_contract_params(
+            descriptor,
+            settings,
+            runtime_profile,
+        )
     return contracts
 
 
@@ -648,7 +375,7 @@ def build_extension_taxonomy_from_registry() -> dict[str, list[str]]:
         "shared_provider_private_contracts": [],
         "codex_provider_private_contracts": [],
     }
-    for descriptor in get_extension_contract_registry():
+    for descriptor in EXTENSION_CONTRACT_REGISTRY:
         if descriptor.taxonomy_group is None:
             continue
         taxonomy[descriptor.taxonomy_group].append(descriptor.uri)

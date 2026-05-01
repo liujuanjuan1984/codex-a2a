@@ -4,9 +4,6 @@ from typing import Any
 
 from codex_a2a.auth import has_configured_auth_scheme
 from codex_a2a.config import Settings
-from codex_a2a.contracts.extension_registry import (
-    build_openapi_extension_contracts_from_registry,
-)
 from codex_a2a.contracts.extensions import (
     CORE_JSONRPC_PATH,
     DISCOVERY_METHODS,
@@ -462,26 +459,3 @@ def build_rest_message_openapi_examples() -> dict[str, Any]:
             },
         },
     }
-
-
-def build_openapi_a2a_extension_contracts(
-    *,
-    runtime_profile: RuntimeProfile,
-) -> dict[str, dict[str, Any]]:
-    return build_openapi_extension_contracts_from_registry(
-        settings=None,
-        runtime_profile=runtime_profile,
-        group="a2a",
-    )
-
-
-def build_openapi_codex_contracts(
-    *,
-    settings: Settings,
-    runtime_profile: RuntimeProfile,
-) -> dict[str, dict[str, Any]]:
-    return build_openapi_extension_contracts_from_registry(
-        settings=settings,
-        runtime_profile=runtime_profile,
-        group="codex",
-    )

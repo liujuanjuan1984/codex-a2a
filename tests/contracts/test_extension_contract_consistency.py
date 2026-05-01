@@ -3,6 +3,7 @@ from pathlib import Path
 import httpx
 import pytest
 
+from codex_a2a.contracts.extension_registry import build_openapi_extension_contracts_from_registry
 from codex_a2a.contracts.extensions import (
     COMPATIBILITY_PROFILE_EXTENSION_URI,
     CORE_JSONRPC_PATH,
@@ -36,9 +37,6 @@ from codex_a2a.contracts.extensions import (
 from codex_a2a.profile.runtime import build_runtime_profile
 from codex_a2a.server.agent_card import build_authenticated_extended_agent_card
 from codex_a2a.server.application import create_app
-from codex_a2a.server.openapi_contract_fragments import (
-    build_openapi_codex_contracts,
-)
 from tests.support.dummy_clients import DummySessionQueryCodexClient as DummyCodexClient
 from tests.support.settings import make_settings
 
@@ -67,9 +65,10 @@ def _example_params_include_field(payload: object, dotted_field: str) -> bool:
 
 def _codex_contracts(settings) -> dict[str, dict[str, object]]:  # noqa: ANN001
     runtime_profile = build_runtime_profile(settings)
-    return build_openapi_codex_contracts(
+    return build_openapi_extension_contracts_from_registry(
         settings=settings,
         runtime_profile=runtime_profile,
+        group="codex",
     )
 
 

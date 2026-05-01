@@ -100,7 +100,7 @@ class CodexConversationFacade:
     async def thread_fork(self, thread_id: str, *, params: dict[str, Any] | None = None) -> Any:
         result = await self._rpc_request(
             "thread/fork",
-            self._merge_thread_params(thread_id, params),
+            build_thread_rpc_params(thread_id, params),
         )
         if not isinstance(result, dict):
             raise RuntimeError("codex thread/fork response missing result object")
@@ -134,7 +134,7 @@ class CodexConversationFacade:
     ) -> Any:
         result = await self._rpc_request(
             "thread/metadata/update",
-            self._merge_thread_params(thread_id, params),
+            build_thread_rpc_params(thread_id, params),
         )
         if not isinstance(result, dict):
             raise RuntimeError("codex thread/metadata/update response missing result object")
@@ -406,10 +406,3 @@ class CodexConversationFacade:
             "turn_id": turn_id.strip(),
             "review_thread_id": review_thread_id.strip(),
         }
-
-    @staticmethod
-    def _merge_thread_params(
-        thread_id: str,
-        params: dict[str, Any] | None,
-    ) -> dict[str, Any]:
-        return build_thread_rpc_params(thread_id, params)

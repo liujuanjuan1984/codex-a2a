@@ -29,19 +29,16 @@ class A2AClientManager:
         self._clients: dict[str, A2AClient] = {}
         self._lock = asyncio.Lock()
 
-    def _build_headers(self) -> dict[str, str]:
-        return build_default_headers(
-            self._settings.a2a_client_bearer_token,
-            self._settings.a2a_client_basic_auth,
-        )
-
     def _build_config(self, agent_url: str) -> A2AClientConfig:
         return A2AClientConfig(
             agent_url=agent_url,
             request_timeout_seconds=self._settings.a2a_client_timeout_seconds,
             card_fetch_timeout_seconds=self._settings.a2a_client_card_fetch_timeout_seconds,
             use_client_preference=self._settings.a2a_client_use_client_preference,
-            default_headers=self._build_headers(),
+            default_headers=build_default_headers(
+                self._settings.a2a_client_bearer_token,
+                self._settings.a2a_client_basic_auth,
+            ),
             supported_transports=list(self._settings.a2a_client_supported_transports),
             accepted_output_modes=["text/plain"],
             extensions=[

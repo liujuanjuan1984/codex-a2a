@@ -5,6 +5,7 @@ from typing import Any, cast
 from fastapi import FastAPI
 
 from codex_a2a.config import Settings
+from codex_a2a.contracts.extension_registry import build_openapi_extension_contracts_from_registry
 from codex_a2a.contracts.extensions import CORE_JSONRPC_PATH
 from codex_a2a.profile.runtime import RuntimeProfile
 
@@ -13,8 +14,6 @@ from .openapi_contract_fragments import (
     build_core_jsonrpc_openapi_examples,
     build_extension_jsonrpc_openapi_description,
     build_extension_jsonrpc_openapi_examples,
-    build_openapi_a2a_extension_contracts,
-    build_openapi_codex_contracts,
     build_openapi_security,
     build_rest_message_openapi_examples,
 )
@@ -147,12 +146,15 @@ def patch_openapi_contract(
     settings: Settings,
     runtime_profile: RuntimeProfile,
 ) -> None:
-    a2a_extension_contracts = build_openapi_a2a_extension_contracts(
+    a2a_extension_contracts = build_openapi_extension_contracts_from_registry(
+        settings=None,
         runtime_profile=runtime_profile,
+        group="a2a",
     )
-    codex_contracts = build_openapi_codex_contracts(
+    codex_contracts = build_openapi_extension_contracts_from_registry(
         settings=settings,
         runtime_profile=runtime_profile,
+        group="codex",
     )
     original_openapi = app.openapi
 

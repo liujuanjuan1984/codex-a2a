@@ -1,8 +1,8 @@
 from codex_a2a.contracts.extension_registry import (
+    EXTENSION_CONTRACT_REGISTRY,
     build_agent_card_extensions_from_registry,
     build_extension_taxonomy_from_registry,
     build_openapi_extension_contracts_from_registry,
-    get_extension_contract_registry,
 )
 from codex_a2a.contracts.extensions import (
     COMPATIBILITY_PROFILE_EXTENSION_URI,
@@ -23,7 +23,7 @@ from tests.support.settings import make_settings
 
 
 def test_extension_registry_captures_phase1_inventory() -> None:
-    descriptors = get_extension_contract_registry()
+    descriptors = EXTENSION_CONTRACT_REGISTRY
 
     assert [descriptor.key for descriptor in descriptors] == [
         "session_binding",

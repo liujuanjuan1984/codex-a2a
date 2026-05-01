@@ -3,6 +3,7 @@ from typing import Any
 from a2a.types import AgentExtension, AgentSkill
 
 from codex_a2a.a2a_proto import proto_to_python
+from codex_a2a.contracts.extension_registry import build_openapi_extension_contracts_from_registry
 from codex_a2a.contracts.extensions import (
     COMPATIBILITY_PROFILE_EXTENSION_URI,
     CORE_JSONRPC_PATH,
@@ -36,7 +37,6 @@ from codex_a2a.server.agent_card import (
     build_agent_card,
     build_authenticated_extended_agent_card,
 )
-from codex_a2a.server.openapi_contract_fragments import build_openapi_codex_contracts
 from tests.support.settings import make_settings
 
 AUTHENTICATED_EXTENSION_URIS = {
@@ -75,9 +75,10 @@ def _require_examples(skill: AgentSkill) -> list[str]:
 
 def _codex_contracts(settings) -> dict[str, dict[str, Any]]:  # noqa: ANN001
     runtime_profile = build_runtime_profile(settings)
-    return build_openapi_codex_contracts(
+    return build_openapi_extension_contracts_from_registry(
         settings=settings,
         runtime_profile=runtime_profile,
+        group="codex",
     )
 
 

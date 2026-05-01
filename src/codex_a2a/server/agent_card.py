@@ -13,6 +13,7 @@ from a2a.utils.constants import TransportProtocol
 
 from codex_a2a.auth import has_configured_auth_scheme
 from codex_a2a.config import Settings
+from codex_a2a.contracts.extension_registry import build_agent_card_extensions_from_registry
 from codex_a2a.media_modes import (
     DEFAULT_INPUT_MEDIA_MODES,
     DEFAULT_OUTPUT_MEDIA_MODES,
@@ -21,8 +22,6 @@ from codex_a2a.media_modes import (
     TEXT_OUTPUT_MEDIA_MODES,
 )
 from codex_a2a.profile.runtime import RuntimeProfile, build_runtime_profile
-
-from .agent_card_extensions import build_agent_extensions
 
 
 def _build_agent_card_description(
@@ -414,7 +413,7 @@ def _build_agent_card(
         capabilities=AgentCapabilities(
             streaming=True,
             extended_agent_card=True,
-            extensions=build_agent_extensions(
+            extensions=build_agent_card_extensions_from_registry(
                 settings=settings,
                 runtime_profile=runtime_profile,
                 include_detailed_contracts=include_detailed_contracts,
