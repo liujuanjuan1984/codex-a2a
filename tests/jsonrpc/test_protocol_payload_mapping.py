@@ -156,6 +156,14 @@ def test_map_plugin_marketplaces_filters_plugin_metadata_and_keeps_sync_state() 
     }
 
 
+def test_discovery_payload_mapping_rejects_invalid_top_level_shapes() -> None:
+    with pytest.raises(ValueError, match="app/list payload must be an object"):
+        map_apps_list([])
+
+    with pytest.raises(ValueError, match="plugin/list payload missing marketplaces array"):
+        map_plugin_marketplaces({"marketplaces": None})
+
+
 def test_map_plugin_detail_requires_core_fields_and_filters_collections() -> None:
     result = map_plugin_detail(
         {

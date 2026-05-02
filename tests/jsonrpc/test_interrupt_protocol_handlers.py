@@ -30,9 +30,7 @@ def _build_app(
 ):
     def generate_error_response(request_id, error):
         adapted = (
-            adapt_jsonrpc_error(error)
-            if isinstance(error, (JSONRPCError, A2AError))
-            else error
+            adapt_jsonrpc_error(error) if isinstance(error, (JSONRPCError, A2AError)) else error
         )
         payload = {
             "jsonrpc": "2.0",
@@ -209,6 +207,25 @@ async def test_handle_interrupt_callback_404_discards_request_and_uses_not_found
 
 
 @pytest.mark.asyncio
+async def test_handle_interrupt_callback_invalid_params_use_jsonrpc_error_shape() -> None:
+    client = DummySessionQueryCodexClient(make_settings(a2a_bearer_token="test"))
+    app = _build_app(client)
+
+    response = await handle_interrupt_callback_request(
+        app,
+        JSONRPCRequestModel(jsonrpc="2.0", id=422, method=app._method_reply_permission),
+        {"request_id": "perm-invalid"},
+        request=_build_request(),
+    )
+
+    payload = _json_body(response)
+    assert response.status_code == 200
+    assert payload["error"]["code"] == -32602
+    assert payload["error"]["message"] == "Invalid parameters"
+    assert payload["error"]["data"] == {"field": "reply"}
+
+
+@pytest.mark.asyncio
 async def test_handle_interrupt_recovery_filters_identity_inputs_and_returns_items() -> None:
     client = SimpleNamespace(
         list_interrupt_requests=AsyncMock(return_value=[{"request_id": "req-1"}])
@@ -233,6 +250,26 @@ async def test_handle_interrupt_recovery_filters_identity_inputs_and_returns_ite
         credential_id="cred-1",
         interrupt_type="question",
     )
+
+
+@pytest.mark.asyncio
+async def test_handle_interrupt_recovery_invalid_params_use_jsonrpc_error_shape() -> None:
+    client = SimpleNamespace(list_interrupt_requests=AsyncMock())
+    app = _build_app(client)
+
+    response = await handle_interrupt_recovery_request(
+        app,
+        JSONRPCRequestModel(jsonrpc="2.0", id=423, method="codex.interrupts.list"),
+        {"interrupt_type": "unknown"},
+        request=_build_request(user_identity="user-1"),
+    )
+
+    payload = _json_body(response)
+    assert response.status_code == 200
+    assert payload["error"]["code"] == -32602
+    assert payload["error"]["message"] == "Invalid parameters"
+    assert payload["error"]["data"] == {"field": "interrupt_type"}
+    client.list_interrupt_requests.assert_not_called()
 
 
 @pytest.mark.asyncio
