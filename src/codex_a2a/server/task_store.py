@@ -544,7 +544,9 @@ def build_task_store_runtime(
 
 
 async def _ensure_sdk_task_store_schema_compatible(task_store: DatabaseTaskStore) -> None:
-    database_url = task_store.engine.url.render_as_string(hide_password=True)
+    database_url = _render_database_url_for_logs(
+        task_store.engine.url.render_as_string(hide_password=True)
+    )
     async with task_store.engine.begin() as conn:
         await conn.run_sync(
             lambda sync_conn: _validate_sdk_task_table_schema(

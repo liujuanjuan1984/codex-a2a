@@ -145,7 +145,7 @@ async def test_task_store_runtime_does_not_dispose_shared_engine(
 @pytest.mark.asyncio
 async def test_task_store_runtime_rejects_legacy_sdk_task_table_schema(tmp_path: Path) -> None:
     database_path = (tmp_path / "legacy-tasks.db").resolve()
-    database_url = f"sqlite+aiosqlite:///{database_path}"
+    database_url = f"sqlite+aiosqlite:///{database_path}?password=secret"
     settings = make_settings(
         a2a_bearer_token="test-token",
         a2a_database_url=database_url,
@@ -159,10 +159,16 @@ async def test_task_store_runtime_rejects_legacy_sdk_task_table_schema(tmp_path:
 
     runtime = build_task_store_runtime(settings)
     try:
-        with pytest.raises(TaskStoreSchemaCompatibilityError, match="Legacy SDK task table schema"):
+        with pytest.raises(
+            TaskStoreSchemaCompatibilityError,
+            match="Legacy SDK task table schema",
+        ) as exc_info:
             await runtime.startup()
     finally:
         await runtime.shutdown()
+
+    assert "secret" not in str(exc_info.value)
+    assert "password=%2A%2A%2A" in str(exc_info.value)
 
 
 @pytest.mark.asyncio
