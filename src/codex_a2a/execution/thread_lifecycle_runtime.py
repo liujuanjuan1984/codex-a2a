@@ -311,9 +311,6 @@ class CodexThreadLifecycleRuntime:
             )
         except (TaskNotFoundError, TaskNotCancelableError):
             pass
-        except Exception as exc:
-            if not isinstance(exc, (TaskNotFoundError, TaskNotCancelableError)):
-                raise
         if (
             handle is not None
             and handle.producer_task is not None
@@ -356,12 +353,17 @@ class CodexThreadLifecycleRuntime:
         for thread_id in subscription.thread_filter:
             try:
                 await self._client.thread_unsubscribe(thread_id)
-            except Exception:
+            except Exception as exc:
+                # Upstream unsubscribe runs in a best-effort cleanup path after local ownership has
+                # already been released. Surface the failure for diagnostics, but do not convert a
+                # cleanup issue into a user-visible release failure.
                 logger.warning(
-                    "Failed upstream thread/unsubscribe for subscription %s thread_id=%s",
+                    "Failed upstream thread/unsubscribe for subscription %s thread_id=%s "
+                    "error_type=%s",
                     subscription_key,
                     thread_id,
-                    exc_info=True,
+                    type(exc).__name__,
+                    exc_info=exc,
                 )
 
     @staticmethod
