@@ -34,7 +34,7 @@ from codex_a2a.server.openapi import patch_openapi_contract
 from codex_a2a.server.push_config_store import build_push_config_store_runtime
 from codex_a2a.server.request_handler import CodexRequestHandler
 from codex_a2a.server.runtime_state import build_runtime_state_runtime
-from codex_a2a.server.task_store import build_task_store_runtime
+from codex_a2a.server.task_store import build_task_store_runtime, describe_persistence_backend
 from codex_a2a.upstream.client import CodexClient
 
 from .http_middlewares import (
@@ -42,6 +42,8 @@ from .http_middlewares import (
     PathScopedGZipMiddleware,
     install_http_middlewares,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def create_app(settings: Settings) -> FastAPI:
@@ -71,6 +73,7 @@ def create_app(settings: Settings) -> FastAPI:
         engine=shared_database_engine,
     )
     task_store = task_store_runtime.task_store
+    persistence_summary = describe_persistence_backend(settings)
     runtime_profile = build_runtime_profile(settings)
     capability_snapshot = extension_contracts.build_capability_snapshot(
         runtime_profile=runtime_profile
@@ -107,6 +110,16 @@ def create_app(settings: Settings) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
+        logger.info(
+            "A2A persistence configured backend=%s task_store=%s push_config_store=%s "
+            "runtime_state=%s database_url=%s sqlite_tuning=%s",
+            persistence_summary["backend"],
+            persistence_summary["task_store"],
+            persistence_summary["push_config_store"],
+            persistence_summary["runtime_state"],
+            persistence_summary["database_url"],
+            persistence_summary["sqlite_tuning"],
+        )
         await task_store_runtime.startup()
         await push_config_store_runtime.startup()
         await runtime_state_runtime.startup()

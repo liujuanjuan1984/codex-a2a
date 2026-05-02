@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sqlite3
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
@@ -15,7 +16,9 @@ from codex_a2a.server.database import build_database_engine
 from codex_a2a.server.task_store import (
     GuardedTaskStore,
     TaskStoreOperationError,
+    TaskStoreSchemaCompatibilityError,
     build_task_store_runtime,
+    describe_persistence_backend,
     unwrap_task_store,
 )
 from tests.support.settings import make_settings
@@ -45,6 +48,43 @@ def test_build_task_store_runtime_uses_database_backend_when_database_enabled(
 
     assert isinstance(runtime.task_store, GuardedTaskStore)
     assert isinstance(unwrap_task_store(runtime.task_store), DatabaseTaskStore)
+
+
+def test_describe_persistence_backend_reports_memory_defaults() -> None:
+    summary = describe_persistence_backend(
+        make_settings(
+            a2a_bearer_token="test-token",
+            a2a_database_url=None,
+        )
+    )
+
+    assert summary == {
+        "backend": "memory",
+        "task_store": "memory",
+        "push_config_store": "memory",
+        "runtime_state": "disabled",
+        "database_url": "n/a",
+        "sqlite_tuning": "not_applicable",
+    }
+
+
+def test_describe_persistence_backend_reports_database_configuration(tmp_path: Path) -> None:
+    summary = describe_persistence_backend(
+        make_settings(
+            a2a_bearer_token="test-token",
+            a2a_database_url=(
+                f"sqlite+aiosqlite:///{(tmp_path / 'summary.db').resolve()}?password=secret"
+            ),
+        )
+    )
+
+    assert summary["backend"] == "database"
+    assert summary["task_store"] == "sdk_database"
+    assert summary["push_config_store"] == "sdk_database"
+    assert summary["runtime_state"] == "database"
+    assert summary["database_url"].startswith("sqlite+aiosqlite:///")
+    assert "secret" not in summary["database_url"]
+    assert summary["sqlite_tuning"] == "local_durability_defaults"
 
 
 @pytest.mark.asyncio
@@ -100,6 +140,29 @@ async def test_task_store_runtime_does_not_dispose_shared_engine(
     await runtime.shutdown()
 
     dispose_spy.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_task_store_runtime_rejects_legacy_sdk_task_table_schema(tmp_path: Path) -> None:
+    database_path = (tmp_path / "legacy-tasks.db").resolve()
+    database_url = f"sqlite+aiosqlite:///{database_path}"
+    settings = make_settings(
+        a2a_bearer_token="test-token",
+        a2a_database_url=database_url,
+    )
+    connection = sqlite3.connect(database_path)
+    try:
+        connection.execute("CREATE TABLE tasks (id TEXT PRIMARY KEY, context_id TEXT, kind TEXT)")
+        connection.commit()
+    finally:
+        connection.close()
+
+    runtime = build_task_store_runtime(settings)
+    try:
+        with pytest.raises(TaskStoreSchemaCompatibilityError, match="Legacy SDK task table schema"):
+            await runtime.startup()
+    finally:
+        await runtime.shutdown()
 
 
 @pytest.mark.asyncio

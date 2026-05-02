@@ -334,6 +334,42 @@ async def test_create_app_shares_database_engine_across_runtime_components(monke
     shared_engine.dispose.assert_awaited_once()
 
 
+@pytest.mark.asyncio
+async def test_create_app_logs_persistence_summary_at_startup(
+    monkeypatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    import codex_a2a.server.application as app_module
+
+    settings = make_settings(a2a_bearer_token="test-token", a2a_database_url=None)
+    monkeypatch.setattr(app_module, "CodexClient", DummyChatCodexClient)
+    monkeypatch.setattr(
+        app_module,
+        "describe_persistence_backend",
+        lambda _settings: {
+            "backend": "memory",
+            "task_store": "memory",
+            "push_config_store": "memory",
+            "runtime_state": "disabled",
+            "database_url": "n/a",
+            "sqlite_tuning": "not_applicable",
+        },
+    )
+
+    app = app_module.create_app(settings)
+
+    with caplog.at_level(logging.INFO, logger="codex_a2a.server.application"):
+        async with app.router.lifespan_context(app):
+            pass
+
+    assert any(
+        "A2A persistence configured backend=memory task_store=memory "
+        "push_config_store=memory runtime_state=disabled database_url=n/a "
+        "sqlite_tuning=not_applicable" in record.getMessage()
+        for record in caplog.records
+    )
+
+
 def test_openapi_rest_message_routes_include_schema_examples_and_extension_contracts() -> None:
     app = create_app(make_settings(a2a_bearer_token="test-token"))
     openapi = app.openapi()
