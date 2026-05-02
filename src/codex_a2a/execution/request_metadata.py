@@ -35,49 +35,36 @@ def _metadata_mapping(value: Any) -> Mapping[str, Any] | None:
     return normalized_mapping
 
 
-def _append_metadata_candidate(
-    candidates: list[Mapping[str, Any]],
-    value: Any,
-    *,
-    source: str,
-    purpose: str,
-) -> None:
-    try:
-        candidate = _metadata_mapping(value)
-    except Exception:
-        # Request metadata comes from external clients and protobuf adapters, so normalization must
-        # stay fail-open. We still log the failure at debug level to preserve diagnostics without
-        # turning malformed metadata into a request-wide failure path.
-        logger.debug(
-            "Ignoring unparseable request metadata while extracting %s from %s",
-            purpose,
-            source,
-            exc_info=True,
-        )
-        return
-    if candidate is not None:
-        candidates.append(candidate)
-
-
 def _collect_metadata_candidates(
     context: RequestContext,
     *,
     purpose: str,
 ) -> list[Mapping[str, Any]]:
     candidates: list[Mapping[str, Any]] = []
-    _append_metadata_candidate(
-        candidates,
-        context.metadata,
-        source="context.metadata",
-        purpose=purpose,
-    )
-    if context.message is not None:
-        _append_metadata_candidate(
-            candidates,
+    for source, value in (
+        ("context.metadata", context.metadata),
+        (
+            "context.message.metadata",
             getattr(context.message, "metadata", None) or {},
-            source="context.message.metadata",
-            purpose=purpose,
-        )
+        ),
+    ):
+        if source == "context.message.metadata" and context.message is None:
+            continue
+        try:
+            candidate = _metadata_mapping(value)
+        except Exception:
+            # Request metadata comes from external clients and protobuf adapters, so normalization
+            # must stay fail-open. We still log the failure at debug level to preserve diagnostics
+            # without turning malformed metadata into a request-wide failure path.
+            logger.debug(
+                "Ignoring unparseable request metadata while extracting %s from %s",
+                purpose,
+                source,
+                exc_info=True,
+            )
+            continue
+        if candidate is not None:
+            candidates.append(candidate)
     return candidates
 
 
