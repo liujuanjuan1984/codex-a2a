@@ -31,9 +31,10 @@ from codex_a2a.server.agent_card import (
 from codex_a2a.server.call_context import IdentityAwareCallContextBuilder
 from codex_a2a.server.database import build_database_engine
 from codex_a2a.server.openapi import patch_openapi_contract
+from codex_a2a.server.push_config_store import build_push_config_store_runtime
 from codex_a2a.server.request_handler import CodexRequestHandler
 from codex_a2a.server.runtime_state import build_runtime_state_runtime
-from codex_a2a.server.task_store import build_task_store_runtime
+from codex_a2a.server.task_store import build_task_store_runtime, describe_persistence_backend
 from codex_a2a.upstream.client import CodexClient
 
 from .http_middlewares import (
@@ -41,6 +42,8 @@ from .http_middlewares import (
     PathScopedGZipMiddleware,
     install_http_middlewares,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def create_app(settings: Settings) -> FastAPI:
@@ -65,7 +68,12 @@ def create_app(settings: Settings) -> FastAPI:
         session_state_store=runtime_state_runtime.state_store,
     )
     task_store_runtime = build_task_store_runtime(settings, engine=shared_database_engine)
+    push_config_store_runtime = build_push_config_store_runtime(
+        settings,
+        engine=shared_database_engine,
+    )
     task_store = task_store_runtime.task_store
+    persistence_summary = describe_persistence_backend(settings)
     runtime_profile = build_runtime_profile(settings)
     capability_snapshot = extension_contracts.build_capability_snapshot(
         runtime_profile=runtime_profile
@@ -78,6 +86,7 @@ def create_app(settings: Settings) -> FastAPI:
     handler = CodexRequestHandler(
         agent_executor=executor,
         task_store=task_store,
+        push_config_store=push_config_store_runtime.push_config_store,
         agent_card=agent_card,
         extended_agent_card=extended_agent_card,
     )
@@ -101,7 +110,18 @@ def create_app(settings: Settings) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
+        logger.info(
+            "A2A persistence configured backend=%s task_store=%s push_config_store=%s "
+            "runtime_state=%s database_url=%s sqlite_tuning=%s",
+            persistence_summary["backend"],
+            persistence_summary["task_store"],
+            persistence_summary["push_config_store"],
+            persistence_summary["runtime_state"],
+            persistence_summary["database_url"],
+            persistence_summary["sqlite_tuning"],
+        )
         await task_store_runtime.startup()
+        await push_config_store_runtime.startup()
         await runtime_state_runtime.startup()
         try:
             await client.restore_persisted_interrupt_requests()
@@ -112,6 +132,7 @@ def create_app(settings: Settings) -> FastAPI:
             await a2a_client_manager.close_all()
             await client.close()
             await runtime_state_runtime.shutdown()
+            await push_config_store_runtime.shutdown()
             await task_store_runtime.shutdown()
             if shared_database_engine is not None:
                 await shared_database_engine.dispose()
@@ -187,6 +208,7 @@ def create_app(settings: Settings) -> FastAPI:
     app.state.codex_thread_lifecycle_runtime = thread_lifecycle_runtime
     app.state.a2a_client_manager = a2a_client_manager
     app.state.task_store = task_store
+    app.state.push_config_store = push_config_store_runtime.push_config_store
 
     if settings.a2a_enable_health_endpoint:
 

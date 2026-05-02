@@ -264,14 +264,18 @@ async def test_create_app_shares_database_engine_across_runtime_components(monke
     shared_engine = SimpleNamespace(dispose=AsyncMock())
     state_store = object()
     task_store = object()
+    push_config_store = object()
     runtime_startup = AsyncMock()
     runtime_shutdown = AsyncMock()
     task_startup = AsyncMock()
     task_shutdown = AsyncMock()
+    push_config_startup = AsyncMock()
+    push_config_shutdown = AsyncMock()
     captured: dict[str, object | None] = {
         "database_engine_settings": None,
         "runtime_engine": None,
         "task_engine": None,
+        "push_config_engine": None,
     }
 
     monkeypatch.setattr(
@@ -296,8 +300,19 @@ async def test_create_app_shares_database_engine_across_runtime_components(monke
             shutdown=task_shutdown,
         )
 
+    def _build_push_config_store_runtime(_settings, *, engine=None):  # noqa: ANN001
+        captured["push_config_engine"] = engine
+        return SimpleNamespace(
+            push_config_store=push_config_store,
+            startup=push_config_startup,
+            shutdown=push_config_shutdown,
+        )
+
     monkeypatch.setattr(app_module, "build_runtime_state_runtime", _build_runtime_state_runtime)
     monkeypatch.setattr(app_module, "build_task_store_runtime", _build_task_store_runtime)
+    monkeypatch.setattr(
+        app_module, "build_push_config_store_runtime", _build_push_config_store_runtime
+    )
     monkeypatch.setattr(app_module, "CodexClient", DummyChatCodexClient)
 
     app = app_module.create_app(settings)
@@ -305,15 +320,54 @@ async def test_create_app_shares_database_engine_across_runtime_components(monke
     assert captured["database_engine_settings"] is settings
     assert captured["runtime_engine"] is shared_engine
     assert captured["task_engine"] is shared_engine
+    assert captured["push_config_engine"] is shared_engine
 
     async with app.router.lifespan_context(app):
         pass
 
     runtime_startup.assert_awaited_once()
     task_startup.assert_awaited_once()
+    push_config_startup.assert_awaited_once()
     runtime_shutdown.assert_awaited_once()
     task_shutdown.assert_awaited_once()
+    push_config_shutdown.assert_awaited_once()
     shared_engine.dispose.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_create_app_logs_persistence_summary_at_startup(
+    monkeypatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    import codex_a2a.server.application as app_module
+
+    settings = make_settings(a2a_bearer_token="test-token", a2a_database_url=None)
+    monkeypatch.setattr(app_module, "CodexClient", DummyChatCodexClient)
+    monkeypatch.setattr(
+        app_module,
+        "describe_persistence_backend",
+        lambda _settings: {
+            "backend": "memory",
+            "task_store": "memory",
+            "push_config_store": "memory",
+            "runtime_state": "disabled",
+            "database_url": "n/a",
+            "sqlite_tuning": "not_applicable",
+        },
+    )
+
+    app = app_module.create_app(settings)
+
+    with caplog.at_level(logging.INFO, logger="codex_a2a.server.application"):
+        async with app.router.lifespan_context(app):
+            pass
+
+    assert any(
+        "A2A persistence configured backend=memory task_store=memory "
+        "push_config_store=memory runtime_state=disabled database_url=n/a "
+        "sqlite_tuning=not_applicable" in record.getMessage()
+        for record in caplog.records
+    )
 
 
 def test_openapi_rest_message_routes_include_schema_examples_and_extension_contracts() -> None:

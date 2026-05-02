@@ -28,6 +28,7 @@ def test_builder_sets_identity_for_non_stream_request():
     builder = IdentityAwareCallContextBuilder()
     context = builder.build(_request("/"))
     assert context.state.get("identity") == "opaque:test-id"
+    assert context.user.user_name == "opaque:test-id"
     assert context.state.get("correlation_id") == "corr-123"
     assert context.state.get("a2a_streaming_request") is None
 
