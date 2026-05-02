@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import Mapping
 from typing import Any
 
@@ -13,6 +14,8 @@ from codex_a2a.execution.request_overrides import (
     RequestExecutionOptionsValidationError,
     build_request_execution_options,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def _metadata_mapping(value: Any) -> Mapping[str, Any] | None:
@@ -32,25 +35,49 @@ def _metadata_mapping(value: Any) -> Mapping[str, Any] | None:
     return normalized_mapping
 
 
+def _collect_metadata_candidates(
+    context: RequestContext,
+    *,
+    purpose: str,
+) -> list[Mapping[str, Any]]:
+    candidates: list[Mapping[str, Any]] = []
+    for source, value in (
+        ("context.metadata", context.metadata),
+        (
+            "context.message.metadata",
+            getattr(context.message, "metadata", None) or {},
+        ),
+    ):
+        if source == "context.message.metadata" and context.message is None:
+            continue
+        try:
+            candidate = _metadata_mapping(value)
+        except Exception:
+            # Request metadata comes from external clients and protobuf adapters, so normalization
+            # must stay fail-open. We still log the failure at debug level to preserve diagnostics
+            # without turning malformed metadata into a request-wide failure path.
+            logger.debug(
+                "Ignoring unparseable request metadata while extracting %s from %s",
+                purpose,
+                source,
+                exc_info=True,
+            )
+            continue
+        if candidate is not None:
+            candidates.append(candidate)
+    return candidates
+
+
 def extract_namespaced_string_metadata(
     context: RequestContext,
     *,
     namespace: str,
     path: tuple[str, ...],
 ) -> str | None:
-    candidates: list[Mapping[str, Any]] = []
-    try:
-        meta = _metadata_mapping(context.metadata)
-        if meta is not None:
-            candidates.append(meta)
-    except Exception:
-        pass
-
-    if context.message is not None:
-        message_metadata = _metadata_mapping(getattr(context.message, "metadata", None) or {})
-        if message_metadata is not None:
-            candidates.append(message_metadata)
-
+    candidates = _collect_metadata_candidates(
+        context,
+        purpose=f"{namespace}.{'.'.join(path)}",
+    )
     for candidate in candidates:
         current = candidate.get(namespace)
         for part in path[:-1]:
@@ -85,19 +112,10 @@ def extract_codex_directory(context: RequestContext) -> str | None:
 
 
 def extract_codex_execution_options(context: RequestContext) -> RequestExecutionOptions:
-    candidates: list[Mapping[str, Any]] = []
-    try:
-        meta = _metadata_mapping(context.metadata)
-        if meta is not None:
-            candidates.append(meta)
-    except Exception:
-        pass
-
-    if context.message is not None:
-        message_metadata = _metadata_mapping(getattr(context.message, "metadata", None) or {})
-        if message_metadata is not None:
-            candidates.append(message_metadata)
-
+    candidates = _collect_metadata_candidates(
+        context,
+        purpose="codex.execution options",
+    )
     merged: dict[str, Any] = {}
     for candidate in candidates:
         codex = candidate.get("codex")

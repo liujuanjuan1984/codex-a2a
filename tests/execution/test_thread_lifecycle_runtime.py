@@ -1,13 +1,17 @@
 import asyncio
+import logging
 from collections.abc import AsyncIterator
 from typing import Any
 
 import pytest
-from a2a.types import CancelTaskRequest, TaskArtifactUpdateEvent
+from a2a.types import CancelTaskRequest, TaskArtifactUpdateEvent, TaskNotCancelableError
 from a2a.utils.errors import TaskNotFoundError
 
 from codex_a2a.a2a_proto import part_data
-from codex_a2a.execution.thread_lifecycle_runtime import CodexThreadLifecycleRuntime
+from codex_a2a.execution.thread_lifecycle_runtime import (
+    CodexThreadLifecycleRuntime,
+    ThreadLifecycleWatchHandle,
+)
 from codex_a2a.server.runtime_state import build_runtime_state_runtime
 from tests.execution.test_discovery_exec_runtime import RecordingRequestHandler
 from tests.support.context import DummyEventQueue
@@ -388,6 +392,89 @@ async def test_thread_lifecycle_runtime_release_skips_upstream_unsubscribe_on_sc
         )
 
         assert client.thread_unsubscribe_calls == []
+    finally:
+        await runtime_state.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_thread_lifecycle_runtime_cancel_tolerates_task_not_cancelable() -> None:
+    class NotCancelableRequestHandler(BackgroundThreadWatchRequestHandler):
+        async def on_cancel_task(self, params: CancelTaskRequest, context=None):  # noqa: ANN001
+            self.cancel_requests.append({"task_id": params.id, "context": context})
+            raise TaskNotCancelableError()
+
+    runtime = CodexThreadLifecycleRuntime(
+        client=ThreadLifecycleClientStub([]),
+        request_handler=NotCancelableRequestHandler(),
+    )
+    producer_task: asyncio.Task[None] = asyncio.create_task(asyncio.sleep(3600))
+    runtime_handle = ThreadLifecycleWatchHandle(
+        task_id="watch-1",
+        context_id="watch-1",
+        events=frozenset({"thread.started"}),
+        thread_ids=frozenset({"thr-1"}),
+        stop_event=asyncio.Event(),
+        owner_identity="user-1",
+        subscription_key="sub-1",
+        producer_task=producer_task,
+    )
+    runtime._active_handles["watch-1"] = runtime_handle
+
+    try:
+        await runtime._cancel_watch_task(task_id="watch-1", context={"identity": "user-1"})
+
+        assert runtime_handle.stop_event.is_set() is True
+        assert producer_task.cancelled() is True
+    finally:
+        if not producer_task.done():
+            producer_task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await producer_task
+
+
+@pytest.mark.asyncio
+async def test_thread_lifecycle_runtime_release_logs_unsubscribe_failures_and_keeps_success_result(
+    tmp_path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    database_path = (tmp_path / "thread-watch-release-unsubscribe-failure.db").resolve()
+    settings = make_settings(
+        a2a_bearer_token="test-token",
+        a2a_database_url=f"sqlite+aiosqlite:///{database_path}",
+    )
+    runtime_state = build_runtime_state_runtime(settings)
+    await runtime_state.startup()
+    assert runtime_state.state_store is not None
+
+    handler = BackgroundThreadWatchRequestHandler()
+    client = BlockingThreadLifecycleClientStub()
+
+    async def failing_unsubscribe(thread_id: str) -> None:
+        raise RuntimeError(f"boom:{thread_id}")
+
+    client.thread_unsubscribe = failing_unsubscribe  # type: ignore[method-assign]
+    runtime = CodexThreadLifecycleRuntime(
+        client=client,
+        request_handler=handler,
+        state_store=runtime_state.state_store,
+    )
+
+    try:
+        result = await runtime.start(
+            request={"events": ["thread.started"], "thread_ids": ["thr-1"]},
+            context={"identity": "user-1"},
+        )
+
+        caplog.set_level(logging.WARNING, logger="codex_a2a.execution.thread_lifecycle_runtime")
+        release_result = await runtime.release(
+            task_id=result["task_id"],
+            context={"identity": "user-1"},
+        )
+
+        assert release_result["ok"] is True
+        assert release_result["subscription_released"] is True
+        assert "Failed upstream thread/unsubscribe for subscription" in caplog.text
+        assert "error_type=RuntimeError" in caplog.text
     finally:
         await runtime_state.shutdown()
 
