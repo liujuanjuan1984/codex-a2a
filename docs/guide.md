@@ -446,8 +446,9 @@ This path is for contributors. End users should prefer the released CLI path des
 - Those task-store failure surfaces use `metadata.codex.error` with `type=TASK_STORE_UNAVAILABLE` and an `operation` field such as `get` or `save`.
 - Stream artifacts carry `artifact.metadata.shared.stream.block_type` with values `text`, `reasoning`, and `tool_call`.
 - The published `urn:a2a:stream-hints/v1` contract also declares the emitted A2A part type per block: `text` and `reasoning` use `Part(text)`, while `tool_call` uses `Part(data)`.
-- All chunks share one stream artifact ID and preserve original timeline via `artifact.metadata.shared.stream.sequence`. Timeline identity fields such as `message_id`, `event_id`, and `source` are emitted under `metadata.shared.stream`.
-- Session projections are normalized under `metadata.shared.session`, with `id` as the canonical field and optional `title` when the upstream surface provides one. The corresponding leaf fields are `metadata.shared.session.id` and `metadata.shared.session.title`.
+- All chunks share one stream artifact ID and preserve original timeline via `artifact.metadata.shared.stream.sequence`.
+- Advanced correlation fields such as `metadata.shared.stream.message_id` and `metadata.shared.stream.event_id` may still appear on detailed/runtime surfaces, but the public shared contract only exposes the minimum stable discovery fields.
+- Session projections are normalized under `metadata.shared.session`, with `id` as the canonical shared field.
 - A final snapshot is emitted only when stream chunks did not already produce the same final text.
 - Stream routing is schema-first: the service classifies chunks primarily by Codex `part.type` plus `part_id` state rather than inline text markers.
 - `message.part.delta` and `message.part.updated` are merged per `part_id`; out-of-order deltas are buffered and replayed when the corresponding `part.updated` arrives.
@@ -563,7 +564,7 @@ This service exposes Codex session list and message-history queries via A2A JSON
   - `codex.sessions.messages.list` enforces `limit` locally after mapping the upstream thread history into A2A messages, keeping the most recent N messages while preserving their original order
   - canonical session metadata is exposed at `metadata.shared.session`
   - raw upstream payload is preserved at `metadata.codex.raw`
-  - session title is available at `metadata.shared.session.title`
+  - display-oriented session title hints remain provider-shaped data from the upstream payload rather than part of the shared metadata contract
 
 ### Session List (`codex.sessions.list`)
 

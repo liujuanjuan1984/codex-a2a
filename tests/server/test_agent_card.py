@@ -265,8 +265,7 @@ def test_public_agent_card_minimizes_provider_private_contracts() -> None:
     assert session_binding_params == {
         "metadata_field": "metadata.shared.session.id",
         "behavior": "prefer_metadata_binding_else_create_session",
-        "supported_metadata": ["shared.session.id", "codex.directory", "codex.execution"],
-        "provider_private_metadata": ["codex.directory", "codex.execution"],
+        "supported_metadata": ["shared.session.id"],
     }
 
     streaming = ext_by_uri[STREAMING_EXTENSION_URI]
@@ -276,8 +275,11 @@ def test_public_agent_card_minimizes_provider_private_contracts() -> None:
     assert streaming_params["interrupt_metadata_field"] == "metadata.shared.interrupt"
     assert streaming_params["session_fields"] == {
         "id": "metadata.shared.session.id",
-        "title": "metadata.shared.session.title",
     }
+    assert "message_id" not in streaming_params["stream_fields"]
+    assert "event_id" not in streaming_params["status_stream_fields"]
+    assert "resolution" not in streaming_params["interrupt_fields"]
+    assert "reasoning_tokens" not in streaming_params["usage_fields"]
     assert streaming_params["usage_fields"]["total_tokens"] == "metadata.shared.usage.total_tokens"
     assert "tool_call_payload_contract" not in streaming_params
 
@@ -365,8 +367,6 @@ def test_authenticated_extended_agent_card_injects_profile_into_extensions() -> 
     assert binding_params["metadata_field"] == "metadata.shared.session.id"
     assert binding_params["supported_metadata"] == [
         "shared.session.id",
-        "codex.directory",
-        "codex.execution",
     ]
     assert binding_params["provider_private_metadata"] == ["codex.directory", "codex.execution"]
     assert binding_params["request_execution_options"] == {
@@ -399,7 +399,7 @@ def test_authenticated_extended_agent_card_injects_profile_into_extensions() -> 
     }
     assert streaming_params["stream_fields"]["sequence"] == "metadata.shared.stream.sequence"
     assert streaming_params["status_stream_fields"]["event_id"] == "metadata.shared.stream.event_id"
-    assert streaming_params["session_fields"]["title"] == "metadata.shared.session.title"
+    assert streaming_params["session_fields"] == {"id": "metadata.shared.session.id"}
     assert streaming_params["interrupt_fields"]["phase"] == "metadata.shared.interrupt.phase"
     assert (
         streaming_params["interrupt_fields"]["resolution"] == "metadata.shared.interrupt.resolution"

@@ -376,7 +376,6 @@ def test_guide_mentions_declared_streaming_contract_fields() -> None:
     required_doc_fragments = [
         streaming_contract["artifact_metadata_field"],
         streaming_contract["session_metadata_field"],
-        streaming_contract["session_fields"]["title"],
         streaming_contract["interrupt_fields"]["phase"],
         streaming_contract["interrupt_fields"]["resolution"],
         streaming_contract["usage_fields"]["reasoning_tokens"],

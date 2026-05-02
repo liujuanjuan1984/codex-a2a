@@ -213,9 +213,11 @@ def test_payload_mapping_contract_helpers_require_core_identifiers() -> None:
     assert task is not None
     assert task.id == "sess-1"
     assert task.context_id == "sess-1"
-    assert task.metadata["shared"] == {"session": {"id": "sess-1", "title": "Demo Session"}}
+    assert task.metadata["shared"] == {"session": {"id": "sess-1"}}
 
-    assert as_a2a_session_task({"id": "sess-2", "title": "  "}) is None
+    task_without_title = as_a2a_session_task({"id": "sess-2", "title": "  "})
+    assert task_without_title is not None
+    assert task_without_title.metadata["shared"] == {"session": {"id": "sess-2"}}
 
     message = as_a2a_message(
         "sess-1",

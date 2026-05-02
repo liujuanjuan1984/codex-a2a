@@ -453,11 +453,7 @@ def build_session_binding_extension_params(
     return {
         "metadata_field": extension_specs.SHARED_SESSION_BINDING_FIELD,
         "behavior": "prefer_metadata_binding_else_create_session",
-        "supported_metadata": [
-            "shared.session.id",
-            "codex.directory",
-            "codex.execution",
-        ],
+        "supported_metadata": ["shared.session.id"],
         "provider_private_metadata": list(extension_specs._REQUEST_EXECUTION_PROVIDER_METADATA),
         "request_execution_options": extension_specs._build_request_execution_options_contract(),
         "profile": runtime_profile.summary_dict(),

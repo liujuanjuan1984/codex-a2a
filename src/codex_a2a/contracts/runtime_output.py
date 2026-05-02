@@ -17,7 +17,6 @@ class _StrictContractModel(A2ABaseModel):
 
 class SessionMetadata(_StrictContractModel):
     id: str
-    title: str | None = None
 
 
 class ArtifactStreamMetadata(_StrictContractModel):
@@ -102,14 +101,13 @@ def build_interrupt_metadata(
 def build_output_metadata(
     *,
     session_id: str | None = None,
-    session_title: str | None = None,
     usage: Mapping[str, Any] | None = None,
     stream: Mapping[str, Any] | None = None,
     interrupt: Mapping[str, Any] | None = None,
     codex_private: Mapping[str, Any] | None = None,
 ) -> dict[str, Any] | None:
     shared = SharedOutputMetadata(
-        session=SessionMetadata(id=session_id, title=session_title) if session_id else None,
+        session=SessionMetadata(id=session_id) if session_id else None,
         usage=UsageMetadata.model_validate(dict(usage)) if usage is not None else None,
         stream=(
             ArtifactStreamMetadata.model_validate(dict(stream))
@@ -155,10 +153,9 @@ def build_stream_artifact_metadata(
 def build_session_contract_params(*, field_path: str) -> dict[str, Any]:
     return {
         "required_fields": ["id"],
-        "optional_fields": ["title"],
+        "optional_fields": [],
         "field_paths": {
             "id": f"{field_path}.id",
-            "title": f"{field_path}.title",
         },
     }
 
