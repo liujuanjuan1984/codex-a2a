@@ -4,7 +4,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
-from sqlalchemy import Table, insert, inspect, select, update
+from sqlalchemy import Index, Table, insert, inspect, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.schema import CreateColumn
 
@@ -39,6 +39,21 @@ def add_missing_columns(
         rendered_column = str(CreateColumn(column).compile(dialect=sync_conn.dialect)).strip()
         sync_conn.exec_driver_sql(f"ALTER TABLE {table_name} ADD COLUMN {rendered_column}")
         existing_columns.add(column_name)
+
+
+def create_missing_indexes(
+    sync_conn: Any,
+    *,
+    table: Table,
+    indexes: Sequence[Index],
+) -> None:
+    inspector = inspect(sync_conn)
+    existing_indexes = {index["name"] for index in inspector.get_indexes(table.name)}
+    for index in indexes:
+        if index.name is None or index.name in existing_indexes:
+            continue
+        index.create(sync_conn)
+        existing_indexes.add(index.name)
 
 
 def read_schema_version(

@@ -5,7 +5,10 @@ from sqlalchemy.dialects.postgresql import dialect as postgresql_dialect
 from sqlalchemy.exc import IntegrityError
 
 import codex_a2a.server.migrations as migrations_module
-from codex_a2a.server.runtime_state_schema import _PENDING_INTERRUPT_REQUESTS, _SCHEMA_VERSION
+from codex_a2a.server.runtime_state_schema import (
+    _PENDING_INTERRUPT_REQUESTS,
+    _SCHEMA_VERSION,
+)
 
 
 def test_add_missing_columns_supports_non_sqlite_dialects(monkeypatch) -> None:
@@ -56,6 +59,44 @@ def test_add_missing_columns_rejects_non_nullable_columns(monkeypatch) -> None:
             table=_PENDING_INTERRUPT_REQUESTS,
             column_names=("session_id",),
         )
+
+
+def test_create_missing_indexes_creates_only_absent_indexes(monkeypatch) -> None:
+    created: list[str] = []
+
+    class _FakeInspector:
+        def get_indexes(self, _table_name: str) -> list[dict[str, str]]:
+            return [{"name": "ix_a2a_pending_interrupt_requests_identity_expires_at"}]
+
+    class _FakeConnection:
+        def __init__(self) -> None:
+            self.dialect = postgresql_dialect()
+
+    monkeypatch.setattr(migrations_module, "inspect", lambda _connection: _FakeInspector())
+
+    existing_index = next(
+        index
+        for index in _PENDING_INTERRUPT_REQUESTS.indexes
+        if index.name == "ix_a2a_pending_interrupt_requests_identity_expires_at"
+    )
+    missing_index = next(
+        index
+        for index in _PENDING_INTERRUPT_REQUESTS.indexes
+        if index.name == "ix_a2a_pending_interrupt_requests_tombstone_expires_at"
+    )
+    monkeypatch.setattr(
+        type(existing_index),
+        "create",
+        lambda self, _conn: created.append(self.name or "<unnamed>"),
+    )
+
+    migrations_module.create_missing_indexes(
+        _FakeConnection(),
+        table=_PENDING_INTERRUPT_REQUESTS,
+        indexes=(existing_index, missing_index),
+    )
+
+    assert created == ["ix_a2a_pending_interrupt_requests_tombstone_expires_at"]
 
 
 def test_write_schema_version_recovers_from_concurrent_first_insert_race() -> None:
