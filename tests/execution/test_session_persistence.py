@@ -170,7 +170,7 @@ async def test_runtime_state_initialize_upgrades_legacy_interrupt_request_schema
         "expires_at",
         "tombstone_expires_at",
     }.issubset(interrupt_columns)
-    assert _sqlite_schema_version(database_path, "runtime_state") == 3
+    assert _sqlite_schema_version(database_path, "runtime_state") == 4
 
 
 @pytest.mark.asyncio
@@ -198,7 +198,7 @@ async def test_runtime_state_initialize_backfills_missing_schema_version_for_cur
         "expires_at",
         "tombstone_expires_at",
     }.issubset(interrupt_columns)
-    assert _sqlite_schema_version(database_path, "runtime_state") == 3
+    assert _sqlite_schema_version(database_path, "runtime_state") == 4
 
 
 @pytest.mark.asyncio
@@ -217,8 +217,29 @@ async def test_runtime_state_schema_version_write_is_idempotent_across_restarts(
     await runtime_state_2.startup()
     await runtime_state_2.shutdown()
 
-    assert _sqlite_schema_version(database_path, "runtime_state") == 3
+    assert _sqlite_schema_version(database_path, "runtime_state") == 4
     assert _sqlite_schema_version_row_count(database_path, "runtime_state") == 1
+
+
+@pytest.mark.asyncio
+async def test_runtime_state_initialize_creates_query_and_cleanup_indexes(tmp_path) -> None:
+    database_path = (tmp_path / "indexed-runtime.db").resolve()
+    settings = make_settings(
+        a2a_bearer_token="test-token",
+        a2a_database_url=f"sqlite+aiosqlite:///{database_path}",
+    )
+
+    runtime_state = build_runtime_state_runtime(settings)
+    await runtime_state.startup()
+    await runtime_state.shutdown()
+
+    pending_claim_indexes = _sqlite_indexes(database_path, "a2a_pending_session_claims")
+    interrupt_indexes = _sqlite_indexes(database_path, "a2a_pending_interrupt_requests")
+
+    assert "ix_a2a_pending_session_claims_expires_at" in pending_claim_indexes
+    assert "ix_a2a_pending_interrupt_requests_identity_expires_at" in interrupt_indexes
+    assert "ix_a2a_pending_interrupt_requests_identity_type_expires_at" in interrupt_indexes
+    assert "ix_a2a_pending_interrupt_requests_tombstone_expires_at" in interrupt_indexes
 
 
 @pytest.mark.asyncio
@@ -248,6 +269,15 @@ def _sqlite_columns(database_path, table_name: str) -> set[str]:  # noqa: ANN001
     connection = sqlite3.connect(database_path)
     try:
         rows = connection.execute(f"PRAGMA table_info({table_name})").fetchall()
+        return {str(row[1]) for row in rows}
+    finally:
+        connection.close()
+
+
+def _sqlite_indexes(database_path, table_name: str) -> set[str]:  # noqa: ANN001
+    connection = sqlite3.connect(database_path)
+    try:
+        rows = connection.execute(f"PRAGMA index_list({table_name})").fetchall()
         return {str(row[1]) for row in rows}
     finally:
         connection.close()

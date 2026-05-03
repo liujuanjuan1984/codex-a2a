@@ -6,17 +6,23 @@ from sqlalchemy import (
     JSON,
     Column,
     Float,
+    Index,
     Integer,
     MetaData,
     String,
     Table,
 )
 
-from .migrations import SchemaMigration, add_missing_columns, apply_schema_migrations
+from .migrations import (
+    SchemaMigration,
+    add_missing_columns,
+    apply_schema_migrations,
+    create_missing_indexes,
+)
 
 _STATE_METADATA = MetaData()
 _RUNTIME_STATE_SCHEMA_SCOPE = "runtime_state"
-CURRENT_RUNTIME_STATE_SCHEMA_VERSION = 3
+CURRENT_RUNTIME_STATE_SCHEMA_VERSION = 4
 
 _SESSION_BINDINGS = Table(
     "a2a_session_bindings",
@@ -56,6 +62,26 @@ _PENDING_INTERRUPT_REQUESTS = Table(
     Column("tombstone_expires_at", Float, nullable=True),
     Column("rpc_request_id", JSON, nullable=False),
     Column("params", JSON, nullable=False),
+)
+
+Index(
+    "ix_a2a_pending_session_claims_expires_at",
+    _PENDING_SESSION_CLAIMS.c.expires_at,
+)
+Index(
+    "ix_a2a_pending_interrupt_requests_identity_expires_at",
+    _PENDING_INTERRUPT_REQUESTS.c.identity,
+    _PENDING_INTERRUPT_REQUESTS.c.expires_at,
+)
+Index(
+    "ix_a2a_pending_interrupt_requests_identity_type_expires_at",
+    _PENDING_INTERRUPT_REQUESTS.c.identity,
+    _PENDING_INTERRUPT_REQUESTS.c.interrupt_type,
+    _PENDING_INTERRUPT_REQUESTS.c.expires_at,
+)
+Index(
+    "ix_a2a_pending_interrupt_requests_tombstone_expires_at",
+    _PENDING_INTERRUPT_REQUESTS.c.tombstone_expires_at,
 )
 
 _THREAD_WATCH_OWNERS = Table(
@@ -117,6 +143,24 @@ def _upgrade_runtime_state_schema_to_v3(sync_conn: Any) -> None:
     )
 
 
+def _upgrade_runtime_state_schema_to_v4(sync_conn: Any) -> None:
+    create_missing_indexes(
+        sync_conn,
+        table=_PENDING_SESSION_CLAIMS,
+        indexes=tuple(sorted(_PENDING_SESSION_CLAIMS.indexes, key=lambda index: index.name or "")),
+    )
+    create_missing_indexes(
+        sync_conn,
+        table=_PENDING_INTERRUPT_REQUESTS,
+        indexes=tuple(
+            sorted(
+                _PENDING_INTERRUPT_REQUESTS.indexes,
+                key=lambda index: index.name or "",
+            )
+        ),
+    )
+
+
 _RUNTIME_STATE_MIGRATIONS = {
     1: SchemaMigration(
         version=1,
@@ -132,6 +176,11 @@ _RUNTIME_STATE_MIGRATIONS = {
         version=3,
         description="Add persisted interrupt credential identifiers.",
         upgrade=_upgrade_runtime_state_schema_to_v3,
+    ),
+    4: SchemaMigration(
+        version=4,
+        description="Add query and cleanup indexes for pending claims and interrupt requests.",
+        upgrade=_upgrade_runtime_state_schema_to_v4,
     ),
 }
 
