@@ -9,12 +9,15 @@ from typing import Any, cast
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from a2a.auth.user import UnauthenticatedUser, User
+from a2a.compat.v0_3.model_conversions import compat_task_model_to_core
 from a2a.server.context import ServerCallContext
+from a2a.server.models import TaskModel
 from a2a.server.routes.common import StarletteUser
 from a2a.server.tasks.database_task_store import DatabaseTaskStore
 from a2a.server.tasks.inmemory_task_store import InMemoryTaskStore
 from a2a.server.tasks.task_store import TaskStore
 from a2a.types import ListTasksRequest, ListTasksResponse, Task, TaskState, a2a_pb2
+from google.protobuf.json_format import MessageToDict, ParseDict  # type: ignore[import-untyped]
 from sqlalchemy import inspect, or_, select
 from sqlalchemy.dialects.postgresql import insert as postgresql_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
@@ -353,7 +356,7 @@ class PolicyAwareTaskStore(TaskStoreDecorator):
             task_model = result.scalar_one_or_none()
         if task_model is None:
             return None
-        return task_store._from_orm(task_model)
+        return _database_model_to_task(task_store, task_model)
 
     def _log_terminal_persistence_decision(
         self,
@@ -409,6 +412,65 @@ def unwrap_task_store(task_store: TaskStore) -> TaskStore:
     return task_store
 
 
+def _task_to_database_model(
+    task: Task,
+    owner: str,
+    *,
+    task_model_type: type[TaskModel],
+) -> TaskModel:
+    return task_model_type(
+        id=task.id,
+        context_id=task.context_id,
+        kind="task",
+        owner=owner,
+        last_updated=(
+            task.status.timestamp.ToDatetime() if task.status.HasField("timestamp") else None
+        ),
+        status=MessageToDict(task.status),
+        artifacts=[MessageToDict(artifact) for artifact in task.artifacts],
+        history=[MessageToDict(history) for history in task.history],
+        task_metadata=MessageToDict(task.metadata) if task.metadata.fields else None,
+        protocol_version="1.0",
+    )
+
+
+def _task_from_database_model(task_model: TaskModel) -> Task:
+    if task_model.protocol_version == "1.0":
+        task = Task(
+            id=task_model.id,
+            context_id=task_model.context_id,
+        )
+        if task_model.status:
+            ParseDict(task_model.status, task.status)
+        if task_model.artifacts:
+            for artifact_dict in task_model.artifacts:
+                artifact = task.artifacts.add()
+                ParseDict(artifact_dict, artifact)
+        if task_model.history:
+            for message_dict in task_model.history:
+                message = task.history.add()
+                ParseDict(message_dict, message)
+        if task_model.task_metadata:
+            task.metadata.update(task_model.task_metadata)
+        return task
+
+    return compat_task_model_to_core(task_model)
+
+
+def _database_task_to_model(task_store: DatabaseTaskStore, task: Task, owner: str) -> TaskModel:
+    converter = task_store.core_to_model_conversion
+    if converter is not None:
+        return converter(task, owner)
+    return _task_to_database_model(task, owner, task_model_type=task_store.task_model)
+
+
+def _database_model_to_task(task_store: DatabaseTaskStore, task_model: TaskModel) -> Task:
+    converter = task_store.model_to_core_conversion
+    if converter is not None:
+        return converter(task_model)
+    return _task_from_database_model(task_model)
+
+
 def _build_atomic_task_save_statement(
     *,
     task_store: DatabaseTaskStore,
@@ -446,7 +508,7 @@ def _resolve_atomic_insert_factory(dialect_name: str):
 
 
 def _task_row_values(task_store: DatabaseTaskStore, task: Task, owner: str) -> dict[str, Any]:
-    db_task = task_store._to_orm(task, owner)
+    db_task = _database_task_to_model(task_store, task, owner)
     values: dict[str, Any] = {}
     for column_attr in class_mapper(task_store.task_model).column_attrs:
         values[column_attr.columns[0].name] = getattr(db_task, column_attr.key)
@@ -529,6 +591,12 @@ def build_task_store_runtime(
         engine=resolved_engine,
         create_table=True,
         table_name="tasks",
+        core_to_model_conversion=lambda task, owner: _task_to_database_model(
+            task,
+            owner,
+            task_model_type=TaskModel,
+        ),
+        model_to_core_conversion=_task_from_database_model,
     )
     task_store = GuardedTaskStore(raw_task_store)
 

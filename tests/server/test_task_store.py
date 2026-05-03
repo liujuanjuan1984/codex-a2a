@@ -332,6 +332,58 @@ async def test_guarded_database_task_store_does_not_depend_on_stale_read_before_
 
 
 @pytest.mark.asyncio
+async def test_guarded_database_task_store_does_not_use_sdk_private_conversion_helpers(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    database_url = f"sqlite+aiosqlite:///{(tmp_path / 'private-conversion-guard.db').resolve()}"
+    settings = make_settings(
+        a2a_bearer_token="test-token",
+        a2a_database_url=database_url,
+    )
+    authoritative = Task(
+        id="task-1",
+        context_id="ctx-1",
+        status=TaskStatus(state=TaskState.TASK_STATE_COMPLETED),
+    )
+    late_mutation = Task(
+        id="task-1",
+        context_id="ctx-1",
+        status=TaskStatus(state=TaskState.TASK_STATE_COMPLETED),
+        metadata={"codex": {"late_mutation": True}},
+    )
+
+    first_runtime = build_task_store_runtime(settings)
+    second_runtime = build_task_store_runtime(settings)
+    await first_runtime.startup()
+    await second_runtime.startup()
+    try:
+        await first_runtime.task_store.save(authoritative)
+
+        raw_second = unwrap_task_store(second_runtime.task_store)
+        assert isinstance(raw_second, DatabaseTaskStore)
+
+        def _broken_to_orm(*_args, **_kwargs):  # noqa: ANN001
+            raise AssertionError("Guarded task save should not call DatabaseTaskStore._to_orm")
+
+        def _broken_from_orm(*_args, **_kwargs):  # noqa: ANN001
+            raise AssertionError("Guarded task save should not call DatabaseTaskStore._from_orm")
+
+        monkeypatch.setattr(raw_second, "_to_orm", _broken_to_orm)
+        monkeypatch.setattr(raw_second, "_from_orm", _broken_from_orm)
+
+        await second_runtime.task_store.save(late_mutation)
+        restored = await first_runtime.task_store.get("task-1")
+    finally:
+        await first_runtime.shutdown()
+        await second_runtime.shutdown()
+
+    assert restored is not None
+    assert restored.status.state == TaskState.TASK_STATE_COMPLETED
+    assert proto_to_python(restored.metadata) == {}
+
+
+@pytest.mark.asyncio
 async def test_guarded_database_task_store_normalizes_context_with_identity_only(
     tmp_path: Path,
 ) -> None:
