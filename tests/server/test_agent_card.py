@@ -485,15 +485,16 @@ def test_authenticated_extended_agent_card_injects_profile_into_extensions() -> 
     assert any(
         "forwards limit upstream" in note for note in session_query_params["pagination"]["notes"]
     )
-    assert (
-        session_query_params["context_semantics"]["upstream_session_id_field"]
-        == "metadata.shared.session.id"
-    )
+    assert session_query_params["context_semantics"]["upstream_session_id_field"] == "contextId"
     assert session_query_params["context_semantics"]["context_id_strategy"] == (
         "equals_upstream_session_id"
     )
     assert any(
         "contextId equal to the upstream session_id" in note
+        for note in session_query_params["context_semantics"]["notes"]
+    )
+    assert any(
+        "do not duplicate that identity under metadata.shared.session.id" in note
         for note in session_query_params["context_semantics"]["notes"]
     )
     assert "codex.sessions.shell" not in session_query_params["method_contracts"]

@@ -213,11 +213,11 @@ def test_payload_mapping_contract_helpers_require_core_identifiers() -> None:
     assert task is not None
     assert task.id == "sess-1"
     assert task.context_id == "sess-1"
-    assert task.metadata["shared"] == {"session": {"id": "sess-1"}}
+    assert task.metadata == {"codex": {"raw": {"id": " sess-1 ", "title": " Demo Session "}}}
 
     task_without_title = as_a2a_session_task({"id": "sess-2", "title": "  "})
     assert task_without_title is not None
-    assert task_without_title.metadata["shared"] == {"session": {"id": "sess-2"}}
+    assert task_without_title.metadata == {"codex": {"raw": {"id": "sess-2", "title": "  "}}}
 
     message = as_a2a_message(
         "sess-1",
@@ -231,7 +231,14 @@ def test_payload_mapping_contract_helpers_require_core_identifiers() -> None:
     assert message.message_id == "msg-1"
     assert message.role == Role.ROLE_USER
     assert message.context_id == "sess-1"
-    assert message.metadata["shared"] == {"session": {"id": "sess-1"}}
+    assert message.metadata == {
+        "codex": {
+            "raw": {
+                "info": {"id": " msg-1 ", "role": " user "},
+                "parts": [{"type": "text", "text": "hello"}],
+            }
+        }
+    }
     assert extract_raw_items([{"id": "ok"}], kind="sessions") == [{"id": "ok"}]
 
     with pytest.raises(ValueError, match="Codex sessions payload must be an array; got dict"):

@@ -26,7 +26,6 @@ def as_a2a_session_task(session: Any) -> Task | None:
         context_id=session_context_id(session_id),
         status=TaskStatus(state=TaskState.TASK_STATE_COMPLETED),
         metadata={
-            "shared": {"session": {"id": session_id}},
             "codex": {"raw": session},
         },
     )
@@ -60,7 +59,6 @@ def as_a2a_message(session_id: str, item: Any) -> Message | None:
         parts=[new_text_part(text)],
         context_id=session_context_id(session_id),
         metadata={
-            "shared": {"session": {"id": session_id}},
             "codex": {"raw": item},
         },
     )

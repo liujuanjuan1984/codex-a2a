@@ -432,7 +432,7 @@ This path is for contributors. End users should prefer the released CLI path des
 - Image input maps to upstream `turn/start.input[].type=input_image`.
 - `mention.path` and `skill.path` are forwarded verbatim. The service does not guess app or plugin identifiers from display names.
 - `local_image` is not part of the current declared stable rich-input contract.
-- Session query projections currently use the upstream Codex `session_id` as the A2A `contextId`. This is intentional for the current deployment model: `contextId` and `metadata.shared.session.id` refer to the same upstream session identity, and the contract declares that equality explicitly.
+- Session query projections currently use the upstream Codex `session_id` as the A2A `contextId`. In that projection surface, `contextId` is the canonical session identity and the adapter does not duplicate the same value under `metadata.shared.session.id`.
 - Completed chat turns are persisted as `completed`; `input-required` is reserved for active interrupt asks that still need a reply.
 - Non-streaming requests return a `Task` directly.
 - Non-streaming `message:send` responses may include normalized token usage at `Task.metadata.shared.usage` with the same field schema.
@@ -562,8 +562,9 @@ This service exposes Codex session list and message-history queries via A2A JSON
   - limit pagination defaults to `20` items and rejects values above `100`
   - pagination behavior is mixed: `codex.sessions.list` forwards `limit` upstream, while `codex.sessions.messages.list` applies the limit locally
   - `codex.sessions.messages.list` enforces `limit` locally after mapping the upstream thread history into A2A messages, keeping the most recent N messages while preserving their original order
-  - canonical session metadata is exposed at `metadata.shared.session`
+  - `contextId` is the canonical projected session identity on this surface
   - raw upstream payload is preserved at `metadata.codex.raw`
+  - this surface does not duplicate the same session identity under `metadata.shared.session`
   - display-oriented session title hints remain provider-shaped data from the upstream payload rather than part of the shared metadata contract
 
 ### Session List (`codex.sessions.list`)
