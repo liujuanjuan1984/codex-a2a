@@ -94,7 +94,6 @@ EXTENSION_CONTRACT_REGISTRY: tuple[ExtensionContractDescriptor, ...] = (
             "metadata_field",
             "behavior",
             "supported_metadata",
-            "provider_private_metadata",
         ),
     ),
     ExtensionContractDescriptor(
@@ -286,23 +285,23 @@ def build_agent_card_extensions_from_registry(
                     "block_part_types": params["block_part_types"],
                     "stream_fields": _select_public_extension_params(
                         params["stream_fields"],
-                        keys=("block_type", "message_id", "sequence", "source"),
+                        keys=("block_type", "sequence", "source"),
                     ),
                     "status_stream_fields": _select_public_extension_params(
                         params["status_stream_fields"],
-                        keys=("type", "status", "source", "event_id"),
+                        keys=("source",),
                     ),
                     "session_fields": _select_public_extension_params(
                         params["session_fields"],
-                        keys=("id", "title"),
+                        keys=("id",),
                     ),
                     "interrupt_fields": _select_public_extension_params(
                         params["interrupt_fields"],
-                        keys=("request_id", "type", "phase", "resolution"),
+                        keys=("request_id", "type", "phase"),
                     ),
                     "usage_fields": _select_public_extension_params(
                         params["usage_fields"],
-                        keys=("input_tokens", "output_tokens", "total_tokens", "reasoning_tokens"),
+                        keys=("input_tokens", "output_tokens", "total_tokens"),
                     ),
                 }
             elif descriptor.public_params_keys is not None:

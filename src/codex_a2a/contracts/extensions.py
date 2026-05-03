@@ -453,11 +453,7 @@ def build_session_binding_extension_params(
     return {
         "metadata_field": extension_specs.SHARED_SESSION_BINDING_FIELD,
         "behavior": "prefer_metadata_binding_else_create_session",
-        "supported_metadata": [
-            "shared.session.id",
-            "codex.directory",
-            "codex.execution",
-        ],
+        "supported_metadata": ["shared.session.id"],
         "provider_private_metadata": list(extension_specs._REQUEST_EXECUTION_PROVIDER_METADATA),
         "request_execution_options": extension_specs._build_request_execution_options_contract(),
         "profile": runtime_profile.summary_dict(),
@@ -653,14 +649,21 @@ def build_session_query_extension_params(
         "result_envelope": {},
         "context_semantics": {
             "a2a_context_id_field": "contextId",
-            "upstream_session_id_field": extension_specs.SHARED_SESSION_BINDING_FIELD,
+            "upstream_session_id_field": "contextId",
             "context_id_strategy": "equals_upstream_session_id",
             "notes": [
                 (
                     "session query projections currently set contextId equal to the "
                     "upstream session_id"
                 ),
-                "metadata.shared.session.id carries the same upstream session identity explicitly",
+                (
+                    "session query projections do not duplicate that identity under "
+                    "metadata.shared.session.id"
+                ),
+                (
+                    "metadata.shared.session.id remains the request-side rebinding hint "
+                    "for the shared session-binding extension"
+                ),
             ],
         },
     }

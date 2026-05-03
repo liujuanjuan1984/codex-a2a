@@ -29,7 +29,7 @@ Negotiation note:
 URI: `urn:a2a:session-binding/v1`
 
 - Scope: shared A2A request metadata for rebinding to an existing upstream session
-- Public Agent Card: capability declaration plus minimal routing metadata
+- Public Agent Card: capability declaration plus minimal routing metadata for `shared.session.id` only
 - Authenticated extended card: full profile, notes, and detailed contract metadata
 - OpenAPI: shared contract payload under `x-a2a-extension-contracts.session_binding`
 - Runtime field: `metadata.shared.session.id`
@@ -39,7 +39,7 @@ URI: `urn:a2a:session-binding/v1`
 URI: `urn:a2a:stream-hints/v1`
 
 - Scope: shared canonical metadata for block, usage, interrupt, and session hints
-- Public Agent Card: metadata roots plus the minimum discoverability fields for block identity, status, interrupt lifecycle, session identity, and basic token usage
+- Public Agent Card: metadata roots plus the minimum discoverability fields for block identity, status source, interrupt lifecycle, session identity, and basic token usage
 - Authenticated extended card: full shared stream contract including detailed block payload mappings and extended usage metadata
 - OpenAPI: shared contract payload under `x-a2a-extension-contracts.streaming`
 - Runtime fields: `metadata.shared.stream`, `metadata.shared.usage`, `metadata.shared.interrupt`, `metadata.shared.session`
