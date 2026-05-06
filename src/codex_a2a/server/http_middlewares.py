@@ -217,10 +217,6 @@ def _canonical_rest_path(path: str) -> str:
     return path
 
 
-def _is_rest_message_path(path: str) -> bool:
-    return _canonical_rest_path(path) in _REST_MESSAGE_PATHS
-
-
 def _requires_protocol_negotiation(request: Request) -> bool:
     path = _canonical_rest_path(request.url.path)
     if request.method == "OPTIONS":
@@ -237,14 +233,6 @@ def _jsonrpc_request_id(payload: dict | None) -> str | int | None:
     if isinstance(request_id, str | int):
         return request_id
     return None
-
-
-def _requested_protocol_version(request: Request) -> tuple[str | None, str | None]:
-    header_value = request.headers.get("A2A-Version")
-    query_value = request.query_params.get("A2A-Version")
-    if query_value is None:
-        query_value = request.query_params.get("a2a-version")
-    return header_value, query_value
 
 
 def _jsonrpc_error_response(
@@ -265,21 +253,6 @@ def _jsonrpc_error_response(
             "error": error_payload,
         },
         status_code=200,
-    )
-
-
-def _unsupported_protocol_jsonrpc_response(
-    *,
-    request_id: str | int | None,
-    exc: UnsupportedProtocolVersionError,
-) -> JSONResponse:
-    return _jsonrpc_error_response(
-        request_id=request_id,
-        error=version_not_supported_error(
-            requested_version=exc.requested_version,
-            supported_protocol_versions=list(exc.supported_protocol_versions),
-            default_protocol_version=exc.default_protocol_version,
-        ),
     )
 
 
@@ -344,7 +317,10 @@ def install_http_middlewares(
         if not _requires_protocol_negotiation(request):
             return await call_next(request)
 
-        header_value, query_value = _requested_protocol_version(request)
+        header_value = request.headers.get("A2A-Version")
+        query_value = request.query_params.get("A2A-Version")
+        if query_value is None:
+            query_value = request.query_params.get("a2a-version")
         try:
             negotiated = negotiate_protocol_version(
                 header_value=header_value,
@@ -354,9 +330,13 @@ def install_http_middlewares(
             request_id: str | int | None = None
             if request.method == "POST" and _is_jsonrpc_path(request.url.path):
                 request_id = _jsonrpc_request_id(_parse_json_body(await _get_request_body(request)))
-                return _unsupported_protocol_jsonrpc_response(
+                return _jsonrpc_error_response(
                     request_id=request_id,
-                    exc=exc,
+                    error=version_not_supported_error(
+                        requested_version=exc.requested_version,
+                        supported_protocol_versions=list(exc.supported_protocol_versions),
+                        default_protocol_version=exc.default_protocol_version,
+                    ),
                 )
             return _unsupported_protocol_http_response(exc)
 
@@ -421,7 +401,10 @@ def install_http_middlewares(
 
     @app.middleware("http")
     async def guard_rest_payload_shape(request: Request, call_next):
-        if request.method != "POST" or not _is_rest_message_path(request.url.path):
+        if (
+            request.method != "POST"
+            or _canonical_rest_path(request.url.path) not in _REST_MESSAGE_PATHS
+        ):
             return await call_next(request)
 
         body = await _get_request_body(request)
