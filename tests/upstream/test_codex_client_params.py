@@ -27,7 +27,6 @@ from tests.support.settings import make_settings
 def _bind_rpc_request(client: CodexClient, rpc_request) -> None:  # noqa: ANN001
     client._rpc_request = rpc_request
     client._conversation_facade._rpc_request = rpc_request
-    client._exec_facade._rpc_request = rpc_request
 
 
 @pytest.mark.asyncio

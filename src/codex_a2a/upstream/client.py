@@ -14,7 +14,6 @@ from codex_a2a.logging_context import (
     install_log_record_factory,
 )
 from codex_a2a.upstream.conversation_facade import CodexConversationFacade
-from codex_a2a.upstream.exec_facade import CodexExecFacade
 from codex_a2a.upstream.interrupt_bridge import CodexInterruptBridge
 from codex_a2a.upstream.interrupts import (
     INTERRUPT_REQUEST_TOMBSTONE_TTL_SECONDS,
@@ -29,6 +28,7 @@ from codex_a2a.upstream.request_mapping import (
     build_discovery_plugin_read_params,
     build_discovery_plugins_params,
     build_discovery_skills_params,
+    build_interactive_exec_params,
 )
 from codex_a2a.upstream.startup import (
     build_cli_config_args,
@@ -90,10 +90,6 @@ class CodexClient:
             rpc_request=self._rpc_request,
             get_or_create_tracker=self._stream_bridge.get_or_create_tracker,
             turn_trackers=self._stream_bridge.turn_trackers,
-        )
-        self._exec_facade = CodexExecFacade(
-            workspace_root=self._workspace_root,
-            rpc_request=self._rpc_request,
         )
         self._interrupt_bridge = CodexInterruptBridge(
             now=lambda: time.time(),
@@ -394,11 +390,27 @@ class CodexClient:
         directory: str | None = None,
         timeout_override: float | None | _UnsetType = _UNSET,
     ) -> dict[str, Any]:
-        return await self._exec_facade.exec_start(
-            request,
-            directory=directory,
-            timeout_seconds=self._resolve_timeout_seconds(timeout_override=timeout_override),
+        result = await self._rpc_request(
+            "command/exec",
+            build_interactive_exec_params(
+                command_text=str(request["command"]).strip(),
+                arguments=request.get("arguments"),
+                process_id=str(request["process_id"]).strip(),
+                directory=directory,
+                default_workspace_root=self._workspace_root,
+                tty=bool(request.get("tty", True)),
+                rows=request.get("rows"),
+                cols=request.get("cols"),
+                output_bytes_cap=request.get("output_bytes_cap"),
+                disable_output_cap=request.get("disable_output_cap"),
+                timeout_ms=request.get("timeout_ms"),
+                disable_timeout=request.get("disable_timeout"),
+            ),
+            timeout_override=self._resolve_timeout_seconds(timeout_override=timeout_override),
         )
+        if not isinstance(result, dict):
+            raise RuntimeError("codex command/exec response missing result object")
+        return result
 
     async def exec_write(
         self,
@@ -407,11 +419,12 @@ class CodexClient:
         delta_base64: str | None = None,
         close_stdin: bool | None = None,
     ) -> None:
-        await self._exec_facade.exec_write(
-            process_id=process_id,
-            delta_base64=delta_base64,
-            close_stdin=close_stdin,
-        )
+        params: dict[str, Any] = {"processId": process_id}
+        if delta_base64 is not None:
+            params["deltaBase64"] = delta_base64
+        if close_stdin is not None:
+            params["closeStdin"] = close_stdin
+        await self._rpc_request("command/exec/write", params)
 
     async def exec_resize(
         self,
@@ -420,10 +433,9 @@ class CodexClient:
         rows: int,
         cols: int,
     ) -> None:
-        await self._exec_facade.exec_resize(
-            process_id=process_id,
-            rows=rows,
-            cols=cols,
+        await self._rpc_request(
+            "command/exec/resize",
+            {"processId": process_id, "size": {"rows": rows, "cols": cols}},
         )
 
     async def exec_terminate(
@@ -431,7 +443,7 @@ class CodexClient:
         *,
         process_id: str,
     ) -> None:
-        await self._exec_facade.exec_terminate(process_id=process_id)
+        await self._rpc_request("command/exec/terminate", {"processId": process_id})
 
     async def resolve_interrupt_request(
         self, request_id: str

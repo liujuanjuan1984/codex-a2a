@@ -21,7 +21,6 @@ flowchart TD
         Client["client.py (CodexClient)"]
         Transport["transport.py (Stdio JSON-RPC)"]
         ConvFacade["conversation_facade.py"]
-        ExecFacade["exec_facade.py"]
         Bridge["stream_bridge.py / interrupt_bridge.py"]
     end
 
@@ -65,7 +64,7 @@ flowchart TD
 -   **`client.py`**: A coordinator facade that brings together transport, facades, and bridges.
 -   **`transport.py`**: Manages the life of the `codex app-server` subprocess and JSON-RPC message exchange.
 -   **`conversation_facade.py`**: Translates A2A thread/message concepts to Codex `thread/*` and `turn/*` RPCs.
--   **`exec_facade.py`**: Manages the standalone `command/exec` interactive surface.
+-   **`client.py` exec helpers**: Manage the standalone `command/exec` interactive surface directly because the mapping stayed too small to justify a dedicated facade module.
 -   **`stream_bridge.py`**: Decouples incoming JSON-RPC notifications from specific request/response pairs.
 -   **`interrupt_bridge.py`**: Manages the lifecycle of server-initiated requests (asked/replied).
 
