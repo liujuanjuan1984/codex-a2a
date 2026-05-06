@@ -80,6 +80,7 @@ Before starting the runtime:
 - Configure Codex with a working provider/model setup and any required credentials.
 - `codex-a2a` does not provision Codex providers, login state, or API keys for you.
 - Startup fails fast if the local `codex` runtime is missing or cannot initialize.
+- For long-running Linux service-manager deployments, set `CODEX_CLI_BIN` explicitly to the bundled native Codex binary. See [Usage Guide](docs/guide.md) for the recommended setup.
 
 Self-start the released CLI against a workspace root:
 

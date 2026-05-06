@@ -221,6 +221,7 @@ These variables are forwarded to the local `codex app-server` subprocess.
 
 - `CODEX_WORKSPACE_ROOT`: default Codex workspace root (optional)
 - `CODEX_CLI_BIN`: Codex CLI binary path, default `codex`
+  - For long-running Linux deployments managed by PM2, systemd, or similar supervisors, set this explicitly to the bundled native Codex binary.
 - `CODEX_MODEL`: default Codex model, default `gpt-5.1-codex`
 - `CODEX_APPROVAL_POLICY`: default approval policy (`never`, `on-request`, etc.)
 - `CODEX_SANDBOX_MODE`: default sandbox mode (`danger-full-access`, `read-only`, etc.)
@@ -399,6 +400,39 @@ CODEX_WORKSPACE_ROOT=/abs/path/to/workspace uv run codex-a2a serve
 ```
 
 This path is for contributors. End users should prefer the released CLI path described first in [README.md](../README.md) and above in this guide.
+
+## Stable Linux Codex CLI Setup
+
+For long-running Linux deployments, configure `codex-a2a-serve` to launch the bundled native Codex binary directly through `CODEX_CLI_BIN`.
+
+Resolve the native binary from the installed `codex` command:
+
+```bash
+CODEX_WRAPPER_BIN="$(readlink -f "$(command -v codex)")"
+CODEX_PACKAGE_ROOT="$(dirname "$(dirname "$CODEX_WRAPPER_BIN")")"
+CODEX_NATIVE_BIN="$CODEX_PACKAGE_ROOT/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/codex/codex"
+test -x "$CODEX_NATIVE_BIN"
+```
+
+Export the resolved path before starting the service:
+
+```bash
+export CODEX_CLI_BIN="$CODEX_NATIVE_BIN"
+```
+
+PM2 example:
+
+```bash
+CODEX_CLI_BIN="$CODEX_NATIVE_BIN" uv run codex-a2a serve
+```
+
+Systemd example:
+
+```ini
+Environment=CODEX_CLI_BIN=/absolute/path/to/codex
+```
+
+On the current npm global install layout for Linux x64, the command above resolves the bundled native binary shipped with `@openai/codex`.
 
 ## Service Behavior
 
