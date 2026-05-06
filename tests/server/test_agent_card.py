@@ -729,7 +729,10 @@ def test_authenticated_extended_agent_card_injects_profile_into_extensions() -> 
     assert compatibility_params["deployment"] == profile["deployment"]
     assert compatibility_params["runtime_features"] == profile["runtime_features"]
     assert compatibility_params["core"]["jsonrpc_endpoint"] == CORE_JSONRPC_PATH
-    assert compatibility_params["extension_transport"]["jsonrpc_endpoint"] == EXTENSION_JSONRPC_PATH
+    assert compatibility_params["extension_transport"] == {
+        "jsonrpc_endpoint": EXTENSION_JSONRPC_PATH,
+        "protocol_version": "1.0",
+    }
     assert "GetExtendedAgentCard" in compatibility_params["core"]["jsonrpc_methods"]
     assert compatibility_params["extension_taxonomy"]["shared_agent_card_extensions"] == [
         SESSION_BINDING_EXTENSION_URI,

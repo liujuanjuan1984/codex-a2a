@@ -85,6 +85,28 @@ def test_capability_snapshot_tracks_session_query_only_surface() -> None:
     assert "codex.sessions.prompt_async" not in snapshot.supported_jsonrpc_methods
 
 
+def test_provider_private_contract_builders_reject_non_1_0_protocol_version() -> None:
+    runtime_profile = build_runtime_profile(make_settings(a2a_bearer_token="test-token"))
+
+    with pytest.raises(
+        ValueError,
+        match="Provider-private codex contracts must stay on the 1.0 protocol line.",
+    ):
+        build_wire_contract_extension_params(
+            protocol_version="2.0",
+            runtime_profile=runtime_profile,
+        )
+
+    with pytest.raises(
+        ValueError,
+        match="Provider-private codex contracts must stay on the 1.0 protocol line.",
+    ):
+        build_compatibility_profile_params(
+            protocol_version="0.3",
+            runtime_profile=runtime_profile,
+        )
+
+
 def test_session_query_contract_ssot_matches_openapi_contract() -> None:
     settings = make_settings(a2a_bearer_token="test-token")
     runtime_profile = build_runtime_profile(settings)

@@ -206,8 +206,19 @@ def _is_jsonrpc_path(path: str) -> bool:
     }
 
 
+def _canonical_rest_path(path: str) -> str:
+    rest_prefix = extension_contracts.REST_API_PATH_PREFIX
+    if path == rest_prefix or path.startswith(f"{rest_prefix}/"):
+        return path
+    marker = f"{rest_prefix}/"
+    marker_index = path.find(marker, 1)
+    if marker_index > 0 and "/" not in path[1:marker_index]:
+        return path[marker_index:]
+    return path
+
+
 def _requires_protocol_negotiation(request: Request) -> bool:
-    path = request.url.path
+    path = _canonical_rest_path(request.url.path)
     if request.method == "OPTIONS":
         return False
     return _is_jsonrpc_path(path) or path.startswith(f"{extension_contracts.REST_API_PATH_PREFIX}/")
@@ -222,14 +233,6 @@ def _jsonrpc_request_id(payload: dict | None) -> str | int | None:
     if isinstance(request_id, str | int):
         return request_id
     return None
-
-
-def _requested_protocol_version(request: Request) -> tuple[str | None, str | None]:
-    header_value = request.headers.get("A2A-Version")
-    query_value = request.query_params.get("A2A-Version")
-    if query_value is None:
-        query_value = request.query_params.get("a2a-version")
-    return header_value, query_value
 
 
 def _jsonrpc_error_response(
@@ -250,21 +253,6 @@ def _jsonrpc_error_response(
             "error": error_payload,
         },
         status_code=200,
-    )
-
-
-def _unsupported_protocol_jsonrpc_response(
-    *,
-    request_id: str | int | None,
-    exc: UnsupportedProtocolVersionError,
-) -> JSONResponse:
-    return _jsonrpc_error_response(
-        request_id=request_id,
-        error=version_not_supported_error(
-            requested_version=exc.requested_version,
-            supported_protocol_versions=list(exc.supported_protocol_versions),
-            default_protocol_version=exc.default_protocol_version,
-        ),
     )
 
 
@@ -329,7 +317,10 @@ def install_http_middlewares(
         if not _requires_protocol_negotiation(request):
             return await call_next(request)
 
-        header_value, query_value = _requested_protocol_version(request)
+        header_value = request.headers.get("A2A-Version")
+        query_value = request.query_params.get("A2A-Version")
+        if query_value is None:
+            query_value = request.query_params.get("a2a-version")
         try:
             negotiated = negotiate_protocol_version(
                 header_value=header_value,
@@ -339,9 +330,13 @@ def install_http_middlewares(
             request_id: str | int | None = None
             if request.method == "POST" and _is_jsonrpc_path(request.url.path):
                 request_id = _jsonrpc_request_id(_parse_json_body(await _get_request_body(request)))
-                return _unsupported_protocol_jsonrpc_response(
+                return _jsonrpc_error_response(
                     request_id=request_id,
-                    exc=exc,
+                    error=version_not_supported_error(
+                        requested_version=exc.requested_version,
+                        supported_protocol_versions=list(exc.supported_protocol_versions),
+                        default_protocol_version=exc.default_protocol_version,
+                    ),
                 )
             return _unsupported_protocol_http_response(exc)
 
@@ -364,8 +359,9 @@ def install_http_middlewares(
             return await call_next(request)
 
         path = request.url.path
+        canonical_path = _canonical_rest_path(path)
         is_public_card = path in _PUBLIC_AGENT_CARD_PATHS
-        is_extended_card = path in _AUTHENTICATED_EXTENDED_CARD_PATHS
+        is_extended_card = canonical_path in _AUTHENTICATED_EXTENDED_CARD_PATHS
         if not is_public_card and not is_extended_card:
             return await call_next(request)
 
@@ -405,7 +401,10 @@ def install_http_middlewares(
 
     @app.middleware("http")
     async def guard_rest_payload_shape(request: Request, call_next):
-        if request.method != "POST" or request.url.path not in _REST_MESSAGE_PATHS:
+        if (
+            request.method != "POST"
+            or _canonical_rest_path(request.url.path) not in _REST_MESSAGE_PATHS
+        ):
             return await call_next(request)
 
         body = await _get_request_body(request)
@@ -427,7 +426,7 @@ def install_http_middlewares(
 
     @app.middleware("http")
     async def guard_missing_subscribe_task(request: Request, call_next):
-        path = request.url.path
+        path = _canonical_rest_path(request.url.path)
         if not path.startswith("/v1/tasks/") or not path.endswith(":subscribe"):
             return await call_next(request)
 
