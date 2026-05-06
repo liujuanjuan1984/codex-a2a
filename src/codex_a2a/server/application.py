@@ -8,6 +8,7 @@ import uvicorn
 from a2a.server.routes.agent_card_routes import create_agent_card_routes
 from a2a.server.routes.rest_routes import create_rest_routes
 from fastapi import FastAPI
+from starlette.routing import BaseRoute, Mount
 
 from codex_a2a.client.manager import A2AClientManager
 from codex_a2a.config import Settings
@@ -44,6 +45,17 @@ from .http_middlewares import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _is_sdk_tenant_mount(route: BaseRoute) -> bool:
+    return isinstance(route, Mount) and route.path == "/{tenant}"
+
+
+def _create_single_tenant_rest_routes(**kwargs: Any) -> list[BaseRoute]:
+    # The SDK exposes a tenant-prefixed REST alias by default. This service's
+    # supported HTTP+JSON contract is the documented single-tenant `/v1/...`
+    # surface, so the application assembly narrows the route set explicitly.
+    return [route for route in create_rest_routes(**kwargs) if not _is_sdk_tenant_mount(route)]
 
 
 def create_app(settings: Settings) -> FastAPI:
@@ -194,7 +206,7 @@ def create_app(settings: Settings) -> FastAPI:
         )
     )
     app.router.routes.extend(
-        create_rest_routes(
+        _create_single_tenant_rest_routes(
             request_handler=handler,
             context_builder=context_builder,
             path_prefix=extension_contracts.REST_API_PATH_PREFIX,
