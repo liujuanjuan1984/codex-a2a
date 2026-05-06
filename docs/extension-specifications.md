@@ -24,6 +24,13 @@ Negotiation note:
 - Provider-private `codex.*` extension URIs and the shared interrupt callback URI are declaration-only contracts. Discover them from the authenticated extended Agent Card or OpenAPI, then invoke the documented JSON-RPC methods directly; no additional `A2A-Extensions` activation header is required for those methods.
 - `wire_contract` and `compatibility_profile` are descriptive metadata contracts, not activatable runtime extensions.
 
+Canonical URI note:
+
+- The `urn:` identifiers listed below remain the canonical extension URIs for the current `1.x` line of `codex-a2a`.
+- This document is the stable repository-owned specification index for those URIs, but the project does not currently claim "spec hosting at the extension URI" for them.
+- A future move to dereferenceable HTTPS extension URIs should happen only when the project has a long-lived namespace and redirect policy that are independent from deployment instance URLs and GitHub branch/blob URLs.
+- If that migration happens later, the new HTTPS URIs should be versioned and should replace the legacy `urn:` identifiers as the single canonical runtime identities for the new compatibility line.
+
 ## Shared Session Binding v1
 
 URI: `urn:a2a:session-binding/v1`

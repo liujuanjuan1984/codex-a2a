@@ -86,6 +86,13 @@ That inventory must be reusable by:
 - No public expansion of provider-private extension declarations.
 - No compatibility shim for A2A 0.3 behavior.
 
+## Canonical URI Strategy Snapshot
+
+- Existing `urn:` extension URIs remain the canonical contract identifiers for the current `1.x` line.
+- `docs/extension-specifications.md` is the repository-managed specification index, but it is not itself the canonical extension URI namespace.
+- A future migration to dereferenceable HTTPS extension URIs should only happen after the project controls a long-lived namespace with explicit redirect governance. Deployment instance URLs and GitHub branch/blob URLs are not suitable canonical identifiers.
+- If a future migration happens, each extension should move to a versioned HTTPS URI that becomes the single canonical identifier for that compatibility line. Legacy `urn:` identifiers may remain documented as historical aliases, but they should not be dual-advertised indefinitely as concurrent runtime identities.
+
 ## Follow-On Phases
 
 Phase 2 will unify request-level negotiation, disclosure layering, and runtime behavior around the authenticated extension declaration model.
