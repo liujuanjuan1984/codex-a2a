@@ -7,6 +7,7 @@ from pydantic import ValidationError
 
 from codex_a2a import __version__
 from codex_a2a.config import Settings
+from tests.support.settings import make_settings
 
 
 def _registry_env(credentials: list[dict[str, object]] | None = None) -> dict[str, str]:
@@ -212,6 +213,32 @@ def test_settings_enable_turn_control_by_default() -> None:
         settings = Settings.from_env()
 
     assert settings.a2a_enable_turn_control is True
+
+
+def test_make_settings_ignores_ambient_environment_sources() -> None:
+    polluted_env = {
+        "A2A_HOST": "100.89.160.53",
+        "A2A_PORT": "19010",
+        "A2A_PUBLIC_URL": "http://100.89.160.53:19010",
+        "CODEX_MODEL": "gpt-5.4",
+        "CODEX_WEB_SEARCH": "live",
+        "CODEX_APPROVAL_POLICY": "never",
+        "CODEX_SANDBOX_MODE": "danger-full-access",
+        "CODEX_MODEL_REASONING_EFFORT": "high",
+        "CODEX_WORKSPACE_ROOT": "/tmp/polluted-workspace",
+    }
+    with mock.patch.dict(os.environ, polluted_env, clear=True):
+        settings = make_settings(a2a_bearer_token="test-token")
+
+    assert settings.a2a_host == "127.0.0.1"
+    assert settings.a2a_port == 8000
+    assert settings.a2a_public_url == "http://127.0.0.1:8000"
+    assert settings.codex_model == "gpt-5.1-codex"
+    assert settings.codex_web_search is None
+    assert settings.codex_approval_policy is None
+    assert settings.codex_sandbox_mode is None
+    assert settings.codex_model_reasoning_effort is None
+    assert settings.codex_workspace_root is None
 
 
 def test_settings_explicit_none_database_url_is_not_replaced_by_dynamic_default() -> None:
