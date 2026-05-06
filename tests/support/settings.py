@@ -7,6 +7,22 @@ from codex_a2a.config import Settings
 _UNSET = object()
 
 
+class _IsolatedTestSettings(Settings):
+    """Test-only settings variant that ignores ambient env and .env sources."""
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls,
+        init_settings,
+        env_settings,
+        dotenv_settings,
+        file_secret_settings,
+    ):
+        del settings_cls, env_settings, dotenv_settings, file_secret_settings
+        return (init_settings,)
+
+
 def _build_test_auth_credentials(overrides: dict[str, Any]) -> tuple[dict[str, Any], ...]:
     explicit_registry = overrides.pop("a2a_static_auth_credentials", _UNSET)
     if explicit_registry is not _UNSET:
@@ -59,4 +75,4 @@ def make_settings(**overrides: Any) -> Settings:
     auth_credentials = _build_test_auth_credentials(overrides)
     base.update(overrides)
     base["a2a_static_auth_credentials"] = auth_credentials
-    return Settings(**base)
+    return _IsolatedTestSettings(**base)
