@@ -759,7 +759,9 @@ def test_authenticated_extended_agent_card_injects_profile_into_extensions() -> 
         "single-tenant, shared-workspace coding profile" in note
         for note in compatibility_params["consumer_guidance"]
     )
-    assert any("urn:a2a:*" in note for note in compatibility_params["consumer_guidance"])
+    assert any(
+        "urn:codex-a2a:extension:" in note for note in compatibility_params["consumer_guidance"]
+    )
     assert any(
         "execution_environment" in note for note in compatibility_params["consumer_guidance"]
     )
@@ -780,36 +782,36 @@ def test_authenticated_extended_agent_card_injects_profile_into_extensions() -> 
     interrupt_recovery_policy = compatibility_params["method_retention"]["codex.interrupts.list"]
     assert interrupt_recovery_policy["availability"] == "always"
     assert interrupt_recovery_policy["retention"] == "stable"
-    assert interrupt_recovery_policy["extension_uri"] == "urn:codex-a2a:codex-interrupt-recovery/v1"
+    assert interrupt_recovery_policy["extension_uri"] == INTERRUPT_RECOVERY_EXTENSION_URI
     assert compatibility_params["method_retention"]["codex.sessions.list"] == {
         "surface": "extension",
         "availability": "always",
         "retention": "stable",
-        "extension_uri": "urn:codex-a2a:codex-session-query/v1",
+        "extension_uri": SESSION_QUERY_EXTENSION_URI,
     }
     exec_policy = compatibility_params["method_retention"]["codex.exec.start"]
     assert exec_policy["availability"] == "enabled"
     assert exec_policy["retention"] == "deployment-conditional"
-    assert exec_policy["extension_uri"] == "urn:codex-a2a:codex-exec/v1"
+    assert exec_policy["extension_uri"] == EXEC_CONTROL_EXTENSION_URI
     assert exec_policy["toggle"] == "A2A_ENABLE_EXEC_CONTROL"
     thread_policy = compatibility_params["method_retention"]["codex.threads.watch"]
     assert thread_policy["availability"] == "always"
     assert thread_policy["retention"] == "stable"
-    assert thread_policy["extension_uri"] == "urn:codex-a2a:codex-thread-lifecycle/v1"
+    assert thread_policy["extension_uri"] == THREAD_LIFECYCLE_EXTENSION_URI
     turn_policy = compatibility_params["method_retention"]["codex.turns.steer"]
     assert turn_policy["availability"] == "enabled"
     assert turn_policy["retention"] == "deployment-conditional"
-    assert turn_policy["extension_uri"] == "urn:codex-a2a:codex-turn-control/v1"
+    assert turn_policy["extension_uri"] == TURN_CONTROL_EXTENSION_URI
     assert turn_policy["toggle"] == "A2A_ENABLE_TURN_CONTROL"
     review_policy = compatibility_params["method_retention"]["codex.review.start"]
     assert review_policy["availability"] == "enabled"
     assert review_policy["retention"] == "deployment-conditional"
-    assert review_policy["extension_uri"] == "urn:codex-a2a:codex-review/v1"
+    assert review_policy["extension_uri"] == REVIEW_CONTROL_EXTENSION_URI
     assert review_policy["toggle"] == "A2A_ENABLE_REVIEW_CONTROL"
     review_watch_policy = compatibility_params["method_retention"]["codex.review.watch"]
     assert review_watch_policy["availability"] == "enabled"
     assert review_watch_policy["retention"] == "deployment-conditional"
-    assert review_watch_policy["extension_uri"] == "urn:codex-a2a:codex-review/v1"
+    assert review_watch_policy["extension_uri"] == REVIEW_CONTROL_EXTENSION_URI
     assert review_watch_policy["toggle"] == "A2A_ENABLE_REVIEW_CONTROL"
 
 

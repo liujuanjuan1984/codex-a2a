@@ -4,6 +4,11 @@ import httpx
 import pytest
 
 from codex_a2a.contracts.extension_registry import build_openapi_extension_contracts_from_registry
+from codex_a2a.contracts.extension_specs import (
+    ALL_EXTENSION_URIS,
+    EXTENSION_SPEC_DOCUMENT_PATHS_BY_URI,
+    EXTENSION_URI_NAMESPACE,
+)
 from codex_a2a.contracts.extensions import (
     COMPATIBILITY_PROFILE_EXTENSION_URI,
     CORE_JSONRPC_PATH,
@@ -389,6 +394,25 @@ def test_openapi_and_agent_card_contract_partitions_match() -> None:
         core_codex_contract["compatibility_profile"]
         == extension_codex_contract["compatibility_profile"]
     )
+
+
+def test_extension_uris_map_to_repository_spec_index() -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    index_path = repo_root / "docs" / "extension-specifications.md"
+    index_text = index_path.read_text(encoding="utf-8")
+
+    spec_paths = {repo_root / path for path in EXTENSION_SPEC_DOCUMENT_PATHS_BY_URI.values()}
+    assert spec_paths == {index_path}
+
+    for uri in ALL_EXTENSION_URIS:
+        assert uri.startswith(EXTENSION_URI_NAMESPACE), (
+            "Extension URI drifted away from the repository-governed permanent URN namespace."
+        )
+        local_spec_path = repo_root / EXTENSION_SPEC_DOCUMENT_PATHS_BY_URI[uri]
+        assert local_spec_path.is_file(), (
+            f"Extension URI {uri!r} does not map to a checked-in spec document."
+        )
+        assert uri in index_text
 
 
 def test_guide_mentions_declared_streaming_contract_fields() -> None:

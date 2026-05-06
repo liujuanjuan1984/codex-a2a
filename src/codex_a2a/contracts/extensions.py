@@ -388,9 +388,9 @@ def build_compatibility_profile_params(
                 "do not assume per-consumer workspace or tenant isolation."
             ),
             (
-                "Treat urn:a2a:* extension URIs in this repository as shared extension "
-                "conventions used across this repo family, not as claims that they are part "
-                "of the A2A core baseline."
+                "Treat urn:codex-a2a:extension:* URIs in this repository as "
+                "repository-governed, versioned extension identifiers rather than as "
+                "claims that they are part of the A2A core baseline."
             ),
             (
                 "Treat shared session-binding and stream-hints as the negotiated "

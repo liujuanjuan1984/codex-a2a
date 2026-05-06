@@ -139,7 +139,7 @@ Retention guidance:
 - Treat core methods as the generic client interoperability baseline.
 - Treat this deployment as a single-tenant, shared-workspace coding profile.
 - Treat shared session-binding and streaming metadata contracts as required for the current deployment model; they are not optional documentation-only hints.
-- Treat `urn:a2a:*` extension URIs in this repository as shared extension conventions used across this repo family, not as claims that they are part of the A2A core baseline.
+- Treat `urn:codex-a2a:extension:...` extension URIs in this repository as repository-governed extension identifiers, not as claims that they are part of the A2A core baseline.
 - Treat `a2a.interrupt.*` methods as a shared provider-private callback contract on `POST /`, not as core A2A methods or Agent Card-negotiated extensions.
 - Treat `codex.*` methods plus `metadata.codex.directory` and `metadata.codex.execution` as Codex-specific extensions or provider-private operational surfaces rather than portable A2A baseline capabilities.
 - Treat `codex.interrupts.list` as an adapter-local recovery surface for rediscovering active pending interrupt request IDs after reconnecting.
@@ -479,7 +479,7 @@ On the current npm global install layout for Linux x64, the command above resolv
 - If task persistence fails while processing a request, the service maps that failure to a stable failed task or failed final status instead of leaking raw task-store exceptions.
 - Those task-store failure surfaces use `metadata.codex.error` with `type=TASK_STORE_UNAVAILABLE` and an `operation` field such as `get` or `save`.
 - Stream artifacts carry `artifact.metadata.shared.stream.block_type` with values `text`, `reasoning`, and `tool_call`.
-- The published `urn:a2a:stream-hints/v1` contract also declares the emitted A2A part type per block: `text` and `reasoning` use `Part(text)`, while `tool_call` uses `Part(data)`.
+- The published `urn:codex-a2a:extension:shared:stream-hints:v1` contract also declares the emitted A2A part type per block: `text` and `reasoning` use `Part(text)`, while `tool_call` uses `Part(data)`.
 - All chunks share one stream artifact ID and preserve original timeline via `artifact.metadata.shared.stream.sequence`.
 - Advanced correlation fields such as `metadata.shared.stream.message_id` and `metadata.shared.stream.event_id` may still appear on detailed/runtime surfaces, but the public shared contract only exposes the minimum stable discovery fields.
 - Session projections are normalized under `metadata.shared.session`, with `id` as the canonical shared field.

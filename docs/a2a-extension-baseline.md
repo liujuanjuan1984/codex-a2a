@@ -88,10 +88,10 @@ That inventory must be reusable by:
 
 ## Canonical URI Strategy Snapshot
 
-- Existing `urn:` extension URIs remain the canonical contract identifiers for the current `1.x` line.
-- `docs/extension-specifications.md` is the repository-managed specification index, but it is not itself the canonical extension URI namespace.
-- A future migration to dereferenceable HTTPS extension URIs should only happen after the project controls a long-lived namespace with explicit redirect governance. Deployment instance URLs and GitHub branch/blob URLs are not suitable canonical identifiers.
-- If a future migration happens, each extension should move to a versioned HTTPS URI that becomes the single canonical identifier for that compatibility line. Legacy `urn:` identifiers may remain documented as historical aliases, but they should not be dual-advertised indefinitely as concurrent runtime identities.
+- `urn:codex-a2a:extension:...` URIs are the repository-governed, versioned permanent identifiers for this repository family.
+- `docs/extension-specifications.md` is the repository-managed specification index for those URIs, but it is not itself the extension URI namespace.
+- The current contract strategy does not assume a later migration to dereferenceable HTTPS extension URIs as the default next step.
+- Any future namespace change would require an explicit compatibility and governance decision, and it should replace the old canonical identifiers for the new compatibility line rather than creating an indefinite dual-identity runtime contract.
 
 ## Follow-On Phases
 

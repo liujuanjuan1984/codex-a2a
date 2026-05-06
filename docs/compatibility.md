@@ -30,7 +30,7 @@ Open-source consumption guidance:
 - Treat the core A2A send / stream / task methods as the portable baseline.
 - Treat the Agent Card `supported_interfaces[].url` value as the shared service discovery root. For `HTTP+JSON`, this repository uses that URL as the REST base root rather than as a concrete method path.
 - Treat `POST /` as the shared JSON-RPC surface for both core A2A methods and provider-private extension methods.
-- Treat `urn:a2a:*` entries in this repository as shared repo-family conventions, not as claims that they are part of the A2A core baseline.
+- Treat `urn:codex-a2a:extension:...` entries in this repository as repository-governed extension identifiers, not as claims that they are part of the A2A core baseline.
 - Treat `a2a.interrupt.*` reply methods as a shared provider-private callback contract on `POST /`, declared on authenticated discovery surfaces but not activated through `A2A-Extensions`.
 - Treat `codex.*` methods plus `metadata.codex.directory` and `metadata.codex.execution` as a Codex-specific control plane layered on top of the portable A2A surface.
 - Treat [extension-specifications.md](./extension-specifications.md) as the stable URI/spec index, not as the main usage guide.
@@ -176,7 +176,7 @@ Discovery note:
 
 Important note:
 
-- `urn:a2a:*` extension URIs used here should be read as shared conventions in this repository family.
+- `urn:codex-a2a:extension:...` extension URIs used here are repository-governed, versioned permanent identifiers.
 - They are not a claim that those extensions are part of the A2A core baseline.
 - `codex.*` methods are intentionally product-specific. They improve Codex-aware workflows but should not be assumed to transfer unchanged to unrelated A2A agents.
 - The public Agent Card is intentionally smaller than the authenticated extended card; that size difference is part of the current discovery contract rather than a documentation accident.
