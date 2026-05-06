@@ -27,7 +27,11 @@ from codex_a2a.jsonrpc.review_control import handle_review_control_request
 from codex_a2a.jsonrpc.session_query import handle_session_query_request
 from codex_a2a.jsonrpc.thread_lifecycle_control import handle_thread_lifecycle_control_request
 from codex_a2a.jsonrpc.turn_control import handle_turn_control_request
-from codex_a2a.protocol_versions import get_current_protocol_version
+from codex_a2a.protocol_versions import (
+    LEGACY_COMPAT_PROTOCOL_VERSION,
+    PROVIDER_PRIVATE_PROTOCOL_VERSION,
+    get_current_protocol_version,
+)
 from codex_a2a.upstream.client import CodexClient
 
 
@@ -44,6 +48,7 @@ def create_extension_jsonrpc_routes(
     supported_methods: list[str],
     guard_hooks: SessionGuardHooks,
     rpc_url: str,
+    enable_v0_3_compat: bool = False,
     dispatcher_factory=None,
 ) -> list[Route]:
     factory = dispatcher_factory or CodexSessionQueryJSONRPCApplication
@@ -58,6 +63,7 @@ def create_extension_jsonrpc_routes(
         methods=methods,
         supported_methods=supported_methods,
         guard_hooks=guard_hooks,
+        enable_v0_3_compat=enable_v0_3_compat,
     )
     return [
         Route(
@@ -140,12 +146,26 @@ class CodexSessionQueryJSONRPCApplication(JsonRpcDispatcher):
         except Exception:
             return await super().handle_requests(request)
 
+        if self._is_legacy_core_method(base_request.method):
+            if get_current_protocol_version() != LEGACY_COMPAT_PROTOCOL_VERSION:
+                if base_request.id is None:
+                    return Response(status_code=204)
+                return self._provider_private_method_not_found(base_request.id)
+            return await super().handle_requests(request)
+
         if not self._method_registry.is_extension_method(base_request.method):
             if self._looks_like_extension_method(base_request.method):
                 if base_request.id is None:
                     return Response(status_code=204)
+                if get_current_protocol_version() == LEGACY_COMPAT_PROTOCOL_VERSION:
+                    return self._provider_private_method_not_found(base_request.id)
                 return self._unsupported_method_response(base_request.id, base_request.method)
             return await super().handle_requests(request)
+
+        if get_current_protocol_version() != PROVIDER_PRIVATE_PROTOCOL_VERSION:
+            if base_request.id is None:
+                return Response(status_code=204)
+            return self._provider_private_method_not_found(base_request.id)
 
         params = base_request.params or {}
         if not isinstance(params, dict):
@@ -211,6 +231,13 @@ class CodexSessionQueryJSONRPCApplication(JsonRpcDispatcher):
     def _looks_like_extension_method(method: str) -> bool:
         return method.startswith("codex.") or method.startswith("a2a.interrupt.")
 
+    def _is_legacy_core_method(self, method: str) -> bool:
+        return bool(
+            self.enable_v0_3_compat
+            and self._v03_adapter is not None
+            and self._v03_adapter.supports_method(method)
+        )
+
     def _unsupported_method_response(
         self,
         request_id: str | int,
@@ -228,6 +255,18 @@ class CodexSessionQueryJSONRPCApplication(JsonRpcDispatcher):
                     "supported_methods": self._supported_methods,
                     "protocol_version": protocol_version,
                 },
+            ),
+        )
+
+    def _provider_private_method_not_found(
+        self,
+        request_id: str | int,
+    ) -> JSONResponse:
+        return self._generate_error_response(
+            request_id,
+            JSONRPCError(
+                code=-32601,
+                message="Method not found",
             ),
         )
 

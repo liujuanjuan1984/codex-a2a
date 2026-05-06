@@ -7,11 +7,18 @@ This document explains the compatibility promises this repository currently trie
 - Python versions: 3.11, 3.12, 3.13
 - A2A SDK line: `1.0.x`
 - A2A protocol version advertised by default: `1.0`
-- Normalized protocol compatibility lines declared today: `1.0`
+- Normalized protocol compatibility lines declared today: `1.0`, `0.3`
 
 The repository pins the SDK version in `pyproject.toml` and validates the published CLI build in CI. Upgrade the SDK deliberately rather than relying on floating dependency resolution.
 
-The OpenAPI-published compatibility profile and wire contract publish `default_protocol_version`, `supported_protocol_versions`, and `protocol_compatibility`. Request-time `A2A-Version` negotiation now targets the repository's `1.0` baseline only, and the published contracts should describe the implemented `1.0` transport surface rather than any legacy compatibility line.
+The OpenAPI-published compatibility profile and wire contract publish `default_protocol_version`, `supported_protocol_versions`, and `protocol_compatibility`. Request-time `A2A-Version` negotiation now supports both `1.0` and `0.3` for the core A2A surface. By default this repository still advertises `1.0`, while `0.3` remains an explicit compatibility line for SDK-managed core JSON-RPC and REST handling.
+
+Provider-private JSON-RPC methods are intentionally narrower than the core compatibility surface:
+
+- core A2A methods support explicit `1.0` and `0.3`
+- `codex.*` methods remain `1.0`-only
+- `a2a.interrupt.*` callback methods remain `1.0`-only
+- the legacy authenticated card discovery route remains `GET /v1/card` under explicit `0.3`
 
 ## Contract Honesty
 
@@ -30,6 +37,7 @@ Open-source consumption guidance:
 - Treat the core A2A send / stream / task methods as the portable baseline.
 - Treat the Agent Card `supported_interfaces[].url` value as the shared service discovery root. For `HTTP+JSON`, this repository uses that URL as the REST base root rather than as a concrete method path.
 - Treat `POST /` as the shared JSON-RPC surface for both core A2A methods and provider-private extension methods.
+- Treat explicit `0.3` support as a core-surface compatibility layer only, not as a blanket promise for every provider-private method on `POST /`.
 - Treat `urn:a2a:*` entries in this repository as shared repo-family conventions, not as claims that they are part of the A2A core baseline.
 - Treat `a2a.interrupt.*` reply methods as a shared provider-private callback contract on `POST /`, declared on authenticated discovery surfaces but not activated through `A2A-Extensions`.
 - Treat `codex.*` methods plus `metadata.codex.directory` and `metadata.codex.execution` as a Codex-specific control plane layered on top of the portable A2A surface.

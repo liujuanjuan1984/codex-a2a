@@ -22,6 +22,7 @@ from codex_a2a.media_modes import (
     TEXT_OUTPUT_MEDIA_MODES,
 )
 from codex_a2a.profile.runtime import RuntimeProfile, build_runtime_profile
+from codex_a2a.protocol_versions import ordered_supported_protocol_versions
 
 
 def _build_agent_card_description(
@@ -388,14 +389,11 @@ def _build_agent_card(
     supported_interfaces = [
         AgentInterface(
             url=public_url,
-            protocol_binding=TransportProtocol.HTTP_JSON,
-            protocol_version=settings.a2a_protocol_version,
-        ),
-        AgentInterface(
-            url=public_url,
-            protocol_binding=TransportProtocol.JSONRPC,
-            protocol_version=settings.a2a_protocol_version,
-        ),
+            protocol_binding=protocol_binding,
+            protocol_version=protocol_version,
+        )
+        for protocol_version in ordered_supported_protocol_versions(settings.a2a_protocol_version)
+        for protocol_binding in (TransportProtocol.HTTP_JSON, TransportProtocol.JSONRPC)
     ]
 
     return AgentCard(

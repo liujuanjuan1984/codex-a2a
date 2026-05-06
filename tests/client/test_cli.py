@@ -17,7 +17,7 @@ def test_root_help_includes_branding_and_compact_commands_section() -> None:
 
     assert f"repo: {CLI_REPOSITORY_URL}" in help_text
     assert "uv tool install --upgrade codex-a2a" in help_text
-    assert "A2A Protocol 1.0 only." in help_text
+    assert "A2A Protocol 1.0 by default, with core 0.3 compatibility." in help_text
     assert "codex-a2a <command> [arguments] [options]" in help_text
     assert "commands:\n    serve        Run the A2A service." in help_text
     assert "commands:\n  command" not in help_text

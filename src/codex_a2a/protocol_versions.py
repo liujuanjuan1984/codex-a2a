@@ -11,21 +11,39 @@ _CURRENT_PROTOCOL_VERSION: ContextVar[str | None] = ContextVar(
     default=None,
 )
 SUPPORTED_PROTOCOL_VERSION = "1.0"
-SUPPORTED_PROTOCOL_VERSIONS: tuple[str, ...] = (SUPPORTED_PROTOCOL_VERSION,)
-ADVERTISED_PROTOCOL_VERSION = "1.0"
+LEGACY_COMPAT_PROTOCOL_VERSION = "0.3"
+SUPPORTED_PROTOCOL_VERSIONS: tuple[str, ...] = (
+    SUPPORTED_PROTOCOL_VERSION,
+    LEGACY_COMPAT_PROTOCOL_VERSION,
+)
+ADVERTISED_PROTOCOL_VERSION = SUPPORTED_PROTOCOL_VERSION
+PROVIDER_PRIVATE_PROTOCOL_VERSION = SUPPORTED_PROTOCOL_VERSION
 
 V1_SUPPORTED_FEATURES: tuple[str, ...] = (
     "A2A-Version request-time negotiation and response header echo.",
     "Official A2A 1.0 JSON-RPC methods and /v1 HTTP endpoints.",
     "Unified Part(text|data|url|raw) payloads, task streaming, and protocol-aware error shaping.",
 )
+V03_SUPPORTED_FEATURES: tuple[str, ...] = (
+    "Explicit A2A-Version=0.3 request-time negotiation on the shared runtime endpoint.",
+    "SDK-managed A2A 0.3 JSON-RPC aliases and HTTP payload compatibility for core methods.",
+    "Core send, stream, and task APIs bridged into the repository's shared task/runtime model.",
+)
+V03_KNOWN_GAPS: tuple[str, ...] = (
+    "Provider-private codex.* and a2a.interrupt.* JSON-RPC methods remain available on 1.0 only.",
+)
 
 
 class UnsupportedProtocolVersionError(ValueError):
-    def __init__(self, requested_version: str) -> None:
+    def __init__(
+        self,
+        requested_version: str,
+        *,
+        default_protocol_version: str = ADVERTISED_PROTOCOL_VERSION,
+    ) -> None:
         self.requested_version = requested_version
         self.supported_protocol_versions = SUPPORTED_PROTOCOL_VERSIONS
-        self.default_protocol_version = ADVERTISED_PROTOCOL_VERSION
+        self.default_protocol_version = default_protocol_version
         supported_display = ", ".join(SUPPORTED_PROTOCOL_VERSIONS)
         super().__init__(
             f"Unsupported A2A protocol version {requested_version!r}. "
@@ -49,23 +67,49 @@ def normalize_protocol_version(value: str) -> str:
     return f"{match.group('major')}.{match.group('minor')}"
 
 
+def ordered_supported_protocol_versions(
+    default_protocol_version: str = ADVERTISED_PROTOCOL_VERSION,
+) -> tuple[str, ...]:
+    normalized_default = normalize_protocol_version(default_protocol_version)
+    if normalized_default not in SUPPORTED_PROTOCOL_VERSIONS:
+        raise ValueError(
+            f"Default protocol version must be one of: {', '.join(SUPPORTED_PROTOCOL_VERSIONS)}"
+        )
+    ordered_versions = tuple(
+        version for version in SUPPORTED_PROTOCOL_VERSIONS if version != normalized_default
+    )
+    return (normalized_default, *ordered_versions)
+
+
 def negotiate_protocol_version(
     *,
     header_value: str | None,
     query_value: str | None,
+    default_protocol_version: str = ADVERTISED_PROTOCOL_VERSION,
 ) -> NegotiatedProtocolVersion:
+    normalized_default = normalize_protocol_version(default_protocol_version)
+    if normalized_default not in SUPPORTED_PROTOCOL_VERSIONS:
+        raise ValueError(
+            "default_protocol_version must be one of: " + ", ".join(SUPPORTED_PROTOCOL_VERSIONS)
+        )
     raw_header = (header_value or "").strip()
     raw_query = (query_value or "").strip()
     explicit = bool(raw_header or raw_query)
-    raw_requested = raw_header or raw_query or ADVERTISED_PROTOCOL_VERSION
+    raw_requested = raw_header or raw_query or normalized_default
 
     try:
         normalized_requested = normalize_protocol_version(raw_requested)
     except ValueError as exc:
-        raise UnsupportedProtocolVersionError(raw_requested) from exc
+        raise UnsupportedProtocolVersionError(
+            raw_requested,
+            default_protocol_version=normalized_default,
+        ) from exc
 
-    if normalized_requested != SUPPORTED_PROTOCOL_VERSION:
-        raise UnsupportedProtocolVersionError(normalized_requested)
+    if normalized_requested not in SUPPORTED_PROTOCOL_VERSIONS:
+        raise UnsupportedProtocolVersionError(
+            normalized_requested,
+            default_protocol_version=normalized_default,
+        )
 
     return NegotiatedProtocolVersion(
         protocol_version=normalized_requested,
@@ -88,17 +132,28 @@ def get_current_protocol_version() -> str:
     return ADVERTISED_PROTOCOL_VERSION
 
 
-def build_protocol_compatibility_summary() -> dict[str, Any]:
+def build_protocol_compatibility_summary(
+    *,
+    default_protocol_version: str = ADVERTISED_PROTOCOL_VERSION,
+) -> dict[str, Any]:
+    ordered_versions = ordered_supported_protocol_versions(default_protocol_version)
     return {
-        "default_protocol_version": ADVERTISED_PROTOCOL_VERSION,
-        "supported_protocol_versions": list(SUPPORTED_PROTOCOL_VERSIONS),
+        "default_protocol_version": ordered_versions[0],
+        "supported_protocol_versions": list(ordered_versions),
         "versions": {
             SUPPORTED_PROTOCOL_VERSION: {
                 "enabled": True,
-                "default": True,
+                "default": SUPPORTED_PROTOCOL_VERSION == ordered_versions[0],
                 "status": "supported",
                 "supported_features": list(V1_SUPPORTED_FEATURES),
                 "known_gaps": [],
-            }
+            },
+            LEGACY_COMPAT_PROTOCOL_VERSION: {
+                "enabled": True,
+                "default": LEGACY_COMPAT_PROTOCOL_VERSION == ordered_versions[0],
+                "status": "supported",
+                "supported_features": list(V03_SUPPORTED_FEATURES),
+                "known_gaps": list(V03_KNOWN_GAPS),
+            },
         },
     }

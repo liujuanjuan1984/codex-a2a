@@ -15,7 +15,7 @@ Repository: https://github.com/liujuanjuan1984/codex-a2a
 
 Install: `uv tool install --upgrade codex-a2a`
 
-Protocol: A2A `1.0` only.
+Protocol: A2A `1.0` by default, with core `0.3` compatibility.
 
 Start the runtime explicitly with `codex-a2a serve`.
 

@@ -8,6 +8,7 @@ import uvicorn
 from a2a.server.routes.agent_card_routes import create_agent_card_routes
 from a2a.server.routes.rest_routes import create_rest_routes
 from fastapi import FastAPI
+from starlette.routing import BaseRoute, Mount, Route
 
 from codex_a2a.client.manager import A2AClientManager
 from codex_a2a.config import Settings
@@ -24,6 +25,10 @@ from codex_a2a.jsonrpc.application import (
 from codex_a2a.jsonrpc.hooks import SessionGuardHooks
 from codex_a2a.logging_context import install_log_record_factory
 from codex_a2a.profile.runtime import build_runtime_profile
+from codex_a2a.protocol_versions import (
+    LEGACY_COMPAT_PROTOCOL_VERSION,
+    get_current_protocol_version,
+)
 from codex_a2a.server.agent_card import (
     build_agent_card,
     build_authenticated_extended_agent_card,
@@ -44,6 +49,135 @@ from .http_middlewares import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _flatten_rest_routes(
+    routes: list[BaseRoute],
+    *,
+    prefix: str = "",
+) -> list[tuple[str, str, Any, str | None]]:
+    flattened: list[tuple[str, str, Any, str | None]] = []
+    for route in routes:
+        if isinstance(route, Route):
+            methods = sorted((route.methods or set()) - {"HEAD"})
+            if len(methods) != 1:
+                continue
+            flattened.append((f"{prefix}{route.path}", methods[0], route.endpoint, route.name))
+            continue
+        if isinstance(route, Mount):
+            flattened.extend(
+                _flatten_rest_routes(
+                    list(route.routes),
+                    prefix=f"{prefix}{route.path}",
+                )
+            )
+    return flattened
+
+
+def _extract_compat_rest_routes(
+    *,
+    request_handler,
+    context_builder,
+    path_prefix: str,
+) -> list[tuple[str, str, Any, str | None]]:
+    compat_prefix = f"{path_prefix}{extension_contracts.REST_API_PATH_PREFIX}"
+    compat_card_path = f"{compat_prefix}/card"
+    routes = create_rest_routes(
+        request_handler=request_handler,
+        context_builder=context_builder,
+        enable_v0_3_compat=True,
+        path_prefix=path_prefix,
+    )
+    return [
+        route
+        for route in _flatten_rest_routes(routes)
+        if route[0].startswith(f"{compat_prefix}/") or route[0] == compat_card_path
+    ]
+
+
+def _merge_dual_stack_rest_routes(
+    *,
+    base_routes: list[tuple[str, str, Any, str | None]],
+    compat_routes: list[tuple[str, str, Any, str | None]],
+) -> list[Route]:
+    compat_route_map = {
+        (path, method): (endpoint, name) for path, method, endpoint, name in compat_routes
+    }
+    merged_routes: list[Route] = []
+
+    for path, method, base_endpoint, name in base_routes:
+        compat_endpoint = compat_route_map.pop((path, method), None)
+        if compat_endpoint is None:
+            merged_routes.append(
+                Route(
+                    path=path,
+                    endpoint=base_endpoint,
+                    methods=[method],
+                    name=name,
+                )
+            )
+            continue
+
+        async def _dispatch(
+            request,
+            *,
+            base_endpoint=base_endpoint,
+            compat_endpoint=compat_endpoint[0],
+        ):
+            if get_current_protocol_version() == LEGACY_COMPAT_PROTOCOL_VERSION:
+                return await compat_endpoint(request)
+            return await base_endpoint(request)
+
+        merged_routes.append(
+            Route(
+                path=path,
+                endpoint=_dispatch,
+                methods=[method],
+                name=name,
+            )
+        )
+
+    for (path, method), (compat_endpoint, name) in compat_route_map.items():
+        merged_routes.append(
+            Route(
+                path=path,
+                endpoint=compat_endpoint,
+                methods=[method],
+                name=name,
+            )
+        )
+
+    return merged_routes
+
+
+def _create_dual_stack_rest_routes(
+    *,
+    request_handler,
+    context_builder,
+) -> list[Any]:
+    base_routes = _flatten_rest_routes(
+        create_rest_routes(
+            request_handler=request_handler,
+            context_builder=context_builder,
+            path_prefix=extension_contracts.REST_API_PATH_PREFIX,
+        )
+    )
+    compat_routes = _extract_compat_rest_routes(
+        request_handler=request_handler,
+        context_builder=context_builder,
+        path_prefix="",
+    )
+    compat_routes.extend(
+        _extract_compat_rest_routes(
+            request_handler=request_handler,
+            context_builder=context_builder,
+            path_prefix="/{tenant}",
+        )
+    )
+    return _merge_dual_stack_rest_routes(
+        base_routes=base_routes,
+        compat_routes=compat_routes,
+    )
 
 
 def create_app(settings: Settings) -> FastAPI:
@@ -190,14 +324,14 @@ def create_app(settings: Settings) -> FastAPI:
             supported_methods=supported_extension_jsonrpc_methods,
             guard_hooks=session_guard_hooks,
             rpc_url=extension_contracts.CORE_JSONRPC_PATH,
+            enable_v0_3_compat=True,
             dispatcher_factory=CodexSessionQueryJSONRPCApplication,
         )
     )
     app.router.routes.extend(
-        create_rest_routes(
+        _create_dual_stack_rest_routes(
             request_handler=handler,
             context_builder=context_builder,
-            path_prefix=extension_contracts.REST_API_PATH_PREFIX,
         )
     )
     app.state.codex_client = client

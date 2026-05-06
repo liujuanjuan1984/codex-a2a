@@ -21,7 +21,7 @@ def test_cli_help_does_not_require_runtime_settings(capsys: pytest.CaptureFixtur
     assert excinfo.value.code == 0
     output = capsys.readouterr().out
     assert "uv tool install --upgrade codex-a2a" in output
-    assert "A2A Protocol 1.0 only." in output
+    assert "A2A Protocol 1.0 by default, with core 0.3 compatibility." in output
     assert "codex-a2a <command> [arguments] [options]" in output
     assert "A2A_STATIC_AUTH_CREDENTIALS" in output
     serve_mock.assert_not_called()

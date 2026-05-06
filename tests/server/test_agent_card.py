@@ -123,6 +123,14 @@ def test_agent_card_supported_interfaces_share_same_public_url() -> None:
     assert [interface.url for interface in card.supported_interfaces] == [
         "http://127.0.0.1:8000",
         "http://127.0.0.1:8000",
+        "http://127.0.0.1:8000",
+        "http://127.0.0.1:8000",
+    ]
+    assert [interface.protocol_version for interface in card.supported_interfaces] == [
+        "1.0",
+        "1.0",
+        "0.3",
+        "0.3",
     ]
 
 
@@ -673,8 +681,8 @@ def test_authenticated_extended_agent_card_injects_profile_into_extensions() -> 
     wire_contract_params = codex_contracts["wire_contract"]
     assert wire_contract_params["protocol_version"] == "1.0"
     assert wire_contract_params["default_protocol_version"] == "1.0"
-    assert wire_contract_params["supported_protocol_versions"] == ["1.0"]
-    assert set(wire_contract_params["protocol_compatibility"]["versions"]) == {"1.0"}
+    assert wire_contract_params["supported_protocol_versions"] == ["1.0", "0.3"]
+    assert set(wire_contract_params["protocol_compatibility"]["versions"]) == {"1.0", "0.3"}
     assert (
         wire_contract_params["protocol_compatibility"]["versions"]["1.0"]["status"] == "supported"
     )
@@ -684,6 +692,12 @@ def test_authenticated_extended_agent_card_injects_profile_into_extensions() -> 
             0
         ]
     )
+    assert wire_contract_params["protocol_compatibility"]["versions"]["0.3"]["known_gaps"] == [
+        (
+            "Provider-private codex.* and a2a.interrupt.* JSON-RPC methods remain "
+            "available on 1.0 only."
+        )
+    ]
     assert "GetExtendedAgentCard" in wire_contract_params["all_jsonrpc_methods"]
     assert "CreateTaskPushNotificationConfig" in wire_contract_params["all_jsonrpc_methods"]
     assert (
@@ -715,13 +729,23 @@ def test_authenticated_extended_agent_card_injects_profile_into_extensions() -> 
             "protocol_version": "1.0",
             "url_path": CORE_JSONRPC_PATH,
         },
+        {
+            "protocol_binding": "HTTP+JSON",
+            "protocol_version": "0.3",
+            "url_path_prefix": REST_API_PATH_PREFIX,
+        },
+        {
+            "protocol_binding": "JSON-RPC",
+            "protocol_version": "0.3",
+            "url_path": CORE_JSONRPC_PATH,
+        },
     ]
 
     compatibility_params = codex_contracts["compatibility_profile"]
     assert compatibility_params["profile_id"] == "codex-a2a-single-tenant-coding-v1"
     assert compatibility_params["protocol_version"] == "1.0"
     assert compatibility_params["default_protocol_version"] == "1.0"
-    assert compatibility_params["supported_protocol_versions"] == ["1.0"]
+    assert compatibility_params["supported_protocol_versions"] == ["1.0", "0.3"]
     assert (
         compatibility_params["protocol_compatibility"]
         == wire_contract_params["protocol_compatibility"]
@@ -729,7 +753,10 @@ def test_authenticated_extended_agent_card_injects_profile_into_extensions() -> 
     assert compatibility_params["deployment"] == profile["deployment"]
     assert compatibility_params["runtime_features"] == profile["runtime_features"]
     assert compatibility_params["core"]["jsonrpc_endpoint"] == CORE_JSONRPC_PATH
-    assert compatibility_params["extension_transport"]["jsonrpc_endpoint"] == EXTENSION_JSONRPC_PATH
+    assert compatibility_params["extension_transport"] == {
+        "jsonrpc_endpoint": EXTENSION_JSONRPC_PATH,
+        "protocol_version": "1.0",
+    }
     assert "GetExtendedAgentCard" in compatibility_params["core"]["jsonrpc_methods"]
     assert compatibility_params["extension_taxonomy"]["shared_agent_card_extensions"] == [
         SESSION_BINDING_EXTENSION_URI,
@@ -757,6 +784,10 @@ def test_authenticated_extended_agent_card_injects_profile_into_extensions() -> 
         for note in compatibility_params["consumer_guidance"]
     )
     assert any("urn:a2a:*" in note for note in compatibility_params["consumer_guidance"])
+    assert any(
+        "explicit A2A 0.3 support as a core-surface compatibility layer only" in note
+        for note in compatibility_params["consumer_guidance"]
+    )
     assert any(
         "execution_environment" in note for note in compatibility_params["consumer_guidance"]
     )

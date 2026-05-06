@@ -13,9 +13,10 @@ from codex_a2a.execution.tool_call_payloads import build_tool_call_payload_contr
 from codex_a2a.profile.runtime import RuntimeProfile
 from codex_a2a.protocol_versions import (
     ADVERTISED_PROTOCOL_VERSION,
-    SUPPORTED_PROTOCOL_VERSIONS,
+    PROVIDER_PRIVATE_PROTOCOL_VERSION,
     build_protocol_compatibility_summary,
     normalize_protocol_version,
+    ordered_supported_protocol_versions,
 )
 
 from . import extension_specs
@@ -60,15 +61,43 @@ def _extension_jsonrpc_endpoint_contract() -> dict[str, Any]:
     }
 
 
+def _core_transport_interfaces(
+    default_protocol_version: str,
+) -> list[dict[str, Any]]:
+    return [
+        {
+            "protocol_binding": protocol_binding,
+            "protocol_version": protocol_version,
+            transport_path_key: transport_path_value,
+        }
+        for protocol_version in ordered_supported_protocol_versions(default_protocol_version)
+        for protocol_binding, transport_path_key, transport_path_value in (
+            ("HTTP+JSON", "url_path_prefix", REST_API_PATH_PREFIX),
+            ("JSON-RPC", "url_path", CORE_JSONRPC_PATH),
+        )
+    ]
+
+
+def _declared_provider_private_protocol_version(protocol_version: str) -> str:
+    declared_protocol_version = normalize_protocol_version(protocol_version)
+    if declared_protocol_version != PROVIDER_PRIVATE_PROTOCOL_VERSION:
+        raise ValueError("Provider-private codex contracts must stay on the 1.0 protocol line.")
+    return declared_protocol_version
+
+
 def build_wire_contract_extension_params(
     *,
     protocol_version: str,
     runtime_profile: RuntimeProfile,
 ) -> dict[str, Any]:
-    declared_protocol_version = normalize_protocol_version(protocol_version)
+    declared_protocol_version = _declared_provider_private_protocol_version(protocol_version)
     declared_default_protocol_version = normalize_protocol_version(ADVERTISED_PROTOCOL_VERSION)
-    declared_supported_protocol_versions = SUPPORTED_PROTOCOL_VERSIONS
-    protocol_compatibility = build_protocol_compatibility_summary()
+    declared_supported_protocol_versions = ordered_supported_protocol_versions(
+        declared_default_protocol_version
+    )
+    protocol_compatibility = build_protocol_compatibility_summary(
+        default_protocol_version=declared_default_protocol_version
+    )
     snapshot = extension_specs.build_capability_snapshot(runtime_profile=runtime_profile)
     resubscribe_behavior = {
         "scope": "service-level",
@@ -92,18 +121,7 @@ def build_wire_contract_extension_params(
         "default_protocol_version": declared_default_protocol_version,
         "supported_protocol_versions": list(declared_supported_protocol_versions),
         "protocol_compatibility": protocol_compatibility,
-        "transport_interfaces": [
-            {
-                "protocol_binding": "HTTP+JSON",
-                "protocol_version": declared_protocol_version,
-                "url_path_prefix": REST_API_PATH_PREFIX,
-            },
-            {
-                "protocol_binding": "JSON-RPC",
-                "protocol_version": declared_protocol_version,
-                "url_path": CORE_JSONRPC_PATH,
-            },
-        ],
+        "transport_interfaces": _core_transport_interfaces(declared_default_protocol_version),
         "core": {
             "jsonrpc_endpoint": {
                 "protocol_binding": "JSON-RPC",
@@ -116,7 +134,7 @@ def build_wire_contract_extension_params(
         "extensions": {
             "jsonrpc_endpoint": {
                 "protocol_binding": "JSON-RPC",
-                "protocol_version": declared_protocol_version,
+                "protocol_version": PROVIDER_PRIVATE_PROTOCOL_VERSION,
                 "url_path": EXTENSION_JSONRPC_PATH,
             },
             "jsonrpc_methods": list(snapshot.extension_jsonrpc_methods),
@@ -160,10 +178,14 @@ def build_compatibility_profile_params(
     protocol_version: str,
     runtime_profile: RuntimeProfile,
 ) -> dict[str, Any]:
-    declared_protocol_version = normalize_protocol_version(protocol_version)
+    declared_protocol_version = _declared_provider_private_protocol_version(protocol_version)
     declared_default_protocol_version = normalize_protocol_version(ADVERTISED_PROTOCOL_VERSION)
-    declared_supported_protocol_versions = SUPPORTED_PROTOCOL_VERSIONS
-    protocol_compatibility = build_protocol_compatibility_summary()
+    declared_supported_protocol_versions = ordered_supported_protocol_versions(
+        declared_default_protocol_version
+    )
+    protocol_compatibility = build_protocol_compatibility_summary(
+        default_protocol_version=declared_default_protocol_version
+    )
     snapshot = extension_specs.build_capability_snapshot(runtime_profile=runtime_profile)
     resubscribe_behavior = {
         "scope": "service-level",
@@ -356,6 +378,7 @@ def build_compatibility_profile_params(
         },
         "extension_transport": {
             "jsonrpc_endpoint": EXTENSION_JSONRPC_PATH,
+            "protocol_version": PROVIDER_PRIVATE_PROTOCOL_VERSION,
         },
         "service_behaviors": {
             extension_specs.TASKS_RESUBSCRIBE_METHOD: resubscribe_behavior,
@@ -396,6 +419,11 @@ def build_compatibility_profile_params(
                 f"Use {CORE_JSONRPC_PATH} for both core A2A JSON-RPC methods and "
                 "provider-private codex.* / a2a.interrupt.* methods; distinguish them "
                 "by method name and the published compatibility contracts."
+            ),
+            (
+                "Treat explicit A2A 0.3 support as a core-surface compatibility layer only; "
+                "provider-private codex.* and a2a.interrupt.* methods remain on the 1.0 "
+                "JSON-RPC contract."
             ),
             (
                 "Treat codex.* methods and codex.directory/codex.execution metadata as "

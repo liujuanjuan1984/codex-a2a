@@ -25,7 +25,7 @@ CLI_BRAND_BANNER = (
 )
 ROOT_DESCRIPTION = (
     "Codex A2A runtime for explicit service startup and peer calls. "
-    "A2A Protocol 1.0 only.\n"
+    "A2A Protocol 1.0 by default, with core 0.3 compatibility.\n"
     "  codex-a2a <command> [arguments] [options]"
 )
 CODEX_SETUP_HELP = (

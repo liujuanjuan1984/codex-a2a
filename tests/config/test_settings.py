@@ -78,6 +78,17 @@ def test_settings_valid():
         assert settings.a2a_log_level == "WARNING"
 
 
+def test_settings_accept_1_0_protocol_line() -> None:
+    env = {
+        **_registry_env(),
+        "A2A_PROTOCOL_VERSION": "1.0.0",
+    }
+    with mock.patch.dict(os.environ, env, clear=True):
+        settings = Settings.from_env()
+
+    assert settings.a2a_protocol_version == "1.0"
+
+
 @pytest.mark.parametrize("protocol_version", ["0.3.0", "1.1.0"])
 def test_settings_reject_non_1_0_protocol_line(protocol_version: str) -> None:
     env = {

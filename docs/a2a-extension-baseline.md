@@ -84,7 +84,7 @@ That inventory must be reusable by:
 
 - No migration from `urn:` to HTTPS extension URI yet.
 - No public expansion of provider-private extension declarations.
-- No compatibility shim for A2A 0.3 behavior.
+- No provider-private compatibility shim for A2A 0.3 behavior beyond the SDK-managed core surface.
 
 ## Follow-On Phases
 

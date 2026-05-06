@@ -115,6 +115,69 @@ def _ensure_minimal_a2a_schemas(schema: dict[str, Any]) -> None:
             "additionalProperties": True,
         },
     )
+    _ensure_object_schema(
+        schemas,
+        "A2A03ContentPart",
+        {
+            "type": "object",
+            "description": (
+                "A2A 0.3 compatibility content part. Text parts typically use "
+                "{'text': '...'} and the SDK maps them into the v1 core model."
+            ),
+            "additionalProperties": True,
+        },
+    )
+    _ensure_object_schema(
+        schemas,
+        "A2A03Message",
+        {
+            "type": "object",
+            "required": ["messageId", "role", "content"],
+            "properties": {
+                "messageId": {"type": "string"},
+                "role": {
+                    "type": "string",
+                    "enum": ["user", "agent"],
+                },
+                "content": {
+                    "type": "array",
+                    "items": {"$ref": "#/components/schemas/A2A03ContentPart"},
+                },
+                "metadata": {
+                    "type": "object",
+                    "additionalProperties": True,
+                },
+            },
+            "additionalProperties": True,
+        },
+    )
+    _ensure_object_schema(
+        schemas,
+        "A2A03SendMessageRequest",
+        {
+            "type": "object",
+            "required": ["request"],
+            "properties": {
+                "request": {"$ref": "#/components/schemas/A2A03Message"},
+                "configuration": {
+                    "type": "object",
+                    "additionalProperties": True,
+                },
+                "metadata": {
+                    "type": "object",
+                    "additionalProperties": True,
+                },
+            },
+            "additionalProperties": True,
+        },
+    )
+    _ensure_object_schema(
+        schemas,
+        "A2A03SendStreamingMessageRequest",
+        {
+            "$ref": "#/components/schemas/A2A03SendMessageRequest",
+        },
+    )
 
 
 def _ensure_path_item(
@@ -205,9 +268,16 @@ def patch_openapi_contract(
                     "summary": "Send Message (HTTP+JSON)",
                     "description": (
                         "A2A HTTP+JSON message send endpoint. "
-                        "Use the A2A 1.0 request body with message.parts."
+                        "Use the negotiated A2A REST request body for the selected "
+                        "protocol version; the SDK also accepts explicit 0.3 "
+                        "compatibility payloads on this core route."
                     ),
-                    "schema_ref": "#/components/schemas/SendMessageRequest",
+                    "schema": {
+                        "oneOf": [
+                            {"$ref": "#/components/schemas/SendMessageRequest"},
+                            {"$ref": "#/components/schemas/A2A03SendMessageRequest"},
+                        ]
+                    },
                     "contracts": {
                         "session_binding": a2a_extension_contracts["session_binding"],
                     },
@@ -216,9 +286,16 @@ def patch_openapi_contract(
                     "summary": "Stream Message (HTTP+JSON)",
                     "description": (
                         "A2A HTTP+JSON streaming endpoint. "
-                        "Use the A2A 1.0 request body with message.parts."
+                        "Use the negotiated A2A REST request body for the selected "
+                        "protocol version; the SDK also accepts explicit 0.3 "
+                        "compatibility payloads on this core route."
                     ),
-                    "schema_ref": "#/components/schemas/SendStreamingMessageRequest",
+                    "schema": {
+                        "oneOf": [
+                            {"$ref": "#/components/schemas/SendStreamingMessageRequest"},
+                            {"$ref": "#/components/schemas/A2A03SendStreamingMessageRequest"},
+                        ]
+                    },
                     "contracts": {
                         "session_binding": a2a_extension_contracts["session_binding"],
                         "streaming": a2a_extension_contracts["streaming"],
@@ -255,8 +332,19 @@ def patch_openapi_contract(
                 app_json = content.setdefault("application/json", {})
                 if not isinstance(app_json, dict):
                     continue
-                app_json["schema"] = {"$ref": contract["schema_ref"]}
+                app_json["schema"] = contract["schema"]
                 app_json["examples"] = rest_examples
+
+            card_get = _ensure_path_item(paths, "/v1/card", "get")
+            if "security" in schema:
+                card_get["security"] = list(cast(list[dict[str, list[str]]], schema["security"]))
+            card_get["summary"] = "Get Authenticated Extended Agent Card (HTTP+JSON 0.3)"
+            card_get["description"] = (
+                "A2A 0.3 compatibility REST discovery route for the authenticated extended "
+                "Agent Card. Use explicit A2A-Version: 0.3 when calling this compatibility "
+                "endpoint."
+            )
+            card_get.setdefault("responses", {"200": {"description": "Authenticated Agent Card"}})
 
         app.openapi_schema = schema
         return schema

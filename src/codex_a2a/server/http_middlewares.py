@@ -47,6 +47,7 @@ _PUBLIC_AGENT_CARD_PATHS = {
 }
 _AUTHENTICATED_EXTENDED_CARD_PATHS = {
     f"{extension_contracts.REST_API_PATH_PREFIX}/extendedAgentCard",
+    f"{extension_contracts.REST_API_PATH_PREFIX}/card",
 }
 _OPENAPI_PATHS = {
     "/openapi.json",
@@ -206,8 +207,23 @@ def _is_jsonrpc_path(path: str) -> bool:
     }
 
 
+def _canonical_rest_path(path: str) -> str:
+    rest_prefix = extension_contracts.REST_API_PATH_PREFIX
+    if path == rest_prefix or path.startswith(f"{rest_prefix}/"):
+        return path
+    marker = f"{rest_prefix}/"
+    marker_index = path.find(marker, 1)
+    if marker_index > 0 and "/" not in path[1:marker_index]:
+        return path[marker_index:]
+    return path
+
+
+def _is_rest_message_path(path: str) -> bool:
+    return _canonical_rest_path(path) in _REST_MESSAGE_PATHS
+
+
 def _requires_protocol_negotiation(request: Request) -> bool:
-    path = request.url.path
+    path = _canonical_rest_path(request.url.path)
     if request.method == "OPTIONS":
         return False
     return _is_jsonrpc_path(path) or path.startswith(f"{extension_contracts.REST_API_PATH_PREFIX}/")
@@ -334,6 +350,7 @@ def install_http_middlewares(
             negotiated = negotiate_protocol_version(
                 header_value=header_value,
                 query_value=query_value,
+                default_protocol_version=settings.a2a_protocol_version,
             )
         except UnsupportedProtocolVersionError as exc:
             request_id: str | int | None = None
@@ -364,8 +381,9 @@ def install_http_middlewares(
             return await call_next(request)
 
         path = request.url.path
+        canonical_path = _canonical_rest_path(path)
         is_public_card = path in _PUBLIC_AGENT_CARD_PATHS
-        is_extended_card = path in _AUTHENTICATED_EXTENDED_CARD_PATHS
+        is_extended_card = canonical_path in _AUTHENTICATED_EXTENDED_CARD_PATHS
         if not is_public_card and not is_extended_card:
             return await call_next(request)
 
@@ -405,7 +423,7 @@ def install_http_middlewares(
 
     @app.middleware("http")
     async def guard_rest_payload_shape(request: Request, call_next):
-        if request.method != "POST" or request.url.path not in _REST_MESSAGE_PATHS:
+        if request.method != "POST" or not _is_rest_message_path(request.url.path):
             return await call_next(request)
 
         body = await _get_request_body(request)
@@ -415,7 +433,8 @@ def install_http_middlewares(
                 {
                     "error": (
                         "Invalid HTTP+JSON payload for REST endpoint. "
-                        "Use an A2A 1.0 request body with message.parts, or call "
+                        "Use the transport-specific A2A REST request body for the "
+                        "negotiated protocol version, or call "
                         f"POST {extension_contracts.CORE_JSONRPC_PATH} "
                         "with JSON-RPC method=SendMessage or "
                         "method=SendStreamingMessage."
@@ -427,7 +446,7 @@ def install_http_middlewares(
 
     @app.middleware("http")
     async def guard_missing_subscribe_task(request: Request, call_next):
-        path = request.url.path
+        path = _canonical_rest_path(request.url.path)
         if not path.startswith("/v1/tasks/") or not path.endswith(":subscribe"):
             return await call_next(request)
 

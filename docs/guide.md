@@ -13,6 +13,7 @@ This guide covers runtime configuration, transport contracts, streaming/session/
 - The authenticated extended card exposes the authenticated provider-private skill inventory and deployment-aware examples:
   - preferred: JSON-RPC `GetExtendedAgentCard`
   - HTTP core route: `GET /v1/extendedAgentCard`
+  - HTTP `0.3` compatibility route: `GET /v1/card`
 - Full provider-private contract payloads are available through OpenAPI metadata:
   - `GET /openapi.json`
   - `x-a2a-extension-contracts` for negotiated shared extensions
@@ -26,6 +27,10 @@ This guide covers runtime configuration, transport contracts, streaming/session/
 - Payload schema is transport-specific and should not be mixed:
   - REST send payload uses `message.parts` and role values like `ROLE_USER`
   - JSON-RPC `SendMessage` payload uses `params.message.parts` and role values like `ROLE_USER`
+- The core A2A surface also accepts explicit `A2A-Version: 0.3` requests through the SDK compatibility adapters:
+  - REST `0.3` send payloads use `request.content` and role values such as `user`
+  - JSON-RPC `0.3` send payloads use legacy method names such as `message/send`
+- Provider-private `codex.*` and `a2a.interrupt.*` methods remain on the `1.0` JSON-RPC contract even though they share `POST /`.
 - OpenAPI metadata on the shared JSON-RPC entrypoint publishes the explicit wire contract for the supported method set and unsupported-method error shape.
 
 ## Wire Contract
@@ -63,6 +68,10 @@ Unsupported method contract on the shared JSON-RPC endpoint (`POST /`):
   - JSON-RPC error code: `-32601`
   - error message: `Method not found`
   - no additional `error.data` contract is declared
+- Explicit `0.3` requests to provider-private namespaces:
+  - JSON-RPC error code: `-32601`
+  - error message: `Method not found`
+  - no additional `error.data` contract is declared
 - Recognized provider-private extension namespaces (`codex.*`, `a2a.interrupt.*`):
   - JSON-RPC error code: `-32601`
   - error message: `Method not found`
@@ -78,6 +87,7 @@ Consumer guidance:
 - Use OpenAPI when you need the detailed method matrix, provider-private notes, or full provider-private contract payloads.
 - Treat `supported_methods` in extension-namespace `error.data` as the runtime truth for the current deployment, especially when a deployment-conditional method is disabled.
 - Treat the core A2A methods as the portable interoperability baseline.
+- Treat explicit `0.3` support as limited to the core A2A surface; use `1.0` when calling provider-private `codex.*` or `a2a.interrupt.*` methods.
 - Treat `codex.*` methods plus `metadata.codex.directory` and `metadata.codex.execution` as a Codex-specific control plane for Codex-aware clients rather than generic A2A portability claims.
 - See [extension-specifications.md](./extension-specifications.md) for the stable URI/spec index, and [compatibility.md](./compatibility.md) for compatibility promises.
 

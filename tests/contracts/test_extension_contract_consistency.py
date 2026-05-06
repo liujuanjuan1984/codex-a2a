@@ -546,6 +546,9 @@ def test_openapi_jsonrpc_examples_match_declared_extension_contracts() -> None:
             "SendMessage",
             "SendStreamingMessage",
             "GetExtendedAgentCard",
+            "message/send",
+            "message/stream",
+            "agent/getAuthenticatedExtendedCard",
         }:
             continue
 

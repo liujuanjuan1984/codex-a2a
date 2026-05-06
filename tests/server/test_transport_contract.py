@@ -1,5 +1,7 @@
 import asyncio
 import logging
+import subprocess
+import sys
 import uuid
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
@@ -68,6 +70,12 @@ def test_agent_card_declares_dual_stack_with_http_json_preferred() -> None:
     assert card.supported_interfaces[0].protocol_binding == TransportProtocol.HTTP_JSON
     assert card.supported_interfaces[0].url == "http://127.0.0.1:8000"
     assert card.supported_interfaces[1].url == "http://127.0.0.1:8000"
+    assert [iface.protocol_version for iface in card.supported_interfaces] == [
+        "1.0",
+        "1.0",
+        "0.3",
+        "0.3",
+    ]
     assert TransportProtocol.HTTP_JSON in transports
     assert TransportProtocol.JSONRPC in transports
 
@@ -82,8 +90,10 @@ def test_rest_subscription_route_matches_current_sdk_contract() -> None:
     assert f"{REST_API_PATH_PREFIX}/tasks/{{id}}:subscribe" in route_paths
     assert f"{REST_API_PATH_PREFIX}/tasks/{{id}}:resubscribe" not in route_paths
     assert f"{REST_API_PATH_PREFIX}/extendedAgentCard" in route_paths
+    assert f"{REST_API_PATH_PREFIX}/card" in route_paths
+    assert f"/{{tenant}}{REST_API_PATH_PREFIX}/message:send" in route_paths
+    assert f"/{{tenant}}{REST_API_PATH_PREFIX}/card" in route_paths
     assert "/agent/authenticatedExtendedCard" not in route_paths
-    assert f"{REST_API_PATH_PREFIX}/card" not in route_paths
 
 
 def test_health_route_can_be_disabled() -> None:
@@ -375,19 +385,27 @@ def test_openapi_rest_message_routes_include_schema_examples_and_extension_contr
     openapi = app.openapi()
     paths = openapi["paths"]
 
-    expected: dict[str, str] = {
-        "/v1/message:send": "#/components/schemas/SendMessageRequest",
-        "/v1/message:stream": "#/components/schemas/SendStreamingMessageRequest",
+    expected: dict[str, tuple[str, str]] = {
+        "/v1/message:send": (
+            "#/components/schemas/SendMessageRequest",
+            "#/components/schemas/A2A03SendMessageRequest",
+        ),
+        "/v1/message:stream": (
+            "#/components/schemas/SendStreamingMessageRequest",
+            "#/components/schemas/A2A03SendStreamingMessageRequest",
+        ),
     }
-    for path, expected_schema_ref in expected.items():
+    for path, expected_schema_refs in expected.items():
         post = paths[path]["post"]
         assert post["summary"] in {"Send Message (HTTP+JSON)", "Stream Message (HTTP+JSON)"}
         content = post.get("requestBody", {}).get("content", {}).get("application/json", {})
-        assert content.get("schema", {}).get("$ref") == expected_schema_ref
+        schema_refs = {item.get("$ref") for item in content.get("schema", {}).get("oneOf", [])}
+        assert schema_refs == set(expected_schema_refs)
         examples = content.get("examples")
         assert isinstance(examples, dict)
         assert "basic_message" in examples
         assert "continue_session" in examples
+        assert "basic_message_v03" in examples
         contracts = post.get("x-a2a-extension-contracts")
         assert isinstance(contracts, dict)
         assert "session_binding" in contracts
@@ -418,6 +436,9 @@ def test_openapi_rest_message_routes_include_schema_examples_and_extension_contr
     assert "turn_control" in extension_contracts
     assert "review_control" in extension_contracts
 
+    card_get = paths["/v1/card"]["get"]
+    assert "0.3 compatibility REST discovery route" in card_get["description"]
+
 
 def test_openapi_jsonrpc_examples_include_core_and_extension_methods() -> None:
     app = create_app(make_settings(a2a_bearer_token="test-token"))
@@ -436,6 +457,9 @@ def test_openapi_jsonrpc_examples_include_core_and_extension_methods() -> None:
     assert "SendMessage" in core_methods
     assert "SendStreamingMessage" in core_methods
     assert "GetExtendedAgentCard" in core_methods
+    assert "message/send" in core_methods
+    assert "message/stream" in core_methods
+    assert "agent/getAuthenticatedExtendedCard" in core_methods
 
     extension_post = openapi["paths"][EXTENSION_JSONRPC_PATH]["post"]
     extension_example_values = (
@@ -802,39 +826,51 @@ async def test_dual_stack_send_accepts_transport_native_payloads(monkeypatch) ->
     transport = httpx.ASGITransport(app=app)
     headers = {"Authorization": "Bearer test-token"}
 
-    rest_payload = {
-        "message": {
-            "messageId": "m-rest",
-            "role": "ROLE_USER",
-            "parts": [{"text": "hello from rest"}],
-        }
-    }
-    rpc_payload = {
-        "jsonrpc": "2.0",
-        "id": 1,
-        "method": "SendMessage",
-        "params": {
-            "message": {
-                "messageId": "m-rpc",
-                "role": "ROLE_USER",
-                "parts": [{"text": "hello from jsonrpc"}],
-            }
-        },
-    }
-
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         rest_resp = await client.post(
             f"{REST_API_PATH_PREFIX}/message:send",
             headers=headers,
-            json=rest_payload,
+            json=_rest_message_payload(),
         )
         assert rest_resp.status_code == 200
         assert rest_resp.headers["A2A-Version"] == "1.0"
 
-        rpc_resp = await client.post(CORE_JSONRPC_PATH, headers=headers, json=rpc_payload)
+        rpc_resp = await client.post(
+            CORE_JSONRPC_PATH,
+            headers=headers,
+            json=_jsonrpc_message_send_payload("hello from jsonrpc"),
+        )
         assert rpc_resp.status_code == 200
         assert rpc_resp.headers["A2A-Version"] == "1.0"
         assert rpc_resp.json().get("error") is None
+
+        rest_v03_resp = await client.post(
+            f"{REST_API_PATH_PREFIX}/message:send",
+            headers={**headers, "A2A-Version": "0.3"},
+            json=_rest_message_payload_v03(),
+        )
+        assert rest_v03_resp.status_code == 200
+        assert rest_v03_resp.headers["A2A-Version"] == "0.3"
+
+        rpc_v03_resp = await client.post(
+            CORE_JSONRPC_PATH,
+            headers={**headers, "A2A-Version": "0.3"},
+            json=_jsonrpc_message_send_payload_v03("hello from legacy jsonrpc"),
+        )
+        assert rpc_v03_resp.status_code == 200
+        assert rpc_v03_resp.headers["A2A-Version"] == "0.3"
+        assert rpc_v03_resp.json().get("error") is None
+
+
+def test_server_application_imports_cleanly_in_fresh_interpreter() -> None:
+    result = subprocess.run(
+        [sys.executable, "-c", "import codex_a2a.server.application"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
 
 
 @pytest.mark.asyncio
@@ -871,6 +907,51 @@ async def test_jsonrpc_legacy_core_method_alias_is_rejected_under_v1(monkeypatch
 
 
 @pytest.mark.asyncio
+async def test_tenant_rest_0_3_route_uses_sdk_compat_handler(monkeypatch) -> None:
+    import codex_a2a.server.application as app_module
+
+    monkeypatch.setattr(app_module, "CodexClient", DummyChatCodexClient)
+    app = app_module.create_app(make_settings(a2a_bearer_token="test-token"))
+    transport = httpx.ASGITransport(app=app)
+    headers = {"Authorization": "Bearer test-token", "A2A-Version": "0.3"}
+
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post(
+            f"/acme{REST_API_PATH_PREFIX}/message:send",
+            headers=headers,
+            json=_rest_message_payload_v03(),
+        )
+
+    assert response.status_code == 200
+    assert response.headers["A2A-Version"] == "0.3"
+
+
+@pytest.mark.asyncio
+async def test_jsonrpc_provider_private_method_is_rejected_under_v0_3(monkeypatch) -> None:
+    import codex_a2a.server.application as app_module
+
+    monkeypatch.setattr(app_module, "CodexClient", DummyChatCodexClient)
+    app = app_module.create_app(make_settings(a2a_bearer_token="test-token"))
+    transport = httpx.ASGITransport(app=app)
+    headers = {"Authorization": "Bearer test-token", "A2A-Version": "0.3"}
+
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post(
+            CORE_JSONRPC_PATH,
+            headers=headers,
+            json={"jsonrpc": "2.0", "id": 44, "method": "codex.sessions.list", "params": {}},
+        )
+
+    assert response.status_code == 200
+    assert response.headers["A2A-Version"] == "0.3"
+    payload = response.json()
+    assert payload["id"] == 44
+    assert payload["error"]["code"] == -32601
+    assert payload["error"]["message"] == "Method not found"
+    assert payload["error"].get("data") is None
+
+
+@pytest.mark.asyncio
 async def test_jsonrpc_unsupported_protocol_version_preserves_request_id(monkeypatch) -> None:
     import codex_a2a.server.application as app_module
 
@@ -895,7 +976,7 @@ async def test_jsonrpc_unsupported_protocol_version_preserves_request_id(monkeyp
     error_info = details[0]
     assert error_info["reason"] == "VERSION_NOT_SUPPORTED"
     assert error_info["metadata"]["requested_version"] == "2.0"
-    assert error_info["metadata"]["supported_protocol_versions"] == '["1.0"]'
+    assert error_info["metadata"]["supported_protocol_versions"] == '["1.0","0.3"]'
 
 
 @pytest.mark.asyncio
@@ -1146,6 +1227,16 @@ def _rest_message_payload() -> dict:
     }
 
 
+def _rest_message_payload_v03() -> dict:
+    return {
+        "request": {
+            "messageId": "m-rest-v03",
+            "role": "user",
+            "content": [{"text": "hello from legacy rest"}],
+        }
+    }
+
+
 def _jsonrpc_message_send_payload(text: str) -> dict:
     return {
         "jsonrpc": "2.0",
@@ -1156,6 +1247,21 @@ def _jsonrpc_message_send_payload(text: str) -> dict:
                 "messageId": "m-rpc",
                 "role": "ROLE_USER",
                 "parts": [{"text": text}],
+            }
+        },
+    }
+
+
+def _jsonrpc_message_send_payload_v03(text: str) -> dict:
+    return {
+        "jsonrpc": "2.0",
+        "id": 100,
+        "method": "message/send",
+        "params": {
+            "message": {
+                "messageId": "m-rpc-v03",
+                "role": "user",
+                "parts": [{"kind": "text", "text": text}],
             }
         },
     }

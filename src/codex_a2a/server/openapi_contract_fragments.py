@@ -39,6 +39,9 @@ def build_core_jsonrpc_openapi_description() -> str:
         "ListTaskPushNotificationConfigs, DeleteTaskPushNotificationConfig, "
         "SubscribeToTask, GetExtendedAgentCard) on POST "
         f"{extension_contracts.CORE_JSONRPC_PATH}.\n\n"
+        "When clients explicitly negotiate A2A 0.3 on the same endpoint, the SDK also "
+        "accepts legacy method aliases such as message/send, message/stream, tasks/get, "
+        "tasks/cancel, tasks/resubscribe, and agent/getAuthenticatedExtendedCard.\n\n"
         "Provider-private Codex methods share the same public JSON-RPC endpoint and "
         "are distinguished by method name plus the published compatibility contracts."
     )
@@ -71,6 +74,8 @@ def build_extension_jsonrpc_openapi_description(*, runtime_profile: RuntimeProfi
     return (
         "Provider-private Codex JSON-RPC methods also use POST "
         f"{extension_contracts.CORE_JSONRPC_PATH}. "
+        "These provider-private methods remain on the 1.0 JSON-RPC contract even when "
+        "the core A2A surface is serving explicit 0.3 compatibility traffic. "
         "Supports Codex session extensions, Codex thread lifecycle extensions, "
         "interrupt recovery extensions, active-turn control extensions, review "
         "control extensions, Codex discovery extensions, interactive exec "
@@ -127,6 +132,45 @@ def build_core_jsonrpc_openapi_examples() -> dict[str, Any]:
                 "jsonrpc": "2.0",
                 "id": 103,
                 "method": "GetExtendedAgentCard",
+                "params": {},
+            },
+        },
+        "message_send_v03": {
+            "summary": "Send message via JSON-RPC 0.3 compatibility method",
+            "value": {
+                "jsonrpc": "2.0",
+                "id": 104,
+                "method": "message/send",
+                "params": {
+                    "message": {
+                        "messageId": "msg-legacy-1",
+                        "role": "user",
+                        "parts": [{"kind": "text", "text": "Explain what this repository does."}],
+                    }
+                },
+            },
+        },
+        "message_stream_v03": {
+            "summary": "Stream message via JSON-RPC 0.3 compatibility method",
+            "value": {
+                "jsonrpc": "2.0",
+                "id": 105,
+                "method": "message/stream",
+                "params": {
+                    "message": {
+                        "messageId": "msg-legacy-stream-1",
+                        "role": "user",
+                        "parts": [{"kind": "text", "text": "Stream the answer and summarize."}],
+                    }
+                },
+            },
+        },
+        "authenticated_extended_card_v03": {
+            "summary": "Fetch the authenticated extended Agent Card via 0.3 compatibility",
+            "value": {
+                "jsonrpc": "2.0",
+                "id": 106,
+                "method": "agent/getAuthenticatedExtendedCard",
                 "params": {},
             },
         },
@@ -450,6 +494,16 @@ def build_rest_message_openapi_examples() -> dict[str, Any]:
                     "parts": [{"text": "Continue previous work and summarize next steps."}],
                 },
                 "metadata": {"shared": {"session": {"id": "s-1"}}},
+            },
+        },
+        "basic_message_v03": {
+            "summary": "Send a basic user message (HTTP+JSON 0.3 compatibility)",
+            "value": {
+                "request": {
+                    "messageId": "msg-rest-legacy-1",
+                    "role": "user",
+                    "content": [{"text": "Explain what this repository does."}],
+                }
             },
         },
     }
