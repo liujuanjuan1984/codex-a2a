@@ -7,7 +7,7 @@ Phase 1 is intentionally internal-facing. It does not change the external extens
 ## Goals
 
 - Define which runtime surfaces are true A2A extensions versus auxiliary machine-readable contracts.
-- Define the intended responsibilities of the public Agent Card, authenticated extended Agent Card, and OpenAPI metadata.
+- Define the intended responsibilities of the public Agent Card, authenticated extended Agent Card, and anonymous OpenAPI metadata.
 - Centralize extension inventory so that Agent Card, OpenAPI, compatibility guidance, and documentation stop drifting independently.
 - Preserve current externally visible behavior during phase 1 unless a change is required to remove ambiguity.
 
@@ -26,7 +26,7 @@ Phase 1 is intentionally internal-facing. It does not change the external extens
 - These are adapter-managed `codex.*` or shared-repo callback contracts that remain specific to this deployment family.
 - They are still treated as extensions conceptually, but their public disclosure remains conservative.
 - They should be declared through authenticated extended Agent Card `capabilities.extensions`.
-- Their detailed contract payloads remain machine-readable through OpenAPI and human-discoverable through authenticated skill inventory.
+- Their detailed contract payloads should stay machine-readable on the authenticated extended card, with authenticated skill inventory remaining additive discovery guidance.
 
 3. Machine-readable contract metadata
 
@@ -51,15 +51,16 @@ Phase 1 is intentionally internal-facing. It does not change the external extens
 
 ### OpenAPI Metadata
 
-- Full machine-readable contract surface.
-- Remains the detailed source for provider-private request/response method contracts, transport notes, and compatibility metadata.
-- Should be derived from the same registry as Agent Card declarations whenever possible.
+- Anonymous, transport-adjacent discovery surface.
+- Should remain limited to the minimum shared-contract disclosure needed for interoperable clients.
+- Should not be treated as the canonical machine-readable source for provider-private method matrices or deployment-private compatibility metadata.
+- Should still be derived from the same registry as Agent Card declarations whenever possible.
 
 ## Negotiation Rules
 
 - Shared request/response extensions are the only extensions treated as negotiated by default in phase 1.
 - Shared request/response extensions use request-level `A2A-Extensions` activation only when the request depends on that negotiated behavior.
-- Provider-private `codex.*` contracts and shared callback contracts marked `declaration_only` are discovered through the authenticated extended Agent Card and OpenAPI, then used by directly invoking their documented provider-private methods. They do not require a separate `A2A-Extensions` activation header.
+- Provider-private `codex.*` contracts and shared callback contracts marked `declaration_only` are discovered through the authenticated extended Agent Card, then used by directly invoking their documented provider-private methods. They do not require a separate `A2A-Extensions` activation header.
 - Compatibility and wire-profile documents are not negotiable extensions.
 
 ## Inventory Rules

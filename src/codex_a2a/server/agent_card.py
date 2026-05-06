@@ -36,8 +36,7 @@ def _build_agent_card_description(
             base,
             (
                 "Supports HTTP+JSON and JSON-RPC transports, standard A2A messaging, "
-                "authenticated extended Agent Card discovery, and OpenAPI-based "
-                "provider-private contract discovery."
+                "and authenticated extended Agent Card discovery."
             ),
             (
                 "Single-tenant deployment; all consumers share the same underlying Codex "
@@ -63,7 +62,8 @@ def _build_agent_card_description(
         "(GetExtendedAgentCard), task APIs (GetTask, ListTasks, CancelTask, "
         "SubscribeToTask), and shared session-binding plus streaming contracts. "
         "Provider-private control surfaces are declared through authenticated "
-        "extended Agent Card extensions, authenticated skills, and OpenAPI contracts. "
+        "extended Agent Card extensions and authenticated skills, while anonymous "
+        "OpenAPI stays limited to minimal shared-contract disclosure. "
         f"Provider-private surfaces in this deployment include {codex_surface_summary}, "
         "shared interrupt callback handling, a machine-readable compatibility profile, "
         "and a machine-readable wire contract."

@@ -13,10 +13,10 @@ This guide covers runtime configuration, transport contracts, streaming/session/
 - The authenticated extended card exposes the authenticated provider-private skill inventory and deployment-aware examples:
   - preferred: JSON-RPC `GetExtendedAgentCard`
   - HTTP core route: `GET /v1/extendedAgentCard`
-- Full provider-private contract payloads are available through OpenAPI metadata:
+- Anonymous shared-contract hints are available through OpenAPI metadata:
   - `GET /openapi.json`
-  - `x-a2a-extension-contracts` for negotiated shared extensions
-  - `x-codex-contracts` for provider-private control contracts
+  - `x-a2a-extension-contracts` for negotiated shared extensions and shared interrupt callback hints
+- Full provider-private contract payloads are available through the authenticated extended Agent Card rather than anonymous OpenAPI.
 - Agent Card responses publish `ETag` and `Cache-Control`; clients should revalidate instead of repeatedly fetching full payloads.
 - Larger discovery documents support gzip compression on these HTTP GET routes:
   - `/.well-known/agent-card.json`
@@ -26,7 +26,7 @@ This guide covers runtime configuration, transport contracts, streaming/session/
 - Payload schema is transport-specific and should not be mixed:
   - REST send payload uses `message.parts` and role values like `ROLE_USER`
   - JSON-RPC `SendMessage` payload uses `params.message.parts` and role values like `ROLE_USER`
-- OpenAPI metadata on the shared JSON-RPC entrypoint publishes the explicit wire contract for the supported method set and unsupported-method error shape.
+- OpenAPI metadata on the shared JSON-RPC entrypoint publishes anonymous shared-contract hints and transport notes for the supported method set.
 
 ## Wire Contract
 
@@ -75,7 +75,7 @@ Consumer guidance:
 
 - Discover the current method set from Agent Card / OpenAPI before calling custom JSON-RPC methods.
 - Fetch the authenticated extended card when you need the authenticated skill inventory or deployment-aware examples.
-- Use OpenAPI when you need the detailed method matrix, provider-private notes, or full provider-private contract payloads.
+- Use OpenAPI for anonymous shared-contract hints and transport notes; use the authenticated extended card for provider-private method matrices and detailed compatibility metadata.
 - Treat `supported_methods` in extension-namespace `error.data` as the runtime truth for the current deployment, especially when a deployment-conditional method is disabled.
 - Treat the core A2A methods as the portable interoperability baseline.
 - Treat `codex.*` methods plus `metadata.codex.directory` and `metadata.codex.execution` as a Codex-specific control plane for Codex-aware clients rather than generic A2A portability claims.
@@ -140,10 +140,10 @@ Retention guidance:
 - Treat this deployment as a single-tenant, shared-workspace coding profile.
 - Treat shared session-binding and streaming metadata contracts as required for the current deployment model; they are not optional documentation-only hints.
 - Treat `urn:codex-a2a:extension:...` extension URIs in this repository as repository-governed extension identifiers, not as claims that they are part of the A2A core baseline.
-- Treat `a2a.interrupt.*` methods as a shared provider-private callback contract on `POST /`, not as core A2A methods or Agent Card-negotiated extensions.
+- Treat `a2a.interrupt.*` methods as a shared callback contract on `POST /`, not as core A2A methods or Agent Card-negotiated extensions.
 - Treat `codex.*` methods plus `metadata.codex.directory` and `metadata.codex.execution` as Codex-specific extensions or provider-private operational surfaces rather than portable A2A baseline capabilities.
 - Treat `codex.interrupts.list` as an adapter-local recovery surface for rediscovering active pending interrupt request IDs after reconnecting.
-- Treat `codex.turns.steer`, `codex.review.*`, and `codex.exec.*` as deployment-aware provider-private controls. Discover them from the authenticated extended card or OpenAPI before calling them.
+- Treat `codex.turns.steer`, `codex.review.*`, and `codex.exec.*` as deployment-aware provider-private controls. Discover them from the authenticated extended card before calling them.
 - Treat `codex.exec.*` as the standalone interactive exec surface for internal or tightly controlled deployments. Use it for stdin write, PTY resize, and terminate flows as a separate provider-private contract rather than inferring terminal lifecycle support from chat/session flows.
 - Default deployment posture keeps `codex.review.*` and `codex.exec.*` disabled unless a deployment intentionally opts into them. `codex.turns.steer` is enabled by default but remains provider-private and can still be disabled with `A2A_ENABLE_TURN_CONTROL=false`.
 - Generic A2A clients should remain usable without the `codex.*` control plane. Opt into those methods only when you are intentionally integrating with Codex-specific workflows such as session continuation, discovery-backed mentions, or interactive exec.
@@ -460,7 +460,7 @@ On the current npm global install layout for Linux x64, the command above resolv
 - Agent Card media modes reflect that stable core message surface: default input modes are `text/plain`, `image/*`, and `application/json`; default output modes are `text/plain` and `application/json`.
 - The authenticated extended Agent Card also decomposes provider-private JSON-RPC surfaces into narrower skills: `codex.sessions.query`, `codex.discovery.query`, `codex.discovery.watch`, `codex.threads.control`, `codex.threads.watch`, `codex.turns.control`, `codex.review.control`, `codex.exec.control`, `codex.exec.stream`, and `codex.interrupt.callback`.
 - `codex.turns.control`, `codex.review.*`, and `codex.exec.*` only appear in the authenticated extended card when their deployment toggles are enabled.
-- OpenAPI carries the full provider-private contract payloads for those skills under `x-codex-contracts`; the authenticated extended card is intentionally narrower and discovery-oriented.
+- The authenticated extended Agent Card is the canonical machine-readable discovery surface for those provider-private skills; anonymous OpenAPI stays limited to shared-contract hints and transport-adjacent examples.
 - Those provider-private skills use narrower `output_modes` where practical: query/control/watch handle surfaces declare `application/json` when their primary contract is a structured JSON-RPC result or `Part(data)` watch payload, while `codex.exec.stream` declares `text/plain` because stdout/stderr deltas and terminal summaries are emitted as `Part(text)`.
 - On the core chat surface, the `application/json` input mode is intentionally narrower than arbitrary JSON: only `Part(data={"type":"mention"|"skill", ...})` is part of the declared stable contract.
 - Image input maps to upstream `turn/start.input[].type=input_image`.

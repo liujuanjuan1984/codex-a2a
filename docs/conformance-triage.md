@@ -25,7 +25,7 @@ For each failed or errored node ID:
 
 1. Copy the node ID from `failed-tests.json`.
 2. Inspect the corresponding raw details in `pytest-report.json` and `tck.log`.
-3. Compare the expectation with `docs/compatibility.md`, authenticated extended card skills/examples, and OpenAPI `x-a2a-extension-contracts` plus `x-codex-contracts`.
+3. Compare the expectation with `docs/compatibility.md`, authenticated extended card skills/examples, and OpenAPI `x-a2a-extension-contracts`.
 4. Assign one classification label.
 5. Record whether the next action belongs in this repository, the TCK, or a future protocol compatibility issue.
 

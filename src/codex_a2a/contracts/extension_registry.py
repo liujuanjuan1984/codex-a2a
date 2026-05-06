@@ -47,6 +47,48 @@ def _select_public_extension_params(
     return {key: params[key] for key in keys if key in params}
 
 
+def _project_public_extension_params(
+    descriptor: ExtensionContractDescriptor,
+    params: dict[str, Any],
+) -> dict[str, Any]:
+    if descriptor.public_params_transform == "streaming_public":
+        return {
+            "artifact_metadata_field": params["artifact_metadata_field"],
+            "status_metadata_field": params["status_metadata_field"],
+            "interrupt_metadata_field": params["interrupt_metadata_field"],
+            "session_metadata_field": params["session_metadata_field"],
+            "usage_metadata_field": params["usage_metadata_field"],
+            "block_types": params["block_types"],
+            "block_part_types": params["block_part_types"],
+            "stream_fields": _select_public_extension_params(
+                params["stream_fields"],
+                keys=("block_type", "sequence", "source"),
+            ),
+            "status_stream_fields": _select_public_extension_params(
+                params["status_stream_fields"],
+                keys=("source",),
+            ),
+            "session_fields": _select_public_extension_params(
+                params["session_fields"],
+                keys=("id",),
+            ),
+            "interrupt_fields": _select_public_extension_params(
+                params["interrupt_fields"],
+                keys=("request_id", "type", "phase"),
+            ),
+            "usage_fields": _select_public_extension_params(
+                params["usage_fields"],
+                keys=("input_tokens", "output_tokens", "total_tokens"),
+            ),
+        }
+    if descriptor.public_params_keys is not None:
+        return _select_public_extension_params(
+            params,
+            keys=descriptor.public_params_keys,
+        )
+    return params
+
+
 def _build_extension_contract_params(
     descriptor: ExtensionContractDescriptor,
     settings: Settings | None,
@@ -217,14 +259,20 @@ EXTENSION_CONTRACT_REGISTRY: tuple[ExtensionContractDescriptor, ...] = (
         uri=extension_specs.INTERRUPT_CALLBACK_EXTENSION_URI,
         title="Shared Interactive Interrupt v1",
         description="Shared repo-family interrupt callback reply methods.",
-        family="provider_private",
+        family="shared",
         negotiation_mode="declaration_only",
-        public_agent_card=False,
+        public_agent_card=True,
         authenticated_agent_card=True,
-        openapi_group="codex",
-        taxonomy_group="shared_provider_private_contracts",
+        openapi_group="a2a",
+        taxonomy_group="shared_agent_card_extensions",
         params_builder_name="build_interrupt_callback_extension_params",
         params_builder_signature="runtime_profile",
+        public_params_keys=(
+            "methods",
+            "supported_interrupt_events",
+            "interrupt_metadata_field",
+            "request_id_field",
+        ),
     ),
     ExtensionContractDescriptor(
         key="wire_contract",
@@ -274,41 +322,7 @@ def build_agent_card_extensions_from_registry(
             continue
         params = _build_extension_contract_params(descriptor, settings, runtime_profile)
         if not include_detailed_contracts:
-            if descriptor.public_params_transform == "streaming_public":
-                params = {
-                    "artifact_metadata_field": params["artifact_metadata_field"],
-                    "status_metadata_field": params["status_metadata_field"],
-                    "interrupt_metadata_field": params["interrupt_metadata_field"],
-                    "session_metadata_field": params["session_metadata_field"],
-                    "usage_metadata_field": params["usage_metadata_field"],
-                    "block_types": params["block_types"],
-                    "block_part_types": params["block_part_types"],
-                    "stream_fields": _select_public_extension_params(
-                        params["stream_fields"],
-                        keys=("block_type", "sequence", "source"),
-                    ),
-                    "status_stream_fields": _select_public_extension_params(
-                        params["status_stream_fields"],
-                        keys=("source",),
-                    ),
-                    "session_fields": _select_public_extension_params(
-                        params["session_fields"],
-                        keys=("id",),
-                    ),
-                    "interrupt_fields": _select_public_extension_params(
-                        params["interrupt_fields"],
-                        keys=("request_id", "type", "phase"),
-                    ),
-                    "usage_fields": _select_public_extension_params(
-                        params["usage_fields"],
-                        keys=("input_tokens", "output_tokens", "total_tokens"),
-                    ),
-                }
-            elif descriptor.public_params_keys is not None:
-                params = _select_public_extension_params(
-                    params,
-                    keys=descriptor.public_params_keys,
-                )
+            params = _project_public_extension_params(descriptor, params)
         extensions.append(
             AgentExtension(
                 uri=descriptor.uri,
@@ -325,16 +339,20 @@ def build_openapi_extension_contracts_from_registry(
     settings: Settings | None,
     runtime_profile: RuntimeProfile,
     group: Literal["a2a", "codex"],
+    public: bool = False,
 ) -> dict[str, dict[str, Any]]:
     contracts: dict[str, dict[str, Any]] = {}
     for descriptor in EXTENSION_CONTRACT_REGISTRY:
         if descriptor.openapi_group != group:
             continue
-        contracts[descriptor.key] = _build_extension_contract_params(
+        params = _build_extension_contract_params(
             descriptor,
             settings,
             runtime_profile,
         )
+        if public:
+            params = _project_public_extension_params(descriptor, params)
+        contracts[descriptor.key] = params
     return contracts
 
 

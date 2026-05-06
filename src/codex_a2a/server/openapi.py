@@ -140,14 +140,10 @@ def patch_openapi_contract(
     runtime_profile: RuntimeProfile,
 ) -> None:
     a2a_extension_contracts = build_openapi_extension_contracts_from_registry(
-        settings=None,
-        runtime_profile=runtime_profile,
-        group="a2a",
-    )
-    codex_contracts = build_openapi_extension_contracts_from_registry(
         settings=settings,
         runtime_profile=runtime_profile,
-        group="codex",
+        group="a2a",
+        public=True,
     )
     original_openapi = app.openapi
 
@@ -179,7 +175,6 @@ def patch_openapi_contract(
                 ]
             )
             post["x-a2a-extension-contracts"] = a2a_extension_contracts
-            post["x-codex-contracts"] = codex_contracts
             post.setdefault("responses", {"200": {"description": "JSON-RPC response"}})
 
             request_body = post.setdefault("requestBody", {})
@@ -223,9 +218,6 @@ def patch_openapi_contract(
                         "session_binding": a2a_extension_contracts["session_binding"],
                         "streaming": a2a_extension_contracts["streaming"],
                     },
-                    "codex_contracts": {
-                        "interrupt_callback": codex_contracts["interrupt_callback"],
-                    },
                 },
             }
             rest_examples = openapi_contract_fragments.build_rest_message_openapi_examples()
@@ -239,8 +231,6 @@ def patch_openapi_contract(
                 rest_post["summary"] = contract["summary"]
                 rest_post["description"] = contract["description"]
                 rest_post["x-a2a-extension-contracts"] = contract["contracts"]
-                if "codex_contracts" in contract:
-                    rest_post["x-codex-contracts"] = contract["codex_contracts"]
                 rest_post.setdefault("responses", {"200": {"description": "A2A response"}})
                 if rest_path == "/v1/message:stream":
                     rest_post["x-a2a-streaming"] = a2a_extension_contracts["streaming"]

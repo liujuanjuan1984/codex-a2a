@@ -19,7 +19,7 @@ Machine-readable discovery surfaces must reflect actual runtime behavior:
 
 - public Agent Card
 - authenticated extended card
-- OpenAPI metadata, including `x-a2a-extension-contracts` and `x-codex-contracts`
+- OpenAPI metadata, including anonymous `x-a2a-extension-contracts`
 - JSON-RPC wire contract
 - compatibility profile
 
@@ -31,7 +31,7 @@ Open-source consumption guidance:
 - Treat the Agent Card `supported_interfaces[].url` value as the shared service discovery root. For `HTTP+JSON`, this repository uses that URL as the REST base root rather than as a concrete method path.
 - Treat `POST /` as the shared JSON-RPC surface for both core A2A methods and provider-private extension methods.
 - Treat `urn:codex-a2a:extension:...` entries in this repository as repository-governed extension identifiers, not as claims that they are part of the A2A core baseline.
-- Treat `a2a.interrupt.*` reply methods as a shared provider-private callback contract on `POST /`, declared on authenticated discovery surfaces but not activated through `A2A-Extensions`.
+- Treat `a2a.interrupt.*` reply methods as a shared callback contract on `POST /`, declared on public and authenticated discovery surfaces but not activated through `A2A-Extensions`.
 - Treat `codex.*` methods plus `metadata.codex.directory` and `metadata.codex.execution` as a Codex-specific control plane layered on top of the portable A2A surface.
 - Treat [extension-specifications.md](./extension-specifications.md) as the stable URI/spec index, not as the main usage guide.
 
@@ -95,7 +95,7 @@ Execution-environment boundary fields are also published through the runtime pro
 ## Extension Stability
 
 - Shared metadata and extension contracts should stay synchronized across Agent Card, OpenAPI, and runtime behavior.
-- Public Agent Card should stay intentionally minimal. Negotiated shared extension params belong in public `capabilities.extensions`; provider-private and machine-readable extension contracts belong in authenticated extended card `capabilities.extensions`, with OpenAPI `x-codex-contracts` carrying the full payloads and skill decomposition remaining additive discovery guidance.
+- Public Agent Card should stay intentionally minimal. Negotiated shared extension params and the shared interrupt callback contract belong in public `capabilities.extensions`; provider-private and machine-readable extension contracts belong in authenticated extended card `capabilities.extensions`, with skill decomposition remaining additive discovery guidance.
 - Only shared request/response extensions currently participate in request-level `A2A-Extensions` negotiation. Provider-private extension URIs declared on the authenticated extended card are declaration-only unless explicitly documented otherwise; clients discover them there and then invoke their documented methods directly.
 - Product-specific extensions should remain stable within the current major line unless explicitly documented otherwise.
 - Deployment-conditional methods must be declared as conditional rather than silently disappearing.

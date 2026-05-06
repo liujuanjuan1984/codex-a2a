@@ -56,6 +56,11 @@ AUTHENTICATED_EXTENSION_URIS = {
     WIRE_CONTRACT_EXTENSION_URI,
     COMPATIBILITY_PROFILE_EXTENSION_URI,
 }
+PUBLIC_EXTENSION_URIS = {
+    SESSION_BINDING_EXTENSION_URI,
+    STREAMING_EXTENSION_URI,
+    INTERRUPT_CALLBACK_EXTENSION_URI,
+}
 
 
 async def _empty_async_stream():
@@ -400,26 +405,15 @@ def test_openapi_rest_message_routes_include_schema_examples_and_extension_contr
 
     stream_contract = paths["/v1/message:stream"]["post"].get("x-a2a-streaming")
     assert isinstance(stream_contract, dict)
-    stream_codex_contracts = paths["/v1/message:stream"]["post"].get("x-codex-contracts")
-    assert isinstance(stream_codex_contracts, dict)
-    assert "interrupt_callback" in stream_codex_contracts
+    assert paths["/v1/message:stream"]["post"].get("x-codex-contracts") is None
 
     root_contracts = paths[CORE_JSONRPC_PATH]["post"].get("x-a2a-extension-contracts")
     assert isinstance(root_contracts, dict)
     assert "session_binding" in root_contracts
     assert "streaming" in root_contracts
-    root_codex_contracts = paths[CORE_JSONRPC_PATH]["post"].get("x-codex-contracts")
-    assert isinstance(root_codex_contracts, dict)
-    assert "wire_contract" in root_codex_contracts
-    assert "compatibility_profile" in root_codex_contracts
-
-    extension_contracts = paths[EXTENSION_JSONRPC_PATH]["post"].get("x-codex-contracts")
-    assert isinstance(extension_contracts, dict)
-    assert "discovery" in extension_contracts
-    assert "thread_lifecycle" in extension_contracts
-    assert "interrupt_recovery" in extension_contracts
-    assert "turn_control" in extension_contracts
-    assert "review_control" in extension_contracts
+    assert "interrupt_callback" in root_contracts
+    assert paths[CORE_JSONRPC_PATH]["post"].get("x-codex-contracts") is None
+    assert paths[EXTENSION_JSONRPC_PATH]["post"].get("x-codex-contracts") is None
 
 
 def test_openapi_jsonrpc_examples_include_core_and_extension_methods() -> None:
@@ -449,24 +443,12 @@ def test_openapi_jsonrpc_examples_include_core_and_extension_methods() -> None:
         .values()
     )
     methods = {value.get("value", {}).get("method") for value in extension_example_values}
-    assert "codex.sessions.list" in methods
-    assert "codex.sessions.messages.list" in methods
-    assert "codex.discovery.skills.list" in methods
-    assert "codex.discovery.apps.list" in methods
-    assert "codex.discovery.plugins.list" in methods
-    assert "codex.discovery.plugins.read" in methods
-    assert "codex.discovery.watch" in methods
-    assert "codex.threads.fork" in methods
-    assert "codex.threads.archive" in methods
-    assert "codex.threads.unarchive" in methods
-    assert "codex.threads.metadata.update" in methods
-    assert "codex.threads.watch" in methods
-    assert "codex.threads.watch.release" in methods
-    assert "codex.interrupts.list" in methods
-    assert "codex.turns.steer" in methods
-    assert "codex.review.start" in methods
-    assert "codex.review.watch" in methods
     assert "a2a.interrupt.permission.reply" in methods
+    assert "a2a.interrupt.permissions.reply" in methods
+    assert "a2a.interrupt.elicitation.reply" in methods
+    assert "codex.sessions.list" not in methods
+    assert "codex.discovery.skills.list" not in methods
+    assert "codex.exec.start" not in methods
 
 
 @pytest.mark.asyncio
@@ -521,10 +503,7 @@ async def test_agent_card_routes_split_public_and_authenticated_extended_contrac
         extended_extensions = {
             item["uri"]: item for item in extended_card.json()["capabilities"]["extensions"]
         }
-        assert set(public_extensions) == {
-            SESSION_BINDING_EXTENSION_URI,
-            STREAMING_EXTENSION_URI,
-        }
+        assert set(public_extensions) == PUBLIC_EXTENSION_URIS
         assert set(extended_extensions) == AUTHENTICATED_EXTENSION_URIS
         assert len(public_card.content) < len(extended_card.content)
         public_skill_ids = {item["id"] for item in public_card.json()["skills"]}
