@@ -53,6 +53,11 @@ AUTHENTICATED_EXTENSION_URIS = {
     WIRE_CONTRACT_EXTENSION_URI,
     COMPATIBILITY_PROFILE_EXTENSION_URI,
 }
+PUBLIC_EXTENSION_URIS = {
+    SESSION_BINDING_EXTENSION_URI,
+    STREAMING_EXTENSION_URI,
+    INTERRUPT_CALLBACK_EXTENSION_URI,
+}
 
 
 def _require_params(extension: AgentExtension) -> dict[str, Any]:
@@ -87,7 +92,7 @@ def test_public_agent_card_description_reflects_discovery_surface() -> None:
 
     assert "HTTP+JSON and JSON-RPC transports" in card.description
     assert "authenticated extended Agent Card discovery" in card.description
-    assert "OpenAPI-based provider-private contract discovery" in card.description
+    assert "OpenAPI-based provider-private contract discovery" not in card.description
     assert "single-tenant deployment" in card.description.lower()
     assert "machine-readable wire contract" not in card.description
     assert card.capabilities.extended_agent_card is True
@@ -100,6 +105,9 @@ def test_authenticated_extended_agent_card_description_reflects_detailed_contrac
     assert "GetTask, ListTasks, CancelTask, SubscribeToTask" in card.description
     assert "GetExtendedAgentCard" in card.description
     assert "Provider-private control surfaces are declared through authenticated extended" in (
+        card.description
+    )
+    assert "anonymous OpenAPI stays limited to minimal shared-contract disclosure" in (
         card.description
     )
     assert "interactive exec" in card.description
@@ -255,10 +263,7 @@ def test_public_agent_card_minimizes_provider_private_contracts() -> None:
     card = build_agent_card(make_settings(a2a_bearer_token="test-token"))
     ext_by_uri = {ext.uri: ext for ext in card.capabilities.extensions or []}
 
-    assert set(ext_by_uri) == {
-        SESSION_BINDING_EXTENSION_URI,
-        STREAMING_EXTENSION_URI,
-    }
+    assert set(ext_by_uri) == PUBLIC_EXTENSION_URIS
 
     session_binding = ext_by_uri[SESSION_BINDING_EXTENSION_URI]
     session_binding_params = _require_params(session_binding)
@@ -282,6 +287,26 @@ def test_public_agent_card_minimizes_provider_private_contracts() -> None:
     assert "reasoning_tokens" not in streaming_params["usage_fields"]
     assert streaming_params["usage_fields"]["total_tokens"] == "metadata.shared.usage.total_tokens"
     assert "tool_call_payload_contract" not in streaming_params
+
+    interrupt_callback = ext_by_uri[INTERRUPT_CALLBACK_EXTENSION_URI]
+    interrupt_params = _require_params(interrupt_callback)
+    assert interrupt_params == {
+        "methods": {
+            "reply_permission": "a2a.interrupt.permission.reply",
+            "reply_question": "a2a.interrupt.question.reply",
+            "reject_question": "a2a.interrupt.question.reject",
+            "reply_permissions": "a2a.interrupt.permissions.reply",
+            "reply_elicitation": "a2a.interrupt.elicitation.reply",
+        },
+        "supported_interrupt_events": [
+            "permission.asked",
+            "question.asked",
+            "permissions.asked",
+            "elicitation.asked",
+        ],
+        "interrupt_metadata_field": "metadata.shared.interrupt",
+        "request_id_field": "metadata.shared.interrupt.request_id",
+    }
 
 
 def test_authenticated_extended_agent_card_injects_profile_into_extensions() -> None:
@@ -637,7 +662,11 @@ def test_authenticated_extended_agent_card_injects_profile_into_extensions() -> 
     ]
     assert any("codex.review.watch" in note for note in review_control_params["consumer_guidance"])
 
-    interrupt_params = codex_contracts["interrupt_callback"]
+    interrupt_params = build_openapi_extension_contracts_from_registry(
+        settings=settings,
+        runtime_profile=build_runtime_profile(settings),
+        group="a2a",
+    )["interrupt_callback"]
     assert interrupt_params["jsonrpc_endpoint"]["url_path"] == EXTENSION_JSONRPC_PATH
     assert interrupt_params["profile"] == profile
     assert interrupt_params["request_id_field"] == "metadata.shared.interrupt.request_id"
@@ -737,10 +766,9 @@ def test_authenticated_extended_agent_card_injects_profile_into_extensions() -> 
     assert compatibility_params["extension_taxonomy"]["shared_agent_card_extensions"] == [
         SESSION_BINDING_EXTENSION_URI,
         STREAMING_EXTENSION_URI,
-    ]
-    assert compatibility_params["extension_taxonomy"]["shared_provider_private_contracts"] == [
         INTERRUPT_CALLBACK_EXTENSION_URI,
     ]
+    assert compatibility_params["extension_taxonomy"]["shared_provider_private_contracts"] == []
     assert compatibility_params["extension_taxonomy"]["provider_private_metadata"] == [
         "codex.directory",
         "codex.execution",
@@ -759,7 +787,9 @@ def test_authenticated_extended_agent_card_injects_profile_into_extensions() -> 
         "single-tenant, shared-workspace coding profile" in note
         for note in compatibility_params["consumer_guidance"]
     )
-    assert any("urn:a2a:*" in note for note in compatibility_params["consumer_guidance"])
+    assert any(
+        "urn:codex-a2a:extension:" in note for note in compatibility_params["consumer_guidance"]
+    )
     assert any(
         "execution_environment" in note for note in compatibility_params["consumer_guidance"]
     )
@@ -780,36 +810,36 @@ def test_authenticated_extended_agent_card_injects_profile_into_extensions() -> 
     interrupt_recovery_policy = compatibility_params["method_retention"]["codex.interrupts.list"]
     assert interrupt_recovery_policy["availability"] == "always"
     assert interrupt_recovery_policy["retention"] == "stable"
-    assert interrupt_recovery_policy["extension_uri"] == "urn:codex-a2a:codex-interrupt-recovery/v1"
+    assert interrupt_recovery_policy["extension_uri"] == INTERRUPT_RECOVERY_EXTENSION_URI
     assert compatibility_params["method_retention"]["codex.sessions.list"] == {
         "surface": "extension",
         "availability": "always",
         "retention": "stable",
-        "extension_uri": "urn:codex-a2a:codex-session-query/v1",
+        "extension_uri": SESSION_QUERY_EXTENSION_URI,
     }
     exec_policy = compatibility_params["method_retention"]["codex.exec.start"]
     assert exec_policy["availability"] == "enabled"
     assert exec_policy["retention"] == "deployment-conditional"
-    assert exec_policy["extension_uri"] == "urn:codex-a2a:codex-exec/v1"
+    assert exec_policy["extension_uri"] == EXEC_CONTROL_EXTENSION_URI
     assert exec_policy["toggle"] == "A2A_ENABLE_EXEC_CONTROL"
     thread_policy = compatibility_params["method_retention"]["codex.threads.watch"]
     assert thread_policy["availability"] == "always"
     assert thread_policy["retention"] == "stable"
-    assert thread_policy["extension_uri"] == "urn:codex-a2a:codex-thread-lifecycle/v1"
+    assert thread_policy["extension_uri"] == THREAD_LIFECYCLE_EXTENSION_URI
     turn_policy = compatibility_params["method_retention"]["codex.turns.steer"]
     assert turn_policy["availability"] == "enabled"
     assert turn_policy["retention"] == "deployment-conditional"
-    assert turn_policy["extension_uri"] == "urn:codex-a2a:codex-turn-control/v1"
+    assert turn_policy["extension_uri"] == TURN_CONTROL_EXTENSION_URI
     assert turn_policy["toggle"] == "A2A_ENABLE_TURN_CONTROL"
     review_policy = compatibility_params["method_retention"]["codex.review.start"]
     assert review_policy["availability"] == "enabled"
     assert review_policy["retention"] == "deployment-conditional"
-    assert review_policy["extension_uri"] == "urn:codex-a2a:codex-review/v1"
+    assert review_policy["extension_uri"] == REVIEW_CONTROL_EXTENSION_URI
     assert review_policy["toggle"] == "A2A_ENABLE_REVIEW_CONTROL"
     review_watch_policy = compatibility_params["method_retention"]["codex.review.watch"]
     assert review_watch_policy["availability"] == "enabled"
     assert review_watch_policy["retention"] == "deployment-conditional"
-    assert review_watch_policy["extension_uri"] == "urn:codex-a2a:codex-review/v1"
+    assert review_watch_policy["extension_uri"] == REVIEW_CONTROL_EXTENSION_URI
     assert review_watch_policy["toggle"] == "A2A_ENABLE_REVIEW_CONTROL"
 
 

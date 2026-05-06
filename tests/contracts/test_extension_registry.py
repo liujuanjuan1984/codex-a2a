@@ -57,7 +57,7 @@ def test_extension_registry_captures_phase1_inventory() -> None:
     authenticated_keys = [
         descriptor.key for descriptor in descriptors if descriptor.authenticated_agent_card
     ]
-    assert public_keys == ["session_binding", "streaming"]
+    assert public_keys == ["session_binding", "streaming", "interrupt_callback"]
     assert authenticated_keys == [
         "session_binding",
         "streaming",
@@ -117,6 +117,7 @@ def test_registry_builds_agent_card_extensions_for_current_phase1_surface() -> N
     assert [extension.uri for extension in public_extensions] == [
         SESSION_BINDING_EXTENSION_URI,
         STREAMING_EXTENSION_URI,
+        INTERRUPT_CALLBACK_EXTENSION_URI,
     ]
     assert [extension.uri for extension in authenticated_extensions] == [
         SESSION_BINDING_EXTENSION_URI,
@@ -149,7 +150,7 @@ def test_registry_builds_openapi_contract_groups() -> None:
         group="codex",
     )
 
-    assert list(shared_contracts) == ["session_binding", "streaming"]
+    assert list(shared_contracts) == ["session_binding", "streaming", "interrupt_callback"]
     assert list(codex_contracts) == [
         "session_query",
         "discovery",
@@ -158,7 +159,6 @@ def test_registry_builds_openapi_contract_groups() -> None:
         "turn_control",
         "review_control",
         "exec_control",
-        "interrupt_callback",
         "wire_contract",
         "compatibility_profile",
     ]
@@ -169,10 +169,9 @@ def test_extension_taxonomy_is_derived_from_registry() -> None:
         "shared_agent_card_extensions": [
             SESSION_BINDING_EXTENSION_URI,
             STREAMING_EXTENSION_URI,
-        ],
-        "shared_provider_private_contracts": [
             INTERRUPT_CALLBACK_EXTENSION_URI,
         ],
+        "shared_provider_private_contracts": [],
         "codex_provider_private_contracts": [
             SESSION_QUERY_EXTENSION_URI,
             DISCOVERY_EXTENSION_URI,

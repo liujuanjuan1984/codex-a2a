@@ -39,50 +39,20 @@ def build_core_jsonrpc_openapi_description() -> str:
         "ListTaskPushNotificationConfigs, DeleteTaskPushNotificationConfig, "
         "SubscribeToTask, GetExtendedAgentCard) on POST "
         f"{extension_contracts.CORE_JSONRPC_PATH}.\n\n"
-        "Provider-private Codex methods share the same public JSON-RPC endpoint and "
-        "are distinguished by method name plus the published compatibility contracts."
+        "Anonymous OpenAPI discovery intentionally exposes only the minimal shared "
+        "contract surface needed for interoperable clients."
     )
 
 
 def build_extension_jsonrpc_openapi_description(*, runtime_profile: RuntimeProfile) -> str:
-    session_methods: list[str] = [
-        extension_contracts.SESSION_QUERY_METHODS["list_sessions"],
-        extension_contracts.SESSION_QUERY_METHODS["get_session_messages"],
-    ]
-    discovery_methods = ", ".join(extension_contracts.DISCOVERY_METHODS.values())
-    thread_lifecycle_methods = ", ".join(extension_contracts.THREAD_LIFECYCLE_METHODS.values())
-    interrupt_recovery_methods = ", ".join(extension_contracts.INTERRUPT_RECOVERY_METHODS.values())
-    turn_methods = (
-        ", ".join(extension_contracts.TURN_CONTROL_METHODS.values())
-        if runtime_profile.turn_control_enabled
-        else "(disabled)"
-    )
-    review_methods = (
-        ", ".join(extension_contracts.REVIEW_CONTROL_METHODS.values())
-        if runtime_profile.review_control_enabled
-        else "(disabled)"
-    )
-    exec_methods = (
-        ", ".join(extension_contracts.EXEC_CONTROL_METHODS.values())
-        if runtime_profile.exec_control_enabled
-        else "(disabled)"
-    )
+    del runtime_profile
     interrupt_methods = ", ".join(sorted(extension_contracts.INTERRUPT_CALLBACK_METHODS.values()))
     return (
         "Provider-private Codex JSON-RPC methods also use POST "
-        f"{extension_contracts.CORE_JSONRPC_PATH}. "
-        "Supports Codex session extensions, Codex thread lifecycle extensions, "
-        "interrupt recovery extensions, active-turn control extensions, review "
-        "control extensions, Codex discovery extensions, interactive exec "
-        "extensions, and shared interrupt callback methods.\n\n"
-        f"Codex session query methods: {', '.join(session_methods)}.\n"
-        f"Codex thread lifecycle methods: {thread_lifecycle_methods}.\n"
-        f"Codex interrupt recovery methods: {interrupt_recovery_methods}.\n"
-        f"Codex active-turn control methods: {turn_methods}.\n"
-        f"Codex review control methods: {review_methods}.\n"
-        f"Codex discovery methods: {discovery_methods}.\n"
-        f"Codex interactive exec methods: {exec_methods}.\n"
-        f"Shared interrupt callback methods: {interrupt_methods}.\n\n"
+        f"{extension_contracts.CORE_JSONRPC_PATH}, but their canonical machine-readable "
+        "discovery surface is the authenticated extended Agent Card rather than this "
+        "anonymous OpenAPI document.\n"
+        f"Shared interrupt callback methods disclosed here: {interrupt_methods}.\n\n"
         "Notification semantics: extension requests without JSON-RPC id return HTTP 204. "
         "Unsupported methods return JSON-RPC -32601 with supported_methods and "
         "protocol_version in error.data."
@@ -137,147 +107,8 @@ def build_extension_jsonrpc_openapi_examples(
     *,
     runtime_profile: RuntimeProfile,
 ) -> dict[str, Any]:
-    examples: dict[str, Any] = {
-        "session_list": {
-            "summary": "List Codex sessions",
-            "value": {
-                "jsonrpc": "2.0",
-                "id": 1,
-                "method": extension_contracts.SESSION_QUERY_METHODS["list_sessions"],
-                "params": {"limit": extension_contracts.SESSION_QUERY_DEFAULT_LIMIT},
-            },
-        },
-        "session_messages": {
-            "summary": "List messages for a session",
-            "value": {
-                "jsonrpc": "2.0",
-                "id": 2,
-                "method": extension_contracts.SESSION_QUERY_METHODS["get_session_messages"],
-                "params": {
-                    "session_id": "s-1",
-                    "limit": extension_contracts.SESSION_QUERY_DEFAULT_LIMIT,
-                },
-            },
-        },
-        "discovery_skills_list": {
-            "summary": "List available Codex skills",
-            "value": {
-                "jsonrpc": "2.0",
-                "id": 23,
-                "method": extension_contracts.DISCOVERY_METHODS["list_skills"],
-                "params": {"cwds": ["/workspace/project"], "force_reload": True},
-            },
-        },
-        "discovery_apps_list": {
-            "summary": "List available Codex apps",
-            "value": {
-                "jsonrpc": "2.0",
-                "id": 24,
-                "method": extension_contracts.DISCOVERY_METHODS["list_apps"],
-                "params": {"limit": 20, "force_refetch": False},
-            },
-        },
-        "discovery_plugins_list": {
-            "summary": "List available Codex plugins",
-            "value": {
-                "jsonrpc": "2.0",
-                "id": 25,
-                "method": extension_contracts.DISCOVERY_METHODS["list_plugins"],
-                "params": {"cwds": ["/workspace/project"], "force_remote_sync": False},
-            },
-        },
-        "discovery_plugin_read": {
-            "summary": "Read one Codex plugin",
-            "value": {
-                "jsonrpc": "2.0",
-                "id": 26,
-                "method": extension_contracts.DISCOVERY_METHODS["read_plugin"],
-                "params": {
-                    "marketplace_path": "/workspace/project/.codex/plugins/marketplace.json",
-                    "plugin_name": "sample",
-                },
-            },
-        },
-        "discovery_watch": {
-            "summary": "Watch discovery invalidation and refresh signals",
-            "value": {
-                "jsonrpc": "2.0",
-                "id": 27,
-                "method": extension_contracts.DISCOVERY_METHODS["watch"],
-                "params": {"request": {"events": ["skills.changed", "apps.updated"]}},
-            },
-        },
-        "thread_fork": {
-            "summary": "Fork a Codex thread",
-            "value": {
-                "jsonrpc": "2.0",
-                "id": 271,
-                "method": extension_contracts.THREAD_LIFECYCLE_METHODS["fork"],
-                "params": {"thread_id": "thr-1", "request": {"ephemeral": True}},
-            },
-        },
-        "thread_archive": {
-            "summary": "Archive a Codex thread",
-            "value": {
-                "jsonrpc": "2.0",
-                "id": 272,
-                "method": extension_contracts.THREAD_LIFECYCLE_METHODS["archive"],
-                "params": {"thread_id": "thr-1"},
-            },
-        },
-        "thread_unarchive": {
-            "summary": "Restore an archived Codex thread",
-            "value": {
-                "jsonrpc": "2.0",
-                "id": 273,
-                "method": extension_contracts.THREAD_LIFECYCLE_METHODS["unarchive"],
-                "params": {"thread_id": "thr-1"},
-            },
-        },
-        "thread_metadata_update": {
-            "summary": "Patch persisted Codex thread git metadata",
-            "value": {
-                "jsonrpc": "2.0",
-                "id": 274,
-                "method": extension_contracts.THREAD_LIFECYCLE_METHODS["metadata_update"],
-                "params": {
-                    "thread_id": "thr-1",
-                    "request": {"git_info": {"branch": "feature/thread-lifecycle"}},
-                },
-            },
-        },
-        "thread_watch": {
-            "summary": "Watch thread lifecycle signals through a task stream",
-            "value": {
-                "jsonrpc": "2.0",
-                "id": 275,
-                "method": extension_contracts.THREAD_LIFECYCLE_METHODS["watch"],
-                "params": {
-                    "request": {
-                        "events": ["thread.started", "thread.status.changed"],
-                        "thread_ids": ["thr-1"],
-                    }
-                },
-            },
-        },
-        "thread_watch_release": {
-            "summary": "Release an owned thread lifecycle watch task",
-            "value": {
-                "jsonrpc": "2.0",
-                "id": 276,
-                "method": extension_contracts.THREAD_LIFECYCLE_METHODS["watch_release"],
-                "params": {"task_id": "task-thread-watch-1"},
-            },
-        },
-        "interrupts_list": {
-            "summary": "List active pending interrupts for the current caller",
-            "value": {
-                "jsonrpc": "2.0",
-                "id": 277,
-                "method": extension_contracts.INTERRUPT_RECOVERY_METHODS["list"],
-                "params": {"type": "permission"},
-            },
-        },
+    del runtime_profile
+    return {
         "permission_reply": {
             "summary": "Reply to permission interrupt request",
             "value": {
@@ -332,101 +163,6 @@ def build_extension_jsonrpc_openapi_examples(
             },
         },
     }
-    if runtime_profile.turn_control_enabled:
-        examples["turn_steer"] = {
-            "summary": "Append user input to the active regular turn",
-            "value": {
-                "jsonrpc": "2.0",
-                "id": 276,
-                "method": extension_contracts.TURN_CONTROL_METHODS["steer"],
-                "params": {
-                    "thread_id": "thr-1",
-                    "expected_turn_id": "turn-9",
-                    "request": {
-                        "parts": [{"type": "text", "text": "Focus on the failing tests first."}]
-                    },
-                },
-            },
-        }
-    if runtime_profile.review_control_enabled:
-        examples["review_start"] = {
-            "summary": "Start a provider-private review turn",
-            "value": {
-                "jsonrpc": "2.0",
-                "id": 277,
-                "method": extension_contracts.REVIEW_CONTROL_METHODS["start"],
-                "params": {
-                    "thread_id": "thr-1",
-                    "delivery": "inline",
-                    "target": {
-                        "type": "commit",
-                        "sha": "commit-demo-123",
-                        "title": "Polish tui colors",
-                    },
-                },
-            },
-        }
-        examples["review_watch"] = {
-            "summary": "Watch coarse-grained review lifecycle signals through a task stream",
-            "value": {
-                "jsonrpc": "2.0",
-                "id": 278,
-                "method": extension_contracts.REVIEW_CONTROL_METHODS["watch"],
-                "params": {
-                    "thread_id": "thr-1",
-                    "review_thread_id": "thr-1-review",
-                    "turn_id": "turn-review-1",
-                    "request": {"events": ["review.started", "review.completed", "review.failed"]},
-                },
-            },
-        }
-    if runtime_profile.exec_control_enabled:
-        examples["exec_start"] = {
-            "summary": "Start standalone interactive command execution",
-            "value": {
-                "jsonrpc": "2.0",
-                "id": 28,
-                "method": extension_contracts.EXEC_CONTROL_METHODS["exec_start"],
-                "params": {
-                    "request": {
-                        "command": "bash",
-                        "arguments": "-lc 'printf hello && sleep 1'",
-                        "process_id": "exec-1",
-                        "tty": True,
-                        "rows": 24,
-                        "cols": 80,
-                    }
-                },
-            },
-        }
-        examples["exec_write"] = {
-            "summary": "Write stdin bytes to an interactive exec session",
-            "value": {
-                "jsonrpc": "2.0",
-                "id": 29,
-                "method": extension_contracts.EXEC_CONTROL_METHODS["exec_write"],
-                "params": {"request": {"process_id": "exec-1", "delta_base64": "cHdkCg=="}},
-            },
-        }
-        examples["exec_resize"] = {
-            "summary": "Resize the interactive exec PTY",
-            "value": {
-                "jsonrpc": "2.0",
-                "id": 30,
-                "method": extension_contracts.EXEC_CONTROL_METHODS["exec_resize"],
-                "params": {"request": {"process_id": "exec-1", "rows": 40, "cols": 120}},
-            },
-        }
-        examples["exec_terminate"] = {
-            "summary": "Terminate an interactive exec session",
-            "value": {
-                "jsonrpc": "2.0",
-                "id": 31,
-                "method": extension_contracts.EXEC_CONTROL_METHODS["exec_terminate"],
-                "params": {"request": {"process_id": "exec-1"}},
-            },
-        }
-    return examples
 
 
 def build_rest_message_openapi_examples() -> dict[str, Any]:

@@ -388,18 +388,19 @@ def build_compatibility_profile_params(
                 "do not assume per-consumer workspace or tenant isolation."
             ),
             (
-                "Treat urn:a2a:* extension URIs in this repository as shared extension "
-                "conventions used across this repo family, not as claims that they are part "
-                "of the A2A core baseline."
+                "Treat urn:codex-a2a:extension:* URIs in this repository as "
+                "repository-governed, versioned extension identifiers rather than as "
+                "claims that they are part of the A2A core baseline."
             ),
             (
                 "Treat shared session-binding and stream-hints as the negotiated "
                 "Agent Card extension surface for this deployment."
             ),
             (
-                "Treat a2a.interrupt.* callback methods as a shared provider-private "
-                "contract exposed on the shared JSON-RPC endpoint rather than as core "
-                "A2A behavior or an Agent Card-negotiated extension."
+                "Treat a2a.interrupt.* callback methods as a shared callback contract "
+                "declared on the public and authenticated discovery surfaces, then "
+                "invoked directly on the shared JSON-RPC endpoint rather than treated "
+                "as core A2A behavior."
             ),
             (
                 f"Use {CORE_JSONRPC_PATH} for both core A2A JSON-RPC methods and "
@@ -648,6 +649,7 @@ def build_session_query_extension_params(
             ],
         },
         "method_contracts": method_contracts,
+        "interrupt_metadata_field": extension_specs.SHARED_INTERRUPT_METADATA_FIELD,
         "errors": {
             "business_codes": dict(extension_specs.SESSION_QUERY_ERROR_BUSINESS_CODES),
             "error_data_fields": list(extension_specs.SESSION_QUERY_ERROR_DATA_FIELDS),
@@ -1240,6 +1242,7 @@ def build_interrupt_callback_extension_params(
         "jsonrpc_endpoint": _extension_jsonrpc_endpoint_contract(),
         "methods": dict(extension_specs.INTERRUPT_CALLBACK_METHODS),
         "method_contracts": method_contracts,
+        "interrupt_metadata_field": extension_specs.SHARED_INTERRUPT_METADATA_FIELD,
         "supported_interrupt_events": [
             "permission.asked",
             "question.asked",
