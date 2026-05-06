@@ -221,7 +221,7 @@ These variables are forwarded to the local `codex app-server` subprocess.
 
 - `CODEX_WORKSPACE_ROOT`: default Codex workspace root (optional)
 - `CODEX_CLI_BIN`: Codex CLI binary path, default `codex`
-  - For long-running Linux deployments managed by PM2, systemd, or similar supervisors, prefer the bundled native Codex binary over the npm `codex` Node wrapper when that native binary is available.
+  - For long-running Linux deployments managed by PM2, systemd, or similar supervisors, set this explicitly to the bundled native Codex binary.
 - `CODEX_MODEL`: default Codex model, default `gpt-5.1-codex`
 - `CODEX_APPROVAL_POLICY`: default approval policy (`never`, `on-request`, etc.)
 - `CODEX_SANDBOX_MODE`: default sandbox mode (`danger-full-access`, `read-only`, etc.)
@@ -401,54 +401,38 @@ CODEX_WORKSPACE_ROOT=/abs/path/to/workspace uv run codex-a2a serve
 
 This path is for contributors. End users should prefer the released CLI path described first in [README.md](../README.md) and above in this guide.
 
-## Core Dump Hygiene
+## Stable Linux Codex CLI Setup
 
-If a local crash leaves a `core` or `core.<pid>` file in the workspace, treat it as a local debugging artifact rather than a repository file.
+For long-running Linux deployments, configure `codex-a2a-serve` to launch the bundled native Codex binary directly through `CODEX_CLI_BIN`.
 
-- The repository ignores `core` and `core.*` by default because a core dump can contain process memory snapshots.
-- Before deleting the file, capture a minimal diagnostic snapshot so future triage does not depend on the raw dump alone.
-
-Recommended minimum steps:
-
-```bash
-file core.*
-node -v
-codex --version
-```
-
-If `file` reports a command such as `node .../codex`, the crash came from the local Codex CLI stack rather than from the `codex-a2a-serve` Python service itself.
-
-When native debugging tools are available, collect one stack trace before removing the dump:
-
-```bash
-gdb -batch -ex 'thread apply all bt' /usr/local/bin/node core.<pid>
-```
-
-If `gdb` is not installed, record that limitation and keep the higher-level metadata:
-
-- the `file core.*` output
-- `node -v`
-- `codex --version`
-- the command or workflow that produced the crash
-
-For stable long-running Linux deployments, prefer resolving the bundled native Codex binary and setting `CODEX_CLI_BIN` explicitly instead of relying on the npm `codex` wrapper:
+Resolve the native binary from the installed `codex` command:
 
 ```bash
 CODEX_WRAPPER_BIN="$(readlink -f "$(command -v codex)")"
 CODEX_PACKAGE_ROOT="$(dirname "$(dirname "$CODEX_WRAPPER_BIN")")"
 CODEX_NATIVE_BIN="$CODEX_PACKAGE_ROOT/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/codex/codex"
-test -x "$CODEX_NATIVE_BIN" && printf '%s\n' "$CODEX_NATIVE_BIN"
+test -x "$CODEX_NATIVE_BIN"
 ```
 
-On the current npm global install layout for Linux x64, the printed path can be used as:
+Export the resolved path before starting the service:
 
 ```bash
 export CODEX_CLI_BIN="$CODEX_NATIVE_BIN"
 ```
 
-This is a deployment-stability preference for wrapper-related shutdown crashes on Linux. It is not required when the default `codex` wrapper is already stable in your environment.
+PM2 example:
 
-After the metadata is captured, remove the dump from the workspace unless you explicitly need to keep it for native debugging outside the repository.
+```bash
+CODEX_CLI_BIN="$CODEX_NATIVE_BIN" uv run codex-a2a serve
+```
+
+Systemd example:
+
+```ini
+Environment=CODEX_CLI_BIN=/absolute/path/to/codex
+```
+
+On the current npm global install layout for Linux x64, the command above resolves the bundled native binary shipped with `@openai/codex`.
 
 ## Service Behavior
 
