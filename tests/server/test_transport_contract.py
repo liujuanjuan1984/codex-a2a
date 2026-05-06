@@ -1,5 +1,7 @@
 import asyncio
 import logging
+import subprocess
+import sys
 import uuid
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
@@ -837,6 +839,103 @@ async def test_dual_stack_send_accepts_transport_native_payloads(monkeypatch) ->
         assert rpc_resp.json().get("error") is None
 
 
+def test_server_application_imports_cleanly_in_fresh_interpreter() -> None:
+    result = subprocess.run(
+        [sys.executable, "-c", "import codex_a2a.server.application"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+@pytest.mark.asyncio
+async def test_tenant_rest_message_route_negotiates_protocol_header(monkeypatch) -> None:
+    import codex_a2a.server.application as app_module
+
+    monkeypatch.setattr(app_module, "CodexClient", DummyChatCodexClient)
+    app = app_module.create_app(make_settings(a2a_bearer_token="test-token"))
+    transport = httpx.ASGITransport(app=app)
+    headers = {"Authorization": "Bearer test-token"}
+
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post(
+            f"/acme{REST_API_PATH_PREFIX}/message:send",
+            headers=headers,
+            json=_rest_message_payload(),
+        )
+
+    assert response.status_code == 200
+    assert response.headers["A2A-Version"] == "1.0"
+
+
+@pytest.mark.asyncio
+async def test_tenant_rest_message_route_uses_payload_shape_guard(monkeypatch) -> None:
+    import codex_a2a.server.application as app_module
+
+    monkeypatch.setattr(app_module, "CodexClient", DummyChatCodexClient)
+    app = app_module.create_app(make_settings(a2a_bearer_token="test-token"))
+    transport = httpx.ASGITransport(app=app)
+    headers = {"Authorization": "Bearer test-token"}
+    jsonrpc_envelope = {
+        "jsonrpc": "2.0",
+        "id": 7,
+        "method": "SendMessage",
+        "params": {
+            "message": {
+                "messageId": "m-tenant-cross-envelope",
+                "role": "ROLE_USER",
+                "parts": [{"text": "hello from tenant envelope"}],
+            }
+        },
+    }
+
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post(
+            f"/acme{REST_API_PATH_PREFIX}/message:send",
+            headers=headers,
+            json=jsonrpc_envelope,
+        )
+
+    assert response.status_code == 400
+    assert "Invalid HTTP+JSON payload" in response.text
+
+
+@pytest.mark.asyncio
+async def test_tenant_extended_card_uses_authenticated_cache_contract(monkeypatch) -> None:
+    import codex_a2a.server.application as app_module
+
+    monkeypatch.setattr(app_module, "CodexClient", DummyChatCodexClient)
+    app = app_module.create_app(make_settings(a2a_bearer_token="test-token"))
+    transport = httpx.ASGITransport(app=app)
+    headers = {"Authorization": "Bearer test-token"}
+
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get(
+            f"/acme{REST_API_PATH_PREFIX}/extendedAgentCard",
+            headers=headers,
+        )
+
+        cached = await client.get(
+            f"/acme{REST_API_PATH_PREFIX}/extendedAgentCard",
+            headers={
+                **headers,
+                "If-None-Match": response.headers["etag"],
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.headers["A2A-Version"] == "1.0"
+    assert response.headers["cache-control"] == AUTHENTICATED_EXTENDED_CARD_CACHE_CONTROL
+    assert {value.strip() for value in response.headers["vary"].split(",") if value.strip()} == {
+        "Authorization",
+        "Accept-Encoding",
+    }
+    assert response.headers["etag"]
+    assert cached.status_code == 304
+
+
 @pytest.mark.asyncio
 async def test_jsonrpc_legacy_core_method_alias_is_rejected_under_v1(monkeypatch) -> None:
     import codex_a2a.server.application as app_module
@@ -1089,6 +1188,25 @@ async def test_subscribe_missing_task_returns_controlled_404(monkeypatch) -> Non
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.get(
             f"{REST_API_PATH_PREFIX}/tasks/task-missing:subscribe",
+            headers=headers,
+        )
+
+    assert response.status_code == 404
+    assert response.json() == {"error": "Task not found", "task_id": "task-missing"}
+
+
+@pytest.mark.asyncio
+async def test_tenant_subscribe_missing_task_returns_controlled_404(monkeypatch) -> None:
+    import codex_a2a.server.application as app_module
+
+    monkeypatch.setattr(app_module, "CodexClient", DummyChatCodexClient)
+    app = app_module.create_app(make_settings(a2a_bearer_token="test-token"))
+    transport = httpx.ASGITransport(app=app)
+    headers = {"Authorization": "Bearer test-token"}
+
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get(
+            f"/acme{REST_API_PATH_PREFIX}/tasks/task-missing:subscribe",
             headers=headers,
         )
 
