@@ -8,10 +8,6 @@ from codex_a2a.a2a_proto import new_text_part
 from codex_a2a.parts.text import extract_text_from_parts
 
 
-def session_context_id(session_id: str) -> str:
-    return session_id
-
-
 def as_a2a_session_task(session: Any) -> Task | None:
     if not isinstance(session, dict):
         return None
@@ -23,7 +19,7 @@ def as_a2a_session_task(session: Any) -> Task | None:
         return None
     task = Task(
         id=session_id,
-        context_id=session_context_id(session_id),
+        context_id=session_id,
         status=TaskStatus(state=TaskState.TASK_STATE_COMPLETED),
         metadata={
             "codex": {"raw": session},
@@ -57,7 +53,7 @@ def as_a2a_message(session_id: str, item: Any) -> Message | None:
         message_id=message_id,
         role=role,
         parts=[new_text_part(text)],
-        context_id=session_context_id(session_id),
+        context_id=session_id,
         metadata={
             "codex": {"raw": item},
         },
