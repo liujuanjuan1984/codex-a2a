@@ -27,7 +27,7 @@ Negotiation note:
 Canonical URI note:
 
 - The `urn:codex-a2a:extension:...` identifiers listed below are the canonical extension URIs for the current repository contract line.
-- URI paths do not encode disclosure or auth semantics. Contract family, public Agent Card visibility, authenticated extended-card visibility, and negotiation mode are registry metadata.
+- URI paths do not encode disclosure or auth semantics. Scope, public Agent Card visibility, authenticated extended-card visibility, and negotiation mode define the disclosure and activation boundaries.
 - This document is the stable repository-owned specification index for those URIs, but the project does not currently claim "spec hosting at the extension URI" for them.
 - The current strategy treats this repository-owned URN namespace as the long-lived canonical identity layer rather than as a temporary bridge to a planned HTTPS migration.
 - Any future namespace change should be handled as an explicit compatibility-line decision, not as an indefinitely dual-advertised runtime identity.
@@ -132,7 +132,7 @@ URI: `urn:codex-a2a:extension:interactive-interrupt:v1`
 - Negotiation: declaration-only; discover first, then invoke the documented methods directly
 - Public disclosure: method aliases, supported interrupt event names, shared interrupt metadata field names, and the authentication/request-id scope summary only
 - Authenticated disclosure: full JSON-RPC endpoint metadata, method contracts, reply schemas, provider-private metadata, success result fields, errors, and runtime profile
-- Note: this URI identifies a shared repo-family callback contract and is published on both anonymous and authenticated discovery surfaces. Anonymous publication does not imply anonymous invocation; callback methods require configured transport authentication and an active pending interrupt `request_id`, with session-owner validation when session binding is available.
+- Note: this URI identifies a shared interrupt callback contract and is published on both anonymous and authenticated discovery surfaces. Anonymous publication does not imply anonymous invocation; callback methods require configured transport authentication and an active pending interrupt `request_id`, with session-owner validation when session binding is available.
 
 ## A2A Compatibility Profile v1
 

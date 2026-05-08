@@ -164,14 +164,13 @@ def test_registry_builds_openapi_contract_groups() -> None:
     ]
 
 
-def test_interrupt_callback_family_does_not_imply_anonymous_invocation() -> None:
+def test_interrupt_callback_public_disclosure_does_not_imply_anonymous_invocation() -> None:
     interrupt_descriptor = next(
         descriptor
         for descriptor in EXTENSION_CONTRACT_REGISTRY
         if descriptor.uri == INTERRUPT_CALLBACK_EXTENSION_URI
     )
 
-    assert interrupt_descriptor.family == "shared"
     assert interrupt_descriptor.negotiation_mode == "declaration_only"
     assert interrupt_descriptor.public_agent_card is True
     assert interrupt_descriptor.authenticated_agent_card is True
