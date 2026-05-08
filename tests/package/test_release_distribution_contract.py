@@ -102,7 +102,7 @@ def test_dependency_health_workflow_runs_as_a_standalone_check() -> None:
 
 
 def test_scripts_index_exposes_built_cli_smoke_test() -> None:
-    assert "doctor.sh" in SCRIPTS_README_TEXT
+    assert "doctor.sh" not in SCRIPTS_README_TEXT
     assert "conformance.sh" in SCRIPTS_README_TEXT
     assert "validate_runtime_matrix.sh" in SCRIPTS_README_TEXT
     assert "dependency_health.sh" in SCRIPTS_README_TEXT

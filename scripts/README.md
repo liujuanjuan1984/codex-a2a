@@ -12,7 +12,6 @@ This document only explains the remaining repository-local maintainer scripts. U
 
 ## Which Script to Use
 
-- [`scripts/doctor.sh`](./doctor.sh): run the default local validation baseline through the shortest maintainer entrypoint.
 - [`scripts/validate_baseline.sh`](./validate_baseline.sh): run the default local validation baseline used by contributors and CI.
 - [`scripts/check_dead_code.py`](./check_dead_code.py): run the conservative private dead-code guard used by the default validation baseline.
 - [`scripts/audit_low_call_sites.py`](./audit_low_call_sites.py): report low-call-count function and method candidates for manual wrapper/abstraction review.
@@ -32,7 +31,6 @@ The `Publish` workflow now separates build, PyPI publish, and GitHub Release syn
 
 ## Notes
 
-- `doctor.sh` is a thin alias for the default local regression baseline; `validate_baseline.sh` remains the CI-facing script name.
 - `conformance.sh` intentionally stays outside the default regression gate. Use it to gather external compatibility evidence, then triage results in [`docs/conformance-triage.md`](../docs/conformance-triage.md).
 - `validate_baseline.sh` and `dependency_health.sh` intentionally remain separate entrypoints and share common prerequisites through [`health_common.sh`](./health_common.sh).
 - `validate_baseline.sh` now includes a conservative private dead-code check before type-checking and test execution.

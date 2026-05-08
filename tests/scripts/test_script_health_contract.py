@@ -4,7 +4,6 @@ DEPENDENCY_HEALTH_TEXT = Path("scripts/dependency_health.sh").read_text()
 CONFORMANCE_TEXT = Path("scripts/conformance.sh").read_text()
 HEALTH_COMMON_TEXT = Path("scripts/health_common.sh").read_text()
 SCRIPTS_INDEX_TEXT = Path("scripts/README.md").read_text()
-DOCTOR_TEXT = Path("scripts/doctor.sh").read_text()
 VALIDATE_BASELINE_TEXT = Path("scripts/validate_baseline.sh").read_text()
 CHECK_DEAD_CODE_TEXT = Path("scripts/check_dead_code.py").read_text()
 AUDIT_LOW_CALL_SITES_TEXT = Path("scripts/audit_low_call_sites.py").read_text()
@@ -48,13 +47,6 @@ def test_low_call_audit_stays_manual_and_non_blocking() -> None:
     assert "No low-call-count function wrappers detected" in AUDIT_LOW_CALL_SITES_TEXT
 
 
-def test_doctor_is_thin_default_regression_alias() -> None:
-    assert 'exec bash "${SCRIPT_DIR}/validate_baseline.sh" "$@"' in DOCTOR_TEXT
-    assert "uv run pytest" not in DOCTOR_TEXT
-    assert "uv run mypy" not in DOCTOR_TEXT
-    assert "uv run pip-audit" not in DOCTOR_TEXT
-
-
 def test_conformance_keeps_external_tck_experiment_scope() -> None:
     assert "Run the official A2A TCK as a local/manual experiment." in CONFORMANCE_TEXT
     assert 'run_shared_repo_health_prerequisites "conformance"' in CONFORMANCE_TEXT
@@ -80,10 +72,9 @@ def test_dependency_health_keeps_dependency_review_scope() -> None:
 
 
 def test_scripts_index_documents_split_health_entrypoints() -> None:
-    assert "doctor.sh" in SCRIPTS_INDEX_TEXT
+    assert "doctor.sh" not in SCRIPTS_INDEX_TEXT
     assert "conformance.sh" in SCRIPTS_INDEX_TEXT
     assert "audit_low_call_sites.py" in SCRIPTS_INDEX_TEXT
-    assert "shortest maintainer entrypoint" in SCRIPTS_INDEX_TEXT
     assert "outside the default regression gate" in SCRIPTS_INDEX_TEXT
     assert "default local validation baseline used by contributors and CI" in SCRIPTS_INDEX_TEXT
     assert "standalone dependency review flow" in SCRIPTS_INDEX_TEXT
