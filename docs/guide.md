@@ -481,7 +481,7 @@ On the current npm global install layout for Linux x64, the command above resolv
 - If task persistence fails while processing a request, the service maps that failure to a stable failed task or failed final status instead of leaking raw task-store exceptions.
 - Those task-store failure surfaces use `metadata.codex.error` with `type=TASK_STORE_UNAVAILABLE` and an `operation` field such as `get` or `save`.
 - Stream artifacts carry `artifact.metadata.shared.stream.block_type` with values `text`, `reasoning`, and `tool_call`.
-- The published `urn:codex-a2a:extension:shared:stream-hints:v1` contract also declares the emitted A2A part type per block: `text` and `reasoning` use `Part(text)`, while `tool_call` uses `Part(data)`.
+- The published `urn:codex-a2a:extension:stream-hints:v1` contract also declares the emitted A2A part type per block: `text` and `reasoning` use `Part(text)`, while `tool_call` uses `Part(data)`.
 - All chunks share one stream artifact ID and preserve original timeline via `artifact.metadata.shared.stream.sequence`.
 - Advanced correlation fields such as `metadata.shared.stream.message_id` and `metadata.shared.stream.event_id` may still appear on detailed/runtime surfaces, but the public shared contract only exposes the minimum stable discovery fields.
 - Session projections are normalized under `metadata.shared.session`, with `id` as the canonical shared field.

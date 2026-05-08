@@ -18,18 +18,18 @@ def _extension_uri(*segments: str) -> str:
     return f"{EXTENSION_URI_NAMESPACE}{':'.join(normalized_segments)}"
 
 
-COMPATIBILITY_PROFILE_EXTENSION_URI = _extension_uri("private", "compatibility-profile", "v1")
-WIRE_CONTRACT_EXTENSION_URI = _extension_uri("private", "wire-contract", "v1")
-SESSION_BINDING_EXTENSION_URI = _extension_uri("shared", "session-binding", "v1")
-STREAMING_EXTENSION_URI = _extension_uri("shared", "stream-hints", "v1")
-SESSION_QUERY_EXTENSION_URI = _extension_uri("private", "session-query", "v1")
-DISCOVERY_EXTENSION_URI = _extension_uri("private", "discovery", "v1")
-THREAD_LIFECYCLE_EXTENSION_URI = _extension_uri("private", "thread-lifecycle", "v1")
-INTERRUPT_RECOVERY_EXTENSION_URI = _extension_uri("private", "interrupt-recovery", "v1")
-TURN_CONTROL_EXTENSION_URI = _extension_uri("private", "turn-control", "v1")
-REVIEW_CONTROL_EXTENSION_URI = _extension_uri("private", "review-control", "v1")
-EXEC_CONTROL_EXTENSION_URI = _extension_uri("private", "exec-control", "v1")
-INTERRUPT_CALLBACK_EXTENSION_URI = _extension_uri("shared", "interactive-interrupt", "v1")
+COMPATIBILITY_PROFILE_EXTENSION_URI = _extension_uri("compatibility-profile", "v1")
+WIRE_CONTRACT_EXTENSION_URI = _extension_uri("wire-contract", "v1")
+SESSION_BINDING_EXTENSION_URI = _extension_uri("session-binding", "v1")
+STREAMING_EXTENSION_URI = _extension_uri("stream-hints", "v1")
+SESSION_QUERY_EXTENSION_URI = _extension_uri("session-query", "v1")
+DISCOVERY_EXTENSION_URI = _extension_uri("discovery", "v1")
+THREAD_LIFECYCLE_EXTENSION_URI = _extension_uri("thread-lifecycle", "v1")
+INTERRUPT_RECOVERY_EXTENSION_URI = _extension_uri("interrupt-recovery", "v1")
+TURN_CONTROL_EXTENSION_URI = _extension_uri("turn-control", "v1")
+REVIEW_CONTROL_EXTENSION_URI = _extension_uri("review-control", "v1")
+EXEC_CONTROL_EXTENSION_URI = _extension_uri("exec-control", "v1")
+INTERRUPT_CALLBACK_EXTENSION_URI = _extension_uri("interactive-interrupt", "v1")
 
 PUBLIC_EXTENSION_URIS: tuple[str, ...] = (
     SESSION_BINDING_EXTENSION_URI,

@@ -120,6 +120,22 @@ def test_provider_private_contract_builders_reject_non_1_0_protocol_version() ->
         )
 
 
+def test_machine_readable_contracts_use_canonical_extension_uri_inventory() -> None:
+    runtime_profile = build_runtime_profile(make_settings(a2a_bearer_token="test-token"))
+
+    wire_contract = build_wire_contract_extension_params(
+        protocol_version="1.0",
+        runtime_profile=runtime_profile,
+    )
+    compatibility_profile = build_compatibility_profile_params(
+        protocol_version="1.0",
+        runtime_profile=runtime_profile,
+    )
+
+    assert wire_contract["extensions"]["extension_uris"] == list(ALL_EXTENSION_URIS)
+    assert set(compatibility_profile["extension_retention"]) == set(ALL_EXTENSION_URIS)
+
+
 def test_session_query_contract_ssot_matches_openapi_contract() -> None:
     settings = make_settings(a2a_bearer_token="test-token")
     runtime_profile = build_runtime_profile(settings)
@@ -329,12 +345,30 @@ def test_extension_uris_map_to_repository_spec_index() -> None:
     index_path = repo_root / "docs" / "extension-specifications.md"
     index_text = index_path.read_text(encoding="utf-8")
 
+    assert ALL_EXTENSION_URIS == (
+        "urn:codex-a2a:extension:session-binding:v1",
+        "urn:codex-a2a:extension:stream-hints:v1",
+        "urn:codex-a2a:extension:session-query:v1",
+        "urn:codex-a2a:extension:discovery:v1",
+        "urn:codex-a2a:extension:thread-lifecycle:v1",
+        "urn:codex-a2a:extension:interrupt-recovery:v1",
+        "urn:codex-a2a:extension:turn-control:v1",
+        "urn:codex-a2a:extension:review-control:v1",
+        "urn:codex-a2a:extension:exec-control:v1",
+        "urn:codex-a2a:extension:interactive-interrupt:v1",
+        "urn:codex-a2a:extension:wire-contract:v1",
+        "urn:codex-a2a:extension:compatibility-profile:v1",
+    )
     spec_paths = {repo_root / path for path in EXTENSION_SPEC_DOCUMENT_PATHS_BY_URI.values()}
     assert spec_paths == {index_path}
 
     for uri in ALL_EXTENSION_URIS:
         assert uri.startswith(EXTENSION_URI_NAMESPACE), (
             "Extension URI drifted away from the repository-governed permanent URN namespace."
+        )
+        uri_suffix = uri.removeprefix(EXTENSION_URI_NAMESPACE)
+        assert uri_suffix.split(":")[0] not in {"shared", "private"}, (
+            "Extension URI must not encode disclosure or auth semantics in the URI path."
         )
         local_spec_path = repo_root / EXTENSION_SPEC_DOCUMENT_PATHS_BY_URI[uri]
         assert local_spec_path.is_file(), (

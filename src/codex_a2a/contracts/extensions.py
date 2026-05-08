@@ -129,18 +129,7 @@ def build_wire_contract_extension_params(
             },
             "jsonrpc_methods": list(snapshot.extension_jsonrpc_methods),
             "conditionally_available_methods": dict(snapshot.conditional_methods),
-            "extension_uris": [
-                extension_specs.SESSION_BINDING_EXTENSION_URI,
-                extension_specs.STREAMING_EXTENSION_URI,
-                extension_specs.SESSION_QUERY_EXTENSION_URI,
-                extension_specs.DISCOVERY_EXTENSION_URI,
-                extension_specs.THREAD_LIFECYCLE_EXTENSION_URI,
-                extension_specs.INTERRUPT_RECOVERY_EXTENSION_URI,
-                extension_specs.TURN_CONTROL_EXTENSION_URI,
-                extension_specs.REVIEW_CONTROL_EXTENSION_URI,
-                extension_specs.EXEC_CONTROL_EXTENSION_URI,
-                extension_specs.INTERRUPT_CALLBACK_EXTENSION_URI,
-            ],
+            "extension_uris": list(extension_specs.ALL_EXTENSION_URIS),
         },
         "all_jsonrpc_methods": list(snapshot.supported_jsonrpc_methods),
         "unsupported_method_error": {
@@ -342,6 +331,16 @@ def build_compatibility_profile_params(
         },
         extension_specs.INTERRUPT_CALLBACK_EXTENSION_URI: {
             "surface": "jsonrpc-extension",
+            "availability": "always",
+            "retention": "stable",
+        },
+        extension_specs.WIRE_CONTRACT_EXTENSION_URI: {
+            "surface": "machine-readable-metadata",
+            "availability": "always",
+            "retention": "stable",
+        },
+        extension_specs.COMPATIBILITY_PROFILE_EXTENSION_URI: {
+            "surface": "machine-readable-metadata",
             "availability": "always",
             "retention": "stable",
         },
