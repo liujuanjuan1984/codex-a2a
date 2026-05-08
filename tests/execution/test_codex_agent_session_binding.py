@@ -283,9 +283,9 @@ async def test_agent_uses_stable_fallback_message_id_when_upstream_missing_messa
     task = _terminal_task(q)
     assert task.status.state == TaskState.TASK_STATE_COMPLETED
     assert task.metadata is not None
-    assert task.status.message is not None
+    assert not task.status.HasField("message")
     assert "message_id" not in task.metadata["shared"]["session"]
-    assert task.status.message.message_id == "t-fallback:c-fallback:assistant"
+    assert part_text(task.artifacts[0].parts[0]) == "echo:hello"
 
 
 @pytest.mark.asyncio
@@ -469,8 +469,8 @@ async def test_agent_supports_tool_loop_and_merges_stream_output() -> None:
 
     assert client.call_count == 2
     task = _terminal_task(queue)
-    assert task.status.message is not None
-    assert part_text(task.status.message.parts[0]) == "done"
+    assert not task.status.HasField("message")
+    assert part_text(task.artifacts[0].parts[0]) == "done"
 
 
 def test_executor_merge_streamed_a2a_tool_output() -> None:

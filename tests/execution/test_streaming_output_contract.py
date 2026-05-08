@@ -2079,5 +2079,6 @@ async def test_non_streaming_task_metadata_matches_declared_output_contract() ->
     )
 
     task = _terminal_task(queue)
+    assert not task.status.HasField("message")
     assert task.metadata is not None
     _assert_shared_metadata_matches_streaming_contract(_task_metadata(task))

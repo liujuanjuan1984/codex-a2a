@@ -13,7 +13,6 @@ from codex_a2a.contracts.runtime_output import (
     build_status_stream_metadata,
 )
 from codex_a2a.execution.output_mapping import (
-    build_assistant_message,
     build_history,
     enqueue_artifact_update,
 )
@@ -99,12 +98,7 @@ async def emit_non_stream_completion(
     resolved_token_usage: dict[str, Any] | None,
 ) -> None:
     normalized_text = response_text or "(No text content returned by Codex.)"
-    assistant_message = build_assistant_message(
-        task_id=task_id,
-        context_id=context_id,
-        text=normalized_text,
-        message_id=resolved_message_id,
-    )
+    del resolved_message_id
     artifact = Artifact(
         artifact_id=str(uuid.uuid4()),
         name="response",
@@ -115,7 +109,6 @@ async def emit_non_stream_completion(
         context_id=context_id,
         status=TaskStatus(
             state=TaskState.TASK_STATE_COMPLETED,
-            message=assistant_message,
         ),
         history=build_history(context),
         artifacts=[artifact],

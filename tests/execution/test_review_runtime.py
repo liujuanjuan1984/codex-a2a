@@ -114,6 +114,7 @@ async def test_review_runtime_start_bridges_lifecycle_notifications() -> None:
     statuses = _status_updates(queue)
     assert len(statuses) == 1
     assert statuses[0].status.state == TaskState.TASK_STATE_COMPLETED
+    assert not statuses[0].status.HasField("message")
 
 
 @pytest.mark.asyncio
@@ -158,6 +159,7 @@ async def test_review_runtime_maps_failed_turns_to_failed_terminal_status() -> N
     statuses = _status_updates(queue)
     assert len(statuses) == 1
     assert statuses[0].status.state == TaskState.TASK_STATE_FAILED
+    assert not statuses[0].status.HasField("message")
 
 
 @pytest.mark.asyncio
