@@ -470,6 +470,8 @@ On the current npm global install layout for Linux x64, the command above resolv
 - Completed chat turns are persisted as `completed`; `input-required` is reserved for active interrupt asks that still need a reply.
 - Non-streaming requests return a `Task` directly.
 - Non-streaming `message:send` responses may include normalized token usage at `Task.metadata.shared.usage` with the same field schema.
+- Successful terminal chat results are artifact-first. Non-streaming terminal `Task` objects carry the completed answer in `Task.artifacts`; streaming terminal status updates carry lifecycle state and metadata but do not repeat the final answer in `status.message`.
+- `status.message` remains reserved for user-facing status, interrupt, or error details. Clients should not treat it as the canonical completed-result carrier on successful terminal surfaces.
 - `SubscribeToTask` remains part of the core A2A method baseline, but this deployment's terminal-task replay-once policy is a declared service-level behavior rather than a generic A2A guarantee.
 - Task persistence also applies a service-level resilience policy: once a task has been durably stored in a terminal state, later conflicting writes are dropped instead of overwriting that terminal snapshot.
 
@@ -479,7 +481,7 @@ On the current npm global install layout for Linux x64, the command above resolv
 - If task persistence fails while processing a request, the service maps that failure to a stable failed task or failed final status instead of leaking raw task-store exceptions.
 - Those task-store failure surfaces use `metadata.codex.error` with `type=TASK_STORE_UNAVAILABLE` and an `operation` field such as `get` or `save`.
 - Stream artifacts carry `artifact.metadata.shared.stream.block_type` with values `text`, `reasoning`, and `tool_call`.
-- The published `urn:codex-a2a:extension:shared:stream-hints:v1` contract also declares the emitted A2A part type per block: `text` and `reasoning` use `Part(text)`, while `tool_call` uses `Part(data)`.
+- The published `urn:codex-a2a:extension:stream-hints:v1` contract also declares the emitted A2A part type per block: `text` and `reasoning` use `Part(text)`, while `tool_call` uses `Part(data)`.
 - All chunks share one stream artifact ID and preserve original timeline via `artifact.metadata.shared.stream.sequence`.
 - Advanced correlation fields such as `metadata.shared.stream.message_id` and `metadata.shared.stream.event_id` may still appear on detailed/runtime surfaces, but the public shared contract only exposes the minimum stable discovery fields.
 - Session projections are normalized under `metadata.shared.session`, with `id` as the canonical shared field.
@@ -502,6 +504,7 @@ On the current npm global install layout for Linux x64, the command above resolv
 - For Codex app-server approval and `tool/requestUserInput` requests, user-visible approval/question/permissions/elicitation details are normalized into `metadata.shared.interrupt.details`, including readable `display_message`, resolved `patterns`, requested permission subsets, elicitation form/url payloads, and `questions` when available.
 - HTTP streaming responses send transport-level SSE ping comments on a default keepalive interval from the underlying SDK / `sse-starlette` response without adding synthetic A2A business events.
 - Interrupt status events no longer mirror the asked payload under `metadata.codex.interrupt`; downstream consumers should treat `metadata.shared.interrupt` as the single interrupt rendering contract.
+- Review watch lifecycle payloads are emitted as artifacts. Terminal review-watch status updates only carry the terminal state and watch metadata; the review payload or error details remain in the final review artifact update.
 
 ### Tool Call Payload Contract
 

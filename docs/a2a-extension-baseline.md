@@ -2,7 +2,7 @@
 
 This document defines the phase-1 baseline for how `codex-a2a` classifies, documents, and publishes A2A 1.0 extensions and extension-like contracts.
 
-Phase 1 is intentionally internal-facing. It does not change the external extension URI strategy yet. The goal is to establish a single source of truth for extension inventory, disclosure surfaces, and negotiation posture before any breaking URI migration or Agent Card expansion.
+Phase 1 is intentionally internal-facing. The goal is to establish a single source of truth for extension inventory, disclosure surfaces, and negotiation posture before any later Agent Card expansion or compatibility-line change.
 
 ## Goals
 
@@ -23,7 +23,7 @@ Phase 1 is intentionally internal-facing. It does not change the external extens
 
 2. Provider-private extensions
 
-- These are adapter-managed `codex.*` or shared-repo callback contracts that remain specific to this deployment family.
+- These are adapter-managed `codex.*` contracts that remain specific to this deployment family.
 - They are still treated as extensions conceptually, but their public disclosure remains conservative.
 - They should be declared through authenticated extended Agent Card `capabilities.extensions`.
 - Their detailed contract payloads should stay machine-readable on the authenticated extended card, with authenticated skill inventory remaining additive discovery guidance.
@@ -60,7 +60,8 @@ Phase 1 is intentionally internal-facing. It does not change the external extens
 
 - Shared request/response extensions are the only extensions treated as negotiated by default in phase 1.
 - Shared request/response extensions use request-level `A2A-Extensions` activation only when the request depends on that negotiated behavior.
-- Provider-private `codex.*` contracts and shared callback contracts marked `declaration_only` are discovered through the authenticated extended Agent Card, then used by directly invoking their documented provider-private methods. They do not require a separate `A2A-Extensions` activation header.
+- Provider-private `codex.*` contracts and shared callback contracts marked `declaration_only` are used by directly invoking their documented methods. They do not require a separate `A2A-Extensions` activation header.
+- Shared callback contracts may publish minimal public discovery metadata, but their detailed method contracts and reply schemas remain on authenticated discovery surfaces.
 - Compatibility and wire-profile documents are not negotiable extensions.
 
 ## Inventory Rules

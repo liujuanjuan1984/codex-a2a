@@ -12,7 +12,7 @@ Usage:
 
 Purpose:
   Run the official A2A TCK as a local/manual experiment.
-  This script is intentionally separate from doctor.sh, validate_baseline.sh, and CI gates.
+  This script is intentionally separate from validate_baseline.sh and CI gates.
 
 Category:
   Defaults to "mandatory". Any category supported by a2aproject/a2a-tck run_tck.py is accepted.

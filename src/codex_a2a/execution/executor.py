@@ -378,7 +378,6 @@ class CodexAgentExecutor(AgentExecutor):
                         context_id=context_id,
                         response_text=response_text,
                         session_id=response.session_id,
-                        resolved_message_id=resolved_message_id,
                         resolved_token_usage=resolved_token_usage,
                     )
                 break

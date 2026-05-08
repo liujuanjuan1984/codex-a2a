@@ -306,6 +306,11 @@ def test_public_agent_card_minimizes_provider_private_contracts() -> None:
         ],
         "interrupt_metadata_field": "metadata.shared.interrupt",
         "request_id_field": "metadata.shared.interrupt.request_id",
+        "authorization": {
+            "transport_auth": "required",
+            "request_id_scope": "active_pending_interrupt_request",
+            "owner_validation": "session_owner_match_when_session_binding_available",
+        },
     }
 
 

@@ -160,20 +160,6 @@ class CodexReviewRuntime:
                                 if payload["event"] == "review.completed"
                                 else TaskState.TASK_STATE_FAILED
                             ),
-                            message=build_assistant_message(
-                                handle.task_id,
-                                handle.context_id,
-                                (
-                                    "Review completed."
-                                    if payload["event"] == "review.completed"
-                                    else "Review failed."
-                                ),
-                                message_id=(
-                                    f"{handle.task_id}:status:completed"
-                                    if payload["event"] == "review.completed"
-                                    else f"{handle.task_id}:status:failed"
-                                ),
-                            ),
                         ),
                         metadata=metadata,
                     )

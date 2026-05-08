@@ -164,6 +164,26 @@ def test_registry_builds_openapi_contract_groups() -> None:
     ]
 
 
+def test_interrupt_callback_public_disclosure_does_not_imply_anonymous_invocation() -> None:
+    interrupt_descriptor = next(
+        descriptor
+        for descriptor in EXTENSION_CONTRACT_REGISTRY
+        if descriptor.uri == INTERRUPT_CALLBACK_EXTENSION_URI
+    )
+
+    assert interrupt_descriptor.negotiation_mode == "declaration_only"
+    assert interrupt_descriptor.public_agent_card is True
+    assert interrupt_descriptor.authenticated_agent_card is True
+    assert interrupt_descriptor.openapi_group == "a2a"
+    assert interrupt_descriptor.public_params_keys == (
+        "methods",
+        "supported_interrupt_events",
+        "interrupt_metadata_field",
+        "request_id_field",
+        "authorization",
+    )
+
+
 def test_extension_taxonomy_is_derived_from_registry() -> None:
     assert build_extension_taxonomy_from_registry() == {
         "shared_agent_card_extensions": [

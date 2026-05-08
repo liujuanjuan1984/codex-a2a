@@ -4,7 +4,7 @@ This repository keeps internal regression and external interoperability experime
 
 ## Scope
 
-- `./scripts/doctor.sh` and `./scripts/validate_baseline.sh` remain the default internal regression entrypoints.
+- `./scripts/validate_baseline.sh` remains the default internal regression entrypoint.
 - `./scripts/conformance.sh` is a local/manual experiment entrypoint for official external tooling.
 - External conformance output is investigation input, not an automatic merge gate.
 

@@ -17,7 +17,6 @@ class ExtensionContractDescriptor:
     uri: str
     title: str
     description: str
-    family: Literal["shared", "provider_private", "machine_readable"]
     # negotiated: request-level activation via A2A-Extensions is meaningful
     # declaration_only: discover through Agent Card/OpenAPI and invoke directly
     # not_applicable: descriptive metadata, not an activatable runtime extension
@@ -124,7 +123,6 @@ EXTENSION_CONTRACT_REGISTRY: tuple[ExtensionContractDescriptor, ...] = (
             "metadata.codex.execution fields remain available as Codex-private "
             "request overrides under server-side validation."
         ),
-        family="shared",
         negotiation_mode="negotiated",
         public_agent_card=True,
         authenticated_agent_card=True,
@@ -146,7 +144,6 @@ EXTENSION_CONTRACT_REGISTRY: tuple[ExtensionContractDescriptor, ...] = (
             "Shared streaming metadata contract for canonical block hints, "
             "timeline identity, usage, and interactive interrupt metadata."
         ),
-        family="shared",
         negotiation_mode="negotiated",
         public_agent_card=True,
         authenticated_agent_card=True,
@@ -161,7 +158,6 @@ EXTENSION_CONTRACT_REGISTRY: tuple[ExtensionContractDescriptor, ...] = (
         uri=extension_specs.SESSION_QUERY_EXTENSION_URI,
         title="Codex Session Query v1",
         description="Provider-private Codex session history and low-risk control methods.",
-        family="provider_private",
         negotiation_mode="declaration_only",
         public_agent_card=False,
         authenticated_agent_card=True,
@@ -175,7 +171,6 @@ EXTENSION_CONTRACT_REGISTRY: tuple[ExtensionContractDescriptor, ...] = (
         uri=extension_specs.DISCOVERY_EXTENSION_URI,
         title="Codex Discovery v1",
         description="Provider-private skills, apps, plugins, and watch bridge methods.",
-        family="provider_private",
         negotiation_mode="declaration_only",
         public_agent_card=False,
         authenticated_agent_card=True,
@@ -189,7 +184,6 @@ EXTENSION_CONTRACT_REGISTRY: tuple[ExtensionContractDescriptor, ...] = (
         uri=extension_specs.THREAD_LIFECYCLE_EXTENSION_URI,
         title="Codex Thread Lifecycle v1",
         description="Provider-private thread lifecycle control and watch bridge methods.",
-        family="provider_private",
         negotiation_mode="declaration_only",
         public_agent_card=False,
         authenticated_agent_card=True,
@@ -203,7 +197,6 @@ EXTENSION_CONTRACT_REGISTRY: tuple[ExtensionContractDescriptor, ...] = (
         uri=extension_specs.INTERRUPT_RECOVERY_EXTENSION_URI,
         title="Codex Interrupt Recovery v1",
         description="Provider-private interrupt rediscovery contract for authenticated callers.",
-        family="provider_private",
         negotiation_mode="declaration_only",
         public_agent_card=False,
         authenticated_agent_card=True,
@@ -217,7 +210,6 @@ EXTENSION_CONTRACT_REGISTRY: tuple[ExtensionContractDescriptor, ...] = (
         uri=extension_specs.TURN_CONTROL_EXTENSION_URI,
         title="Codex Turn Control v1",
         description="Provider-private active-turn steering for already-running regular turns.",
-        family="provider_private",
         negotiation_mode="declaration_only",
         public_agent_card=False,
         authenticated_agent_card=True,
@@ -231,7 +223,6 @@ EXTENSION_CONTRACT_REGISTRY: tuple[ExtensionContractDescriptor, ...] = (
         uri=extension_specs.REVIEW_CONTROL_EXTENSION_URI,
         title="Codex Review Control v1",
         description="Provider-private review control and lifecycle watch bridge.",
-        family="provider_private",
         negotiation_mode="declaration_only",
         public_agent_card=False,
         authenticated_agent_card=True,
@@ -245,7 +236,6 @@ EXTENSION_CONTRACT_REGISTRY: tuple[ExtensionContractDescriptor, ...] = (
         uri=extension_specs.EXEC_CONTROL_EXTENSION_URI,
         title="Codex Exec v1",
         description="Provider-private standalone interactive command execution.",
-        family="provider_private",
         negotiation_mode="declaration_only",
         public_agent_card=False,
         authenticated_agent_card=True,
@@ -258,8 +248,7 @@ EXTENSION_CONTRACT_REGISTRY: tuple[ExtensionContractDescriptor, ...] = (
         key="interrupt_callback",
         uri=extension_specs.INTERRUPT_CALLBACK_EXTENSION_URI,
         title="Shared Interactive Interrupt v1",
-        description="Shared repo-family interrupt callback reply methods.",
-        family="shared",
+        description="Shared interrupt callback reply methods.",
         negotiation_mode="declaration_only",
         public_agent_card=True,
         authenticated_agent_card=True,
@@ -272,6 +261,7 @@ EXTENSION_CONTRACT_REGISTRY: tuple[ExtensionContractDescriptor, ...] = (
             "supported_interrupt_events",
             "interrupt_metadata_field",
             "request_id_field",
+            "authorization",
         ),
     ),
     ExtensionContractDescriptor(
@@ -279,7 +269,6 @@ EXTENSION_CONTRACT_REGISTRY: tuple[ExtensionContractDescriptor, ...] = (
         uri=extension_specs.WIRE_CONTRACT_EXTENSION_URI,
         title="A2A Wire Contract v1",
         description="Machine-readable wire-level contract metadata.",
-        family="machine_readable",
         negotiation_mode="not_applicable",
         public_agent_card=False,
         authenticated_agent_card=True,
@@ -293,7 +282,6 @@ EXTENSION_CONTRACT_REGISTRY: tuple[ExtensionContractDescriptor, ...] = (
         uri=extension_specs.COMPATIBILITY_PROFILE_EXTENSION_URI,
         title="A2A Compatibility Profile v1",
         description="Machine-readable compatibility profile metadata.",
-        family="machine_readable",
         negotiation_mode="not_applicable",
         public_agent_card=False,
         authenticated_agent_card=True,
