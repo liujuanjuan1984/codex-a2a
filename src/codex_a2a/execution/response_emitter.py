@@ -94,11 +94,9 @@ async def emit_non_stream_completion(
     context_id: str,
     response_text: str,
     session_id: str,
-    resolved_message_id: str,
     resolved_token_usage: dict[str, Any] | None,
 ) -> None:
     normalized_text = response_text or "(No text content returned by Codex.)"
-    del resolved_message_id
     artifact = Artifact(
         artifact_id=str(uuid.uuid4()),
         name="response",
