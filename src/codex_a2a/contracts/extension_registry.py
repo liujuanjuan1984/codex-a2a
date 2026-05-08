@@ -17,6 +17,8 @@ class ExtensionContractDescriptor:
     uri: str
     title: str
     description: str
+    # family describes contract portability, not auth or disclosure.
+    # Disclosure is controlled by the explicit surface flags below.
     family: Literal["shared", "provider_private", "machine_readable"]
     # negotiated: request-level activation via A2A-Extensions is meaningful
     # declaration_only: discover through Agent Card/OpenAPI and invoke directly
@@ -272,6 +274,7 @@ EXTENSION_CONTRACT_REGISTRY: tuple[ExtensionContractDescriptor, ...] = (
             "supported_interrupt_events",
             "interrupt_metadata_field",
             "request_id_field",
+            "authorization",
         ),
     ),
     ExtensionContractDescriptor(

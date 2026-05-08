@@ -1263,6 +1263,11 @@ def build_interrupt_callback_extension_params(
             ),
         },
         "request_id_field": f"{extension_specs.SHARED_INTERRUPT_METADATA_FIELD}.request_id",
+        "authorization": {
+            "transport_auth": "required",
+            "request_id_scope": "active_pending_interrupt_request",
+            "owner_validation": "session_owner_match_when_session_binding_available",
+        },
         "supported_metadata": ["codex.directory"],
         "provider_private_metadata": ["codex.directory"],
         "context_fields": {

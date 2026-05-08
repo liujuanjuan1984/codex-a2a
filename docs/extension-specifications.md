@@ -130,7 +130,9 @@ URI: `urn:codex-a2a:extension:interactive-interrupt:v1`
 - Discovery surface: public Agent Card, authenticated extended card `capabilities.extensions`, and anonymous OpenAPI `x-a2a-extension-contracts.interrupt_callback`
 - Transport: provider-private JSON-RPC methods on `POST /`
 - Negotiation: declaration-only; discover first, then invoke the documented methods directly
-- Note: this URI identifies a shared repo-family callback contract and is published on both anonymous and authenticated discovery surfaces
+- Public disclosure: method aliases, supported interrupt event names, shared interrupt metadata field names, and the authentication/request-id scope summary only
+- Authenticated disclosure: full JSON-RPC endpoint metadata, method contracts, reply schemas, provider-private metadata, success result fields, errors, and runtime profile
+- Note: this URI identifies a shared repo-family callback contract and is published on both anonymous and authenticated discovery surfaces. Anonymous publication does not imply anonymous invocation; callback methods require configured transport authentication and an active pending interrupt `request_id`, with session-owner validation when session binding is available.
 
 ## A2A Compatibility Profile v1
 

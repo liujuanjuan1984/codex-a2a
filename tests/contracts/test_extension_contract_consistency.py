@@ -340,6 +340,38 @@ def test_openapi_and_agent_card_contract_partitions_match() -> None:
     )
 
 
+def test_interrupt_callback_public_contract_keeps_detailed_matrix_authenticated() -> None:
+    settings = make_settings(a2a_bearer_token="test-token")
+    public_card = build_agent_card(settings)
+    authenticated_card = build_authenticated_extended_agent_card(settings)
+    public_ext_by_uri = {ext.uri: ext for ext in public_card.capabilities.extensions or []}
+    authenticated_ext_by_uri = {
+        ext.uri: ext for ext in authenticated_card.capabilities.extensions or []
+    }
+
+    public_params = public_ext_by_uri[INTERRUPT_CALLBACK_EXTENSION_URI].params
+    authenticated_params = authenticated_ext_by_uri[INTERRUPT_CALLBACK_EXTENSION_URI].params
+
+    assert set(public_params) == {
+        "methods",
+        "supported_interrupt_events",
+        "interrupt_metadata_field",
+        "request_id_field",
+        "authorization",
+    }
+    assert public_params["authorization"] == {
+        "transport_auth": "required",
+        "request_id_scope": "active_pending_interrupt_request",
+        "owner_validation": "session_owner_match_when_session_binding_available",
+    }
+    assert "method_contracts" not in public_params
+    assert "jsonrpc_endpoint" not in public_params
+    assert "permission_reply_values" not in public_params
+    assert "method_contracts" in authenticated_params
+    assert "jsonrpc_endpoint" in authenticated_params
+    assert "permission_reply_values" in authenticated_params
+
+
 def test_extension_uris_map_to_repository_spec_index() -> None:
     repo_root = Path(__file__).resolve().parents[2]
     index_path = repo_root / "docs" / "extension-specifications.md"

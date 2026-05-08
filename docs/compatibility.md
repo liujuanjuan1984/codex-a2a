@@ -170,7 +170,7 @@ Discovery note:
 - `codex.review.watch` is the declared review lifecycle watch-task bridge for `review.started`, `review.status.changed`, `review.completed`, and `review.failed`.
 - `codex.review.start` remains a control-handle surface; clients should use `codex.review.watch` plus `SubscribeToTask` for review lifecycle observation.
 - `codex.interrupts.list` is always-on but adapter-local and identity-scoped. `codex.turns.steer`, `codex.review.*`, and `codex.exec.*` remain deployment-conditional surfaces and should be discovered from machine-readable contracts before use.
-- `a2a.interrupt.*` reply methods remain shared repo-family callback contracts. They are declared on authenticated discovery surfaces, mirrored in OpenAPI, and used directly rather than through `A2A-Extensions` activation.
+- `a2a.interrupt.*` reply methods remain shared repo-family callback contracts. Minimal metadata is declared on public discovery surfaces and mirrored in OpenAPI, while detailed method contracts stay on authenticated discovery surfaces. These methods are used directly rather than through `A2A-Extensions` activation.
 - `thread/unsubscribe` is intentionally excluded from the stable public contract until this service exposes connection-safe subscription ownership.
 - This repository does not claim a generic standalone server-push JSON-RPC transport for those notifications; the compatibility contract is the watch-task bridge published through Agent Card and OpenAPI.
 
