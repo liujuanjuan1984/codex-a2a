@@ -16,10 +16,8 @@ from .client.request_context import build_default_headers
 
 CLI_REPOSITORY_URL = "https://github.com/liujuanjuan1984/codex-a2a"
 CLI_BRAND_BANNER = (
-    "              |                   _  )       \n"
-    "  _|  _ \\  _` |  -_)\\ \\ /____|_` |  /   _` | \n"
-    "\\__|\\___/\\__,_|\\___| _\\_\\   \\__,_|___|\\__,_| \n"
-    "                                             "
+    " ____ ____ ___  ____ _ _    ____ ____\n"
+    " |___ [__] |__> |=== _X_ -- |--| |--|"
 )
 ROOT_DESCRIPTION = (
     "Codex A2A runtime for explicit service startup and peer calls. "
