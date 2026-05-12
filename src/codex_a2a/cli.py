@@ -29,6 +29,10 @@ ROOT_DESCRIPTION = (
     "A2A Protocol 1.0 only.\n"
     "  codex-a2a <command> [arguments] [options]"
 )
+SERVE_DESCRIPTION = (
+    "Run the Codex A2A service.\n"
+    "  codex-a2a serve"
+)
 CODEX_SETUP_HELP = (
     "Codex runtime quick start:\n"
     "  codex --version\n"
@@ -90,7 +94,7 @@ CALL_HELP = (
     "  Outbound peer credentials are read from environment variables only.\n"
     "  Service base URLs also work, but card URLs are the preferred example form."
 )
-ROOT_HELP_EPILOG = f"{CODEX_SETUP_HELP}\n\n{SERVE_ENVIRONMENT_HELP}\n\n{CALL_HELP}"
+ROOT_HELP_EPILOG = f"{CODEX_SETUP_HELP}\n\n{CALL_HELP}"
 
 
 class CliHelpFormatter(
@@ -196,6 +200,9 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers.add_parser(
         "serve",
         help="Run the A2A service.",
+        description=SERVE_DESCRIPTION,
+        epilog=SERVE_ENVIRONMENT_HELP,
+        formatter_class=CliHelpFormatter,
     )
     call_parser = subparsers.add_parser(
         "call",
