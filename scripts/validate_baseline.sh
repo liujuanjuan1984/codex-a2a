@@ -12,12 +12,16 @@ run_pip_audit() {
   local attempt=1
   local max_attempts=3
   local status=0
+  local audit_cache_dir=""
 
   while true; do
-    if uv run pip-audit --requirement "${requirement_file}"; then
+    audit_cache_dir="$(mktemp -d)"
+    if XDG_CACHE_HOME="${audit_cache_dir}" uv run pip-audit --requirement "${requirement_file}"; then
+      rm -rf "${audit_cache_dir}"
       return 0
     fi
     status=$?
+    rm -rf "${audit_cache_dir}"
     if [[ "${attempt}" -ge "${max_attempts}" ]]; then
       echo "pip-audit failed after ${attempt} attempts" >&2
       return "${status}"

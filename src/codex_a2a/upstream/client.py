@@ -24,9 +24,7 @@ from codex_a2a.upstream.models import (
     CodexStartupPrerequisiteError,
 )
 from codex_a2a.upstream.request_mapping import (
-    build_discovery_apps_params,
-    build_discovery_plugin_read_params,
-    build_discovery_plugins_params,
+    _project_present_fields,
     build_discovery_skills_params,
     build_interactive_exec_params,
 )
@@ -291,19 +289,45 @@ class CodexClient:
     async def list_apps(self, *, params: dict[str, Any] | None = None) -> Any:
         return await self._rpc_request(
             "app/list",
-            self._merge_params(build_discovery_apps_params(params)),
+            self._merge_params(
+                _project_present_fields(
+                    params,
+                    (
+                        ("cursor", "cursor"),
+                        ("limit", "limit"),
+                        ("thread_id", "threadId"),
+                        ("force_refetch", "forceRefetch"),
+                    ),
+                )
+            ),
         )
 
     async def list_plugins(self, *, params: dict[str, Any] | None = None) -> Any:
         return await self._rpc_request(
             "plugin/list",
-            self._merge_params(build_discovery_plugins_params(params)),
+            self._merge_params(
+                _project_present_fields(
+                    params,
+                    (
+                        ("cwds", "cwds"),
+                        ("force_remote_sync", "forceRemoteSync"),
+                    ),
+                )
+            ),
         )
 
     async def read_plugin(self, *, params: dict[str, Any] | None = None) -> Any:
         return await self._rpc_request(
             "plugin/read",
-            self._merge_params(build_discovery_plugin_read_params(params)),
+            self._merge_params(
+                _project_present_fields(
+                    params,
+                    (
+                        ("marketplace_path", "marketplacePath"),
+                        ("plugin_name", "pluginName"),
+                    ),
+                )
+            ),
         )
 
     async def list_sessions(self, *, params: dict[str, Any] | None = None) -> Any:

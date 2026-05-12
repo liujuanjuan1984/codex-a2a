@@ -226,6 +226,132 @@ async def test_handle_interrupt_callback_invalid_params_use_jsonrpc_error_shape(
 
 
 @pytest.mark.asyncio
+async def test_handle_interrupt_callback_question_reject_notification_returns_no_content() -> None:
+    client = DummySessionQueryCodexClient(make_settings(a2a_bearer_token="test"))
+    client._interrupt_requests["question-1"] = InterruptRequestBinding(
+        request_id="question-1",
+        interrupt_type="question",
+        session_id="sess-question",
+        created_at=0.0,
+    )
+    app = _build_app(client)
+
+    response = await handle_interrupt_callback_request(
+        app,
+        JSONRPCRequestModel(jsonrpc="2.0", id=None, method=app._method_reject_question),
+        {"request_id": "question-1"},
+        request=_build_request(),
+    )
+
+    assert response.status_code == 204
+    assert response.body == b""
+    assert client.question_reject_calls == [
+        {
+            "request_id": "question-1",
+            "directory": None,
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_handle_interrupt_callback_permissions_reply_returns_scope() -> None:
+    client = DummySessionQueryCodexClient(make_settings(a2a_bearer_token="test"))
+    client._interrupt_requests["perm-scope"] = InterruptRequestBinding(
+        request_id="perm-scope",
+        interrupt_type="permissions",
+        session_id="sess-permissions",
+        created_at=0.0,
+    )
+    app = _build_app(client)
+
+    response = await handle_interrupt_callback_request(
+        app,
+        JSONRPCRequestModel(jsonrpc="2.0", id=32, method=app._method_reply_permissions),
+        {
+            "request_id": "perm-scope",
+            "permissions": {"edit": True},
+            "scope": "session",
+        },
+        request=_build_request(),
+    )
+
+    assert response.status_code == 200
+    assert _json_body(response)["result"] == {
+        "ok": True,
+        "request_id": "perm-scope",
+        "permissions": {"edit": True},
+        "scope": "session",
+    }
+
+
+@pytest.mark.asyncio
+async def test_handle_interrupt_callback_question_reply_returns_binding_error() -> None:
+    client = DummySessionQueryCodexClient(make_settings(a2a_bearer_token="test"))
+    app = _build_app(client)
+
+    response = await handle_interrupt_callback_request(
+        app,
+        JSONRPCRequestModel(jsonrpc="2.0", id=33, method=app._method_reply_question),
+        {"request_id": "missing", "answers": []},
+        request=_build_request(),
+    )
+
+    payload = _json_body(response)
+    assert response.status_code == 200
+    assert error_reason(payload) == "INTERRUPT_REQUEST_NOT_FOUND"
+
+
+@pytest.mark.asyncio
+async def test_handle_interrupt_callback_hides_foreign_owner() -> None:
+    client = DummySessionQueryCodexClient(make_settings(a2a_bearer_token="test"))
+    client._interrupt_requests["perm-owner"] = InterruptRequestBinding(
+        request_id="perm-owner",
+        interrupt_type="permission",
+        session_id="sess-owner",
+        created_at=0.0,
+    )
+    app = _build_app(client, session_owner_matcher=AsyncMock(return_value=False))
+
+    response = await handle_interrupt_callback_request(
+        app,
+        JSONRPCRequestModel(jsonrpc="2.0", id=34, method=app._method_reply_permission),
+        {"request_id": "perm-owner", "reply": "once"},
+        request=_build_request(user_identity="foreign-user"),
+    )
+
+    payload = _json_body(response)
+    assert response.status_code == 200
+    assert error_reason(payload) == "INTERRUPT_REQUEST_NOT_FOUND"
+
+
+@pytest.mark.asyncio
+async def test_handle_interrupt_callback_returns_upstream_unreachable_shape() -> None:
+    binding = InterruptRequestBinding(
+        request_id="perm-unreachable",
+        interrupt_type="permission",
+        session_id="sess-500",
+        created_at=0.0,
+    )
+    client = SimpleNamespace(
+        resolve_interrupt_request=AsyncMock(return_value=("active", binding)),
+        permission_reply=AsyncMock(side_effect=httpx.ConnectError("offline")),
+        discard_interrupt_request=AsyncMock(),
+    )
+    app = _build_app(client)
+
+    response = await handle_interrupt_callback_request(
+        app,
+        JSONRPCRequestModel(jsonrpc="2.0", id=35, method=app._method_reply_permission),
+        {"request_id": "perm-unreachable", "reply": "once"},
+        request=_build_request(),
+    )
+
+    payload = _json_body(response)
+    assert response.status_code == 200
+    assert error_reason(payload) == "UPSTREAM_UNREACHABLE"
+
+
+@pytest.mark.asyncio
 async def test_handle_interrupt_recovery_filters_identity_inputs_and_returns_items() -> None:
     client = SimpleNamespace(
         list_interrupt_requests=AsyncMock(return_value=[{"request_id": "req-1"}])

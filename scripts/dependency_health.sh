@@ -11,7 +11,8 @@ echo "[dependency-health] list outdated packages"
 uv pip list --outdated
 
 dev_requirements="$(mktemp)"
-trap 'rm -f "${dev_requirements}"' EXIT
+audit_cache_dir="$(mktemp -d)"
+trap 'rm -f "${dev_requirements}"; rm -rf "${audit_cache_dir}"' EXIT
 
 echo "[dependency-health] export dev extra requirements"
 uv export \
@@ -23,4 +24,4 @@ uv export \
   --output-file "${dev_requirements}" >/dev/null
 
 echo "[dependency-health] run dev dependency vulnerability audit"
-uv run pip-audit --requirement "${dev_requirements}"
+XDG_CACHE_HOME="${audit_cache_dir}" uv run pip-audit --requirement "${dev_requirements}"

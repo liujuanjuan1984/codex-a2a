@@ -52,7 +52,11 @@ jobs:
           --output-file /tmp/runtime-requirements.txt >/dev/null
 
       - name: Run runtime dependency vulnerability audit
-        run: uv run pip-audit --requirement /tmp/runtime-requirements.txt
+        run: |
+          audit_cache_dir="$(mktemp -d)"
+          trap 'rm -rf "${audit_cache_dir}"' EXIT
+          XDG_CACHE_HOME="${audit_cache_dir}" \
+            uv run pip-audit --requirement /tmp/runtime-requirements.txt
 
       - name: Resolve release tag
         id: release_tag

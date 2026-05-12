@@ -167,12 +167,6 @@ async def run_call(
     return 0
 
 
-def _serve_main() -> None:
-    from .server.application import main as serve_main
-
-    serve_main()
-
-
 def build_parser() -> argparse.ArgumentParser:
     parser = TopLevelArgumentParser(
         prog="codex-a2a",
@@ -221,7 +215,9 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     namespace = parser.parse_args(args)
     if namespace.command == "serve":
-        _serve_main()
+        from .server.application import main as serve_main
+
+        serve_main()
         return 0
 
     if namespace.command is None:

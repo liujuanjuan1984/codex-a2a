@@ -14,6 +14,7 @@ from codex_a2a.contracts.runtime_output import (
     build_interrupt_metadata,
     build_output_metadata,
     build_status_stream_metadata,
+    build_stream_artifact_metadata,
 )
 from codex_a2a.execution.output_mapping import (
     enqueue_artifact_update,
@@ -43,7 +44,6 @@ from codex_a2a.execution.stream_state import (
     PendingDelta,
     StreamOutputState,
     StreamPartState,
-    build_stream_artifact_metadata,
     flush_time_limit,
 )
 from codex_a2a.metrics import (
@@ -243,7 +243,7 @@ class StreamEventProcessor:
             append=effective_append,
             last_chunk=False,
             artifact_metadata=build_stream_artifact_metadata(
-                block_type=chunk.block_type,
+                block_type=chunk.block_type.value,
                 source=chunk.source,
                 message_id=resolved_message_id,
                 role=chunk.role,

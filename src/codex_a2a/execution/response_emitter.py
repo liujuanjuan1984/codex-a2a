@@ -11,16 +11,13 @@ from codex_a2a.a2a_proto import new_text_part
 from codex_a2a.contracts.runtime_output import (
     build_output_metadata,
     build_status_stream_metadata,
+    build_stream_artifact_metadata,
 )
 from codex_a2a.execution.output_mapping import (
     build_history,
     enqueue_artifact_update,
 )
-from codex_a2a.execution.stream_state import (
-    BlockType,
-    StreamOutputState,
-    build_stream_artifact_metadata,
-)
+from codex_a2a.execution.stream_state import BlockType, StreamOutputState
 
 
 async def emit_initial_task(
@@ -61,7 +58,7 @@ async def emit_streaming_completion(
             append=stream_state.emitted_stream_chunk,
             last_chunk=True,
             artifact_metadata=build_stream_artifact_metadata(
-                block_type=BlockType.TEXT,
+                block_type=BlockType.TEXT.value,
                 source="final_snapshot",
                 message_id=resolved_message_id,
                 sequence=sequence,

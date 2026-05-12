@@ -203,15 +203,6 @@ class CodexInterruptBridge:
             }
         )
 
-    def interrupt_request_status(
-        self,
-        binding: InterruptRequestBinding,
-    ) -> str:
-        return interrupt_request_status(
-            binding,
-            interrupt_request_ttl_seconds=self._interrupt_request_ttl_seconds,
-        )
-
     async def resolve_interrupt_request(
         self, request_id: str
     ) -> tuple[str, InterruptRequestBinding | None]:
@@ -221,7 +212,11 @@ class CodexInterruptBridge:
         self._purge_expired_interrupt_tombstones()
         pending = self._pending_server_requests.get(request_key)
         if pending is not None:
-            status = self.interrupt_request_status(pending.binding)
+            status = interrupt_request_status(
+                pending.binding,
+                interrupt_request_ttl_seconds=self._interrupt_request_ttl_seconds,
+                now=self._now,
+            )
             if status == "expired":
                 self._remember_interrupt_tombstone(request_key)
                 if self._interrupt_request_store is not None:
@@ -271,7 +266,11 @@ class CodexInterruptBridge:
 
         items: list[dict[str, Any]] = []
         for request_id, pending in list(self._pending_server_requests.items()):
-            status = self.interrupt_request_status(pending.binding)
+            status = interrupt_request_status(
+                pending.binding,
+                interrupt_request_ttl_seconds=self._interrupt_request_ttl_seconds,
+                now=self._now,
+            )
             if status == "expired":
                 self._remember_interrupt_tombstone(request_id)
                 if self._interrupt_request_store is not None:
