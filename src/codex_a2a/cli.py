@@ -29,10 +29,7 @@ ROOT_DESCRIPTION = (
     "A2A Protocol 1.0 only.\n"
     "  codex-a2a <command> [arguments] [options]"
 )
-SERVE_DESCRIPTION = (
-    "Run the Codex A2A service.\n"
-    "  codex-a2a serve"
-)
+SERVE_DESCRIPTION = "Run the Codex A2A service.\n  codex-a2a serve"
 CODEX_SETUP_HELP = (
     "Codex runtime quick start:\n"
     "  codex --version\n"

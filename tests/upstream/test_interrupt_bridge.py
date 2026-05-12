@@ -231,7 +231,17 @@ async def test_question_reply_maps_answers_by_question_id_and_discards_request()
     )
 
     assert ok is True
-    assert sent == [{"id": "rpc-1", "result": {"answers": {"q1": {"answers": ["A"]}, "q2": {"answers": ["B", "C"]}}}}]
+    assert sent == [
+        {
+            "id": "rpc-1",
+            "result": {
+                "answers": {
+                    "q1": {"answers": ["A"]},
+                    "q2": {"answers": ["B", "C"]},
+                }
+            },
+        }
+    ]
     assert events == [
         {
             "type": "question.replied",
