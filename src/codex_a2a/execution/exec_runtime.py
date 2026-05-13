@@ -19,9 +19,12 @@ from a2a.types import (
 )
 
 from codex_a2a.a2a_proto import new_text_part
-from codex_a2a.contracts.runtime_output import build_status_stream_metadata
+from codex_a2a.contracts.runtime_output import (
+    build_status_stream_metadata,
+    build_stream_artifact_metadata,
+)
 from codex_a2a.execution.output_mapping import enqueue_artifact_update
-from codex_a2a.execution.stream_state import BlockType, build_stream_artifact_metadata
+from codex_a2a.execution.stream_state import BlockType
 from codex_a2a.upstream.request_mapping import format_exec_result_text
 
 logger = logging.getLogger(__name__)
@@ -305,7 +308,7 @@ class CodexExecRuntime:
             append=append.get(stream, False),
             last_chunk=bool(props.get("cap_reached", False)),
             artifact_metadata=build_stream_artifact_metadata(
-                block_type=BlockType.TEXT,
+                block_type=BlockType.TEXT.value,
                 source="codex.exec.output_delta",
                 message_id=f"{task_id}:exec:{stream}",
                 sequence=sequence,
@@ -349,7 +352,7 @@ class CodexExecRuntime:
             append=False,
             last_chunk=True,
             artifact_metadata=build_stream_artifact_metadata(
-                block_type=BlockType.TEXT,
+                block_type=BlockType.TEXT.value,
                 source="codex.exec.result",
                 message_id=f"{handle.task_id}:exec:result",
                 sequence=None,

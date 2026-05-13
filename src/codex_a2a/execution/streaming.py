@@ -19,7 +19,6 @@ from codex_a2a.execution.stream_processor import StreamEventProcessor
 from codex_a2a.execution.stream_state import (
     BlockType,
     StreamOutputState,
-    build_stream_artifact_metadata,
 )
 from codex_a2a.metrics import CODEX_STREAM_RETRIES_TOTAL, get_metrics_registry
 from codex_a2a.upstream.client import CodexClient
@@ -32,7 +31,6 @@ _STREAM_IDLE_DIAGNOSTIC_SECONDS = 60.0
 __all__ = [
     "BlockType",
     "StreamOutputState",
-    "build_stream_artifact_metadata",
     "consume_codex_stream",
     "extract_event_session_id",
     "extract_interrupt_resolved_event",

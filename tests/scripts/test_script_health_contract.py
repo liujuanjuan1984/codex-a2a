@@ -25,6 +25,10 @@ def test_validate_baseline_keeps_local_regression_scope() -> None:
     assert "uv run pytest" in VALIDATE_BASELINE_TEXT
     assert "uv export" in VALIDATE_BASELINE_TEXT
     assert 'run_pip_audit "${runtime_requirements}"' in VALIDATE_BASELINE_TEXT
+    assert (
+        'XDG_CACHE_HOME="${audit_cache_dir}" uv run pip-audit --requirement "${requirement_file}"'
+        in VALIDATE_BASELINE_TEXT
+    )
     assert "pip-audit failed on attempt" in VALIDATE_BASELINE_TEXT
     assert "uv build --no-sources" in VALIDATE_BASELINE_TEXT
     assert "git fetch --quiet --update-shallow" not in VALIDATE_BASELINE_TEXT
@@ -66,6 +70,10 @@ def test_dependency_health_keeps_dependency_review_scope() -> None:
     assert 'run_shared_repo_health_prerequisites "dependency-health"' in DEPENDENCY_HEALTH_TEXT
     assert "uv pip list --outdated" in DEPENDENCY_HEALTH_TEXT
     assert "uv run pip-audit" in DEPENDENCY_HEALTH_TEXT
+    assert (
+        'XDG_CACHE_HOME="${audit_cache_dir}" uv run pip-audit --requirement "${dev_requirements}"'
+        in DEPENDENCY_HEALTH_TEXT
+    )
     assert "uv run pytest" not in DEPENDENCY_HEALTH_TEXT
     assert "uv run mypy" not in DEPENDENCY_HEALTH_TEXT
     assert "uv run pre-commit run --all-files" not in DEPENDENCY_HEALTH_TEXT

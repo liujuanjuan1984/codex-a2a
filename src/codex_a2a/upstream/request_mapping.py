@@ -146,38 +146,6 @@ def build_discovery_skills_params(params: dict[str, Any] | None) -> dict[str, An
     return rpc_params
 
 
-def build_discovery_apps_params(params: dict[str, Any] | None) -> dict[str, Any]:
-    return _project_present_fields(
-        params,
-        (
-            ("cursor", "cursor"),
-            ("limit", "limit"),
-            ("thread_id", "threadId"),
-            ("force_refetch", "forceRefetch"),
-        ),
-    )
-
-
-def build_discovery_plugins_params(params: dict[str, Any] | None) -> dict[str, Any]:
-    return _project_present_fields(
-        params,
-        (
-            ("cwds", "cwds"),
-            ("force_remote_sync", "forceRemoteSync"),
-        ),
-    )
-
-
-def build_discovery_plugin_read_params(params: dict[str, Any] | None) -> dict[str, Any]:
-    return _project_present_fields(
-        params,
-        (
-            ("marketplace_path", "marketplacePath"),
-            ("plugin_name", "pluginName"),
-        ),
-    )
-
-
 def build_thread_rpc_params(
     thread_id: str,
     params: dict[str, Any] | None,

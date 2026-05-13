@@ -64,6 +64,95 @@ async def test_list_calls_use_expected_rpc_params() -> None:
 
 
 @pytest.mark.asyncio
+async def test_discovery_calls_use_expected_rpc_params() -> None:
+    client = CodexClient(
+        make_settings(
+            a2a_bearer_token="t-1",
+            codex_workspace_root="/safe",
+            codex_timeout=1.0,
+        )
+    )
+
+    seen: list[tuple[str, dict | None]] = []
+
+    async def fake_rpc_request(method: str, params: dict | None = None):
+        seen.append((method, params))
+        return {}
+
+    _bind_rpc_request(client, fake_rpc_request)
+
+    await client.list_skills(
+        params={
+            "cwds": ["/repo"],
+            "force_reload": True,
+            "per_cwd_extra_user_roots": [
+                {"cwd": "/repo", "extra_user_roots": ["/alt"]},
+                {"cwd": "/skip"},
+            ],
+        }
+    )
+    await client.list_apps(
+        params={
+            "directory": "/ignore",
+            "cursor": "next-1",
+            "limit": 10,
+            "thread_id": "thr-1",
+            "force_refetch": True,
+        }
+    )
+    await client.list_plugins(
+        params={
+            "cwds": ["/repo"],
+            "force_remote_sync": False,
+        }
+    )
+    await client.read_plugin(
+        params={
+            "marketplace_path": "/tmp/plugins.json",
+            "plugin_name": "demo-plugin",
+        }
+    )
+
+    assert seen == [
+        (
+            "skills/list",
+            {
+                "directory": "/safe",
+                "cwds": "['/repo']",
+                "forceReload": "True",
+                "perCwdExtraUserRoots": "[{'cwd': '/repo', 'extraUserRoots': ['/alt']}]",
+            },
+        ),
+        (
+            "app/list",
+            {
+                "directory": "/safe",
+                "cursor": "next-1",
+                "limit": "10",
+                "threadId": "thr-1",
+                "forceRefetch": "True",
+            },
+        ),
+        (
+            "plugin/list",
+            {
+                "directory": "/safe",
+                "cwds": "['/repo']",
+                "forceRemoteSync": "False",
+            },
+        ),
+        (
+            "plugin/read",
+            {
+                "directory": "/safe",
+                "marketplacePath": "/tmp/plugins.json",
+                "pluginName": "demo-plugin",
+            },
+        ),
+    ]
+
+
+@pytest.mark.asyncio
 async def test_create_session_uses_model_id_override_not_startup_default() -> None:
     client = CodexClient(
         make_settings(

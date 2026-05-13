@@ -41,6 +41,21 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def _interrupt_reply_model_type(
+    app: CodexSessionQueryJSONRPCApplication,
+    method: str,
+) -> type[_InterruptReplyParams]:
+    if method == app._method_reply_permission:
+        return PermissionReplyParams
+    if method == app._method_reply_question:
+        return QuestionReplyParams
+    if method == app._method_reject_question:
+        return QuestionRejectParams
+    if method == app._method_reply_permissions:
+        return PermissionsReplyParams
+    return ElicitationReplyParams
+
+
 async def handle_interrupt_callback_request(
     app: CodexSessionQueryJSONRPCApplication,
     base_request: JSONRPCRequest,
@@ -49,17 +64,7 @@ async def handle_interrupt_callback_request(
     request: Request,
 ) -> Response:
     parsed_params: _InterruptReplyParams
-    model_type = (
-        PermissionReplyParams
-        if base_request.method == app._method_reply_permission
-        else QuestionReplyParams
-        if base_request.method == app._method_reply_question
-        else QuestionRejectParams
-        if base_request.method == app._method_reject_question
-        else PermissionsReplyParams
-        if base_request.method == app._method_reply_permissions
-        else ElicitationReplyParams
-    )
+    model_type = _interrupt_reply_model_type(app, base_request.method)
     try:
         parsed_params = validate_params_model(
             model_type,

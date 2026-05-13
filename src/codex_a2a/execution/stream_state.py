@@ -7,9 +7,6 @@ from typing import Any
 from a2a.types import Part
 
 from codex_a2a.a2a_proto import is_text_part, new_text_part, part_text
-from codex_a2a.contracts.runtime_output import (
-    build_stream_artifact_metadata as build_runtime_stream_metadata,
-)
 from codex_a2a.execution.output_mapping import merge_token_usage
 
 _STREAM_TEXT_FLUSH_CHARS = 120
@@ -212,22 +209,3 @@ class StreamOutputState:
             return False
         self.pending_interrupt_request_ids.discard(normalized)
         return True
-
-
-def build_stream_artifact_metadata(
-    *,
-    block_type: BlockType,
-    source: str,
-    message_id: str | None = None,
-    role: str | None = None,
-    sequence: int | None = None,
-    event_id: str | None = None,
-) -> dict[str, Any]:
-    return build_runtime_stream_metadata(
-        block_type=block_type.value,
-        source=source,
-        message_id=message_id,
-        role=role,
-        sequence=sequence,
-        event_id=event_id,
-    )

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import time
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
@@ -216,10 +216,11 @@ def interrupt_request_status(
     binding: InterruptRequestBinding,
     *,
     interrupt_request_ttl_seconds: int,
+    now: Callable[[], float] = time.time,
 ) -> str:
     expires_at = binding.expires_at
     if expires_at is None:
         expires_at = binding.created_at + float(interrupt_request_ttl_seconds)
-    if expires_at <= time.time():
+    if expires_at <= float(now()):
         return "expired"
     return "active"

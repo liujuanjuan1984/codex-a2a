@@ -2,9 +2,6 @@ from codex_a2a.execution.request_overrides import RequestExecutionOptions
 from codex_a2a.upstream.request_mapping import (
     apply_thread_start_execution_options,
     apply_turn_start_execution_options,
-    build_discovery_apps_params,
-    build_discovery_plugin_read_params,
-    build_discovery_plugins_params,
     build_discovery_skills_params,
     build_interactive_exec_params,
     build_thread_rpc_params,
@@ -104,37 +101,6 @@ def test_build_discovery_param_helpers_map_repo_shape_to_rpc_shape() -> None:
         "cwds": ["/repo"],
         "forceReload": True,
         "perCwdExtraUserRoots": [{"cwd": "/repo", "extraUserRoots": ["/alt"]}],
-    }
-    assert build_discovery_apps_params(
-        {
-            "cursor": "next-1",
-            "limit": 10,
-            "thread_id": "thr-1",
-            "force_refetch": True,
-        }
-    ) == {
-        "cursor": "next-1",
-        "limit": 10,
-        "threadId": "thr-1",
-        "forceRefetch": True,
-    }
-    assert build_discovery_plugins_params(
-        {
-            "cwds": ["/repo"],
-            "force_remote_sync": False,
-        }
-    ) == {
-        "cwds": ["/repo"],
-        "forceRemoteSync": False,
-    }
-    assert build_discovery_plugin_read_params(
-        {
-            "marketplace_path": "/tmp/plugins.json",
-            "plugin_name": "demo-plugin",
-        }
-    ) == {
-        "marketplacePath": "/tmp/plugins.json",
-        "pluginName": "demo-plugin",
     }
 
 
