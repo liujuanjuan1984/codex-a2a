@@ -30,3 +30,10 @@ updates:
       uv-all-updates:
         patterns:
           - "*"
+        exclude-patterns:
+          # Keep build-system dependencies out of the grouped uv PR. In practice the
+          # grouped updater can lose previous-version metadata for setuptools-scm[toml],
+          # which causes the whole grouped change set to be dropped.
+          - "setuptools"
+          - "setuptools-scm"
+          - "setuptools-scm*"
