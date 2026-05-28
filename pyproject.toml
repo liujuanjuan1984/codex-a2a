@@ -48,7 +48,7 @@ dev = [
     "pytest-asyncio>=0.23",
     "pytest-cov>=5.0,<8.0",
     "ruff>=0.5",
-    "mypy>=1.11,<1.21",
+    "mypy>=1.11,<2.2",
 ]
 
 [project.scripts]
