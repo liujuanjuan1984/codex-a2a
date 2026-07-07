@@ -5,7 +5,6 @@ from typing import Any
 from a2a.types import Message, Role, Task, TaskState, TaskStatus
 
 from codex_a2a.a2a_proto import new_text_part
-from codex_a2a.parts.text import extract_text_from_parts
 
 
 def as_a2a_session_task(session: Any) -> Task | None:
@@ -47,7 +46,7 @@ def as_a2a_message(session_id: str, item: Any) -> Message | None:
     if isinstance(role_raw, str) and role_raw.strip().lower() == "user":
         role = Role.ROLE_USER
 
-    text = extract_text_from_parts(item.get("parts"))
+    text = _extract_text_from_parts(item.get("parts"))
 
     message = Message(
         message_id=message_id,
@@ -65,3 +64,15 @@ def extract_raw_items(raw_result: Any, *, kind: str) -> list[Any]:
     if isinstance(raw_result, list):
         return raw_result
     raise ValueError(f"Codex {kind} payload must be an array; got {type(raw_result).__name__}")
+
+
+def _extract_text_from_parts(parts: Any) -> str:
+    if not isinstance(parts, list):
+        return ""
+    texts: list[str] = []
+    for part in parts:
+        if isinstance(part, dict) and part.get("type") == "text":
+            part_text = part.get("text")
+            if isinstance(part_text, str):
+                texts.append(part_text)
+    return "".join(texts).strip()

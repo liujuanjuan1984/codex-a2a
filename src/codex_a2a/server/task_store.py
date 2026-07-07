@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable, MutableMapping
 from dataclasses import dataclass
 from typing import Any, cast
@@ -116,17 +115,7 @@ class TaskPersistenceDecision:
     reason: str | None = None
 
 
-class TaskWritePolicy(ABC):
-    @abstractmethod
-    def evaluate(
-        self,
-        *,
-        existing: Task | None,
-        incoming: Task,
-    ) -> TaskPersistenceDecision: ...
-
-
-class FirstTerminalStateWinsPolicy(TaskWritePolicy):
+class FirstTerminalStateWinsPolicy:
     def evaluate(
         self,
         *,
@@ -241,11 +230,9 @@ class PolicyAwareTaskStore(TaskStoreDecorator):
     def __init__(
         self,
         inner: TaskStore,
-        *,
-        write_policy: TaskWritePolicy | None = None,
     ) -> None:
         super().__init__(inner)
-        self._write_policy = write_policy or FirstTerminalStateWinsPolicy()
+        self._write_policy = FirstTerminalStateWinsPolicy()
         self._save_lock = asyncio.Lock()
         self._atomic_guard_fallback_logged = False
 
@@ -376,16 +363,8 @@ class PolicyAwareTaskStore(TaskStoreDecorator):
 
 
 class GuardedTaskStore(PolicyAwareTaskStore):
-    def __init__(
-        self,
-        inner: TaskStore,
-        *,
-        write_policy: TaskWritePolicy | None = None,
-    ) -> None:
-        super().__init__(
-            TaskStoreOperationWrappingDecorator(inner),
-            write_policy=write_policy,
-        )
+    def __init__(self, inner: TaskStore) -> None:
+        super().__init__(TaskStoreOperationWrappingDecorator(inner))
 
 
 def build_task_store_failure_metadata(operation: str) -> dict[str, Any]:
