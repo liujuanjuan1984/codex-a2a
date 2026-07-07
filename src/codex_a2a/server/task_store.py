@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable, MutableMapping
 from dataclasses import dataclass
 from typing import Any, cast
@@ -116,17 +115,7 @@ class TaskPersistenceDecision:
     reason: str | None = None
 
 
-class TaskWritePolicy(ABC):
-    @abstractmethod
-    def evaluate(
-        self,
-        *,
-        existing: Task | None,
-        incoming: Task,
-    ) -> TaskPersistenceDecision: ...
-
-
-class FirstTerminalStateWinsPolicy(TaskWritePolicy):
+class FirstTerminalStateWinsPolicy:
     def evaluate(
         self,
         *,
@@ -151,9 +140,12 @@ class FirstTerminalStateWinsPolicy(TaskWritePolicy):
         )
 
 
-class TaskStoreDecorator(TaskStore):
+class GuardedTaskStore(TaskStore):
     def __init__(self, inner: TaskStore) -> None:
         self._inner = inner
+        self._write_policy = FirstTerminalStateWinsPolicy()
+        self._save_lock = asyncio.Lock()
+        self._atomic_guard_fallback_logged = False
 
     def __getattr__(self, name: str) -> Any:
         return getattr(self._inner, name)
@@ -163,38 +155,13 @@ class TaskStoreDecorator(TaskStore):
         task: Task,
         context: ServerCallContext | None = None,
     ) -> None:
-        await self._inner.save(task, _normalize_context(context))
-
-    async def list(
-        self,
-        params: ListTasksRequest,
-        context: ServerCallContext | None = None,
-    ) -> ListTasksResponse:
-        return await self._inner.list(params, _normalize_context(context))
-
-    async def get(
-        self,
-        task_id: str,
-        context: ServerCallContext | None = None,
-    ) -> Task | None:
-        return await self._inner.get(task_id, _normalize_context(context))
-
-    async def delete(
-        self,
-        task_id: str,
-        context: ServerCallContext | None = None,
-    ) -> None:
-        await self._inner.delete(task_id, _normalize_context(context))
-
-
-class TaskStoreOperationWrappingDecorator(TaskStoreDecorator):
-    async def save(
-        self,
-        task: Task,
-        context: ServerCallContext | None = None,
-    ) -> None:
+        context = _normalize_context(context)
+        raw_task_store = unwrap_task_store(self._inner)
         try:
-            await self._inner.save(task, _normalize_context(context))
+            if isinstance(raw_task_store, DatabaseTaskStore):
+                await self._save_database_task(raw_task_store, task, context)
+                return
+            await self._save_with_read_before_write(task, context)
         except TaskStoreOperationError:
             raise
         except Exception as exc:
@@ -235,32 +202,6 @@ class TaskStoreOperationWrappingDecorator(TaskStoreDecorator):
             raise
         except Exception as exc:
             raise TaskStoreOperationError("delete", task_id) from exc
-
-
-class PolicyAwareTaskStore(TaskStoreDecorator):
-    def __init__(
-        self,
-        inner: TaskStore,
-        *,
-        write_policy: TaskWritePolicy | None = None,
-    ) -> None:
-        super().__init__(inner)
-        self._write_policy = write_policy or FirstTerminalStateWinsPolicy()
-        self._save_lock = asyncio.Lock()
-        self._atomic_guard_fallback_logged = False
-
-    async def save(
-        self,
-        task: Task,
-        context: ServerCallContext | None = None,
-    ) -> None:
-        context = _normalize_context(context)
-        raw_task_store = unwrap_task_store(self._inner)
-        if isinstance(raw_task_store, DatabaseTaskStore):
-            await self._save_database_task(raw_task_store, task, context)
-            return
-
-        await self._save_with_read_before_write(task, context)
 
     async def _save_with_read_before_write(
         self,
@@ -372,19 +313,6 @@ class PolicyAwareTaskStore(TaskStoreDecorator):
             incoming.status.state,
             decision.persist,
             decision.reason or "accepted",
-        )
-
-
-class GuardedTaskStore(PolicyAwareTaskStore):
-    def __init__(
-        self,
-        inner: TaskStore,
-        *,
-        write_policy: TaskWritePolicy | None = None,
-    ) -> None:
-        super().__init__(
-            TaskStoreOperationWrappingDecorator(inner),
-            write_policy=write_policy,
         )
 
 
