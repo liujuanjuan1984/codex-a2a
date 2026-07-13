@@ -30,7 +30,7 @@ jobs:
 
       - name: Run pinned mandatory TCK
         env:
-          CONFORMANCE_TCK_REF: 5996b79f9cefa6fc390980e383e358a66fb9e49e
+          CONFORMANCE_TCK_REF: 5996b79f9cefa6fc390980e383e358a66fb9e49e # pragma: allowlist secret
         run: bash ./scripts/conformance.sh mandatory
 
       - name: Upload TCK evidence
