@@ -7,6 +7,7 @@ This repository keeps internal regression and external interoperability experime
 - `./scripts/validate_baseline.sh` remains the default internal regression entrypoint.
 - `./scripts/conformance.sh` is a local/manual experiment entrypoint for official external tooling.
 - External conformance output is investigation input, not an automatic merge gate.
+- `.github/workflows/compatibility.yml` runs the mandatory TCK weekly against a pinned TCK commit and preserves its evidence as a workflow artifact.
 
 ## Current Experiment Shape
 
@@ -19,6 +20,7 @@ The default `./scripts/conformance.sh` workflow does the following:
 5. Preserves raw logs and machine-readable reports under `run/conformance/<timestamp>/`.
 
 The default local SUT uses the repository test double `DummyChatCodexClient`. That keeps the experiment reproducible without requiring a live Codex upstream.
+For current TCK releases that do not expose authentication options, the runner loads `scripts/tck_auth_plugin.py` to inject the configured test credential into HTTP transport clients. The SUT authentication middleware remains enabled.
 
 ## Usage
 
@@ -61,6 +63,8 @@ Each run keeps the following artifacts in the selected output directory:
 - `tck.log`: raw TCK console output
 - `pytest-report.json`: pytest-json-report output emitted by the TCK runner when available
 - `failed-tests.json`: compact list of failed/error node IDs for triage when a report is available
+- `compatibility.json` / `compatibility.html`: current TCK compatibility reports when emitted
+- `tck_report.html` / `junitreport.xml`: current TCK pytest reports when emitted
 - `metadata.json`: experiment metadata including local repo commit and cached TCK commit
 
 ## Interpretation Guidance
@@ -74,5 +78,7 @@ When a TCK run fails, inspect the raw report before changing the runtime:
 
 The experiment is useful only if those categories stay separate during triage.
 Use the authenticated compatibility profile and wire contract `protocol_compatibility` fields as the repository-owned declaration of which protocol lines are supported today.
+
+The same scheduled workflow installs the latest stable Codex CLI and runs `scripts/smoke_test_live_codex.sh`. The smoke check only verifies the real stdio app-server initialization and shutdown handshake; it does not send a model request or require provider credentials.
 
 Record first-pass classifications in [conformance-triage.md](./conformance-triage.md).

@@ -10,10 +10,12 @@ SCRIPTS_README_TEXT = Path("scripts/README.md").read_text()
 CI_WORKFLOW_TEXT = Path(".github/workflows/ci.yml").read_text()
 DEPENDENCY_HEALTH_WORKFLOW_TEXT = Path(".github/workflows/dependency-health.yml").read_text()
 PUBLISH_WORKFLOW_TEXT = Path(".github/workflows/publish.yml").read_text()
+COMPATIBILITY_WORKFLOW_TEXT = Path(".github/workflows/compatibility.yml").read_text()
 DEPENDENCY_HEALTH_SCRIPT_TEXT = Path("scripts/dependency_health.sh").read_text()
 SMOKE_TEST_SCRIPT_TEXT = Path("scripts/smoke_test_built_cli.sh").read_text()
 RUNTIME_MATRIX_SCRIPT_TEXT = Path("scripts/validate_runtime_matrix.sh").read_text()
 SYNC_CODEX_DOCS_TEXT = Path("scripts/sync_codex_docs.sh").read_text()
+LIVE_CODEX_SMOKE_TEXT = Path("scripts/smoke_test_live_codex.sh").read_text()
 CONFORMANCE_TEXT = Path("docs/conformance.md").read_text()
 CONFORMANCE_TRIAGE_TEXT = Path("docs/conformance-triage.md").read_text()
 GUIDE_TEXT = Path("docs/guide.md").read_text()
@@ -106,12 +108,27 @@ def test_dependency_health_workflow_runs_as_a_standalone_check() -> None:
     assert "uv run pip-audit" in DEPENDENCY_HEALTH_SCRIPT_TEXT
 
 
+def test_scheduled_compatibility_workflow_pins_tck_and_smokes_latest_codex() -> None:
+    assert "name: Scheduled Compatibility" in COMPATIBILITY_WORKFLOW_TEXT
+    assert 'cron: "17 4 * * 1"' in COMPATIBILITY_WORKFLOW_TEXT
+    assert "CONFORMANCE_TCK_REF: 5996b79f9cefa6fc390980e383e358a66fb9e49e" in (
+        COMPATIBILITY_WORKFLOW_TEXT
+    )
+    assert "bash ./scripts/conformance.sh mandatory" in COMPATIBILITY_WORKFLOW_TEXT
+    assert "npm install --global @openai/codex@latest" in COMPATIBILITY_WORKFLOW_TEXT
+    assert "bash ./scripts/smoke_test_live_codex.sh" in COMPATIBILITY_WORKFLOW_TEXT
+    assert "client.startup_preflight()" in LIVE_CODEX_SMOKE_TEXT
+    assert "send_message" not in LIVE_CODEX_SMOKE_TEXT
+    assert "scripts.tck_auth_plugin" in Path("scripts/conformance.sh").read_text()
+
+
 def test_scripts_index_exposes_built_cli_smoke_test() -> None:
     assert "doctor.sh" not in SCRIPTS_README_TEXT
     assert "conformance.sh" in SCRIPTS_README_TEXT
     assert "validate_runtime_matrix.sh" in SCRIPTS_README_TEXT
     assert "dependency_health.sh" in SCRIPTS_README_TEXT
     assert "smoke_test_built_cli.sh" in SCRIPTS_README_TEXT
+    assert "smoke_test_live_codex.sh" in SCRIPTS_README_TEXT
     assert "`uv tool`" in SCRIPTS_README_TEXT
     assert "runtime entrypoints live in the released `codex-a2a` CLI" in SCRIPTS_README_TEXT
     assert "Repository-maintainer scripts live here." in SCRIPTS_README_TEXT
