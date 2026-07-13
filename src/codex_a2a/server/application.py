@@ -34,6 +34,11 @@ from codex_a2a.server.database import build_database_engine
 from codex_a2a.server.openapi import patch_openapi_contract
 from codex_a2a.server.push_config_store import build_push_config_store_runtime
 from codex_a2a.server.request_handler import CodexRequestHandler
+from codex_a2a.server.runtime_limits import (
+    OperationCapacity,
+    OperationCapacityMiddleware,
+    RequestBodyLimitMiddleware,
+)
 from codex_a2a.server.runtime_state import build_runtime_state_runtime
 from codex_a2a.server.task_store import build_task_store_runtime, describe_persistence_backend
 from codex_a2a.upstream.client import CodexClient
@@ -188,6 +193,15 @@ def create_app(settings: Settings) -> FastAPI:
         PathScopedGZipMiddleware,
         paths=GZIP_COMPRESSIBLE_PATHS,
     )
+    operation_capacity = OperationCapacity(settings.a2a_max_concurrent_operations)
+    app.add_middleware(
+        OperationCapacityMiddleware,
+        capacity=operation_capacity,
+    )
+    app.add_middleware(
+        RequestBodyLimitMiddleware,
+        max_body_bytes=settings.a2a_request_body_max_bytes,
+    )
     app.router.routes.extend(create_agent_card_routes(agent_card))
     app.router.routes.extend(
         create_extension_jsonrpc_routes(
@@ -221,6 +235,7 @@ def create_app(settings: Settings) -> FastAPI:
     app.state.a2a_client_manager = a2a_client_manager
     app.state.task_store = task_store
     app.state.push_config_store = push_config_store_runtime.push_config_store
+    app.state.operation_capacity = operation_capacity
 
     if settings.a2a_enable_health_endpoint:
 

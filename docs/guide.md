@@ -196,6 +196,8 @@ Use the grouped sections below as the deployment-first reading order:
 - `A2A_LOG_LEVEL`: `DEBUG/INFO/WARNING/ERROR`, default `WARNING`
 - `A2A_LOG_PAYLOADS`: log A2A/Codex payload bodies, default `false`
 - `A2A_LOG_BODY_LIMIT`: payload log body size limit, default `0` (no truncation)
+- `A2A_REQUEST_BODY_MAX_BYTES`: hard HTTP request body limit, default `4194304` (4 MiB); set `0` to disable
+- `A2A_MAX_CONCURRENT_OPERATIONS`: process-local active POST and task-subscription limit, default `32`; set `0` to disable
 - `A2A_TITLE`: agent name, default `Codex A2A`
 - `A2A_DESCRIPTION`: agent description exposed on Agent Card and docs surfaces
 - `A2A_VERSION`: agent version string
@@ -275,6 +277,8 @@ These variables are forwarded to the local `codex app-server` subprocess.
 | `A2A_LOG_LEVEL` | Log level |
 | `A2A_LOG_PAYLOADS` | Log bodies |
 | `A2A_LOG_BODY_LIMIT` | Body log limit |
+| `A2A_REQUEST_BODY_MAX_BYTES` | HTTP request body limit |
+| `A2A_MAX_CONCURRENT_OPERATIONS` | Active operation capacity |
 | `A2A_TITLE` | Agent title |
 | `A2A_DESCRIPTION` | Agent description |
 | `A2A_VERSION` | Agent version |
