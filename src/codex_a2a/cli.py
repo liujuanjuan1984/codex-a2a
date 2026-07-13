@@ -57,6 +57,8 @@ SERVE_ENVIRONMENT_HELP = (
     "    Hard request body limit. Default: 4194304\n"
     "  A2A_MAX_CONCURRENT_OPERATIONS\n"
     "    Process-local active operation limit. Default: 32\n"
+    "  A2A_ENABLE_METRICS_ENDPOINT\n"
+    "    Enable the authenticated Prometheus metrics endpoint. Default: true\n"
     "  CODEX_WORKSPACE_ROOT\n"
     "    Workspace root exposed to Codex tool execution.\n"
     "  CODEX_CLI_BIN\n"

@@ -5,6 +5,13 @@ import asyncio
 from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
+from codex_a2a.metrics import (
+    A2A_OPERATION_ACTIVE,
+    A2A_OPERATION_REJECTED_TOTAL,
+    A2A_REQUEST_BODY_REJECTED_TOTAL,
+    get_metrics_registry,
+)
+
 
 async def _send_json_error(
     scope: Scope,
@@ -84,6 +91,7 @@ class RequestBodyLimitMiddleware:
         await self.app(scope, replay_receive, send)
 
     async def _reject(self, scope: Scope, send: Send) -> None:
+        get_metrics_registry().inc_counter(A2A_REQUEST_BODY_REJECTED_TOTAL)
         await _send_json_error(
             scope,
             send,
@@ -141,6 +149,7 @@ class OperationCapacityMiddleware:
             return
 
         if not await self.capacity.try_acquire():
+            get_metrics_registry().inc_counter(A2A_OPERATION_REJECTED_TOTAL)
             await _send_json_error(
                 scope,
                 send,
@@ -150,7 +159,9 @@ class OperationCapacityMiddleware:
             )
             return
 
+        get_metrics_registry().inc_gauge(A2A_OPERATION_ACTIVE)
         try:
             await self.app(scope, receive, send)
         finally:
             await self.capacity.release()
+            get_metrics_registry().dec_gauge(A2A_OPERATION_ACTIVE)

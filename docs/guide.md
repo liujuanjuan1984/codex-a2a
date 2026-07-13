@@ -198,6 +198,7 @@ Use the grouped sections below as the deployment-first reading order:
 - `A2A_LOG_BODY_LIMIT`: payload log body size limit, default `0` (no truncation)
 - `A2A_REQUEST_BODY_MAX_BYTES`: hard HTTP request body limit, default `4194304` (4 MiB); set `0` to disable
 - `A2A_MAX_CONCURRENT_OPERATIONS`: process-local active POST and task-subscription limit, default `32`; set `0` to disable
+- `A2A_ENABLE_METRICS_ENDPOINT`: enable the authenticated Prometheus `/metrics` endpoint, default `true`
 - `A2A_TITLE`: agent name, default `Codex A2A`
 - `A2A_DESCRIPTION`: agent description exposed on Agent Card and docs surfaces
 - `A2A_VERSION`: agent version string
@@ -286,6 +287,7 @@ These variables are forwarded to the local `codex app-server` subprocess.
 | `A2A_PROTOCOL_VERSION` | Protocol version |
 | `A2A_DOCUMENTATION_URL` | Documentation URL |
 | `A2A_ENABLE_HEALTH_ENDPOINT` | Enable /health |
+| `A2A_ENABLE_METRICS_ENDPOINT` | Enable /metrics |
 | `A2A_ENABLE_TURN_CONTROL` | Enable turn control |
 | `A2A_ENABLE_REVIEW_CONTROL` | Enable review control |
 | `A2A_ENABLE_EXEC_CONTROL` | Enable interactive exec |
@@ -443,6 +445,8 @@ On the current npm global install layout for Linux x64, the command above resolv
 ### Health, Auth, and Deployment Boundary
 
 - `GET /health` is a lightweight authenticated status probe. It requires the same configured inbound auth as other protected endpoints and returns service status plus a structured `profile` summary; it does not call upstream Codex.
+- `GET /ready` is enabled with `/health` and reports whether the initialized Codex app-server subprocess is alive and its stdout reader is running. It does not make a model request.
+- `GET /metrics` exposes authenticated Prometheus text metrics, including active operations and resource-limit rejections. Disable it with `A2A_ENABLE_METRICS_ENDPOINT=false` when metrics are collected through another integration.
 - Protected routes accept configured inbound `Authorization: Bearer <token>` and/or `Authorization: Basic <base64(username:password)>` credentials. The public Agent Card endpoints are public; authenticated extended card routes still require inbound auth.
 - Static credential registry mode is the only supported inbound auth shape. It lets deployments define multiple bearer tokens and/or multiple Basic credentials with stable `principal` values.
 - Stable `principal` values back runtime ownership checks. This avoids tying session, watch, or exec ownership to a bearer token hash that changes during token rotation.

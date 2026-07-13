@@ -264,6 +264,7 @@ def test_settings_parse_ops_flags_and_timeouts():
     env = {
         **_registry_env(),
         "A2A_ENABLE_HEALTH_ENDPOINT": "false",
+        "A2A_ENABLE_METRICS_ENDPOINT": "false",
         "A2A_ENABLE_TURN_CONTROL": "false",
         "A2A_ENABLE_REVIEW_CONTROL": "false",
         "A2A_ENABLE_EXEC_CONTROL": "false",
@@ -276,6 +277,7 @@ def test_settings_parse_ops_flags_and_timeouts():
     with mock.patch.dict(os.environ, env, clear=True):
         settings = Settings.from_env()
         assert settings.a2a_enable_health_endpoint is False
+        assert settings.a2a_enable_metrics_endpoint is False
         assert settings.a2a_enable_turn_control is False
         assert settings.a2a_enable_review_control is False
         assert settings.a2a_enable_exec_control is False

@@ -8,6 +8,7 @@ import uvicorn
 from a2a.server.routes.agent_card_routes import create_agent_card_routes
 from a2a.server.routes.rest_routes import create_rest_routes
 from fastapi import FastAPI
+from starlette.responses import JSONResponse, PlainTextResponse
 from starlette.routing import BaseRoute, Mount
 
 from codex_a2a.client.manager import A2AClientManager
@@ -24,6 +25,7 @@ from codex_a2a.jsonrpc.application import (
 )
 from codex_a2a.jsonrpc.hooks import SessionGuardHooks
 from codex_a2a.logging_context import install_log_record_factory
+from codex_a2a.metrics import get_metrics_registry
 from codex_a2a.profile.runtime import build_runtime_profile
 from codex_a2a.server.agent_card import (
     build_agent_card,
@@ -236,6 +238,7 @@ def create_app(settings: Settings) -> FastAPI:
     app.state.task_store = task_store
     app.state.push_config_store = push_config_store_runtime.push_config_store
     app.state.operation_capacity = operation_capacity
+    app.state.metrics_registry = get_metrics_registry()
 
     if settings.a2a_enable_health_endpoint:
 
@@ -244,6 +247,24 @@ def create_app(settings: Settings) -> FastAPI:
             return runtime_profile.health_payload(
                 service="codex-a2a",
                 version=settings.a2a_version,
+            )
+
+        @app.get("/ready")
+        async def readiness_check():
+            ready = client.ready
+            status = "ready" if ready else "not_ready"
+            return JSONResponse(
+                {"status": status, "checks": {"codex_app_server": status}},
+                status_code=200 if ready else 503,
+            )
+
+    if settings.a2a_enable_metrics_endpoint:
+
+        @app.get("/metrics")
+        async def metrics():
+            return PlainTextResponse(
+                get_metrics_registry().render_prometheus(),
+                media_type="text/plain; version=0.0.4",
             )
 
     install_http_middlewares(

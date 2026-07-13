@@ -103,6 +103,10 @@ class CodexClient:
     def connection_scope_id(self) -> str:
         return self._connection_scope_id
 
+    @property
+    def ready(self) -> bool:
+        return self._transport.ready
+
     def bind_interrupt_context(
         self,
         *,

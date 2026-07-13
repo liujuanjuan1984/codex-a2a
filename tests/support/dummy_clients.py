@@ -25,6 +25,7 @@ class DummyChatCodexClient:
         self.settings = settings or make_settings(
             a2a_bearer_token="test",
         )
+        self.ready = True
 
     async def close(self) -> None:
         return None
@@ -83,6 +84,7 @@ class DummyChatCodexClient:
 
 class DummySessionQueryCodexClient:
     def __init__(self, _settings: Settings, **kwargs: Any) -> None:
+        self.ready = True
         self.directory = "/workspace"
         self.settings = _settings
         self._sessions_payload: Any = [{"id": "s-1", "title": "Session s-1"}]

@@ -7,11 +7,22 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.routing import Route
 
+from codex_a2a.metrics import (
+    A2A_OPERATION_ACTIVE,
+    A2A_OPERATION_REJECTED_TOTAL,
+    A2A_REQUEST_BODY_REJECTED_TOTAL,
+    get_metrics_registry,
+)
 from codex_a2a.server.runtime_limits import (
     OperationCapacity,
     OperationCapacityMiddleware,
     RequestBodyLimitMiddleware,
 )
+
+
+@pytest.fixture(autouse=True)
+def reset_metrics() -> None:
+    get_metrics_registry().reset()
 
 
 async def _echo_body(request: Request) -> JSONResponse:
@@ -42,6 +53,7 @@ async def test_request_body_limit_rejects_declared_oversized_body() -> None:
 
     assert response.status_code == 413
     assert "3-byte limit" in response.json()["error"]
+    assert get_metrics_registry().snapshot()["counters"][A2A_REQUEST_BODY_REJECTED_TOTAL] == 1
 
 
 @pytest.mark.asyncio
@@ -80,12 +92,16 @@ async def test_operation_capacity_rejects_without_queueing_and_releases_slot() -
         assert rejected.status_code == 429
         assert rejected.headers["retry-after"] == "1"
         assert capacity.active == 1
+        snapshot = get_metrics_registry().snapshot()
+        assert snapshot["counters"][A2A_OPERATION_REJECTED_TOTAL] == 1
+        assert snapshot["gauges"][A2A_OPERATION_ACTIVE] == 1
 
         release.set()
         accepted = await first
 
     assert accepted.status_code == 200
     assert capacity.active == 0
+    assert get_metrics_registry().snapshot()["gauges"][A2A_OPERATION_ACTIVE] == 0
 
 
 @pytest.mark.asyncio

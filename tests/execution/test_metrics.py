@@ -10,6 +10,9 @@ from a2a.types import Task, TaskState, TaskStatus
 from codex_a2a.execution.stream_state import StreamOutputState
 from codex_a2a.execution.streaming import consume_codex_stream
 from codex_a2a.metrics import (
+    A2A_OPERATION_ACTIVE,
+    A2A_OPERATION_REJECTED_TOTAL,
+    A2A_REQUEST_BODY_REJECTED_TOTAL,
     A2A_STREAM_ACTIVE,
     A2A_STREAM_REQUESTS_TOTAL,
     CODEX_STREAM_RETRIES_TOTAL,
@@ -36,6 +39,21 @@ def reset_metrics_state() -> Iterator[None]:
     get_metrics_registry().reset()
     yield
     get_metrics_registry().reset()
+
+
+def test_metrics_render_prometheus_text_format() -> None:
+    registry = get_metrics_registry()
+    registry.inc_counter(A2A_REQUEST_BODY_REJECTED_TOTAL, 2)
+    registry.inc_counter(A2A_OPERATION_REJECTED_TOTAL)
+    registry.inc_gauge(A2A_OPERATION_ACTIVE, 3)
+
+    rendered = registry.render_prometheus()
+
+    assert "# TYPE a2a_request_body_rejected_total counter" in rendered
+    assert "a2a_request_body_rejected_total 2" in rendered
+    assert "a2a_operation_rejected_total 1" in rendered
+    assert "# TYPE a2a_operation_active gauge" in rendered
+    assert "a2a_operation_active 3" in rendered
 
 
 @pytest.mark.asyncio
