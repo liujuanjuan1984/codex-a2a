@@ -4,8 +4,8 @@ This document is the standing triage template for local `./scripts/conformance.s
 
 ## Standards Used For Triage
 
-- `a2a-sdk==1.0.2` as installed in this repository.
-- The default A2A protocol version advertised by this repository: `1.0.0`.
+- `a2a-sdk==1.1.0` as installed in this repository.
+- The default A2A protocol version advertised by this repository: `1.0`.
 - Repository compatibility policy:
   - machine-readable Agent Card and OpenAPI contracts must reflect implemented runtime behavior;
   - external TCK results are investigation input rather than default merge gates;

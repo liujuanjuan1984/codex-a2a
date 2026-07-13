@@ -14,6 +14,10 @@ DEPENDENCY_HEALTH_SCRIPT_TEXT = Path("scripts/dependency_health.sh").read_text()
 SMOKE_TEST_SCRIPT_TEXT = Path("scripts/smoke_test_built_cli.sh").read_text()
 RUNTIME_MATRIX_SCRIPT_TEXT = Path("scripts/validate_runtime_matrix.sh").read_text()
 SYNC_CODEX_DOCS_TEXT = Path("scripts/sync_codex_docs.sh").read_text()
+CONFORMANCE_TEXT = Path("docs/conformance.md").read_text()
+CONFORMANCE_TRIAGE_TEXT = Path("docs/conformance-triage.md").read_text()
+GUIDE_TEXT = Path("docs/guide.md").read_text()
+MAINTAINER_ARCHITECTURE_TEXT = Path("docs/maintainer-architecture.md").read_text()
 
 
 def test_readme_documents_released_cli_installation_via_uv_tool() -> None:
@@ -138,6 +142,22 @@ def test_project_metadata_exposes_open_source_entrypoints_cleanly() -> None:
     assert project["urls"]["Documentation"].endswith("/tree/main/docs")
     assert project["urls"]["Releases"].endswith("/releases")
     assert project["urls"]["Security"].endswith("/security/policy")
+
+
+def test_compatibility_docs_track_runtime_dependency_and_protocol_defaults() -> None:
+    project = PYPROJECT_DATA["project"]
+    a2a_sdk_requirement = next(
+        requirement
+        for requirement in project["dependencies"]
+        if requirement.startswith("a2a-sdk==")
+    )
+    assert a2a_sdk_requirement in CONFORMANCE_TEXT
+    assert a2a_sdk_requirement in CONFORMANCE_TRIAGE_TEXT
+    assert "default `1.0`" in GUIDE_TEXT
+    assert "default A2A protocol version advertised by this repository: `1.0`" in (
+        CONFORMANCE_TRIAGE_TEXT
+    )
+    assert "message_routes.py" not in MAINTAINER_ARCHITECTURE_TEXT
 
 
 def test_repository_no_longer_ships_deploy_assets() -> None:

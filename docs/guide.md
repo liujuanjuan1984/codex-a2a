@@ -200,7 +200,7 @@ Use the grouped sections below as the deployment-first reading order:
 - `A2A_DESCRIPTION`: agent description exposed on Agent Card and docs surfaces
 - `A2A_VERSION`: agent version string
 - `A2A_PROJECT`: optional project label injected into examples and discovery metadata
-- `A2A_PROTOCOL_VERSION`: advertised A2A protocol version, default `1.0.0`; values outside the `1.0` protocol line are rejected
+- `A2A_PROTOCOL_VERSION`: advertised A2A protocol version, default `1.0`; values outside the `1.0` protocol line are rejected
 - `A2A_DOCUMENTATION_URL`: optional external documentation URL exposed on Agent Card
 - `A2A_STATIC_AUTH_CREDENTIALS`: JSON array of static inbound credentials. Supports multiple `bearer` and `basic` entries, each with a stable `principal`; `bearer` entries must declare `principal`, while `basic` entries derive `principal` from `username`.
 
