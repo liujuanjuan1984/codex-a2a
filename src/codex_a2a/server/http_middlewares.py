@@ -287,7 +287,7 @@ def _inject_context_protocol_header(
     request._headers = Headers(raw=headers)
 
 
-def install_http_middlewares(
+def install_http_middlewares(  # noqa: C901 - registration split is tracked in #328
     app: FastAPI,
     *,
     settings: Settings,

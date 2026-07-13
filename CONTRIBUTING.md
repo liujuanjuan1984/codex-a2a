@@ -61,7 +61,7 @@ Run the default validation baseline before opening or updating a PR:
 bash ./scripts/validate_baseline.sh
 ```
 
-This script runs `pre-commit`, `mypy`, `pytest` with the repository coverage floor, then builds the package and smoke-tests the freshly built wheel.
+This script checks untracked files before the tracked repository, runs `mypy`, runs `pytest` with the repository coverage floor and a 90% changed-line coverage gate against `origin/main`, then builds the package and smoke-tests the freshly built wheel.
 
 For shell script changes, validate the touched scripts directly, for example:
 

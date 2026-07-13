@@ -23,6 +23,10 @@ def test_validate_baseline_keeps_local_regression_scope() -> None:
     assert "uv run python scripts/check_dead_code.py" in VALIDATE_BASELINE_TEXT
     assert "uv run mypy --config-file mypy.ini" in VALIDATE_BASELINE_TEXT
     assert "uv run pytest" in VALIDATE_BASELINE_TEXT
+    assert "git ls-files --others --exclude-standard -z" in VALIDATE_BASELINE_TEXT
+    assert "uv run diff-cover coverage.xml --compare-branch origin/main --fail-under 90" in (
+        VALIDATE_BASELINE_TEXT
+    )
     assert "uv export" in VALIDATE_BASELINE_TEXT
     assert 'run_pip_audit "${runtime_requirements}"' in VALIDATE_BASELINE_TEXT
     assert (

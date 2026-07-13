@@ -91,7 +91,7 @@ def test_ci_workflow_deduplicates_full_gate_and_runtime_matrix() -> None:
     assert "bash ./scripts/validate_baseline.sh" in CI_WORKFLOW_TEXT
     assert "runtime-matrix:" in CI_WORKFLOW_TEXT
     assert "name: Runtime Matrix (Python ${{ matrix.python-version }})" in CI_WORKFLOW_TEXT
-    assert 'python-version: ["3.11", "3.12"]' in CI_WORKFLOW_TEXT
+    assert 'python-version: ["3.11", "3.12", "3.14"]' in CI_WORKFLOW_TEXT
     assert "bash ./scripts/validate_runtime_matrix.sh" in CI_WORKFLOW_TEXT
 
 
