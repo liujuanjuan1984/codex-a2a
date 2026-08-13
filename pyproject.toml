@@ -24,7 +24,7 @@ classifiers = [
     "Topic :: Internet :: WWW/HTTP",
 ]
 dependencies = [
-    "a2a-sdk==1.1.0",
+    "a2a-sdk==1.1.2",
     "aiosqlite>=0.20,<1.0",
     "fastapi>=0.121,<0.137",
     "httpx>=0.28.1,<0.29",
@@ -45,7 +45,7 @@ dev = [
     "pytest-asyncio>=0.23",
     "pytest-cov>=5.0,<8.0",
     "ruff>=0.5",
-    "mypy>=1.11,<2.2",
+    "mypy>=1.11,<2.4",
 ]
 
 [project.scripts]
