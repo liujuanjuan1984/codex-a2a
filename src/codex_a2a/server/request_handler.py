@@ -118,7 +118,7 @@ class CodexRequestHandler(DefaultRequestHandler):
     ):
         store_context = self._task_store_context(context)
         try:
-            # A2A SDK 1.0.2 currently validates GetTaskRequest through a protobuf
+            # The A2A SDK currently validates GetTaskRequest through a protobuf
             # field API that is incompatible with protobuf 7.x. Mirror the small
             # upstream get-task flow here so the server remains usable on current deps.
             validate_history_length(params)

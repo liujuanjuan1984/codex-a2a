@@ -25,16 +25,16 @@ classifiers = [
     "Topic :: Internet :: WWW/HTTP",
 ]
 dependencies = [
-    "a2a-sdk==1.1.0",
+    "a2a-sdk==1.1.2",
     "aiosqlite>=0.20,<1.0",
-    "fastapi>=0.121,<0.137",
+    "fastapi>=0.121,<0.142",
     "httpx>=0.28.1,<0.29",
     "protobuf>=6.33.5,<7.0",
     "pydantic>=2.6,<3.0",
     "pydantic-settings>=2.2,<3.0",
     "sqlalchemy>=2.0,<3.0",
     "sse-starlette>=2.1,<4.0",
-    "uvicorn>=0.29,<0.46",
+    "uvicorn>=0.29,<0.53",
 ]
 
 [project.optional-dependencies]
@@ -47,7 +47,7 @@ dev = [
     "pytest-cov>=5.0,<8.0",
     "diff-cover>=9,<10",
     "ruff>=0.5",
-    "mypy>=1.11,<2.2",
+    "mypy>=1.11,<2.4",
 ]
 
 [project.scripts]
