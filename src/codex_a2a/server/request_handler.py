@@ -301,7 +301,10 @@ class CodexRequestHandler(DefaultRequestHandler):
         context_id = getattr(message, "context_id", None)
         if not task_id or not context_id:
             return
-        existing = await self.task_store.get(task_id, store_context)
+        try:
+            existing = await self.task_store.get(task_id, store_context)
+        except TaskStoreOperationError as exc:
+            raise self._task_store_server_error(exc) from exc
         if existing is not None and existing.context_id and existing.context_id != context_id:
             raise InvalidRequestError(
                 message=f"contextId mismatch for task {task_id}",
@@ -441,6 +444,7 @@ class CodexRequestHandler(DefaultRequestHandler):
 
     async def on_message_send_stream(self, params, context=None):
         self._validate_chat_output_modes(params)
+        await self._validate_message_context_match(params, self._task_store_context(context))
         self._metrics.inc_counter(A2A_STREAM_REQUESTS_TOTAL)
         self._metrics.inc_gauge(A2A_STREAM_ACTIVE)
         task_id = getattr(getattr(params, "message", None), "task_id", None) or str(uuid.uuid4())

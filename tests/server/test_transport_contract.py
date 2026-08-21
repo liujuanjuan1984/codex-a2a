@@ -1085,6 +1085,58 @@ async def test_send_message_rejects_mismatched_context_id(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
+async def test_streaming_message_rejects_mismatched_context_id(monkeypatch) -> None:
+    import codex_a2a.server.application as app_module
+
+    monkeypatch.setattr(app_module, "CodexClient", DummyChatCodexClient)
+    app = app_module.create_app(make_settings(a2a_bearer_token="test-token"))
+    transport = httpx.ASGITransport(app=app)
+    headers = {"Authorization": "Bearer test-token"}
+
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        created = await client.post(
+            CORE_JSONRPC_PATH,
+            headers=headers,
+            json={
+                "jsonrpc": "2.0",
+                "id": 47,
+                "method": "SendMessage",
+                "params": {
+                    "message": {
+                        "role": "ROLE_USER",
+                        "parts": [{"text": "create task"}],
+                        "messageId": "m-ctx-stream-1",
+                    }
+                },
+            },
+        )
+        task = created.json()["result"]["task"]
+        response = await client.post(
+            CORE_JSONRPC_PATH,
+            headers=headers,
+            json={
+                "jsonrpc": "2.0",
+                "id": 48,
+                "method": "SendStreamingMessage",
+                "params": {
+                    "message": {
+                        "role": "ROLE_USER",
+                        "parts": [{"text": "wrong context"}],
+                        "messageId": "m-ctx-stream-2",
+                        "taskId": task["id"],
+                        "contextId": "wrong-context",
+                    }
+                },
+            },
+        )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["error"]["code"] == -32600
+    assert "contextId mismatch" in payload["error"]["message"]
+
+
+@pytest.mark.asyncio
 async def test_jsonrpc_rejects_non_json_content_type_with_spec_error(monkeypatch) -> None:
     import codex_a2a.server.application as app_module
 
