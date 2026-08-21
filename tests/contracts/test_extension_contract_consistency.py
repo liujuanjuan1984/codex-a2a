@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import cast
 
 import httpx
 import pytest
@@ -147,8 +148,8 @@ def test_session_query_contract_ssot_matches_openapi_contract() -> None:
     assert session_query == expected, (
         "Session query extension drifted from extension_contracts SSOT."
     )
-    assert session_query["pagination"]["default_limit"] == SESSION_QUERY_DEFAULT_LIMIT
-    assert session_query["pagination"]["behavior"] == "mixed"
+    assert cast(dict, session_query)["pagination"]["default_limit"] == SESSION_QUERY_DEFAULT_LIMIT
+    assert cast(dict, session_query)["pagination"]["behavior"] == "mixed"
 
 
 def test_discovery_contract_ssot_matches_openapi_contract() -> None:
@@ -225,7 +226,7 @@ async def test_session_query_runtime_result_envelope_matches_declared_contract(
         codex_timeout=1.0,
     )
     method_contracts = _codex_contracts(settings)["session_query"]["method_contracts"]
-    expected_result = method_contracts[method]["result"]
+    expected_result = cast(dict, method_contracts)[method]["result"]
 
     dummy = DummyCodexClient(settings)
     monkeypatch.setattr(app_module, "CodexClient", lambda _settings, **kwargs: dummy)

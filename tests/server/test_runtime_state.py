@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+from typing import cast
+
 import pytest
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
 
 import codex_a2a.server.runtime_state as runtime_state_module
 from codex_a2a.server.runtime_state import build_runtime_state_runtime
@@ -23,7 +26,7 @@ async def test_insert_then_update_on_conflict_recovers_from_concurrent_first_ins
             raise AssertionError(f"Unexpected clause type: {clause.__visit_name__}")
 
     await runtime_state_module._insert_then_update_on_conflict(
-        _FakeSession(),
+        cast(AsyncSession, _FakeSession()),
         table=_PENDING_INTERRUPT_REQUESTS,
         key_values={"request_id": "perm-1"},
         update_values={

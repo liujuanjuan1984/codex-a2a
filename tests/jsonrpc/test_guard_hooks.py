@@ -1,3 +1,4 @@
+from typing import cast
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -20,6 +21,7 @@ from codex_a2a.jsonrpc.application import (
 )
 from codex_a2a.jsonrpc.hooks import SessionGuardHooks
 from codex_a2a.profile.runtime import build_runtime_profile
+from codex_a2a.upstream.client import CodexClient
 from tests.support.dummy_clients import DummySessionQueryCodexClient as DummyCodexClient
 from tests.support.settings import make_settings
 
@@ -47,7 +49,7 @@ def _build_extension_app(
     }
     return CodexSessionQueryJSONRPCApplication(
         request_handler=MagicMock(),
-        codex_client=DummyCodexClient(settings),
+        codex_client=cast(CodexClient, DummyCodexClient(settings)),
         exec_runtime=MagicMock(),
         discovery_runtime=MagicMock(),
         review_runtime=MagicMock(),
@@ -58,7 +60,7 @@ def _build_extension_app(
                 runtime_profile=build_runtime_profile(settings)
             ).supported_jsonrpc_methods
         ),
-        guard_hooks=guard_hooks,
+        guard_hooks=cast(SessionGuardHooks, guard_hooks),
     )
 
 
@@ -96,7 +98,7 @@ def test_create_extension_jsonrpc_routes_returns_single_post_route() -> None:
     routes = create_extension_jsonrpc_routes(
         request_handler=MagicMock(),
         context_builder=MagicMock(),
-        codex_client=DummyCodexClient(settings),
+        codex_client=cast(CodexClient, DummyCodexClient(settings)),
         exec_runtime=MagicMock(),
         discovery_runtime=MagicMock(),
         review_runtime=MagicMock(),

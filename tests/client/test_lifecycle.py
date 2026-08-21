@@ -28,9 +28,9 @@ async def test_close_idempotent() -> None:
 
     client = A2AClient(
         A2AClientConfig(agent_url="https://example.org"),
-        httpx_client=http_client,
+        httpx_client=http_client,  # type: ignore[arg-type]
     )
-    client._sdk_client = sdk_client  # noqa: SLF001
+    client._sdk_client = sdk_client  # type: ignore[assignment]  # noqa: SLF001
 
     await client.close()
     await client.close()

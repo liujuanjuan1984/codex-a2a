@@ -144,7 +144,7 @@ def test_map_plugin_marketplaces_filters_plugin_metadata_and_keeps_sync_state() 
                         "enabled": True,
                         "interface": {"displayName": "Sample"},
                         "mention_path": "plugin://sample@curated",
-                        "codex": {"raw": raw_marketplace["plugins"][0]},
+                        "codex": {"raw": list(raw_marketplace["plugins"])[0]},
                     }
                 ],
                 "codex": {"raw": raw_marketplace},

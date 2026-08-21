@@ -38,6 +38,23 @@ YYYY-MM-DD:
 - <nodeid>: <classification>. <short rationale>. Next action: <repo/TCK/future/none>.
 ```
 
+2026-08-21 (pinned TCK `5996b79f9cefa6fc390980e383e358a66fb9e49e`, jsonrpc transport, `must` level; 8 failed / 61 passed / 166 skipped):
+
+- `test_artifacts.py::TestTextArtifact::test_task_has_text_artifact[jsonrpc]`: Local experiment artifact. The dummy-backed SUT echoes fixed text instead of the TCK-provided content. Next action: none (fixture limitation of the dummy SUT).
+- `test_artifacts.py::TestFileArtifact::test_task_has_file_artifact[jsonrpc]`: Local experiment artifact. Dummy SUT returns a text part where the TCK expects a file part. Next action: none.
+- `test_artifacts.py::TestFileUrlArtifact::test_task_has_file_url_artifact[jsonrpc]`: Local experiment artifact. Same dummy-SUT limitation. Next action: none.
+- `test_artifacts.py::TestDataArtifact::test_task_has_data_artifact[jsonrpc]`: Local experiment artifact. Same dummy-SUT limitation. Next action: none.
+- `test_artifacts.py::TestMessageResponse::test_returns_message_with_text_part[jsonrpc]`: Local experiment artifact. The adapter returns a Task for plain send (streaming-first contract); the TCK expects a Message for this case. Next action: none (documented deviation; see `docs/compatibility.md`).
+- `test_error_codes.py::TestJsonRpcErrorCodeMappings::test_content_type_not_supported_error[jsonrpc]`: Local experiment artifact. The TCK sends a raw unauthenticated request; the repository's auth wall (by design) returns 401 before the content-type check can produce `ContentTypeNotSupportedError` (-32005). The authenticated path returns -32005 (covered by repository regression tests). Next action: none.
+- `test_error_codes.py::TestJsonRpcErrorCodeMappings::test_version_not_supported_error[jsonrpc]`: Local experiment artifact. Same raw unauthenticated call; the authenticated path returns `VersionNotSupportedError` (-32009). Next action: none.
+- `test_error_codes.py::TestJsonRpcErrorCodeRange::test_error_code_in_valid_range[SendMessage-bad-version]`: Local experiment artifact. Same raw unauthenticated call; the authenticated path returns -32009, which is in the valid A2A range. Next action: none.
+
+Previously failing adapter defects fixed in this pass (verified by the same pinned TCK run and repository regression tests):
+
+- `test_error_handling.py::TestCoreErrorStructure::test_error_has_code_and_message_jsonrpc`: Fixed. The 401 unauthorized body now carries `code`/`message` (A2A error shape).
+- `test_requirements.py::test_must_requirement[STREAM-SUB-004-jsonrpc]` and `test_sse_streaming.py::TestSseSubscribeToTask::test_subscribe_nonexistent_task_returns_error`: Fixed. SubscribeToTask for a missing task now returns `TaskNotFoundError` (-32001) instead of -32603.
+- `test_task_lifecycle.py::TestMultiTurn::test_reject_mismatching_context[jsonrpc]` (CORE-MULTI-006): Fixed. SendMessage with a mismatching contextId is now rejected.
+
 ## Summary
 
 Keep the summary short and separate:

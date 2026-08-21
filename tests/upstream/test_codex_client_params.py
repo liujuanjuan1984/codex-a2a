@@ -2038,10 +2038,8 @@ async def test_startup_preflight_fails_clearly_when_codex_is_missing() -> None:
     original_which = shutil.which
     original_exists = os.path.exists
     shutil.which = lambda _name: None
-    os.path.exists = (
-        lambda path: False
-        if path == os.path.expanduser("~/.npm-global/bin/codex")
-        else original_exists(path)
+    os.path.exists = lambda path: (
+        False if path == os.path.expanduser("~/.npm-global/bin/codex") else original_exists(path)
     )
     try:
         with pytest.raises(CodexStartupPrerequisiteError) as excinfo:

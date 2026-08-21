@@ -175,7 +175,7 @@ async def test_removed_session_control_methods_do_not_call_client(
             **_BASE_SETTINGS,
         )
     )
-    dummy.list_sessions = AsyncMock(side_effect=AssertionError("should not be called"))
+    dummy.list_sessions = AsyncMock(side_effect=AssertionError("should not be called"))  # type: ignore[method-assign]
     app = _build_app(monkeypatch, dummy)
     transport = httpx.ASGITransport(app=app)
 
