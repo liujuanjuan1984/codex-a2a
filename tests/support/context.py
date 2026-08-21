@@ -5,13 +5,14 @@ from unittest.mock import MagicMock, PropertyMock
 
 from a2a.server.agent_execution import RequestContext
 from a2a.server.context import ServerCallContext
+from a2a.server.events.event_queue import EventQueue
 from a2a.types import Message, Part, Role, SendMessageRequest
 
 from codex_a2a.a2a_proto import new_text_part, to_struct
 from tests.support.settings import make_settings
 
 
-class DummyEventQueue:
+class DummyEventQueue(EventQueue):
     def __init__(self) -> None:
         self.events: list[Any] = []
 

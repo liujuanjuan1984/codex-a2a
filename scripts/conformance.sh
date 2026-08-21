@@ -15,7 +15,8 @@ Purpose:
   This script is intentionally separate from validate_baseline.sh and CI gates.
 
 Category:
-  Defaults to "mandatory". Any category supported by a2aproject/a2a-tck run_tck.py is accepted.
+  Defaults to "mandatory", which aliases the current TCK "must" level.
+  The current runner also accepts "must", "should", and "may".
 
 Selected environment variables:
   CONFORMANCE_OUTPUT_DIR              Override artifact directory (default: run/conformance/<timestamp>)
@@ -156,12 +157,18 @@ json_report_name="pytest-${category}.json"
 set +e
 (
   cd "${tck_dir}"
-  CONFORMANCE_CATEGORY="${category}" \
-  CONFORMANCE_SUT_URL="${sut_url}" \
-  CONFORMANCE_JSON_REPORT_NAME="${json_report_name}" \
-  CONFORMANCE_TRANSPORT_STRATEGY="${transport_strategy}" \
-  CONFORMANCE_TRANSPORTS="${transports}" \
-  uv run python - <<'PY'
+  if uv run python - <<'PY'
+import run_tck
+
+raise SystemExit(0 if hasattr(run_tck, "run_test_category") else 1)
+PY
+  then
+    CONFORMANCE_CATEGORY="${category}" \
+    CONFORMANCE_SUT_URL="${sut_url}" \
+    CONFORMANCE_JSON_REPORT_NAME="${json_report_name}" \
+    CONFORMANCE_TRANSPORT_STRATEGY="${transport_strategy}" \
+    CONFORMANCE_TRANSPORTS="${transports}" \
+    uv run python - <<'PY'
 from __future__ import annotations
 
 import os
@@ -181,6 +188,28 @@ raise SystemExit(
     )
 )
 PY
+  else
+    case "${category}" in
+      mandatory | must)
+        level="must"
+        ;;
+      should | may)
+        level="${category}"
+        ;;
+      *)
+        echo "Unsupported current TCK level: ${category}" >&2
+        exit 2
+        ;;
+    esac
+    normalized_transports="${transports//http-json/http_json}"
+    PYTHONPATH="${ROOT_DIR}${PYTHONPATH:+:${PYTHONPATH}}" \
+    uv run python run_tck.py \
+      --sut-host "${sut_url}" \
+      --level "${level}" \
+      --transport "${normalized_transports}" \
+      --verbose-log \
+      -- -p scripts.tck_auth_plugin
+  fi
 ) 2>&1 | tee "${tck_log}"
 tck_exit="${PIPESTATUS[0]}"
 set -e
@@ -189,6 +218,11 @@ report_path="${tck_dir}/reports/${json_report_name}"
 if [[ -f "${report_path}" ]]; then
   cp "${report_path}" "${output_dir}/pytest-report.json"
 fi
+for report_name in compatibility.json compatibility.html tck_report.html junitreport.xml; do
+  if [[ -f "${tck_dir}/reports/${report_name}" ]]; then
+    cp "${tck_dir}/reports/${report_name}" "${output_dir}/${report_name}"
+  fi
+done
 
 CONFORMANCE_CATEGORY="${category}" \
 CONFORMANCE_OUTPUT_DIR="${output_dir}" \

@@ -20,6 +20,7 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Framework :: FastAPI",
     "Topic :: Internet :: WWW/HTTP",
 ]
@@ -44,6 +45,7 @@ dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
     "pytest-cov>=5.0,<8.0",
+    "diff-cover>=9,<10",
     "ruff>=0.5",
     "mypy>=1.11,<2.4",
 ]
@@ -64,7 +66,13 @@ line-length = 100
 src = ["src"]
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "B", "UP"]
+select = ["E", "F", "I", "B", "UP", "S", "C90"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 25
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S"]
 
 [tool.ruff.format]
 quote-style = "double"
@@ -80,12 +88,12 @@ fallback_version = "0.0.0+unknown"
 tag_regex = "^v?(?P<version>.+)$"
 
 [tool.pytest.ini_options]
-addopts = "--cov=src/codex_a2a --cov-branch --cov-report=term-missing:skip-covered"
+addopts = "--cov=src/codex_a2a --cov-branch --cov-report=term-missing:skip-covered --cov-report=xml"
 filterwarnings = [
     "ignore:'HTTP_413_REQUEST_ENTITY_TOO_LARGE' is deprecated. Use 'HTTP_413_CONTENT_TOO_LARGE' instead.:DeprecationWarning:a2a\\.server\\.apps\\.jsonrpc\\.fastapi_app",
 ]
 
 [tool.coverage.report]
-fail_under = 78
+fail_under = 84
 show_missing = true
 skip_covered = true

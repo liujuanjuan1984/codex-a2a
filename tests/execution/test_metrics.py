@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Iterator
+from collections.abc import AsyncGenerator, Iterator
+from typing import cast
 
 import pytest
 from a2a.server.tasks.inmemory_task_store import InMemoryTaskStore
@@ -10,6 +11,9 @@ from a2a.types import Task, TaskState, TaskStatus
 from codex_a2a.execution.stream_state import StreamOutputState
 from codex_a2a.execution.streaming import consume_codex_stream
 from codex_a2a.metrics import (
+    A2A_OPERATION_ACTIVE,
+    A2A_OPERATION_REJECTED_TOTAL,
+    A2A_REQUEST_BODY_REJECTED_TOTAL,
     A2A_STREAM_ACTIVE,
     A2A_STREAM_REQUESTS_TOTAL,
     CODEX_STREAM_RETRIES_TOTAL,
@@ -18,6 +22,7 @@ from codex_a2a.metrics import (
     TOOL_CALL_CHUNKS_EMITTED_TOTAL,
     get_metrics_registry,
 )
+from codex_a2a.upstream.client import CodexClient
 from tests.server.test_request_handler import (
     _make_message_send_params,
     _StubActiveTask,
@@ -26,7 +31,7 @@ from tests.server.test_request_handler import (
 from tests.support.context import DummyEventQueue
 
 
-async def _empty_async_stream() -> None:
+async def _empty_async_stream() -> AsyncGenerator[bytes, None]:
     if asyncio.current_task() is None:
         yield b""
 
@@ -36,6 +41,21 @@ def reset_metrics_state() -> Iterator[None]:
     get_metrics_registry().reset()
     yield
     get_metrics_registry().reset()
+
+
+def test_metrics_render_prometheus_text_format() -> None:
+    registry = get_metrics_registry()
+    registry.inc_counter(A2A_REQUEST_BODY_REJECTED_TOTAL, 2)
+    registry.inc_counter(A2A_OPERATION_REJECTED_TOTAL)
+    registry.inc_gauge(A2A_OPERATION_ACTIVE, 3)
+
+    rendered = registry.render_prometheus()
+
+    assert "# TYPE a2a_request_body_rejected_total counter" in rendered
+    assert "a2a_request_body_rejected_total 2" in rendered
+    assert "a2a_operation_rejected_total 1" in rendered
+    assert "# TYPE a2a_operation_active gauge" in rendered
+    assert "a2a_operation_active 3" in rendered
 
 
 @pytest.mark.asyncio
@@ -125,7 +145,7 @@ async def test_streaming_metrics_capture_tool_call_and_interrupt_events() -> Non
             }
 
     await consume_codex_stream(
-        client=_Client(),
+        client=cast(CodexClient, _Client()),
         session_id="ses-1",
         task_id="task-1",
         context_id="ctx-1",
@@ -166,7 +186,7 @@ async def test_streaming_retry_metric_increments_once_per_retry(monkeypatch) -> 
     monkeypatch.setattr("codex_a2a.execution.streaming.asyncio.sleep", _fast_sleep)
 
     await consume_codex_stream(
-        client=_FlakyClient(),
+        client=cast(CodexClient, _FlakyClient()),
         session_id="ses-1",
         task_id="task-1",
         context_id="ctx-1",

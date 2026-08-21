@@ -10,10 +10,16 @@ SCRIPTS_README_TEXT = Path("scripts/README.md").read_text()
 CI_WORKFLOW_TEXT = Path(".github/workflows/ci.yml").read_text()
 DEPENDENCY_HEALTH_WORKFLOW_TEXT = Path(".github/workflows/dependency-health.yml").read_text()
 PUBLISH_WORKFLOW_TEXT = Path(".github/workflows/publish.yml").read_text()
+COMPATIBILITY_WORKFLOW_TEXT = Path(".github/workflows/compatibility.yml").read_text()
 DEPENDENCY_HEALTH_SCRIPT_TEXT = Path("scripts/dependency_health.sh").read_text()
 SMOKE_TEST_SCRIPT_TEXT = Path("scripts/smoke_test_built_cli.sh").read_text()
 RUNTIME_MATRIX_SCRIPT_TEXT = Path("scripts/validate_runtime_matrix.sh").read_text()
 SYNC_CODEX_DOCS_TEXT = Path("scripts/sync_codex_docs.sh").read_text()
+LIVE_CODEX_SMOKE_TEXT = Path("scripts/smoke_test_live_codex.sh").read_text()
+CONFORMANCE_TEXT = Path("docs/conformance.md").read_text()
+CONFORMANCE_TRIAGE_TEXT = Path("docs/conformance-triage.md").read_text()
+GUIDE_TEXT = Path("docs/guide.md").read_text()
+MAINTAINER_ARCHITECTURE_TEXT = Path("docs/maintainer-architecture.md").read_text()
 
 
 def test_readme_documents_released_cli_installation_via_uv_tool() -> None:
@@ -85,7 +91,7 @@ def test_ci_workflow_deduplicates_full_gate_and_runtime_matrix() -> None:
     assert "bash ./scripts/validate_baseline.sh" in CI_WORKFLOW_TEXT
     assert "runtime-matrix:" in CI_WORKFLOW_TEXT
     assert "name: Runtime Matrix (Python ${{ matrix.python-version }})" in CI_WORKFLOW_TEXT
-    assert 'python-version: ["3.11", "3.12"]' in CI_WORKFLOW_TEXT
+    assert 'python-version: ["3.11", "3.12", "3.14"]' in CI_WORKFLOW_TEXT
     assert "bash ./scripts/validate_runtime_matrix.sh" in CI_WORKFLOW_TEXT
 
 
@@ -102,12 +108,27 @@ def test_dependency_health_workflow_runs_as_a_standalone_check() -> None:
     assert "uv run pip-audit" in DEPENDENCY_HEALTH_SCRIPT_TEXT
 
 
+def test_scheduled_compatibility_workflow_pins_tck_and_smokes_latest_codex() -> None:
+    assert "name: Scheduled Compatibility" in COMPATIBILITY_WORKFLOW_TEXT
+    assert 'cron: "17 4 * * 1"' in COMPATIBILITY_WORKFLOW_TEXT
+    assert "CONFORMANCE_TCK_REF: 5996b79f9cefa6fc390980e383e358a66fb9e49e" in (
+        COMPATIBILITY_WORKFLOW_TEXT
+    )
+    assert "bash ./scripts/conformance.sh mandatory" in COMPATIBILITY_WORKFLOW_TEXT
+    assert "npm install --global @openai/codex@latest" in COMPATIBILITY_WORKFLOW_TEXT
+    assert "bash ./scripts/smoke_test_live_codex.sh" in COMPATIBILITY_WORKFLOW_TEXT
+    assert "client.startup_preflight()" in LIVE_CODEX_SMOKE_TEXT
+    assert "send_message" not in LIVE_CODEX_SMOKE_TEXT
+    assert "scripts.tck_auth_plugin" in Path("scripts/conformance.sh").read_text()
+
+
 def test_scripts_index_exposes_built_cli_smoke_test() -> None:
     assert "doctor.sh" not in SCRIPTS_README_TEXT
     assert "conformance.sh" in SCRIPTS_README_TEXT
     assert "validate_runtime_matrix.sh" in SCRIPTS_README_TEXT
     assert "dependency_health.sh" in SCRIPTS_README_TEXT
     assert "smoke_test_built_cli.sh" in SCRIPTS_README_TEXT
+    assert "smoke_test_live_codex.sh" in SCRIPTS_README_TEXT
     assert "`uv tool`" in SCRIPTS_README_TEXT
     assert "runtime entrypoints live in the released `codex-a2a` CLI" in SCRIPTS_README_TEXT
     assert "Repository-maintainer scripts live here." in SCRIPTS_README_TEXT
@@ -138,6 +159,22 @@ def test_project_metadata_exposes_open_source_entrypoints_cleanly() -> None:
     assert project["urls"]["Documentation"].endswith("/tree/main/docs")
     assert project["urls"]["Releases"].endswith("/releases")
     assert project["urls"]["Security"].endswith("/security/policy")
+
+
+def test_compatibility_docs_track_runtime_dependency_and_protocol_defaults() -> None:
+    project = PYPROJECT_DATA["project"]
+    a2a_sdk_requirement = next(
+        requirement
+        for requirement in project["dependencies"]
+        if requirement.startswith("a2a-sdk==")
+    )
+    assert a2a_sdk_requirement in CONFORMANCE_TEXT
+    assert a2a_sdk_requirement in CONFORMANCE_TRIAGE_TEXT
+    assert "default `1.0`" in GUIDE_TEXT
+    assert "default A2A protocol version advertised by this repository: `1.0`" in (
+        CONFORMANCE_TRIAGE_TEXT
+    )
+    assert "message_routes.py" not in MAINTAINER_ARCHITECTURE_TEXT
 
 
 def test_repository_no_longer_ships_deploy_assets() -> None:

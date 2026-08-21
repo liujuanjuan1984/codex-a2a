@@ -27,6 +27,7 @@ from a2a.types import (
 )
 from a2a.utils.errors import (
     InternalError,
+    InvalidRequestError,
     TaskNotCancelableError,
     TaskNotFoundError,
     UnsupportedOperationError,
@@ -287,6 +288,33 @@ class CodexRequestHandler(DefaultRequestHandler):
                 },
             )
 
+    async def _validate_message_context_match(self, params, store_context) -> None:  # noqa: ANN001
+        """Reject messages whose contextId conflicts with the referenced task's context.
+
+        A2A multi-turn messages that reference an existing task must use the
+        task's contextId; a mismatching contextId is an invalid request.
+        """
+        message = getattr(params, "message", None)
+        if message is None:
+            return
+        task_id = getattr(message, "task_id", None)
+        context_id = getattr(message, "context_id", None)
+        if not task_id or not context_id:
+            return
+        try:
+            existing = await self.task_store.get(task_id, store_context)
+        except TaskStoreOperationError as exc:
+            raise self._task_store_server_error(exc) from exc
+        if existing is not None and existing.context_id and existing.context_id != context_id:
+            raise InvalidRequestError(
+                message=f"contextId mismatch for task {task_id}",
+                data={
+                    "task_id": task_id,
+                    "expected_context_id": existing.context_id,
+                    "provided_context_id": context_id,
+                },
+            )
+
     def _remember_task_output_modes(
         self,
         task_id: str,
@@ -416,6 +444,7 @@ class CodexRequestHandler(DefaultRequestHandler):
 
     async def on_message_send_stream(self, params, context=None):
         self._validate_chat_output_modes(params)
+        await self._validate_message_context_match(params, self._task_store_context(context))
         self._metrics.inc_counter(A2A_STREAM_REQUESTS_TOTAL)
         self._metrics.inc_gauge(A2A_STREAM_ACTIVE)
         task_id = getattr(getattr(params, "message", None), "task_id", None) or str(uuid.uuid4())
@@ -475,6 +504,7 @@ class CodexRequestHandler(DefaultRequestHandler):
 
     async def on_message_send(self, params, context=None):
         self._validate_chat_output_modes(params)
+        await self._validate_message_context_match(params, self._task_store_context(context))
         task_id = getattr(getattr(params, "message", None), "task_id", None) or str(uuid.uuid4())
         accepted_output_modes = self._accepted_output_modes_from_params(params)
         active_task = None

@@ -27,7 +27,7 @@ async def replay_codex_notification_fixture(
     async def fake_enqueue(event: dict) -> None:
         events.append(event)
 
-    client._stream_bridge.enqueue_stream_event = fake_enqueue
+    client._stream_bridge.enqueue_stream_event = fake_enqueue  # type: ignore[method-assign]
     for notification in fixture["notifications"]:
         await client._handle_notification(notification)
     return fixture, events
@@ -46,7 +46,7 @@ async def replay_codex_jsonrpc_line_fixture(
     async def fake_enqueue(event: dict) -> None:
         events.append(event)
 
-    client._stream_bridge.enqueue_stream_event = fake_enqueue
+    client._stream_bridge.enqueue_stream_event = fake_enqueue  # type: ignore[method-assign]
 
     raw_lines: list[bytes] = []
     if prefix_lines:

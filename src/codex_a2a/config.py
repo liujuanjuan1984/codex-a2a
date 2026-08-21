@@ -326,12 +326,21 @@ class Settings(BaseSettings):
     a2a_version: str = Field(default=__version__, alias="A2A_VERSION")
     a2a_protocol_version: str = Field(default="1.0", alias="A2A_PROTOCOL_VERSION")
     a2a_enable_health_endpoint: bool = Field(default=True, alias="A2A_ENABLE_HEALTH_ENDPOINT")
+    a2a_enable_metrics_endpoint: bool = Field(default=True, alias="A2A_ENABLE_METRICS_ENDPOINT")
     a2a_enable_turn_control: bool = Field(default=True, alias="A2A_ENABLE_TURN_CONTROL")
     a2a_enable_review_control: bool = Field(default=False, alias="A2A_ENABLE_REVIEW_CONTROL")
     a2a_enable_exec_control: bool = Field(default=False, alias="A2A_ENABLE_EXEC_CONTROL")
     a2a_log_level: str = Field(default="WARNING", alias="A2A_LOG_LEVEL")
     a2a_log_payloads: bool = Field(default=False, alias="A2A_LOG_PAYLOADS")
     a2a_log_body_limit: int = Field(default=0, alias="A2A_LOG_BODY_LIMIT")
+    a2a_request_body_max_bytes: int = Field(
+        default=4 * 1024 * 1024,
+        alias="A2A_REQUEST_BODY_MAX_BYTES",
+    )
+    a2a_max_concurrent_operations: int = Field(
+        default=32,
+        alias="A2A_MAX_CONCURRENT_OPERATIONS",
+    )
     a2a_documentation_url: str | None = Field(default=None, alias="A2A_DOCUMENTATION_URL")
     a2a_allow_directory_override: bool = Field(default=True, alias="A2A_ALLOW_DIRECTORY_OVERRIDE")
     a2a_host: str = Field(default="127.0.0.1", alias="A2A_HOST")
@@ -423,6 +432,13 @@ class Settings(BaseSettings):
     def validate_cancel_abort_timeout_seconds(cls, value: float) -> float:
         if value < 0:
             raise ValueError("A2A_CANCEL_ABORT_TIMEOUT_SECONDS must be >= 0")
+        return value
+
+    @field_validator("a2a_request_body_max_bytes", "a2a_max_concurrent_operations")
+    @classmethod
+    def validate_runtime_limits(cls, value: int) -> int:
+        if value < 0:
+            raise ValueError("A2A runtime limits must be >= 0")
         return value
 
     @field_validator("a2a_stream_idle_diagnostic_seconds")

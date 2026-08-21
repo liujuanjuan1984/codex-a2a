@@ -55,6 +55,17 @@ class CodexStdioJsonRpcTransport:
     def pending_requests(self, value: dict[str, _PendingRpcRequest]) -> None:
         self._pending_requests = value
 
+    @property
+    def ready(self) -> bool:
+        return bool(
+            not self._closed
+            and self._initialized
+            and self._process is not None
+            and self._process.returncode is None
+            and self._stdout_task is not None
+            and not self._stdout_task.done()
+        )
+
     async def close(self) -> None:
         self._closed = True
         async with self._state_lock:

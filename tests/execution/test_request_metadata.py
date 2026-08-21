@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import logging
 from types import SimpleNamespace
+from typing import cast
 
 import pytest
+from a2a.server.agent_execution import RequestContext
 
 from codex_a2a.execution.request_metadata import (
     extract_codex_execution_options,
@@ -37,7 +39,7 @@ def test_extract_shared_session_id_logs_and_falls_back_when_context_metadata_is_
 
     caplog.set_level(logging.DEBUG, logger="codex_a2a.execution.request_metadata")
 
-    assert extract_shared_session_id(context) == "sess-1"
+    assert extract_shared_session_id(cast(RequestContext, context)) == "sess-1"
     assert "Ignoring unparseable request metadata while extracting shared.session.id" in caplog.text
     assert "bad metadata" in caplog.text
 
@@ -77,7 +79,7 @@ def test_extract_codex_execution_options_logs_and_uses_message_metadata_fallback
 
     caplog.set_level(logging.DEBUG, logger="codex_a2a.execution.request_metadata")
 
-    options = extract_codex_execution_options(context)
+    options = extract_codex_execution_options(cast(RequestContext, context))
 
     assert options.model == "gpt-5.5"
     assert options.effort == "high"
@@ -95,7 +97,7 @@ def test_extract_codex_execution_options_still_validates_normalized_metadata() -
     )
 
     with pytest.raises(RequestExecutionOptionsValidationError) as exc_info:
-        extract_codex_execution_options(context)
+        extract_codex_execution_options(cast(RequestContext, context))
 
     assert exc_info.value.field == "metadata.codex.execution"
     assert str(exc_info.value) == "metadata.codex.execution must be an object"

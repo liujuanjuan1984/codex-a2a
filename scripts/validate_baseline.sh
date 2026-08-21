@@ -32,10 +32,15 @@ run_pip_audit() {
   done
 }
 
+mapfile -d '' untracked_files < <(git ls-files --others --exclude-standard -z)
+if [[ "${#untracked_files[@]}" -gt 0 ]]; then
+  uv run pre-commit run --files "${untracked_files[@]}"
+fi
 uv run pre-commit run --all-files
 uv run python scripts/check_dead_code.py
 uv run mypy --config-file mypy.ini
 uv run pytest
+uv run diff-cover coverage.xml --compare-branch origin/main --fail-under 90
 
 runtime_requirements="$(mktemp)"
 trap 'rm -f "${runtime_requirements}"' EXIT

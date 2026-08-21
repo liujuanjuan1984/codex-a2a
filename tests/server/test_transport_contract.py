@@ -86,6 +86,8 @@ def test_rest_subscription_route_matches_current_sdk_contract() -> None:
     assert CORE_JSONRPC_PATH in route_paths
     assert EXTENSION_JSONRPC_PATH in route_paths
     assert "/health" in route_paths
+    assert "/ready" in route_paths
+    assert "/metrics" in route_paths
     assert f"{REST_API_PATH_PREFIX}/tasks/{{id}}:subscribe" in route_paths
     assert f"{REST_API_PATH_PREFIX}/tasks/{{id}}:resubscribe" not in route_paths
     assert f"{REST_API_PATH_PREFIX}/extendedAgentCard" in route_paths
@@ -104,6 +106,19 @@ def test_health_route_can_be_disabled() -> None:
     route_paths = {route.path for route in app.router.routes if hasattr(route, "path")}
 
     assert "/health" not in route_paths
+    assert "/ready" not in route_paths
+
+
+def test_metrics_route_can_be_disabled() -> None:
+    app = create_app(
+        make_settings(
+            a2a_bearer_token="test-token",
+            a2a_enable_metrics_endpoint=False,
+        )
+    )
+    route_paths = {route.path for route in app.router.routes if hasattr(route, "path")}
+
+    assert "/metrics" not in route_paths
 
 
 def test_create_app_resets_sse_app_status() -> None:
@@ -575,7 +590,9 @@ async def test_health_endpoint_requires_authentication(monkeypatch) -> None:
         resp = await client.get("/health")
 
     assert resp.status_code == 401
-    assert resp.json() == {"error": "Unauthorized"}
+    assert resp.json() == {
+        "error": {"code": 401, "status": "UNAUTHORIZED", "message": "Unauthorized"}
+    }
     assert resp.headers["WWW-Authenticate"] == 'Bearer, Basic realm="codex-a2a"'
 
 
@@ -597,6 +614,47 @@ async def test_health_endpoint_accepts_basic_auth(monkeypatch) -> None:
 
     assert resp.status_code == 200
     assert resp.json()["status"] == "ok"
+
+
+@pytest.mark.asyncio
+async def test_readiness_reports_codex_process_state(monkeypatch) -> None:
+    import codex_a2a.server.application as app_module
+
+    monkeypatch.setattr(app_module, "CodexClient", DummyChatCodexClient)
+    app = app_module.create_app(make_settings(a2a_bearer_token="test-token"))
+    transport = httpx.ASGITransport(app=app)
+    headers = {"Authorization": "Bearer test-token"}
+
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        ready = await client.get("/ready", headers=headers)
+        app.state.codex_client.ready = False
+        not_ready = await client.get("/ready", headers=headers)
+
+    assert ready.status_code == 200
+    assert ready.json() == {"status": "ready", "checks": {"codex_app_server": "ready"}}
+    assert not_ready.status_code == 503
+    assert not_ready.json() == {
+        "status": "not_ready",
+        "checks": {"codex_app_server": "not_ready"},
+    }
+
+
+@pytest.mark.asyncio
+async def test_metrics_endpoint_requires_authentication(monkeypatch) -> None:
+    import codex_a2a.server.application as app_module
+
+    monkeypatch.setattr(app_module, "CodexClient", DummyChatCodexClient)
+    app = app_module.create_app(make_settings(a2a_bearer_token="test-token"))
+    transport = httpx.ASGITransport(app=app)
+
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        unauthorized = await client.get("/metrics")
+        authorized = await client.get("/metrics", headers={"Authorization": "Bearer test-token"})
+
+    assert unauthorized.status_code == 401
+    assert authorized.status_code == 200
+    assert authorized.headers["content-type"].startswith("text/plain; version=0.0.4")
+    assert "# TYPE a2a_operation_active gauge" in authorized.text
 
 
 @pytest.mark.asyncio
@@ -937,13 +995,167 @@ async def test_jsonrpc_unsupported_protocol_version_preserves_request_id(monkeyp
     assert response.status_code == 200
     payload = response.json()
     assert payload["id"] == 43
-    assert payload["error"]["code"] == -32001
+    assert payload["error"]["code"] == -32009
     details = payload["error"]["data"]
     assert isinstance(details, list)
     error_info = details[0]
     assert error_info["reason"] == "VERSION_NOT_SUPPORTED"
     assert error_info["metadata"]["requested_version"] == "2.0"
     assert error_info["metadata"]["supported_protocol_versions"] == '["1.0"]'
+
+
+@pytest.mark.asyncio
+async def test_subscribe_to_task_returns_spec_task_not_found_code(monkeypatch) -> None:
+    import codex_a2a.server.application as app_module
+
+    monkeypatch.setattr(app_module, "CodexClient", DummyChatCodexClient)
+    app = app_module.create_app(make_settings(a2a_bearer_token="test-token"))
+    transport = httpx.ASGITransport(app=app)
+    headers = {"Authorization": "Bearer test-token"}
+
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post(
+            CORE_JSONRPC_PATH,
+            headers=headers,
+            json={
+                "jsonrpc": "2.0",
+                "id": 44,
+                "method": "SubscribeToTask",
+                "params": {"id": "missing-subscribe-task"},
+            },
+        )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["id"] == 44
+    assert payload["error"]["code"] == -32001
+    assert payload["error"]["message"] == "Task not found"
+
+
+@pytest.mark.asyncio
+async def test_send_message_rejects_mismatched_context_id(monkeypatch) -> None:
+    import codex_a2a.server.application as app_module
+
+    monkeypatch.setattr(app_module, "CodexClient", DummyChatCodexClient)
+    app = app_module.create_app(make_settings(a2a_bearer_token="test-token"))
+    transport = httpx.ASGITransport(app=app)
+    headers = {"Authorization": "Bearer test-token"}
+
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        created = await client.post(
+            CORE_JSONRPC_PATH,
+            headers=headers,
+            json={
+                "jsonrpc": "2.0",
+                "id": 45,
+                "method": "SendMessage",
+                "params": {
+                    "message": {
+                        "role": "ROLE_USER",
+                        "parts": [{"text": "create task"}],
+                        "messageId": "m-ctx-1",
+                    }
+                },
+            },
+        )
+        task = created.json()["result"]["task"]
+        response = await client.post(
+            CORE_JSONRPC_PATH,
+            headers=headers,
+            json={
+                "jsonrpc": "2.0",
+                "id": 46,
+                "method": "SendMessage",
+                "params": {
+                    "message": {
+                        "role": "ROLE_USER",
+                        "parts": [{"text": "wrong context"}],
+                        "messageId": "m-ctx-2",
+                        "taskId": task["id"],
+                        "contextId": "wrong-context",
+                    }
+                },
+            },
+        )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["error"]["code"] == -32600
+    assert "contextId mismatch" in payload["error"]["message"]
+
+
+@pytest.mark.asyncio
+async def test_streaming_message_rejects_mismatched_context_id(monkeypatch) -> None:
+    import codex_a2a.server.application as app_module
+
+    monkeypatch.setattr(app_module, "CodexClient", DummyChatCodexClient)
+    app = app_module.create_app(make_settings(a2a_bearer_token="test-token"))
+    transport = httpx.ASGITransport(app=app)
+    headers = {"Authorization": "Bearer test-token"}
+
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        created = await client.post(
+            CORE_JSONRPC_PATH,
+            headers=headers,
+            json={
+                "jsonrpc": "2.0",
+                "id": 47,
+                "method": "SendMessage",
+                "params": {
+                    "message": {
+                        "role": "ROLE_USER",
+                        "parts": [{"text": "create task"}],
+                        "messageId": "m-ctx-stream-1",
+                    }
+                },
+            },
+        )
+        task = created.json()["result"]["task"]
+        response = await client.post(
+            CORE_JSONRPC_PATH,
+            headers=headers,
+            json={
+                "jsonrpc": "2.0",
+                "id": 48,
+                "method": "SendStreamingMessage",
+                "params": {
+                    "message": {
+                        "role": "ROLE_USER",
+                        "parts": [{"text": "wrong context"}],
+                        "messageId": "m-ctx-stream-2",
+                        "taskId": task["id"],
+                        "contextId": "wrong-context",
+                    }
+                },
+            },
+        )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["error"]["code"] == -32600
+    assert "contextId mismatch" in payload["error"]["message"]
+
+
+@pytest.mark.asyncio
+async def test_jsonrpc_rejects_non_json_content_type_with_spec_error(monkeypatch) -> None:
+    import codex_a2a.server.application as app_module
+
+    monkeypatch.setattr(app_module, "CodexClient", DummyChatCodexClient)
+    app = app_module.create_app(make_settings(a2a_bearer_token="test-token"))
+    transport = httpx.ASGITransport(app=app)
+    headers = {"Authorization": "Bearer test-token", "Content-Type": "text/plain"}
+
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post(
+            CORE_JSONRPC_PATH,
+            headers=headers,
+            content='{"jsonrpc":"2.0","id":47,"method":"SendMessage","params":{}}',
+        )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["error"]["code"] == -32005
+    assert "Content-Type" in payload["error"]["message"]
 
 
 @pytest.mark.asyncio

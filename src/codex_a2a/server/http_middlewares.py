@@ -18,7 +18,11 @@ from starlette.middleware.gzip import GZipResponder
 from starlette.responses import Response, StreamingResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
 
-from codex_a2a.auth import authenticate_static_credential, build_static_auth_credentials
+from codex_a2a.auth import (
+    StaticAuthCredential,
+    authenticate_static_credential,
+    build_static_auth_credentials,
+)
 from codex_a2a.config import Settings
 from codex_a2a.contracts import extensions as extension_contracts
 from codex_a2a.jsonrpc.errors import (
@@ -287,31 +291,26 @@ def _inject_context_protocol_header(
     request._headers = Headers(raw=headers)
 
 
-def install_http_middlewares(
-    app: FastAPI,
-    *,
-    settings: Settings,
-    task_store: TaskStore,
-    agent_card: object,
-    extended_agent_card: object,
-) -> None:
-    public_card_etag = _build_agent_card_etag(agent_card)
-    extended_card_etag = _build_agent_card_etag(extended_agent_card)
-    configured_credentials = build_static_auth_credentials(settings)
-    advertised_schemes = {credential.auth_scheme for credential in configured_credentials}
+def _unauthorized_response(advertised_schemes: set[str]) -> JSONResponse:
+    challenges: list[str] = []
+    if "bearer" in advertised_schemes:
+        challenges.append("Bearer")
+    if "basic" in advertised_schemes:
+        challenges.append('Basic realm="codex-a2a"')
+    return JSONResponse(
+        {
+            "error": {
+                "code": 401,
+                "status": "UNAUTHORIZED",
+                "message": "Unauthorized",
+            }
+        },
+        status_code=401,
+        headers={"WWW-Authenticate": ", ".join(challenges)},
+    )
 
-    def _unauthorized_response() -> JSONResponse:
-        challenges: list[str] = []
-        if "bearer" in advertised_schemes:
-            challenges.append("Bearer")
-        if "basic" in advertised_schemes:
-            challenges.append('Basic realm="codex-a2a"')
-        return JSONResponse(
-            {"error": "Unauthorized"},
-            status_code=401,
-            headers={"WWW-Authenticate": ", ".join(challenges)},
-        )
 
+def _install_protocol_negotiation_middleware(app: FastAPI) -> None:
     @app.middleware("http")
     async def negotiate_a2a_protocol(request: Request, call_next):
         if not _requires_protocol_negotiation(request):
@@ -353,6 +352,13 @@ def install_http_middlewares(
         response.headers["A2A-Version"] = negotiated.protocol_version
         return response
 
+
+def _install_agent_card_cache_middleware(
+    app: FastAPI,
+    *,
+    public_card_etag: str,
+    extended_card_etag: str,
+) -> None:
     @app.middleware("http")
     async def cache_agent_card_responses(request: Request, call_next):
         if request.method != "GET":
@@ -399,6 +405,8 @@ def install_http_middlewares(
             return Response(status_code=304, headers=dict(response.headers))
         return response
 
+
+def _install_rest_payload_shape_guard(app: FastAPI) -> None:
     @app.middleware("http")
     async def guard_rest_payload_shape(request: Request, call_next):
         if (
@@ -424,6 +432,8 @@ def install_http_middlewares(
             )
         return await call_next(request)
 
+
+def _install_subscribe_task_guard(app: FastAPI, *, task_store: TaskStore) -> None:
     @app.middleware("http")
     async def guard_missing_subscribe_task(request: Request, call_next):
         path = _canonical_rest_path(request.url.path)
@@ -450,104 +460,141 @@ def install_http_middlewares(
             return JSONResponse({"error": "Task not found", "task_id": task_id}, status_code=404)
         return await call_next(request)
 
+
+async def _payload_request_log_info(
+    request: Request,
+    *,
+    settings: Settings,
+) -> tuple[str | None, str | None]:
+    """Compute the sensitive-method/omit decision and log the request line."""
+    path = request.url.path
+    limit = settings.a2a_log_body_limit
+    content_type = _normalize_content_type(request.headers.get("content-type"))
+    content_length = _parse_content_length(request.headers.get("content-length"))
+
+    sensitive_method: str | None = None
+    request_omit_reason: str | None = None
+
+    if not _is_json_content_type(content_type):
+        request_omit_reason = f"non-json content-type={content_type or 'unknown'}"
+    elif limit > 0 and content_length is None:
+        request_omit_reason = f"missing content-length with limit={limit}"
+    elif limit > 0 and content_length is not None and content_length > limit:
+        request_omit_reason = f"content-length={content_length} exceeds limit={limit}"
+    else:
+        body = await _get_request_body(request)
+        payload = _parse_json_body(body)
+        sensitive_method = _detect_codex_extension_method(payload)
+        if sensitive_method:
+            logger.debug("A2A request %s %s method=%s", request.method, path, sensitive_method)
+        else:
+            logger.debug(
+                "A2A request %s %s body=%s",
+                request.method,
+                path,
+                _decode_payload_preview(body, limit=limit),
+            )
+
+    if request_omit_reason:
+        logger.debug(
+            "A2A request %s %s body=[omitted %s]",
+            request.method,
+            path,
+            request_omit_reason,
+        )
+    return sensitive_method, request_omit_reason
+
+
+def _payload_response_log(
+    response: Response,
+    *,
+    path: str,
+    sensitive_method: str | None,
+    request_omit_reason: str | None,
+    limit: int,
+) -> None:
+    """Log a response according to its content and sensitivity."""
+    if isinstance(response, StreamingResponse):
+        status_code = getattr(response, "status_code", 200)
+        if request_omit_reason:
+            logger.debug(
+                "A2A response %s status=%s body=[omitted request_%s]",
+                path,
+                status_code,
+                request_omit_reason,
+            )
+        elif sensitive_method:
+            logger.debug("A2A response %s streaming method=%s", path, sensitive_method)
+        else:
+            logger.debug("A2A response %s streaming", path)
+        return
+
+    response_body = getattr(response, "body", b"") or b""
+    if sensitive_method:
+        logger.debug(
+            "A2A response %s status=%s bytes=%s method=%s",
+            path,
+            response.status_code,
+            len(response_body),
+            sensitive_method,
+        )
+        return
+    if request_omit_reason:
+        logger.debug(
+            "A2A response %s status=%s bytes=%s body=[omitted request_%s]",
+            path,
+            response.status_code,
+            len(response_body),
+            request_omit_reason,
+        )
+        return
+
+    response_content_type = _normalize_content_type(response.headers.get("content-type"))
+    if not _is_json_content_type(response_content_type):
+        logger.debug(
+            "A2A response %s status=%s bytes=%s body=[omitted non-json content-type=%s]",
+            path,
+            response.status_code,
+            len(response_body),
+            response_content_type or "unknown",
+        )
+        return
+
+    logger.debug(
+        "A2A response %s status=%s body=%s",
+        path,
+        response.status_code,
+        _decode_payload_preview(response_body, limit=limit),
+    )
+
+
+def _install_payload_logging_middleware(app: FastAPI, *, settings: Settings) -> None:
     @app.middleware("http")
     async def log_payloads(request: Request, call_next):
         if not settings.a2a_log_payloads:
             return await call_next(request)
 
-        path = request.url.path
-        limit = settings.a2a_log_body_limit
-        content_type = _normalize_content_type(request.headers.get("content-type"))
-        content_length = _parse_content_length(request.headers.get("content-length"))
-
-        sensitive_method: str | None = None
-        request_omit_reason: str | None = None
-
-        if not _is_json_content_type(content_type):
-            request_omit_reason = f"non-json content-type={content_type or 'unknown'}"
-        elif limit > 0 and content_length is None:
-            request_omit_reason = f"missing content-length with limit={limit}"
-        elif limit > 0 and content_length is not None and content_length > limit:
-            request_omit_reason = f"content-length={content_length} exceeds limit={limit}"
-        else:
-            body = await _get_request_body(request)
-            payload = _parse_json_body(body)
-            sensitive_method = _detect_codex_extension_method(payload)
-
-            if sensitive_method:
-                logger.debug("A2A request %s %s method=%s", request.method, path, sensitive_method)
-            else:
-                logger.debug(
-                    "A2A request %s %s body=%s",
-                    request.method,
-                    path,
-                    _decode_payload_preview(body, limit=limit),
-                )
-
-        if request_omit_reason:
-            logger.debug(
-                "A2A request %s %s body=[omitted %s]",
-                request.method,
-                path,
-                request_omit_reason,
-            )
-
+        sensitive_method, request_omit_reason = await _payload_request_log_info(
+            request,
+            settings=settings,
+        )
         response = await call_next(request)
-        if isinstance(response, StreamingResponse):
-            status_code = getattr(response, "status_code", 200)
-            if request_omit_reason:
-                logger.debug(
-                    "A2A response %s status=%s body=[omitted request_%s]",
-                    path,
-                    status_code,
-                    request_omit_reason,
-                )
-            elif sensitive_method:
-                logger.debug("A2A response %s streaming method=%s", path, sensitive_method)
-            else:
-                logger.debug("A2A response %s streaming", path)
-            return response
-
-        response_body = getattr(response, "body", b"") or b""
-        if sensitive_method:
-            logger.debug(
-                "A2A response %s status=%s bytes=%s method=%s",
-                path,
-                response.status_code,
-                len(response_body),
-                sensitive_method,
-            )
-            return response
-
-        if request_omit_reason:
-            logger.debug(
-                "A2A response %s status=%s bytes=%s body=[omitted request_%s]",
-                path,
-                response.status_code,
-                len(response_body),
-                request_omit_reason,
-            )
-            return response
-
-        response_content_type = _normalize_content_type(response.headers.get("content-type"))
-        if not _is_json_content_type(response_content_type):
-            logger.debug(
-                "A2A response %s status=%s bytes=%s body=[omitted non-json content-type=%s]",
-                path,
-                response.status_code,
-                len(response_body),
-                response_content_type or "unknown",
-            )
-            return response
-
-        logger.debug(
-            "A2A response %s status=%s body=%s",
-            path,
-            response.status_code,
-            _decode_payload_preview(response_body, limit=limit),
+        _payload_response_log(
+            response,
+            path=request.url.path,
+            sensitive_method=sensitive_method,
+            request_omit_reason=request_omit_reason,
+            limit=settings.a2a_log_body_limit,
         )
         return response
 
+
+def _install_bearer_auth_middleware(
+    app: FastAPI,
+    *,
+    configured_credentials: tuple[StaticAuthCredential, ...],
+    advertised_schemes: set[str],
+) -> None:
     @app.middleware("http")
     async def bearer_auth(request: Request, call_next):
         if request.method == "OPTIONS" or request.url.path in _PUBLIC_AGENT_CARD_PATHS:
@@ -557,14 +604,14 @@ def install_http_middlewares(
         try:
             auth_scheme, auth_value = auth_header.split(" ", 1)
         except ValueError:
-            return _unauthorized_response()
+            return _unauthorized_response(advertised_schemes)
         principal = authenticate_static_credential(
             credentials=configured_credentials,
             auth_scheme=auth_scheme,
             auth_value=auth_value.strip(),
         )
         if principal is None:
-            return _unauthorized_response()
+            return _unauthorized_response(advertised_schemes)
         request.state.authenticated_principal = principal
         request.state.user_identity = principal.identity
         request.state.user_auth_scheme = principal.auth_scheme
@@ -573,6 +620,8 @@ def install_http_middlewares(
 
         return await call_next(request)
 
+
+def _install_correlation_id_middleware(app: FastAPI) -> None:
     @app.middleware("http")
     async def correlation_id_middleware(request: Request, call_next):
         correlation_id = resolve_correlation_id(request.headers.get("x-request-id"))
@@ -602,3 +651,36 @@ def install_http_middlewares(
             raise
         finally:
             reset_correlation_id(token)
+
+
+def install_http_middlewares(
+    app: FastAPI,
+    *,
+    settings: Settings,
+    task_store: TaskStore,
+    agent_card: object,
+    extended_agent_card: object,
+) -> None:
+    public_card_etag = _build_agent_card_etag(agent_card)
+    extended_card_etag = _build_agent_card_etag(extended_agent_card)
+    configured_credentials = build_static_auth_credentials(settings)
+    advertised_schemes = {credential.auth_scheme for credential in configured_credentials}
+
+    # Registration order is significant: Starlette wraps the most recently
+    # added middleware outermost, so this mirrors the original single-function
+    # registration order exactly.
+    _install_protocol_negotiation_middleware(app)
+    _install_agent_card_cache_middleware(
+        app,
+        public_card_etag=public_card_etag,
+        extended_card_etag=extended_card_etag,
+    )
+    _install_rest_payload_shape_guard(app)
+    _install_subscribe_task_guard(app, task_store=task_store)
+    _install_payload_logging_middleware(app, settings=settings)
+    _install_bearer_auth_middleware(
+        app,
+        configured_credentials=configured_credentials,
+        advertised_schemes=advertised_schemes,
+    )
+    _install_correlation_id_middleware(app)

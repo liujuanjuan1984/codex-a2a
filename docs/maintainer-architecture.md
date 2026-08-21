@@ -8,7 +8,7 @@ This document describes the internal structure, module boundaries, and request c
 flowchart TD
     subgraph Inbound["Server Layer (src/codex_a2a/server/)"]
         App["application.py (FastAPI)"]
-        Routes["Routes (message_routes.py, etc.)"]
+        Routes["SDK REST and Agent Card routes"]
     end
 
     subgraph Execution["Execution Layer (src/codex_a2a/execution/)"]

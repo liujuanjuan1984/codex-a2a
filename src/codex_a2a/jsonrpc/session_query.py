@@ -116,7 +116,8 @@ async def handle_session_query_request(
     if is_list_sessions:
         items = [task for item in raw_items if (task := as_a2a_session_task(item)) is not None]
     else:
-        assert session_id is not None
+        if session_id is None:
+            raise RuntimeError("session_id is required for message queries")
         items = [
             message
             for item in raw_items

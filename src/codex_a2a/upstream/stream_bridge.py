@@ -129,68 +129,44 @@ class CodexStreamEventBridge:
         emit = enqueue_stream_event or self.enqueue_stream_event
         tracker_factory = get_or_create_tracker or self.get_or_create_tracker
 
-        # v2 stream deltas -> normalized pseudo events consumed by agent.py
+        if method.startswith("item/") or method == "command/exec/outputDelta":
+            await self._handle_item_notification(method, params, emit, tracker_factory)
+            return
+        if method in {"skills/changed", "app/list/updated"}:
+            await self._handle_discovery_notification(method, params, emit)
+            return
+        if method.startswith("thread/"):
+            await self._handle_thread_notification(method, params, emit)
+            return
+        if method.startswith("turn/"):
+            await self._handle_turn_notification(method, params, emit, tracker_factory)
+            return
+        if method == "error":
+            await emit({"type": "codex.error", "properties": {"payload": params}})
+
+    async def _handle_item_notification(
+        self,
+        method: str,
+        params: dict[str, Any],
+        emit: Callable[[dict[str, Any]], Awaitable[None]],
+        tracker_factory: Callable[[str, str], _TurnTracker],
+    ) -> None:
         if method == "item/agentMessage/delta":
-            thread_id = str(params.get("threadId", "")).strip()
-            turn_id = str(params.get("turnId", "")).strip()
-            delta = params.get("delta")
-            if thread_id and turn_id and isinstance(delta, str):
-                tracker = tracker_factory(thread_id, turn_id)
-                tracker.text_chunks.append(delta)
-                item_id = params.get("itemId")
-                if isinstance(item_id, str) and item_id.strip():
-                    tracker.message_id = item_id
-                await emit(
-                    {
-                        "type": "message.part.updated",
-                        "properties": {
-                            "part": {
-                                "sessionID": thread_id,
-                                "messageID": tracker.message_id or "",
-                                "id": tracker.message_id or "",
-                                "type": "text",
-                                "role": "assistant",
-                            },
-                            "delta": delta,
-                        },
-                    }
-                )
+            await self._emit_agent_message_delta(params, emit, tracker_factory)
             return
-
         if method == "item/reasoning/summaryTextDelta":
-            thread_id = str(params.get("threadId", "")).strip()
-            delta = params.get("delta")
-            item_id = str(params.get("itemId", "")).strip()
-            if thread_id and isinstance(delta, str):
-                await emit(
-                    {
-                        "type": "message.part.updated",
-                        "properties": {
-                            "part": {
-                                "sessionID": thread_id,
-                                "messageID": item_id,
-                                "id": item_id,
-                                "type": "reasoning",
-                                "role": "assistant",
-                            },
-                            "delta": delta,
-                        },
-                    }
-                )
+            await self._emit_reasoning_delta(params, emit)
             return
-
         if method in {"item/started", "item/completed"}:
             event = build_tool_call_state_event(params)
             if event is not None:
                 await emit(event)
             return
-
         if method in {"item/commandExecution/outputDelta", "item/fileChange/outputDelta"}:
             event = build_tool_call_output_event(method, params)
             if event is not None:
                 await emit(event)
             return
-
         if method == "command/exec/outputDelta":
             process_id = str(params.get("processId", "")).strip()
             stream = str(params.get("stream", "")).strip()
@@ -207,8 +183,71 @@ class CodexStreamEventBridge:
                         },
                     }
                 )
-            return
 
+    async def _emit_agent_message_delta(
+        self,
+        params: dict[str, Any],
+        emit: Callable[[dict[str, Any]], Awaitable[None]],
+        tracker_factory: Callable[[str, str], _TurnTracker],
+    ) -> None:
+        thread_id = str(params.get("threadId", "")).strip()
+        turn_id = str(params.get("turnId", "")).strip()
+        delta = params.get("delta")
+        if not thread_id or not turn_id or not isinstance(delta, str):
+            return
+        tracker = tracker_factory(thread_id, turn_id)
+        tracker.text_chunks.append(delta)
+        item_id = params.get("itemId")
+        if isinstance(item_id, str) and item_id.strip():
+            tracker.message_id = item_id
+        await emit(
+            {
+                "type": "message.part.updated",
+                "properties": {
+                    "part": {
+                        "sessionID": thread_id,
+                        "messageID": tracker.message_id or "",
+                        "id": tracker.message_id or "",
+                        "type": "text",
+                        "role": "assistant",
+                    },
+                    "delta": delta,
+                },
+            }
+        )
+
+    async def _emit_reasoning_delta(
+        self,
+        params: dict[str, Any],
+        emit: Callable[[dict[str, Any]], Awaitable[None]],
+    ) -> None:
+        thread_id = str(params.get("threadId", "")).strip()
+        delta = params.get("delta")
+        item_id = str(params.get("itemId", "")).strip()
+        if not thread_id or not isinstance(delta, str):
+            return
+        await emit(
+            {
+                "type": "message.part.updated",
+                "properties": {
+                    "part": {
+                        "sessionID": thread_id,
+                        "messageID": item_id,
+                        "id": item_id,
+                        "type": "reasoning",
+                        "role": "assistant",
+                    },
+                    "delta": delta,
+                },
+            }
+        )
+
+    async def _handle_discovery_notification(
+        self,
+        method: str,
+        params: dict[str, Any],
+        emit: Callable[[dict[str, Any]], Awaitable[None]],
+    ) -> None:
         if method == "skills/changed":
             await emit(
                 {
@@ -217,7 +256,6 @@ class CodexStreamEventBridge:
                 }
             )
             return
-
         if method == "app/list/updated":
             await emit(
                 {
@@ -225,8 +263,13 @@ class CodexStreamEventBridge:
                     "properties": {"items": normalize_app_items(params.get("data"))},
                 }
             )
-            return
 
+    async def _handle_thread_notification(
+        self,
+        method: str,
+        params: dict[str, Any],
+        emit: Callable[[dict[str, Any]], Awaitable[None]],
+    ) -> None:
         if method == "thread/started":
             thread = normalize_thread_summary(params.get("thread"))
             if thread is None:
@@ -244,7 +287,6 @@ class CodexStreamEventBridge:
                 }
             )
             return
-
         if method == "thread/status/changed":
             thread_id = str(params.get("threadId", "")).strip()
             status = normalize_thread_status(params.get("status"))
@@ -262,7 +304,6 @@ class CodexStreamEventBridge:
                 }
             )
             return
-
         if method in {"thread/archived", "thread/unarchived", "thread/closed"}:
             thread_id = str(params.get("threadId", "")).strip()
             if not thread_id:
@@ -279,7 +320,6 @@ class CodexStreamEventBridge:
                 }
             )
             return
-
         if method == "thread/tokenUsage/updated":
             thread_id = str(params.get("threadId", "")).strip()
             token_usage = params.get("tokenUsage")
@@ -305,8 +345,14 @@ class CodexStreamEventBridge:
                     },
                 }
             )
-            return
 
+    async def _handle_turn_notification(
+        self,
+        method: str,
+        params: dict[str, Any],
+        emit: Callable[[dict[str, Any]], Awaitable[None]],
+        tracker_factory: Callable[[str, str], _TurnTracker],
+    ) -> None:
         if method == "turn/started":
             thread_id = str(params.get("threadId", "")).strip()
             turn = params.get("turn")
@@ -328,7 +374,6 @@ class CodexStreamEventBridge:
                         }
                     )
             return
-
         if method == "turn/completed":
             thread_id = str(params.get("threadId", "")).strip()
             turn = params.get("turn")
@@ -362,8 +407,3 @@ class CodexStreamEventBridge:
                             },
                         }
                     )
-            return
-
-        if method == "error":
-            # Optional mid-turn error notification, preserve for observability only.
-            await emit({"type": "codex.error", "properties": {"payload": params}})

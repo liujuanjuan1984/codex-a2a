@@ -52,6 +52,7 @@ def test_apply_accepted_output_modes_falls_back_file_parts_to_text() -> None:
     )
 
     filtered = apply_accepted_output_modes(event, ["text/plain"])
+    assert filtered is not None
 
     assert part_text(filtered.artifact.parts[0]) == (
         "[file omitted: demo.png | image/png | https://example.com/demo.png]"
@@ -94,5 +95,6 @@ def test_apply_accepted_output_modes_keeps_text_messages() -> None:
     )
 
     filtered = apply_accepted_output_modes(message, ["text/plain"])
+    assert filtered is not None
 
     assert [part_text(part) for part in filtered.parts] == ["hello", '{"kind":"state"}']

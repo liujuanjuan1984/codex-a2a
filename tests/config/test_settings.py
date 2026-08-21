@@ -264,22 +264,28 @@ def test_settings_parse_ops_flags_and_timeouts():
     env = {
         **_registry_env(),
         "A2A_ENABLE_HEALTH_ENDPOINT": "false",
+        "A2A_ENABLE_METRICS_ENDPOINT": "false",
         "A2A_ENABLE_TURN_CONTROL": "false",
         "A2A_ENABLE_REVIEW_CONTROL": "false",
         "A2A_ENABLE_EXEC_CONTROL": "false",
         "A2A_CANCEL_ABORT_TIMEOUT_SECONDS": "0.25",
         "A2A_STREAM_IDLE_DIAGNOSTIC_SECONDS": "45",
         "A2A_INTERRUPT_REQUEST_TTL_SECONDS": "90",
+        "A2A_REQUEST_BODY_MAX_BYTES": "1024",
+        "A2A_MAX_CONCURRENT_OPERATIONS": "7",
     }
     with mock.patch.dict(os.environ, env, clear=True):
         settings = Settings.from_env()
         assert settings.a2a_enable_health_endpoint is False
+        assert settings.a2a_enable_metrics_endpoint is False
         assert settings.a2a_enable_turn_control is False
         assert settings.a2a_enable_review_control is False
         assert settings.a2a_enable_exec_control is False
         assert settings.a2a_cancel_abort_timeout_seconds == 0.25
         assert settings.a2a_stream_idle_diagnostic_seconds == 45
         assert settings.a2a_interrupt_request_ttl_seconds == 90
+        assert settings.a2a_request_body_max_bytes == 1024
+        assert settings.a2a_max_concurrent_operations == 7
 
 
 def test_settings_parse_task_store_configuration() -> None:
@@ -339,6 +345,18 @@ def test_settings_reject_invalid_stream_idle_diagnostic_seconds():
         with pytest.raises(ValidationError) as excinfo:
             Settings()
     assert "A2A_STREAM_IDLE_DIAGNOSTIC_SECONDS" in str(excinfo.value)
+
+
+@pytest.mark.parametrize(
+    "env_name",
+    ["A2A_REQUEST_BODY_MAX_BYTES", "A2A_MAX_CONCURRENT_OPERATIONS"],
+)
+def test_settings_reject_negative_runtime_limits(env_name: str) -> None:
+    env = {**_registry_env(), env_name: "-1"}
+    with mock.patch.dict(os.environ, env, clear=True):
+        with pytest.raises(ValidationError) as excinfo:
+            Settings.from_env()
+    assert env_name in str(excinfo.value)
 
 
 def test_settings_reject_invalid_execution_sandbox_mode() -> None:

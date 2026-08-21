@@ -422,7 +422,8 @@ class A2AClient:
                 raise ValueError("parts must not be empty")
             outbound_parts = [cast(Part, proto_clone(part)) for part in parts]
         else:
-            assert text is not None
+            if text is None:
+                raise ValueError("text is required when parts and message are absent")
             outbound_parts = [new_text_part(text)]
 
         return Message(

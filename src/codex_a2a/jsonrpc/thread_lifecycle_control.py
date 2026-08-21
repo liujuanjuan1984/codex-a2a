@@ -180,13 +180,12 @@ async def handle_thread_lifecycle_control_request(
             data={"thread_id": thread_id, "method": base_request.method},
         )
     except LookupError:
-        assert task_id is not None
         return app._generate_error_response(
             base_request.id,
             JSONRPCError(
                 code=ERR_WATCH_NOT_FOUND,
                 message="Watch not found",
-                data={"type": "WATCH_NOT_FOUND", "task_id": task_id},
+                data={"type": "WATCH_NOT_FOUND", "task_id": task_id or "unknown"},
             ),
         )
     except PermissionError:

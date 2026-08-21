@@ -330,40 +330,7 @@ class StreamEventProcessor:
             self.maybe_log_idle(logger)
             return
 
-        event_session_id = extract_event_session_id(event)
-        if event_session_id == self._session_id:
-            usage = extract_token_usage(event)
-            if usage is not None:
-                self._stream_state.ingest_token_usage(usage)
-            asked = extract_interrupt_asked_event(event)
-            if asked is not None:
-                request_id = asked["request_id"]
-                if self._stream_state.mark_interrupt_pending(request_id):
-                    await self._emit_interrupt_status(
-                        state=TaskState.TASK_STATE_INPUT_REQUIRED,
-                        request_id=request_id,
-                        interrupt_type=asked["interrupt_type"],
-                        details=asked["details"],
-                        phase="asked",
-                    )
-            resolved = extract_interrupt_resolved_event(event)
-            if resolved is not None:
-                if self._stream_state.clear_interrupt_pending(resolved["request_id"]):
-                    await self._emit_interrupt_status(
-                        state=TaskState.TASK_STATE_WORKING,
-                        request_id=resolved["request_id"],
-                        interrupt_type=resolved["interrupt_type"],
-                        details={},
-                        phase="resolved",
-                        resolution=resolved["resolution"],
-                    )
-            interrupt_diagnostic = diagnose_interrupt_event(event)
-            if interrupt_diagnostic is not None and asked is None and resolved is None:
-                logger.debug(
-                    "Interrupt payload not adapted reason=%s payload=%s",
-                    interrupt_diagnostic,
-                    event,
-                )
+        await self._handle_session_metadata(event, logger)
         self.maybe_log_idle(logger)
         if event_type not in {"message.part.updated", "message.part.delta"}:
             return
@@ -378,42 +345,107 @@ class StreamEventProcessor:
             return
 
         if event_type == "message.part.delta":
-            field = props.get("field")
-            delta = props.get("delta")
-            if field != "text" or not isinstance(delta, str) or not delta:
-                return
-            state = self._part_states.get(part_id)
-            if state is None:
-                self._pending_deltas[part_id].append(
-                    PendingDelta(
-                        field=field,
-                        delta=delta,
-                        message_id=message_id,
-                    )
-                )
-                return
-            if state.role in {"user", "system"}:
-                return
-            if state.block_type == BlockType.TOOL_CALL:
-                delta_event_chunks = tool_delta_chunks(
-                    state=state,
-                    delta_value=delta,
-                    message_id=message_id,
-                    source="delta_event",
-                    task_id=self._task_id,
-                    session_id=self._session_id,
-                )
-            else:
-                delta_event_chunks = delta_chunks(
-                    state=state,
-                    delta_text=delta,
-                    message_id=message_id,
-                    source="delta_event",
-                )
-            if delta_event_chunks:
-                await self.emit_chunks(delta_event_chunks)
+            await self._handle_part_delta(props, part_id=part_id, message_id=message_id)
             return
 
+        await self._handle_part_update(
+            part,
+            props,
+            part_id=part_id,
+            message_id=message_id,
+        )
+        self.maybe_log_idle(logger)
+
+    async def _handle_session_metadata(self, event: dict[str, Any], logger) -> None:  # noqa: ANN001
+        if extract_event_session_id(event) != self._session_id:
+            return
+        usage = extract_token_usage(event)
+        if usage is not None:
+            self._stream_state.ingest_token_usage(usage)
+        asked = extract_interrupt_asked_event(event)
+        if asked is not None and self._stream_state.mark_interrupt_pending(asked["request_id"]):
+            await self._emit_interrupt_status(
+                state=TaskState.TASK_STATE_INPUT_REQUIRED,
+                request_id=asked["request_id"],
+                interrupt_type=asked["interrupt_type"],
+                details=asked["details"],
+                phase="asked",
+            )
+        resolved = extract_interrupt_resolved_event(event)
+        if resolved is not None and self._stream_state.clear_interrupt_pending(
+            resolved["request_id"]
+        ):
+            await self._emit_interrupt_status(
+                state=TaskState.TASK_STATE_WORKING,
+                request_id=resolved["request_id"],
+                interrupt_type=resolved["interrupt_type"],
+                details={},
+                phase="resolved",
+                resolution=resolved["resolution"],
+            )
+        diagnostic = diagnose_interrupt_event(event)
+        if diagnostic is not None and asked is None and resolved is None:
+            logger.debug(
+                "Interrupt payload not adapted reason=%s payload=%s",
+                diagnostic,
+                event,
+            )
+
+    async def _handle_part_delta(
+        self,
+        props: Mapping[str, Any],
+        *,
+        part_id: str,
+        message_id: str | None,
+    ) -> None:
+        field = props.get("field")
+        delta = props.get("delta")
+        if field != "text" or not isinstance(delta, str) or not delta:
+            return
+        state = self._part_states.get(part_id)
+        if state is None:
+            self._pending_deltas[part_id].append(
+                PendingDelta(field=field, delta=delta, message_id=message_id)
+            )
+            return
+        if state.role in {"user", "system"}:
+            return
+        chunks = self._delta_chunks(state, delta=delta, message_id=message_id)
+        if chunks:
+            await self.emit_chunks(chunks)
+
+    def _delta_chunks(
+        self,
+        state: StreamPartState,
+        *,
+        delta: str,
+        message_id: str | None,
+        source: str = "delta_event",
+    ) -> list[NormalizedStreamChunk]:
+        if state.block_type == BlockType.TOOL_CALL:
+            return tool_delta_chunks(
+                state=state,
+                delta_value=delta,
+                message_id=message_id,
+                source=source,
+                task_id=self._task_id,
+                session_id=self._session_id,
+            )
+        return delta_chunks(
+            state=state,
+            delta_text=delta,
+            message_id=message_id,
+            source=source,
+        )
+
+    async def _handle_part_update(
+        self,
+        part: Mapping[str, Any],
+        props: Mapping[str, Any],
+        *,
+        part_id: str,
+        message_id: str | None,
+    ) -> None:
         role = extract_stream_role(part, props)
         state = upsert_stream_part_state(
             part_states=self._part_states,
@@ -430,73 +462,65 @@ class StreamEventProcessor:
             self._pending_deltas.pop(part_id, None)
             return
 
+        chunks = self._consume_pending_deltas(part_id, state)
+        chunks.extend(self._part_update_chunks(part, props, state, message_id=message_id))
+        if chunks:
+            await self.emit_chunks(chunks)
+
+    def _consume_pending_deltas(
+        self,
+        part_id: str,
+        state: StreamPartState,
+    ) -> list[NormalizedStreamChunk]:
         chunks: list[NormalizedStreamChunk] = []
         pending = self._pending_deltas.pop(part_id, [])
         for buffered in pending:
             if buffered.field != "text":
                 continue
-            if state.block_type == BlockType.TOOL_CALL:
-                chunks.extend(
-                    tool_delta_chunks(
-                        state=state,
-                        delta_value=buffered.delta,
-                        message_id=buffered.message_id,
-                        source="delta_event_buffered",
-                        task_id=self._task_id,
-                        session_id=self._session_id,
-                    )
+            chunks.extend(
+                self._delta_chunks(
+                    state,
+                    delta=buffered.delta,
+                    message_id=buffered.message_id,
+                    source="delta_event_buffered",
                 )
-            else:
-                chunks.extend(
-                    delta_chunks(
-                        state=state,
-                        delta_text=buffered.delta,
-                        message_id=buffered.message_id,
-                        source="delta_event_buffered",
-                    )
-                )
+            )
+        return chunks
 
+    def _part_update_chunks(
+        self,
+        part: Mapping[str, Any],
+        props: Mapping[str, Any],
+        state: StreamPartState,
+        *,
+        message_id: str | None,
+    ) -> list[NormalizedStreamChunk]:
         delta = props.get("delta")
         if state.block_type == BlockType.TOOL_CALL:
             if delta is not None and (not isinstance(delta, str) or delta):
-                chunks.extend(
-                    tool_delta_chunks(
-                        state=state,
-                        delta_value=delta,
-                        message_id=message_id,
-                        source="delta",
-                        task_id=self._task_id,
-                        session_id=self._session_id,
-                    )
-                )
-            else:
-                chunks.extend(
-                    tool_part_chunks(
-                        state=state,
-                        part=part,
-                        message_id=message_id,
-                    )
-                )
-        elif isinstance(delta, str) and delta:
-            chunks.extend(
-                delta_chunks(
+                return tool_delta_chunks(
                     state=state,
-                    delta_text=delta,
+                    delta_value=delta,
                     message_id=message_id,
                     source="delta",
-                )
-            )
-        elif isinstance(part.get("text"), str):
-            chunks.extend(
-                snapshot_chunks(
-                    state=state,
-                    snapshot=part["text"],
-                    message_id=message_id,
                     task_id=self._task_id,
                     session_id=self._session_id,
                 )
+            return tool_part_chunks(state=state, part=part, message_id=message_id)
+        if isinstance(delta, str) and delta:
+            return delta_chunks(
+                state=state,
+                delta_text=delta,
+                message_id=message_id,
+                source="delta",
             )
-
-        if chunks:
-            await self.emit_chunks(chunks)
-        self.maybe_log_idle(logger)
+        text = part.get("text")
+        if isinstance(text, str):
+            return snapshot_chunks(
+                state=state,
+                snapshot=text,
+                message_id=message_id,
+                task_id=self._task_id,
+                session_id=self._session_id,
+            )
+        return []

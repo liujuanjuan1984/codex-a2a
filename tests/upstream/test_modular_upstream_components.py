@@ -16,6 +16,25 @@ from codex_a2a.upstream.stream_bridge import (
 from codex_a2a.upstream.transport import CodexStdioJsonRpcTransport
 
 
+def test_transport_readiness_requires_initialized_live_process_and_reader() -> None:
+    transport = CodexStdioJsonRpcTransport(
+        listen="stdio://", startup_cli_args=[], log_payloads=False
+    )
+    process = MagicMock(returncode=None)
+    stdout_task = MagicMock()
+    stdout_task.done.return_value = False
+
+    assert transport.ready is False
+
+    transport._process = process
+    transport._stdout_task = stdout_task
+    transport._initialized = True
+    assert transport.ready is True
+
+    process.returncode = 1
+    assert transport.ready is False
+
+
 def _make_conversation_facade(*, rpc_request, workspace_root="/workspace", model_id="gpt-5.2"):
     turn_trackers: dict[tuple[str, str], _TurnTracker] = {}
 

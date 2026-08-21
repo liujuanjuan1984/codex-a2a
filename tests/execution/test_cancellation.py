@@ -8,7 +8,11 @@ from a2a.types import TaskState, TaskStatusUpdateEvent
 
 from codex_a2a.execution.executor import CodexAgentExecutor
 from codex_a2a.upstream.client import CodexClient
-from tests.support.context import configure_mock_client_runtime, make_request_context_mock
+from tests.support.context import (
+    DummyEventQueue,
+    configure_mock_client_runtime,
+    make_request_context_mock,
+)
 
 
 @pytest.mark.asyncio
@@ -82,14 +86,14 @@ async def test_cancel_interrupts_running_execute_and_keeps_queue_open():
 
 
 @pytest.mark.asyncio
-async def test_cancel_does_not_block_with_real_event_queue() -> None:
+async def test_cancel_does_not_block_with_concrete_event_queue() -> None:
     executor = CodexAgentExecutor(MagicMock(), streaming_enabled=False)
     context = make_request_context_mock(
         task_id=None,
         context_id=None,
         call_context_enabled=False,
     )
-    queue = EventQueue()
+    queue = DummyEventQueue()
 
     await asyncio.wait_for(executor.cancel(context, queue), timeout=0.5)
 

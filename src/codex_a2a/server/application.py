@@ -8,6 +8,7 @@ import uvicorn
 from a2a.server.routes.agent_card_routes import create_agent_card_routes
 from a2a.server.routes.rest_routes import create_rest_routes
 from fastapi import FastAPI
+from starlette.responses import JSONResponse, PlainTextResponse
 from starlette.routing import BaseRoute, Mount
 
 from codex_a2a.client.manager import A2AClientManager
@@ -24,6 +25,7 @@ from codex_a2a.jsonrpc.application import (
 )
 from codex_a2a.jsonrpc.hooks import SessionGuardHooks
 from codex_a2a.logging_context import install_log_record_factory
+from codex_a2a.metrics import get_metrics_registry
 from codex_a2a.profile.runtime import build_runtime_profile
 from codex_a2a.server.agent_card import (
     build_agent_card,
@@ -34,6 +36,11 @@ from codex_a2a.server.database import build_database_engine
 from codex_a2a.server.openapi import patch_openapi_contract
 from codex_a2a.server.push_config_store import build_push_config_store_runtime
 from codex_a2a.server.request_handler import CodexRequestHandler
+from codex_a2a.server.runtime_limits import (
+    OperationCapacity,
+    OperationCapacityMiddleware,
+    RequestBodyLimitMiddleware,
+)
 from codex_a2a.server.runtime_state import build_runtime_state_runtime
 from codex_a2a.server.task_store import build_task_store_runtime, describe_persistence_backend
 from codex_a2a.upstream.client import CodexClient
@@ -188,6 +195,15 @@ def create_app(settings: Settings) -> FastAPI:
         PathScopedGZipMiddleware,
         paths=GZIP_COMPRESSIBLE_PATHS,
     )
+    operation_capacity = OperationCapacity(settings.a2a_max_concurrent_operations)
+    app.add_middleware(
+        OperationCapacityMiddleware,
+        capacity=operation_capacity,
+    )
+    app.add_middleware(
+        RequestBodyLimitMiddleware,
+        max_body_bytes=settings.a2a_request_body_max_bytes,
+    )
     app.router.routes.extend(create_agent_card_routes(agent_card))
     app.router.routes.extend(
         create_extension_jsonrpc_routes(
@@ -221,6 +237,8 @@ def create_app(settings: Settings) -> FastAPI:
     app.state.a2a_client_manager = a2a_client_manager
     app.state.task_store = task_store
     app.state.push_config_store = push_config_store_runtime.push_config_store
+    app.state.operation_capacity = operation_capacity
+    app.state.metrics_registry = get_metrics_registry()
 
     if settings.a2a_enable_health_endpoint:
 
@@ -229,6 +247,24 @@ def create_app(settings: Settings) -> FastAPI:
             return runtime_profile.health_payload(
                 service="codex-a2a",
                 version=settings.a2a_version,
+            )
+
+        @app.get("/ready")
+        async def readiness_check():
+            ready = client.ready
+            status = "ready" if ready else "not_ready"
+            return JSONResponse(
+                {"status": status, "checks": {"codex_app_server": status}},
+                status_code=200 if ready else 503,
+            )
+
+    if settings.a2a_enable_metrics_endpoint:
+
+        @app.get("/metrics")
+        async def metrics():
+            return PlainTextResponse(
+                get_metrics_registry().render_prometheus(),
+                media_type="text/plain; version=0.0.4",
             )
 
     install_http_middlewares(

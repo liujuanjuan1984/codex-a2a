@@ -102,14 +102,16 @@ def is_file_part(part: Part | None) -> bool:
 def part_text(part: Part | None) -> str | None:
     if not is_text_part(part):
         return None
-    assert part is not None
+    if part is None:
+        return None
     return part.text
 
 
 def part_data(part: Part | None) -> Any:
     if not is_data_part(part):
         return None
-    assert part is not None
+    if part is None:
+        return None
     return proto_to_python(part.data)
 
 
