@@ -32,6 +32,26 @@ STANDARD_JSONRPC_ERROR_MESSAGES = {
 }
 STANDARD_JSONRPC_ERROR_CODES = frozenset(STANDARD_JSONRPC_ERROR_MESSAGES)
 
+# A2A SDK errors (a2a.utils.errors) do not carry a `code` attribute; the
+# JSON-RPC code lives in the A2A specification error table. Map them here so
+# SDK-raised core errors keep their spec codes when adapted.
+_SDK_ERROR_CODE_BY_TYPE = {
+    "TaskNotFoundError": -32001,
+    "TaskNotCancelableError": -32002,
+    "PushNotificationNotSupportedError": -32003,
+    "UnsupportedOperationError": -32004,
+    "ContentTypeNotSupportedError": -32005,
+    "InvalidAgentResponseError": -32006,
+    "ExtendedAgentCardNotConfiguredError": -32007,
+    "ExtensionSupportRequiredError": -32008,
+    "VersionNotSupportedError": -32009,
+    "InvalidRequestError": -32600,
+    "MethodNotFoundError": -32601,
+    "InvalidParamsError": -32602,
+    "InternalError": -32603,
+    "JSONParseError": -32700,
+}
+
 
 def _to_upper_snake_case(name: str) -> str:
     normalized: list[str] = []
@@ -130,6 +150,9 @@ def adapt_jsonrpc_error(error: JSONRPCError | A2AError) -> JSONRPCError | A2AErr
     if message is None:
         message = STANDARD_JSONRPC_ERROR_MESSAGES.get(root_code or -32603, "Internal error")
 
+    if root_code is None:
+        root_code = _SDK_ERROR_CODE_BY_TYPE.get(type(root_error).__name__, -32603)
+
     return JSONRPCError(
         code=root_code or -32603,
         message=message,
@@ -168,7 +191,7 @@ def version_not_supported_error(
     default_protocol_version: str,
 ) -> JSONRPCError:
     return JSONRPCError(
-        code=-32001,
+        code=-32009,
         message=f"Unsupported A2A version: {requested_version}",
         data={
             "type": "VERSION_NOT_SUPPORTED",

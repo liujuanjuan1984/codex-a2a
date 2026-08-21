@@ -46,6 +46,13 @@ from codex_a2a.server.task_store import TASK_STORE_ERROR_TYPE, TaskStoreOperatio
 from tests.support.settings import make_settings
 
 
+def _mock_task_store() -> MagicMock:
+    """Task-store mock whose async ``get`` returns no existing task."""
+    store = MagicMock()
+    store.get = AsyncMock(return_value=None)
+    return store
+
+
 def _make_agent_card():
     return build_agent_card(make_settings(a2a_bearer_token="test-token"))
 
@@ -199,7 +206,7 @@ async def test_message_send_returns_failed_task_for_task_store_error() -> None:
     )
     handler = _StubActiveTaskHandler(
         active_task=_StubActiveTask(subscribe_error=TaskStoreOperationError("save", "task-1")),
-        task_store=MagicMock(),
+        task_store=_mock_task_store(),
     )
     result = await handler.on_message_send(params)
 
@@ -302,7 +309,7 @@ async def test_message_send_stream_emits_failed_events_for_task_store_error() ->
     )
     handler = _StubActiveTaskHandler(
         active_task=_StubActiveTask(subscribe_error=TaskStoreOperationError("save", "task-1")),
-        task_store=MagicMock(),
+        task_store=_mock_task_store(),
     )
     events = [event async for event in handler.on_message_send_stream(params)]
 
@@ -377,7 +384,7 @@ async def test_message_send_accepts_case_insensitive_output_modes() -> None:
     )
     handler = _StubActiveTaskHandler(
         active_task=_StubActiveTask(events=[completed_task], current_task=completed_task),
-        task_store=MagicMock(),
+        task_store=_mock_task_store(),
     )
 
     params = SendMessageRequest(
@@ -482,7 +489,7 @@ async def test_message_send_filters_unaccepted_output_parts_to_text() -> None:
     )
     handler = _StubActiveTaskHandler(
         active_task=_StubActiveTask(events=[task], current_task=task),
-        task_store=MagicMock(),
+        task_store=_mock_task_store(),
     )
     result = await handler.on_message_send(params)
 
@@ -523,7 +530,7 @@ async def test_message_send_stream_filters_unaccepted_output_parts_to_text() -> 
     )
     handler = _StubActiveTaskHandler(
         active_task=_StubActiveTask(events=[update]),
-        task_store=MagicMock(),
+        task_store=_mock_task_store(),
     )
     events = [event async for event in handler.on_message_send_stream(params)]
 

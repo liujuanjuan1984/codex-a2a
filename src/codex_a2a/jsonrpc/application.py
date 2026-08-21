@@ -4,7 +4,7 @@ from typing import Any
 
 from a2a.server.jsonrpc_models import InvalidParamsError, JSONRPCError
 from a2a.server.routes.jsonrpc_dispatcher import JsonRpcDispatcher
-from a2a.utils.errors import A2AError
+from a2a.utils.errors import A2AError, ContentTypeNotSupportedError
 from fastapi.responses import JSONResponse
 from starlette.requests import Request
 from starlette.responses import Response
@@ -130,6 +130,18 @@ class CodexSessionQueryJSONRPCApplication(JsonRpcDispatcher):
 
     async def handle_requests(self, request: Request) -> Response:
         request_id: str | int | None = None
+        content_type = (request.headers.get("content-type") or "").split(";", 1)[0].strip().lower()
+        if (
+            content_type
+            and content_type != "application/json"
+            and not content_type.endswith("+json")
+        ):
+            return self._generate_error_response(
+                None,
+                ContentTypeNotSupportedError(
+                    message=f"Unsupported Content-Type: {content_type}",
+                ),
+            )
         try:
             body = await request.json()
             if isinstance(body, dict):

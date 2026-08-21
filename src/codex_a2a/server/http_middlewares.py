@@ -307,7 +307,13 @@ def install_http_middlewares(  # noqa: C901 - registration split is tracked in #
         if "basic" in advertised_schemes:
             challenges.append('Basic realm="codex-a2a"')
         return JSONResponse(
-            {"error": "Unauthorized"},
+            {
+                "error": {
+                    "code": 401,
+                    "status": "UNAUTHORIZED",
+                    "message": "Unauthorized",
+                }
+            },
             status_code=401,
             headers={"WWW-Authenticate": ", ".join(challenges)},
         )
