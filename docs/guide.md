@@ -217,6 +217,8 @@ Deployment requirements:
 - `A2A_LOG_BODY_LIMIT`: payload log body size limit, default `0` (no truncation)
 - `A2A_REQUEST_BODY_MAX_BYTES`: hard HTTP request body limit, default `4194304` (4 MiB); set `0` to disable
 - `A2A_MAX_CONCURRENT_OPERATIONS`: process-local active POST and task-subscription limit, default `32`; set `0` to disable
+- `A2A_RATE_LIMIT_ENABLED` / `A2A_RATE_LIMIT_WINDOW_SECONDS` / `A2A_RATE_LIMIT_MAX_REQUESTS`: per-credential sliding-window rate limiting (per-peer-IP for the unauthenticated Agent Card surface). Defaults: `true` / `60` seconds / `120` requests. Exceeding the window returns HTTP `429` with a `Retry-After` header; `A2A_RATE_LIMIT_ENABLED=false` disables the limiter. The limiter is process-local; multi-process deployments should place a shared gateway in front or rely on per-instance limits.
+- `A2A_STREAM_MAX_BYTES` / `A2A_STREAM_MAX_DURATION_SECONDS` / `A2A_STREAM_IDLE_TIMEOUT_SECONDS`: streaming (SSE) response budgets for total serialized bytes, total duration, and idle gap. Defaults: `67108864` bytes / `3600` seconds / `120` seconds; `0` disables the respective budget. When a budget is exceeded the server ends the stream with an SSE `event: error` frame; if the very first event already exceeds the budget, REST requests are rejected with HTTP `429` `RESOURCE_EXHAUSTED` before the SSE stream starts.
 - `A2A_ENABLE_METRICS_ENDPOINT`: enable the authenticated Prometheus `/metrics` endpoint, default `true`
 - `A2A_TITLE`: agent name, default `Codex A2A`
 - `A2A_DESCRIPTION`: agent description exposed on Agent Card and docs surfaces
@@ -312,6 +314,12 @@ These variables are forwarded to the local `codex app-server` subprocess.
 | `A2A_LOG_BODY_LIMIT` | Body log limit |
 | `A2A_REQUEST_BODY_MAX_BYTES` | HTTP request body limit |
 | `A2A_MAX_CONCURRENT_OPERATIONS` | Active operation capacity |
+| `A2A_RATE_LIMIT_ENABLED` | Sliding-window rate limiter toggle |
+| `A2A_RATE_LIMIT_WINDOW_SECONDS` | Rate-limit window length |
+| `A2A_RATE_LIMIT_MAX_REQUESTS` | Max requests per window per key |
+| `A2A_STREAM_MAX_BYTES` | Streaming byte budget |
+| `A2A_STREAM_MAX_DURATION_SECONDS` | Streaming duration budget |
+| `A2A_STREAM_IDLE_TIMEOUT_SECONDS` | Streaming idle timeout |
 | `A2A_TITLE` | Agent title |
 | `A2A_DESCRIPTION` | Agent description |
 | `A2A_VERSION` | Agent version |

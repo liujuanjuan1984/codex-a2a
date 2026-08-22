@@ -345,6 +345,27 @@ class Settings(BaseSettings):
         default=32,
         alias="A2A_MAX_CONCURRENT_OPERATIONS",
     )
+    a2a_rate_limit_enabled: bool = Field(default=True, alias="A2A_RATE_LIMIT_ENABLED")
+    a2a_rate_limit_window_seconds: float = Field(
+        default=60.0,
+        alias="A2A_RATE_LIMIT_WINDOW_SECONDS",
+    )
+    a2a_rate_limit_max_requests: int = Field(
+        default=120,
+        alias="A2A_RATE_LIMIT_MAX_REQUESTS",
+    )
+    a2a_stream_max_bytes: int = Field(
+        default=64 * 1024 * 1024,
+        alias="A2A_STREAM_MAX_BYTES",
+    )
+    a2a_stream_max_duration_seconds: float = Field(
+        default=3600.0,
+        alias="A2A_STREAM_MAX_DURATION_SECONDS",
+    )
+    a2a_stream_idle_timeout_seconds: float = Field(
+        default=120.0,
+        alias="A2A_STREAM_IDLE_TIMEOUT_SECONDS",
+    )
     a2a_documentation_url: str | None = Field(default=None, alias="A2A_DOCUMENTATION_URL")
     a2a_allow_directory_override: bool = Field(default=True, alias="A2A_ALLOW_DIRECTORY_OVERRIDE")
     a2a_host: str = Field(default="127.0.0.1", alias="A2A_HOST")
@@ -458,6 +479,31 @@ class Settings(BaseSettings):
     def validate_stream_idle_diagnostic_seconds(cls, value: float) -> float:
         if value <= 0:
             raise ValueError("A2A_STREAM_IDLE_DIAGNOSTIC_SECONDS must be > 0")
+        return value
+
+    @field_validator("a2a_rate_limit_window_seconds")
+    @classmethod
+    def validate_rate_limit_window_seconds(cls, value: float) -> float:
+        if value <= 0:
+            raise ValueError("A2A_RATE_LIMIT_WINDOW_SECONDS must be > 0")
+        return value
+
+    @field_validator("a2a_rate_limit_max_requests")
+    @classmethod
+    def validate_rate_limit_max_requests(cls, value: int) -> int:
+        if value <= 0:
+            raise ValueError("A2A_RATE_LIMIT_MAX_REQUESTS must be > 0")
+        return value
+
+    @field_validator(
+        "a2a_stream_max_bytes",
+        "a2a_stream_max_duration_seconds",
+        "a2a_stream_idle_timeout_seconds",
+    )
+    @classmethod
+    def validate_stream_budget_values(cls, value: int | float) -> int | float:
+        if value < 0:
+            raise ValueError("A2A stream budgets must be >= 0")
         return value
 
     @field_validator("a2a_interrupt_request_ttl_seconds")

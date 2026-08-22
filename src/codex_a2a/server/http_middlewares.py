@@ -36,11 +36,16 @@ from codex_a2a.logging_context import (
     resolve_correlation_id,
     set_correlation_id,
 )
+from codex_a2a.metrics import A2A_RATE_LIMIT_REJECTED_TOTAL, get_metrics_registry
 from codex_a2a.protocol_versions import (
     UnsupportedProtocolVersionError,
     negotiate_protocol_version,
     reset_current_protocol_version,
     set_current_protocol_version,
+)
+from codex_a2a.server.runtime_limits import (
+    SlidingWindowRateLimiter,
+    build_rate_limit_response,
 )
 from codex_a2a.server.task_store import TaskStoreOperationError, task_store_failure_message
 
@@ -603,6 +608,44 @@ def _install_payload_logging_middleware(app: FastAPI, *, settings: Settings) -> 
         return response
 
 
+def _resolve_rate_limit_key(request: Request) -> str:
+    """Key the limiter by credential, principal, or peer IP.
+
+    Authenticated requests use ``credential_id`` when declared so independent
+    credentials never share a bucket; otherwise they fall back to the stable
+    principal. The public (unauthenticated) surface is keyed by the direct
+    peer IP; ``X-Forwarded-For`` is deliberately not trusted because it can be
+    spoofed by clients when the service is not behind a trusted proxy.
+    """
+    credential_id = getattr(request.state, "user_credential_id", None)
+    if credential_id:
+        return f"credential:{credential_id}"
+    identity = getattr(request.state, "user_identity", None)
+    if identity:
+        return f"principal:{identity}"
+    client = request.client
+    host = client.host if client is not None else "unknown"
+    return f"ip:{host}"
+
+
+def _install_rate_limit_middleware(app: FastAPI, *, settings: Settings) -> None:
+    rate_limiter = SlidingWindowRateLimiter(
+        max_requests=settings.a2a_rate_limit_max_requests,
+        window_seconds=settings.a2a_rate_limit_window_seconds,
+    )
+
+    @app.middleware("http")
+    async def enforce_rate_limit(request: Request, call_next):
+        if not settings.a2a_rate_limit_enabled or request.method == "OPTIONS":
+            return await call_next(request)
+        key = _resolve_rate_limit_key(request)
+        if not await rate_limiter.check_and_record(key):
+            retry_after = await rate_limiter.retry_after(key)
+            get_metrics_registry().inc_counter(A2A_RATE_LIMIT_REJECTED_TOTAL)
+            return build_rate_limit_response(retry_after)
+        return await call_next(request)
+
+
 def _install_bearer_auth_middleware(
     app: FastAPI,
     *,
@@ -692,6 +735,7 @@ def install_http_middlewares(
     _install_rest_payload_shape_guard(app)
     _install_subscribe_task_guard(app, task_store=task_store)
     _install_payload_logging_middleware(app, settings=settings)
+    _install_rate_limit_middleware(app, settings=settings)
     _install_bearer_auth_middleware(
         app,
         configured_credentials=configured_credentials,

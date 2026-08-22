@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import AsyncGenerator
 from typing import Any
 
 from a2a.server.jsonrpc_models import InvalidParamsError, JSONRPCError
@@ -28,6 +29,7 @@ from codex_a2a.jsonrpc.session_query import handle_session_query_request
 from codex_a2a.jsonrpc.thread_lifecycle_control import handle_thread_lifecycle_control_request
 from codex_a2a.jsonrpc.turn_control import handle_turn_control_request
 from codex_a2a.protocol_versions import get_current_protocol_version
+from codex_a2a.server.runtime_limits import apply_stream_budget
 from codex_a2a.upstream.client import CodexClient
 
 
@@ -45,6 +47,9 @@ def create_extension_jsonrpc_routes(
     guard_hooks: SessionGuardHooks,
     rpc_url: str,
     dispatcher_factory=None,
+    stream_budget_max_bytes: int = 0,
+    stream_budget_max_duration_seconds: float = 0.0,
+    stream_budget_idle_timeout_seconds: float = 0.0,
 ) -> list[Route]:
     factory = dispatcher_factory or CodexSessionQueryJSONRPCApplication
     dispatcher = factory(
@@ -58,6 +63,9 @@ def create_extension_jsonrpc_routes(
         methods=methods,
         supported_methods=supported_methods,
         guard_hooks=guard_hooks,
+        stream_budget_max_bytes=stream_budget_max_bytes,
+        stream_budget_max_duration_seconds=stream_budget_max_duration_seconds,
+        stream_budget_idle_timeout_seconds=stream_budget_idle_timeout_seconds,
     )
     return [
         Route(
@@ -82,6 +90,9 @@ class CodexSessionQueryJSONRPCApplication(JsonRpcDispatcher):
         methods: dict[str, str],
         supported_methods: list[str],
         guard_hooks: SessionGuardHooks,
+        stream_budget_max_bytes: int = 0,
+        stream_budget_max_duration_seconds: float = 0.0,
+        stream_budget_idle_timeout_seconds: float = 0.0,
         **kwargs: Any,
     ) -> None:
         super().__init__(*args, **kwargs)
@@ -119,7 +130,21 @@ class CodexSessionQueryJSONRPCApplication(JsonRpcDispatcher):
         self._supported_methods = list(supported_methods)
         self._method_registry = ExtensionMethodRegistry.from_methods(methods)
         self._guard_hooks = guard_hooks
+        self._stream_budget_max_bytes = stream_budget_max_bytes
+        self._stream_budget_max_duration_seconds = stream_budget_max_duration_seconds
+        self._stream_budget_idle_timeout_seconds = stream_budget_idle_timeout_seconds
         self._validate_guard_hooks()
+
+    def _create_response(self, context: Any, handler_result: Any) -> Any:
+        """Apply streaming output budgets before the SDK serializes SSE events."""
+        if isinstance(handler_result, AsyncGenerator):
+            handler_result = apply_stream_budget(
+                handler_result,
+                max_bytes=self._stream_budget_max_bytes,
+                max_duration_seconds=self._stream_budget_max_duration_seconds,
+                idle_timeout_seconds=self._stream_budget_idle_timeout_seconds,
+            )
+        return super()._create_response(context, handler_result)
 
     def _validate_guard_hooks(self) -> None:
         if self._guard_hooks.session_owner_matcher is None:
