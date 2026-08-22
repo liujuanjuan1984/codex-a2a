@@ -320,6 +320,14 @@ class Settings(BaseSettings):
 
     # A2A settings
     a2a_public_url: str = Field(default="http://127.0.0.1:8000", alias="A2A_PUBLIC_URL")
+    a2a_allowed_origins: Annotated[list[str], NoDecode] = Field(
+        default_factory=list,
+        alias="A2A_ALLOWED_ORIGINS",
+    )
+    a2a_allowed_hosts: Annotated[list[str], NoDecode] = Field(
+        default_factory=list,
+        alias="A2A_ALLOWED_HOSTS",
+    )
     a2a_project: str | None = Field(default=None, alias="A2A_PROJECT")
     a2a_title: str = Field(default="Codex A2A", alias="A2A_TITLE")
     a2a_description: str = Field(default="A2A wrapper service for Codex", alias="A2A_DESCRIPTION")
@@ -472,6 +480,8 @@ class Settings(BaseSettings):
         "a2a_execution_sandbox_writable_roots",
         "a2a_execution_network_allowed_domains",
         "a2a_client_allowed_hosts",
+        "a2a_allowed_origins",
+        "a2a_allowed_hosts",
         mode="before",
     )
     @classmethod
