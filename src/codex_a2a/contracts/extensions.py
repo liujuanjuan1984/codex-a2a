@@ -24,7 +24,6 @@ from .extension_registry import build_extension_taxonomy_from_registry
 
 CORE_JSONRPC_PATH = "/"
 EXTENSION_JSONRPC_PATH = CORE_JSONRPC_PATH
-REST_API_PATH_PREFIX = "/v1"
 
 # Explicit re-exports preserve the public contracts surface without wildcard imports.
 COMPATIBILITY_PROFILE_EXTENSION_URI = extension_specs.COMPATIBILITY_PROFILE_EXTENSION_URI
@@ -104,7 +103,6 @@ def build_wire_contract_extension_params(
             {
                 "protocol_binding": "HTTP+JSON",
                 "protocol_version": declared_protocol_version,
-                "url_path_prefix": REST_API_PATH_PREFIX,
             },
             {
                 "protocol_binding": "JSON-RPC",

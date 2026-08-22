@@ -33,7 +33,7 @@ flowchart TD
 
 ### Inbound Message (Send/Stream)
 
-1.  **FastAPI Route**: `POST /v1/message:send` or `POST /v1/message:stream` (or JSON-RPC equivalent).
+1.  **FastAPI Route**: `POST /message:send` or `POST /message:stream` (or JSON-RPC equivalent).
 2.  **Handler**: Validates auth and maps transport-specific payloads into `RequestContext`.
 3.  **Executor (`CodexAgentExecutor.execute`)**:
     -   Maps A2A parts to Codex-compatible items.

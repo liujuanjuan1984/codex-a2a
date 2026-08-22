@@ -17,10 +17,10 @@ def _is_stream_request(request: Request) -> bool:
     if isinstance(raw_path, (bytes, bytearray)):
         raw_value = raw_path.decode(errors="ignore")
     return (
-        path.endswith("/v1/message:stream")
-        or path.endswith("/v1/message%3Astream")
-        or raw_value.endswith("/v1/message:stream")
-        or raw_value.endswith("/v1/message%3Astream")
+        path.endswith("/message:stream")
+        or path.endswith("/message%3Astream")
+        or raw_value.endswith("/message:stream")
+        or raw_value.endswith("/message%3Astream")
     )
 
 

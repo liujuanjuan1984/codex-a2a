@@ -60,8 +60,10 @@ def _is_sdk_tenant_mount(route: BaseRoute) -> bool:
 
 def _create_single_tenant_rest_routes(**kwargs: Any) -> list[BaseRoute]:
     # The SDK exposes a tenant-prefixed REST alias by default. This service's
-    # supported HTTP+JSON contract is the documented single-tenant `/v1/...`
-    # surface, so the application assembly narrows the route set explicitly.
+    # supported HTTP+JSON contract is the spec-rooted single-tenant surface
+    # (A2A 1.0 resolves REST paths from the advertised interface URL, with no
+    # version prefix in the URL), so the application assembly narrows the route
+    # set explicitly.
     return [route for route in create_rest_routes(**kwargs) if not _is_sdk_tenant_mount(route)]
 
 
@@ -225,7 +227,9 @@ def create_app(settings: Settings) -> FastAPI:
         _create_single_tenant_rest_routes(
             request_handler=handler,
             context_builder=context_builder,
-            path_prefix=extension_contracts.REST_API_PATH_PREFIX,
+            # A2A 1.0 roots the HTTP+JSON surface at the service root; the SDK
+            # default prefix is empty, matching the URL the Agent Card advertises.
+            path_prefix="",
         )
     )
     app.state.codex_client = client

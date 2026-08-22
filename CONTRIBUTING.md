@@ -51,7 +51,7 @@ CODEX_WORKSPACE_ROOT=/abs/path/to/workspace uv run codex-a2a serve
 5. Inspect the discovery surfaces:
 
 - `http://127.0.0.1:8000/.well-known/agent-card.json`
-- `curl -H "Authorization: Bearer ${DEMO_BEARER_TOKEN}" http://127.0.0.1:8000/v1/card`
+- `curl -H "Authorization: Bearer ${DEMO_BEARER_TOKEN}" http://127.0.0.1:8000/extendedAgentCard`
 
 ## Validation Baseline
 

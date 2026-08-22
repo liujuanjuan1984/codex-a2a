@@ -5,14 +5,14 @@ This guide covers runtime configuration, transport contracts, streaming/session/
 ## Transport Contracts
 
 - The service supports both transports:
-  - HTTP+JSON (REST endpoints such as `/v1/message:send`)
+  - HTTP+JSON (REST endpoints such as `/message:send`)
   - Shared JSON-RPC (`POST /`) for both core A2A methods and provider-private extension methods
 - Agent Card publishes both HTTP+JSON and JSON-RPC endpoints through `supported_interfaces[]`.
-- Both supported interfaces now publish the same `public_url`. For HTTP+JSON, that URL is the REST service root; concrete REST methods remain under `/v1/...`.
+- Both supported interfaces publish the same `public_url`. For HTTP+JSON, that URL is the REST service root: per A2A 1.0 the concrete REST methods (`/message:send`, `/tasks/...`) live at that root, and the protocol version is negotiated via the `A2A-Version` header rather than a URL prefix.
 - The public Agent Card at `/.well-known/agent-card.json` is intentionally slimmed to the minimum discovery surface.
 - The authenticated extended card exposes the authenticated provider-private skill inventory and deployment-aware examples:
   - preferred: JSON-RPC `GetExtendedAgentCard`
-  - HTTP core route: `GET /v1/extendedAgentCard`
+  - HTTP core route: `GET /extendedAgentCard`
 - Anonymous shared-contract hints are available through OpenAPI metadata:
   - `GET /openapi.json`
   - `x-a2a-extension-contracts` for negotiated shared extensions and shared interrupt callback hints
@@ -20,7 +20,7 @@ This guide covers runtime configuration, transport contracts, streaming/session/
 - Agent Card responses publish `ETag` and `Cache-Control`; clients should revalidate instead of repeatedly fetching full payloads.
 - Larger discovery documents support gzip compression on these HTTP GET routes:
   - `/.well-known/agent-card.json`
-  - `GET /v1/extendedAgentCard`
+  - `GET /extendedAgentCard`
   - `GET /openapi.json`
 - Streaming and task routes do not rely on this gzip behavior.
 - Payload schema is transport-specific and should not be mixed:
@@ -48,9 +48,9 @@ Current behavior:
   - `CancelTask`
   - `SubscribeToTask`
 - core HTTP endpoints:
-  - `/v1/message:send`
-  - `/v1/message:stream`
-  - `/v1/tasks/{id}:subscribe`
+  - `/message:send`
+  - `/message:stream`
+  - `/tasks/{id}:subscribe`
 - extension JSON-RPC methods are declared separately from the core baseline even though they share the same `POST /` endpoint
 - `codex.interrupts.list` is an always-on adapter-local recovery surface for pending interrupt request IDs
 - `codex.turns.steer` becomes deployment-conditional when `A2A_ENABLE_TURN_CONTROL=false`
@@ -130,9 +130,9 @@ Current profile shape:
   - `CancelTask`
   - `SubscribeToTask`
 - core HTTP endpoints:
-  - `/v1/message:send`
-  - `/v1/message:stream`
-  - `/v1/tasks/{id}:subscribe`
+  - `/message:send`
+  - `/message:stream`
+  - `/tasks/{id}:subscribe`
 
 Retention guidance:
 
@@ -460,7 +460,7 @@ On the current npm global install layout for Linux x64, the command above resolv
 ### Session and Task Behavior
 
 - The service forwards A2A `message:send` requests and `SendMessage` JSON-RPC calls to Codex session/message flows.
-- Streaming is always enabled for this service surface. `/v1/message:stream` and JSON-RPC `SendStreamingMessage` are compatibility-sensitive core capabilities rather than deployment-time toggles.
+- Streaming is always enabled for this service surface. `/message:stream` and JSON-RPC `SendStreamingMessage` are compatibility-sensitive core capabilities rather than deployment-time toggles.
 - `codex.exec.start`, `codex.exec.write`, `codex.exec.resize`, and `codex.exec.terminate` expose a standalone interactive `command/exec` runtime when `A2A_ENABLE_EXEC_CONTROL=true`. This surface is intended for internal or tightly controlled deployments where interactive terminal control is an explicit part of the adapter contract. `codex.exec.start` returns process/task handles immediately, while stdout/stderr deltas and the final result flow through normal A2A task streaming and `SubscribeToTask`.
 - Rich input is supported on two surfaces:
   - core A2A `SendMessage` and `SendStreamingMessage` keep standard A2A parts and map `Part(text)`, image `Part(url|raw)`, and `Part(data={"type":"mention"|"skill", ...})` into Codex turn input
@@ -485,7 +485,7 @@ On the current npm global install layout for Linux x64, the command above resolv
 
 ### Streaming and Interrupt Contract
 
-- Streaming (`/v1/message:stream`) emits an initial working `Task`, then incremental `TaskArtifactUpdateEvent` / `TaskStatusUpdateEvent` updates, and finally a terminal `Task`.
+- Streaming (`/message:stream`) emits an initial working `Task`, then incremental `TaskArtifactUpdateEvent` / `TaskStatusUpdateEvent` updates, and finally a terminal `Task`.
 - If task persistence fails while processing a request, the service maps that failure to a stable failed task or failed final status instead of leaking raw task-store exceptions.
 - Those task-store failure surfaces use `metadata.codex.error` with `type=TASK_STORE_UNAVAILABLE` and an `operation` field such as `get` or `save`.
 - Stream artifacts carry `artifact.metadata.shared.stream.block_type` with values `text`, `reasoning`, and `tool_call`.
@@ -573,7 +573,7 @@ Server behavior:
 Minimal example:
 
 ```bash
-curl -sS http://127.0.0.1:8000/v1/message:send \
+curl -sS http://127.0.0.1:8000/message:send \
   -H 'content-type: application/json' \
   -H "Authorization: Bearer ${DEMO_BEARER_TOKEN}" \
   -d '{
@@ -763,7 +763,7 @@ curl -sS http://127.0.0.1:8000/ \
 The JSON-RPC result returns `task_id` and `context_id`. Then use the standard task stream:
 
 ```bash
-curl -sS http://127.0.0.1:8000/v1/tasks/<task_id>:subscribe \
+curl -sS http://127.0.0.1:8000/tasks/<task_id>:subscribe \
   -H "Authorization: Bearer ${DEMO_BEARER_TOKEN}"
 ```
 
@@ -894,7 +894,7 @@ curl -sS http://127.0.0.1:8000/ \
 The JSON-RPC result returns `task_id` and `context_id`. Then use the standard task stream:
 
 ```bash
-curl -sS http://127.0.0.1:8000/v1/tasks/<task_id>:subscribe \
+curl -sS http://127.0.0.1:8000/tasks/<task_id>:subscribe \
   -H "Authorization: Bearer ${DEMO_BEARER_TOKEN}"
 ```
 
@@ -1173,7 +1173,7 @@ curl -sS http://127.0.0.1:8000/ \
 ## Authentication Example (curl)
 
 ```bash
-curl -sS http://127.0.0.1:8000/v1/message:send \
+curl -sS http://127.0.0.1:8000/message:send \
   -H 'content-type: application/json' \
   -H "Authorization: Bearer ${DEMO_BEARER_TOKEN}" \
   -d '{
@@ -1207,7 +1207,7 @@ curl -sS http://127.0.0.1:8000/ \
 
 ## Streaming Re-Subscription (`subscribe`)
 
-If an SSE connection drops, use `GET /v1/tasks/{task_id}:subscribe` to re-subscribe while the task is still non-terminal.
+If an SSE connection drops, use `GET /tasks/{task_id}:subscribe` to re-subscribe while the task is still non-terminal.
 
 Terminal-task note:
 

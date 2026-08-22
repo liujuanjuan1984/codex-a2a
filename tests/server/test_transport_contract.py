@@ -22,7 +22,6 @@ from codex_a2a.contracts.extensions import (
     EXTENSION_JSONRPC_PATH,
     INTERRUPT_CALLBACK_EXTENSION_URI,
     INTERRUPT_RECOVERY_EXTENSION_URI,
-    REST_API_PATH_PREFIX,
     REVIEW_CONTROL_EXTENSION_URI,
     SESSION_BINDING_EXTENSION_URI,
     SESSION_QUERY_EXTENSION_URI,
@@ -88,12 +87,12 @@ def test_rest_subscription_route_matches_current_sdk_contract() -> None:
     assert "/health" in route_paths
     assert "/ready" in route_paths
     assert "/metrics" in route_paths
-    assert f"{REST_API_PATH_PREFIX}/tasks/{{id}}:subscribe" in route_paths
-    assert f"{REST_API_PATH_PREFIX}/tasks/{{id}}:resubscribe" not in route_paths
-    assert f"{REST_API_PATH_PREFIX}/extendedAgentCard" in route_paths
+    assert "/tasks/{id}:subscribe" in route_paths
+    assert "/tasks/{id}:resubscribe" not in route_paths
+    assert "/extendedAgentCard" in route_paths
     assert "/{tenant}" not in route_paths
     assert "/agent/authenticatedExtendedCard" not in route_paths
-    assert f"{REST_API_PATH_PREFIX}/card" not in route_paths
+    assert "/card" not in route_paths
 
 
 def test_health_route_can_be_disabled() -> None:
@@ -153,8 +152,8 @@ async def test_streaming_route_uses_sdk_default_sse_keepalive() -> None:
             "http_version": "1.1",
             "method": "POST",
             "scheme": "http",
-            "path": "/v1/message:stream",
-            "raw_path": b"/v1/message:stream",
+            "path": "/message:stream",
+            "raw_path": b"/message:stream",
             "query_string": b"",
             "headers": [],
             "client": ("127.0.0.1", 12345),
@@ -399,8 +398,8 @@ def test_openapi_rest_message_routes_include_schema_examples_and_extension_contr
     paths = openapi["paths"]
 
     expected: dict[str, str] = {
-        "/v1/message:send": "#/components/schemas/SendMessageRequest",
-        "/v1/message:stream": "#/components/schemas/SendStreamingMessageRequest",
+        "/message:send": "#/components/schemas/SendMessageRequest",
+        "/message:stream": "#/components/schemas/SendStreamingMessageRequest",
     }
     for path, expected_schema_ref in expected.items():
         post = paths[path]["post"]
@@ -418,9 +417,9 @@ def test_openapi_rest_message_routes_include_schema_examples_and_extension_contr
     role_enum = openapi["components"]["schemas"]["A2AMessage"]["properties"]["role"]["enum"]
     assert role_enum == ["ROLE_UNSPECIFIED", "ROLE_USER", "ROLE_AGENT"]
 
-    stream_contract = paths["/v1/message:stream"]["post"].get("x-a2a-streaming")
+    stream_contract = paths["/message:stream"]["post"].get("x-a2a-streaming")
     assert isinstance(stream_contract, dict)
-    assert paths["/v1/message:stream"]["post"].get("x-codex-contracts") is None
+    assert paths["/message:stream"]["post"].get("x-codex-contracts") is None
 
     root_contracts = paths[CORE_JSONRPC_PATH]["post"].get("x-a2a-extension-contracts")
     assert isinstance(root_contracts, dict)
@@ -492,10 +491,10 @@ async def test_agent_card_routes_split_public_and_authenticated_extended_contrac
         assert public_cached.status_code == 304
         assert public_cached.headers["vary"] == "Accept-Encoding"
 
-        unauthorized_extended = await client.get("/v1/extendedAgentCard")
+        unauthorized_extended = await client.get("/extendedAgentCard")
         assert unauthorized_extended.status_code == 401
 
-        extended_card = await client.get("/v1/extendedAgentCard", headers=headers)
+        extended_card = await client.get("/extendedAgentCard", headers=headers)
         assert extended_card.status_code == 200
         assert extended_card.headers["cache-control"] == AUTHENTICATED_EXTENDED_CARD_CACHE_CONTROL
         assert {
@@ -504,7 +503,7 @@ async def test_agent_card_routes_split_public_and_authenticated_extended_contrac
         assert extended_card.headers["etag"]
 
         extended_cached = await client.get(
-            "/v1/extendedAgentCard",
+            "/extendedAgentCard",
             headers={
                 **headers,
                 "If-None-Match": extended_card.headers["etag"],
@@ -557,7 +556,7 @@ async def test_targeted_gzip_applies_to_card_and_openapi_routes(monkeypatch) -> 
             headers={"Accept-Encoding": "gzip"},
         )
         extended_card = await client.get(
-            "/v1/extendedAgentCard",
+            "/extendedAgentCard",
             headers={
                 "Authorization": "Bearer test-token",
                 "Accept-Encoding": "gzip",
@@ -755,7 +754,7 @@ async def test_authenticated_extended_card_accepts_basic_auth(monkeypatch) -> No
 
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.get(
-            "/v1/extendedAgentCard",
+            "/extendedAgentCard",
             headers=_basic_auth_header("operator", "op-pass"),
         )
 
@@ -864,7 +863,7 @@ async def test_dual_stack_send_accepts_transport_native_payloads(monkeypatch) ->
 
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         rest_resp = await client.post(
-            f"{REST_API_PATH_PREFIX}/message:send",
+            "/message:send",
             headers=headers,
             json=rest_payload,
         )
@@ -899,7 +898,7 @@ async def test_tenant_prefixed_rest_message_route_is_not_supported(monkeypatch) 
 
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.post(
-            f"/acme{REST_API_PATH_PREFIX}/message:send",
+            "/acme/message:send",
             headers=headers,
             json=_rest_message_payload(),
         )
@@ -918,7 +917,7 @@ async def test_tenant_prefixed_extended_card_route_is_not_supported(monkeypatch)
 
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.get(
-            f"/acme{REST_API_PATH_PREFIX}/extendedAgentCard",
+            "/acme/extendedAgentCard",
             headers=headers,
         )
 
@@ -936,8 +935,27 @@ async def test_tenant_subscribe_route_is_not_supported(monkeypatch) -> None:
 
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.get(
-            f"/acme{REST_API_PATH_PREFIX}/tasks/task-missing:subscribe",
+            "/acme/tasks/task-missing:subscribe",
             headers=headers,
+        )
+
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_legacy_v1_prefixed_rest_route_is_not_served(monkeypatch) -> None:
+    import codex_a2a.server.application as app_module
+
+    monkeypatch.setattr(app_module, "CodexClient", DummyChatCodexClient)
+    app = app_module.create_app(make_settings(a2a_bearer_token="test-token"))
+    transport = httpx.ASGITransport(app=app)
+    headers = {"Authorization": "Bearer test-token"}
+
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post(
+            "/v1/message:send",
+            headers=headers,
+            json=_rest_message_payload(),
         )
 
     assert response.status_code == 404
@@ -1171,7 +1189,7 @@ async def test_rest_unsupported_v1_protocol_version_uses_protocol_error_shape(
 
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.post(
-            f"{REST_API_PATH_PREFIX}/message:send",
+            "/message:send",
             headers=headers,
             json=_rest_message_payload(),
         )
@@ -1230,14 +1248,14 @@ async def test_dual_stack_send_rejects_cross_transport_payload_shapes(monkeypatc
 
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         rest_resp = await client.post(
-            f"{REST_API_PATH_PREFIX}/message:send",
+            "/message:send",
             headers=headers,
             json=rest_with_legacy_shape,
         )
         assert rest_resp.status_code == 400
 
         rest_envelope_resp = await client.post(
-            f"{REST_API_PATH_PREFIX}/message:send",
+            "/message:send",
             headers=headers,
             json=full_jsonrpc_envelope,
         )
@@ -1348,7 +1366,7 @@ async def test_subscribe_missing_task_returns_controlled_404(monkeypatch) -> Non
 
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.get(
-            f"{REST_API_PATH_PREFIX}/tasks/task-missing:subscribe",
+            "/tasks/task-missing:subscribe",
             headers=headers,
         )
 
@@ -1391,7 +1409,7 @@ async def test_subscribe_task_store_failure_returns_controlled_503(monkeypatch) 
     headers = {"Authorization": "Bearer test-token"}
 
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-        response = await client.get("/v1/tasks/task-broken:subscribe", headers=headers)
+        response = await client.get("/tasks/task-broken:subscribe", headers=headers)
 
     assert response.status_code == 503
     assert response.json() == {"error": "Task store unavailable while loading task state."}
@@ -1434,7 +1452,7 @@ async def test_log_payloads_keeps_body_for_rest_handler(monkeypatch, caplog) -> 
     with caplog.at_level(logging.DEBUG, logger="codex_a2a.server.http_middlewares"):
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
             resp = await client.post(
-                "/v1/message:send",
+                "/message:send",
                 headers=headers,
                 json=_rest_message_payload(),
             )
@@ -1442,7 +1460,7 @@ async def test_log_payloads_keeps_body_for_rest_handler(monkeypatch, caplog) -> 
             assert resp.status_code == 200
 
     assert any(
-        "A2A request POST /v1/message:send body=" in record.message for record in caplog.records
+        "A2A request POST /message:send body=" in record.message for record in caplog.records
     )
 
 
@@ -1458,7 +1476,7 @@ async def test_log_payloads_streaming_response_path(monkeypatch, caplog) -> None
     with caplog.at_level(logging.DEBUG, logger="codex_a2a.server.http_middlewares"):
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
             async with client.stream(
-                "POST", "/v1/message:stream", headers=headers, json=_rest_message_payload()
+                "POST", "/message:stream", headers=headers, json=_rest_message_payload()
             ) as resp:
                 assert resp.status_code == 200
                 assert "text/event-stream" in resp.headers.get("content-type", "")
@@ -1467,8 +1485,8 @@ async def test_log_payloads_streaming_response_path(monkeypatch, caplog) -> None
                         break
 
     assert any(
-        "A2A response /v1/message:stream status=200" in record.message
-        or "A2A response /v1/message:stream streaming" in record.message
+        "A2A response /message:stream status=200" in record.message
+        or "A2A response /message:stream streaming" in record.message
         for record in caplog.records
     )
 
@@ -1618,7 +1636,7 @@ async def test_request_logs_reuse_supplied_correlation_id(monkeypatch, caplog) -
     with caplog.at_level(logging.DEBUG):
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
             response = await client.post(
-                "/v1/message:send",
+                "/message:send",
                 headers=headers,
                 json=_rest_message_payload(),
             )
@@ -1665,7 +1683,7 @@ async def test_request_logs_generate_correlation_id_for_stream_requests(
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
             async with client.stream(
                 "POST",
-                "/v1/message:stream",
+                "/message:stream",
                 headers=headers,
                 json=_rest_message_payload(),
             ) as response:
