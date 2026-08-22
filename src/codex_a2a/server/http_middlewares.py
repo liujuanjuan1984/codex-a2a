@@ -50,14 +50,14 @@ _PUBLIC_AGENT_CARD_PATHS = {
     "/.well-known/agent-card.json",
 }
 _AUTHENTICATED_EXTENDED_CARD_PATHS = {
-    f"{extension_contracts.REST_API_PATH_PREFIX}/extendedAgentCard",
+    "/extendedAgentCard",
 }
 _OPENAPI_PATHS = {
     "/openapi.json",
 }
 _REST_MESSAGE_PATHS = {
-    f"{extension_contracts.REST_API_PATH_PREFIX}/message:send",
-    f"{extension_contracts.REST_API_PATH_PREFIX}/message:stream",
+    "/message:send",
+    "/message:stream",
 }
 GZIP_COMPRESSIBLE_PATHS = (
     _PUBLIC_AGENT_CARD_PATHS | _AUTHENTICATED_EXTENDED_CARD_PATHS | _OPENAPI_PATHS

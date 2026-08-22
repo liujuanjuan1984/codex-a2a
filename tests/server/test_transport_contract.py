@@ -22,7 +22,6 @@ from codex_a2a.contracts.extensions import (
     EXTENSION_JSONRPC_PATH,
     INTERRUPT_CALLBACK_EXTENSION_URI,
     INTERRUPT_RECOVERY_EXTENSION_URI,
-    REST_API_PATH_PREFIX,
     REVIEW_CONTROL_EXTENSION_URI,
     SESSION_BINDING_EXTENSION_URI,
     SESSION_QUERY_EXTENSION_URI,
@@ -88,12 +87,12 @@ def test_rest_subscription_route_matches_current_sdk_contract() -> None:
     assert "/health" in route_paths
     assert "/ready" in route_paths
     assert "/metrics" in route_paths
-    assert f"{REST_API_PATH_PREFIX}/tasks/{{id}}:subscribe" in route_paths
-    assert f"{REST_API_PATH_PREFIX}/tasks/{{id}}:resubscribe" not in route_paths
-    assert f"{REST_API_PATH_PREFIX}/extendedAgentCard" in route_paths
+    assert "/tasks/{id}:subscribe" in route_paths
+    assert "/tasks/{id}:resubscribe" not in route_paths
+    assert "/extendedAgentCard" in route_paths
     assert "/{tenant}" not in route_paths
     assert "/agent/authenticatedExtendedCard" not in route_paths
-    assert f"{REST_API_PATH_PREFIX}/card" not in route_paths
+    assert "/card" not in route_paths
 
 
 def test_health_route_can_be_disabled() -> None:
@@ -864,7 +863,7 @@ async def test_dual_stack_send_accepts_transport_native_payloads(monkeypatch) ->
 
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         rest_resp = await client.post(
-            f"{REST_API_PATH_PREFIX}/message:send",
+            "/message:send",
             headers=headers,
             json=rest_payload,
         )
@@ -899,7 +898,7 @@ async def test_tenant_prefixed_rest_message_route_is_not_supported(monkeypatch) 
 
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.post(
-            f"/acme{REST_API_PATH_PREFIX}/message:send",
+            "/acme/message:send",
             headers=headers,
             json=_rest_message_payload(),
         )
@@ -918,7 +917,7 @@ async def test_tenant_prefixed_extended_card_route_is_not_supported(monkeypatch)
 
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.get(
-            f"/acme{REST_API_PATH_PREFIX}/extendedAgentCard",
+            "/acme/extendedAgentCard",
             headers=headers,
         )
 
@@ -936,8 +935,27 @@ async def test_tenant_subscribe_route_is_not_supported(monkeypatch) -> None:
 
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.get(
-            f"/acme{REST_API_PATH_PREFIX}/tasks/task-missing:subscribe",
+            "/acme/tasks/task-missing:subscribe",
             headers=headers,
+        )
+
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_legacy_v1_prefixed_rest_route_is_not_served(monkeypatch) -> None:
+    import codex_a2a.server.application as app_module
+
+    monkeypatch.setattr(app_module, "CodexClient", DummyChatCodexClient)
+    app = app_module.create_app(make_settings(a2a_bearer_token="test-token"))
+    transport = httpx.ASGITransport(app=app)
+    headers = {"Authorization": "Bearer test-token"}
+
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post(
+            "/v1/message:send",
+            headers=headers,
+            json=_rest_message_payload(),
         )
 
     assert response.status_code == 404
@@ -1171,7 +1189,7 @@ async def test_rest_unsupported_v1_protocol_version_uses_protocol_error_shape(
 
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.post(
-            f"{REST_API_PATH_PREFIX}/message:send",
+            "/message:send",
             headers=headers,
             json=_rest_message_payload(),
         )
@@ -1230,14 +1248,14 @@ async def test_dual_stack_send_rejects_cross_transport_payload_shapes(monkeypatc
 
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         rest_resp = await client.post(
-            f"{REST_API_PATH_PREFIX}/message:send",
+            "/message:send",
             headers=headers,
             json=rest_with_legacy_shape,
         )
         assert rest_resp.status_code == 400
 
         rest_envelope_resp = await client.post(
-            f"{REST_API_PATH_PREFIX}/message:send",
+            "/message:send",
             headers=headers,
             json=full_jsonrpc_envelope,
         )
@@ -1348,7 +1366,7 @@ async def test_subscribe_missing_task_returns_controlled_404(monkeypatch) -> Non
 
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.get(
-            f"{REST_API_PATH_PREFIX}/tasks/task-missing:subscribe",
+            "/tasks/task-missing:subscribe",
             headers=headers,
         )
 

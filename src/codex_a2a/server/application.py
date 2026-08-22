@@ -227,7 +227,9 @@ def create_app(settings: Settings) -> FastAPI:
         _create_single_tenant_rest_routes(
             request_handler=handler,
             context_builder=context_builder,
-            path_prefix=extension_contracts.REST_API_PATH_PREFIX,
+            # A2A 1.0 roots the HTTP+JSON surface at the service root; the SDK
+            # default prefix is empty, matching the URL the Agent Card advertises.
+            path_prefix="",
         )
     )
     app.state.codex_client = client

@@ -12,7 +12,6 @@ from codex_a2a.contracts.extensions import (
     EXTENSION_JSONRPC_PATH,
     INTERRUPT_CALLBACK_EXTENSION_URI,
     INTERRUPT_RECOVERY_EXTENSION_URI,
-    REST_API_PATH_PREFIX,
     REVIEW_CONTROL_EXTENSION_URI,
     SESSION_BINDING_EXTENSION_URI,
     SESSION_QUERY_DEFAULT_LIMIT,
@@ -720,14 +719,8 @@ def test_authenticated_extended_agent_card_injects_profile_into_extensions() -> 
     )
     assert "GetExtendedAgentCard" in wire_contract_params["all_jsonrpc_methods"]
     assert "CreateTaskPushNotificationConfig" in wire_contract_params["all_jsonrpc_methods"]
-    assert (
-        f"POST {REST_API_PATH_PREFIX}/message:send"
-        in wire_contract_params["core"]["http_endpoints"]
-    )
-    assert (
-        f"GET {REST_API_PATH_PREFIX}/extendedAgentCard"
-        in wire_contract_params["core"]["http_endpoints"]
-    )
+    assert "POST /message:send" in wire_contract_params["core"]["http_endpoints"]
+    assert "GET /extendedAgentCard" in wire_contract_params["core"]["http_endpoints"]
     assert wire_contract_params["core"]["jsonrpc_endpoint"] == {
         "protocol_binding": "JSON-RPC",
         "protocol_version": "1.0",
@@ -742,7 +735,7 @@ def test_authenticated_extended_agent_card_injects_profile_into_extensions() -> 
         {
             "protocol_binding": "HTTP+JSON",
             "protocol_version": "1.0",
-            "url_path_prefix": REST_API_PATH_PREFIX,
+            "url_path_prefix": "",
         },
         {
             "protocol_binding": "JSON-RPC",
