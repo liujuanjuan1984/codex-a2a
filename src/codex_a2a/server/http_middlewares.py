@@ -714,7 +714,14 @@ def _install_http_boundary_middleware(app: FastAPI, *, settings: Settings) -> No
     public_origin = _origin_of_url(settings.a2a_public_url)
     if public_origin is not None:
         allowed_origins.add(public_origin)
+    else:
+        logger.warning(
+            "A2A_PUBLIC_URL=%r is not a valid http(s) URL; requests carrying an "
+            "Origin header will be rejected unless A2A_ALLOWED_ORIGINS matches",
+            settings.a2a_public_url,
+        )
     allowed_hosts = tuple(settings.a2a_allowed_hosts or ())
+    allowed_host_headers = {entry.strip().lower() for entry in allowed_hosts if entry.strip()}
     enforce_host = bool(allowed_hosts)
     if not enforce_host and not _is_loopback_bind(settings.a2a_host):
         logger.warning(
@@ -734,9 +741,7 @@ def _install_http_boundary_middleware(app: FastAPI, *, settings: Settings) -> No
         if enforce_host:
             host = request.headers.get("host")
             hostname = _hostname_from_host_header(host or "")
-            host_header_allowed = (host or "").strip().lower() in {
-                entry.strip().lower() for entry in allowed_hosts if entry.strip()
-            }
+            host_header_allowed = (host or "").strip().lower() in allowed_host_headers
             if not hostname or not (
                 host_header_allowed or matches_allowed_host(hostname, allowed_hosts)
             ):

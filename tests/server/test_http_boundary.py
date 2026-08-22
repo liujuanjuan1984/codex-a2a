@@ -81,6 +81,23 @@ async def test_null_origin_is_rejected_by_default() -> None:
 
 
 @pytest.mark.asyncio
+async def test_invalid_public_url_rejects_origin_requests() -> None:
+    settings = make_settings(a2a_public_url="localhost:8000")
+    response = await _request(_boundary_app(settings), origin="http://127.0.0.1:8000")
+
+    assert response.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_invalid_public_url_logs_warning(caplog: pytest.LogCaptureFixture) -> None:
+    settings = make_settings(a2a_public_url="localhost:8000")
+    with caplog.at_level(logging.WARNING, logger="codex_a2a.server.http_middlewares"):
+        _boundary_app(settings)
+
+    assert any("not a valid http(s) URL" in record.message for record in caplog.records)
+
+
+@pytest.mark.asyncio
 async def test_options_preflight_with_cross_origin_is_rejected() -> None:
     settings = make_settings(a2a_public_url="http://127.0.0.1:8000")
     app = _boundary_app(settings)
