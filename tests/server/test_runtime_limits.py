@@ -487,3 +487,33 @@ async def test_streaming_byte_budget_integration_terminates_jsonrpc_sse(monkeypa
 
     assert b"event: error" in body
     assert b"byte budget" in body
+
+
+@pytest.mark.asyncio
+async def test_subscribe_missing_task_returns_not_found(monkeypatch) -> None:
+    import codex_a2a.server.application as app_module
+
+    monkeypatch.setattr(app_module, "CodexClient", DummyChatCodexClient)
+    app = _create_rate_limited_app(a2a_bearer_token="test-token")
+    headers = {"Authorization": "Bearer test-token"}
+    transport = httpx.ASGITransport(app=app)
+
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get("/tasks/missing:subscribe", headers=headers)
+
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_message_stream_invalid_body_returns_bad_request(monkeypatch) -> None:
+    import codex_a2a.server.application as app_module
+
+    monkeypatch.setattr(app_module, "CodexClient", DummyChatCodexClient)
+    app = _create_rate_limited_app(a2a_bearer_token="test-token")
+    headers = {"Authorization": "Bearer test-token"}
+    transport = httpx.ASGITransport(app=app)
+
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post("/message:stream", headers=headers, content=b"not-json")
+
+    assert response.status_code == 400

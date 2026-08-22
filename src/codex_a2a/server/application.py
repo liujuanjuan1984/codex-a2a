@@ -10,6 +10,7 @@ from a2a.server.routes.rest_dispatcher import RestDispatcher
 from a2a.server.routes.rest_routes import create_rest_routes
 from a2a.types import SubscribeToTaskRequest, a2a_pb2
 from a2a.utils import proto_utils
+from a2a.utils.error_handlers import build_rest_error_payload
 from fastapi import FastAPI
 from google.protobuf.json_format import MessageToDict, Parse  # type: ignore[import-untyped]
 from starlette.requests import Request
@@ -119,6 +120,13 @@ def _stream_budget_error_response(error: StreamBudgetExceeded) -> JSONResponse:
     )
 
 
+def _rest_error_response(error: Exception) -> JSONResponse:
+    """Map a pre-SSE error to the same REST error payload the SDK emits."""
+    payload = build_rest_error_payload(error)
+    http_code = payload.get("error", {}).get("code", 500)
+    return JSONResponse(content=payload, status_code=http_code)
+
+
 def _create_single_tenant_rest_routes(
     *,
     request_handler: Any,
@@ -155,6 +163,8 @@ def _create_single_tenant_rest_routes(
             return await dispatcher._handle_streaming(request, handler_func)
         except StreamBudgetExceeded as error:
             return _stream_budget_error_response(error)
+        except Exception as error:  # noqa: BLE001 - mirrors SDK rest_stream_error_handler
+            return _rest_error_response(error)
 
     async def message_stream_route(request: Request) -> Response:
         async def _handler(context: Any) -> Any:
