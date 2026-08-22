@@ -21,9 +21,6 @@ def normalize_app_item(app: Any) -> dict[str, Any] | None:
         "is_enabled": bool(app.get("isEnabled", False)),
         "install_url": app.get("installUrl"),
         "mention_path": f"app://{normalized_app_id}",
-        "branding": app.get("branding"),
-        "labels": app.get("labels"),
-        "codex": {"raw": app},
     }
 
 

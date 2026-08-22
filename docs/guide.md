@@ -249,6 +249,7 @@ These variables are forwarded to the local `codex app-server` subprocess.
 - `A2A_ENABLE_TURN_CONTROL`: expose `codex.turns.steer` on JSON-RPC extensions, default `true`
 - `A2A_ENABLE_REVIEW_CONTROL`: expose `codex.review.start` and `codex.review.watch` on JSON-RPC extensions, default `false`
 - `A2A_ENABLE_EXEC_CONTROL`: expose `codex.exec.*` on JSON-RPC extensions, default `false`
+- `A2A_EXPOSE_WORKSPACE_ROOT_IN_CARD`: default `false`; controls whether the authenticated extended Agent Card includes the local `CODEX_WORKSPACE_ROOT` in the structured profile `runtime_context`. Keep disabled unless trusted callers explicitly need the host path.
 - `A2A_ALLOW_DIRECTORY_OVERRIDE`: allow `metadata.codex.directory` overrides within the configured workspace boundary, default `true`
 - `A2A_SESSION_CACHE_TTL_SECONDS`: in-memory TTL for session mapping, default `3600`
 - `A2A_SESSION_CACHE_MAXSIZE`: max local process session-cache entries, default `10000`
@@ -487,6 +488,7 @@ On the current npm global install layout for Linux x64, the command above resolv
 - On the core chat surface, the `application/json` input mode is intentionally narrower than arbitrary JSON: only `Part(data={"type":"mention"|"skill", ...})` is part of the declared stable contract.
 - Image input maps to upstream `turn/start.input[].type=input_image`.
 - `mention.path` and `skill.path` are forwarded verbatim. The service does not guess app or plugin identifiers from display names.
+- Discovery responses no longer expose local `skill.path` values; callers that need rich-input skill items must supply the path from their own context.
 - `local_image` is not part of the current declared stable rich-input contract.
 - Session query projections currently use the upstream Codex `session_id` as the A2A `contextId`. In that projection surface, `contextId` is the canonical session identity and the adapter does not duplicate the same value under `metadata.shared.session.id`.
 - Completed chat turns are persisted as `completed`; `input-required` is reserved for active interrupt asks that still need a reply.
@@ -668,15 +670,15 @@ This service exposes read-only Codex discovery methods through JSON-RPC:
 
 Use these methods before constructing rich input:
 
-- `skills.list` returns stable `skill.path` values
+- `skills.list` returns stable skill `name`/`scope` values; local skill paths are intentionally not exposed
 - `apps.list` returns stable `mention_path=app://<id>` values
 - `plugins.list` and `plugins.read` return stable `mention_path=plugin://<plugin>@<marketplace>` values
 
 Result-shape guidance:
 
 - use the normalized stable fields declared in Agent Card / OpenAPI first
-- inspect `codex.raw` only when you need upstream-specific fields outside the declared minimum contract
-- `plugin/list` and `plugin/read` remain upstream experimental; this service exposes a stable minimum subset plus passthrough raw payloads
+- discovery responses are whitelisted summaries; raw upstream records and local paths are intentionally excluded
+- `plugin/list` and `plugin/read` remain upstream experimental; this service exposes a stable minimum subset without raw passthrough
 
 ### Skills List (`codex.discovery.skills.list`)
 

@@ -323,6 +323,7 @@ def test_authenticated_extended_agent_card_injects_profile_into_extensions() -> 
         codex_agent="code-reviewer",
         codex_variant="safe",
         a2a_allow_directory_override=False,
+        a2a_expose_workspace_root_in_card=True,
         a2a_execution_sandbox_mode="workspace-write",
         a2a_execution_network_access="restricted",
         a2a_execution_network_allowed_domains=["api.openai.com"],
@@ -838,6 +839,21 @@ def test_authenticated_extended_agent_card_injects_profile_into_extensions() -> 
     assert review_watch_policy["retention"] == "deployment-conditional"
     assert review_watch_policy["extension_uri"] == REVIEW_CONTROL_EXTENSION_URI
     assert review_watch_policy["toggle"] == "A2A_ENABLE_REVIEW_CONTROL"
+
+
+def test_authenticated_extended_agent_card_omits_workspace_root_by_default() -> None:
+    settings = make_settings(
+        a2a_bearer_token="test-token",
+        a2a_project="alpha",
+        codex_workspace_root="/srv/workspaces/alpha",
+    )
+    card = build_authenticated_extended_agent_card(settings)
+
+    assert "Workspace root" not in card.description
+    assert "/srv/workspaces/alpha" not in card.description
+    ext_by_uri = {ext.uri: ext for ext in card.capabilities.extensions or []}
+    binding_params = _require_params(ext_by_uri[SESSION_BINDING_EXTENSION_URI])
+    assert binding_params["profile"]["runtime_context"] == {"project": "alpha"}
 
 
 def test_authenticated_extended_agent_card_chat_examples_include_project_hint_when_configured() -> (

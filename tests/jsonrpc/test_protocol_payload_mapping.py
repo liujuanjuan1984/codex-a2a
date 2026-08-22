@@ -43,22 +43,20 @@ def test_map_skill_scopes_filters_invalid_entries_and_normalizes_strings() -> No
 
     assert items == [
         {
-            "cwd": "/workspace/repo",
             "skills": [
                 {
                     "name": "demo-skill",
-                    "path": "/workspace/repo/.codex/skills/demo/SKILL.md",
                     "description": "Demo skill",
                     "enabled": True,
                     "scope": "repo",
                     "interface": {"displayName": "Demo Skill"},
-                    "codex": {"raw": raw_scope["skills"][0]},
                 }
             ],
             "errors": [{"message": "warn"}],
-            "codex": {"raw": raw_scope},
         }
     ]
+    assert "/workspace" not in str(items)
+    assert "raw" not in str(items)
 
 
 def test_map_apps_list_normalizes_cursor_and_app_identity() -> None:
@@ -71,6 +69,8 @@ def test_map_apps_list_normalizes_cursor_and_app_identity() -> None:
                     "description": "Example connector",
                     "isAccessible": 1,
                     "isEnabled": 0,
+                    "branding": {"icon": {"url": "https://internal.local/icon.png"}},
+                    "labels": ["demo"],
                 },
                 {"id": "", "name": "broken"},
             ],
@@ -88,19 +88,12 @@ def test_map_apps_list_normalizes_cursor_and_app_identity() -> None:
             "is_enabled": False,
             "install_url": None,
             "mention_path": "app://demo-app",
-            "branding": None,
-            "labels": None,
-            "codex": {
-                "raw": {
-                    "id": " demo-app ",
-                    "name": " Demo App ",
-                    "description": "Example connector",
-                    "isAccessible": 1,
-                    "isEnabled": 0,
-                }
-            },
         }
     ]
+    assert "branding" not in str(items)
+    assert "labels" not in str(items)
+    assert "internal.local" not in str(items)
+    assert "raw" not in str(items)
 
 
 def test_map_plugin_marketplaces_filters_plugin_metadata_and_keeps_sync_state() -> None:
@@ -135,7 +128,6 @@ def test_map_plugin_marketplaces_filters_plugin_metadata_and_keeps_sync_state() 
         "items": [
             {
                 "marketplace_name": "curated",
-                "marketplace_path": "/workspace/plugins/marketplace.json",
                 "interface": {"category": "utility"},
                 "plugins": [
                     {
@@ -144,16 +136,16 @@ def test_map_plugin_marketplaces_filters_plugin_metadata_and_keeps_sync_state() 
                         "enabled": True,
                         "interface": {"displayName": "Sample"},
                         "mention_path": "plugin://sample@curated",
-                        "codex": {"raw": list(raw_marketplace["plugins"])[0]},
                     }
                 ],
-                "codex": {"raw": raw_marketplace},
             }
         ],
         "featured_plugin_ids": ["sample@curated"],
         "marketplace_load_errors": [{"path": "bad.json"}],
         "remote_sync_error": "network timeout",
     }
+    assert "/workspace" not in str(result)
+    assert "raw" not in str(result)
 
 
 def test_discovery_payload_mapping_rejects_invalid_top_level_shapes() -> None:
@@ -183,26 +175,15 @@ def test_map_plugin_detail_requires_core_fields_and_filters_collections() -> Non
     assert result == {
         "name": "sample",
         "marketplace_name": "curated",
-        "marketplace_path": "/workspace/plugins/marketplace.json",
         "mention_path": "plugin://sample@curated",
         "summary": ["First"],
         "skills": [{"name": "skill-1"}],
         "apps": [{"name": "app-1"}],
         "mcp_servers": ["server-1"],
         "interface": {"category": "utility"},
-        "codex": {
-            "raw": {
-                "name": " sample ",
-                "marketplaceName": " curated ",
-                "marketplacePath": " /workspace/plugins/marketplace.json ",
-                "summary": ["First", 1],
-                "skills": [{"name": "skill-1"}, "skip"],
-                "apps": [{"name": "app-1"}, "skip"],
-                "mcpServers": ["server-1", 2],
-                "interface": {"category": "utility"},
-            }
-        },
     }
+    assert "/workspace" not in str(result)
+    assert "raw" not in str(result)
 
     with pytest.raises(ValueError, match="plugin/read payload missing plugin.marketplaceName"):
         map_plugin_detail({"plugin": {"name": "sample", "marketplacePath": "/workspace/x"}})

@@ -73,7 +73,9 @@ async def test_discovery_extension_routes_read_only_methods(monkeypatch) -> None
         )
 
     assert skills_response.status_code == 200
-    assert skills_response.json()["result"]["items"][0]["skills"][0]["path"].endswith("SKILL.md")
+    assert "path" not in str(skills_response.json())
+    assert "/workspace" not in str(skills_response.json())
+    assert "raw" not in str(skills_response.json())
     assert dummy.last_skills_params == {
         "cwds": ["/workspace/project"],
         "force_reload": True,
@@ -97,6 +99,52 @@ async def test_discovery_extension_routes_read_only_methods(monkeypatch) -> None
         "marketplace_path": "/workspace/project/.codex/plugins/marketplace.json",
         "plugin_name": "sample",
     }
+
+
+@pytest.mark.asyncio
+async def test_discovery_responses_exclude_local_paths_and_raw_records(monkeypatch) -> None:
+    import codex_a2a.server.application as app_module
+
+    dummy = DummyCodexClient(
+        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+    )
+    monkeypatch.setattr(app_module, "CodexClient", lambda _settings, **kwargs: dummy)
+    app = app_module.create_app(
+        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+    )
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        headers = {"Authorization": "Bearer t-1"}
+        responses = []
+        for method, request_id, params in (
+            ("codex.discovery.skills.list", 401, {}),
+            ("codex.discovery.apps.list", 402, {}),
+            ("codex.discovery.plugins.list", 403, {}),
+            (
+                "codex.discovery.plugins.read",
+                404,
+                {
+                    "marketplace_path": "/workspace/project/.codex/plugins/marketplace.json",
+                    "plugin_name": "sample",
+                },
+            ),
+        ):
+            response = await client.post(
+                EXTENSION_JSONRPC_PATH,
+                headers=headers,
+                json={"jsonrpc": "2.0", "id": request_id, "method": method, "params": params},
+            )
+            assert response.status_code == 200
+            responses.append(response.json())
+
+    for payload in responses:
+        serialized = str(payload)
+        assert '"path"' not in serialized
+        assert "/workspace" not in serialized
+        assert "SKILL.md" not in serialized
+        assert "marketplace.json" not in serialized
+        assert '"raw"' not in serialized
 
 
 @pytest.mark.asyncio
