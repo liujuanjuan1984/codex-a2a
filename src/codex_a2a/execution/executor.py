@@ -44,6 +44,7 @@ from codex_a2a.input_mapping import (
     map_a2a_message_parts_to_normalized_items,
     summarize_normalized_items,
 )
+from codex_a2a.redact import redact_absolute_paths
 from codex_a2a.upstream.client import CodexClient
 
 from .output_mapping import extract_token_usage, merge_token_usage
@@ -483,7 +484,7 @@ class CodexAgentExecutor(AgentExecutor):
             }
         except Exception as exc:
             logger.exception("A2A tool call failed")
-            return {"call_id": call_id, "tool": tool_name, "error": str(exc)}
+            return {"call_id": call_id, "tool": tool_name, "error": redact_absolute_paths(str(exc))}
 
     @staticmethod
     def _build_tool_followup_prompt(tool_results: list[dict[str, Any]]) -> str:
@@ -610,6 +611,7 @@ class CodexAgentExecutor(AgentExecutor):
         *,
         streaming_request: bool,
     ) -> None:
+        message = redact_absolute_paths(message)
         error_message = Message(
             message_id=str(uuid.uuid4()),
             role=Role.ROLE_AGENT,

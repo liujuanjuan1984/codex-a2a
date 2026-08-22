@@ -25,6 +25,7 @@ from codex_a2a.contracts.runtime_output import (
 )
 from codex_a2a.execution.output_mapping import enqueue_artifact_update
 from codex_a2a.execution.stream_state import BlockType
+from codex_a2a.redact import redact_absolute_paths
 from codex_a2a.upstream.request_mapping import format_exec_result_text
 
 logger = logging.getLogger(__name__)
@@ -263,7 +264,7 @@ class CodexExecRuntime:
                         message=self._build_status_message(
                             task_id=handle.task_id,
                             context_id=handle.context_id,
-                            text=f"Interactive exec failed: {exc}",
+                            text=(f"Interactive exec failed: {redact_absolute_paths(str(exc))}"),
                             message_id=f"{handle.task_id}:status:failed",
                         ),
                     ),
@@ -271,7 +272,7 @@ class CodexExecRuntime:
                         process_id=handle.process_id,
                         command_text=handle.command_text,
                         phase="failed",
-                        error=str(exc),
+                        error=redact_absolute_paths(str(exc)),
                     ),
                 )
             )

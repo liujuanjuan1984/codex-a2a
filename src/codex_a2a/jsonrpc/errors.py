@@ -9,6 +9,7 @@ from a2a.utils.errors import A2AError
 from starlette.responses import Response
 
 from codex_a2a.jsonrpc.params_common import JsonRpcParamsValidationError
+from codex_a2a.redact import redact_absolute_paths, redact_paths_in_value
 
 if TYPE_CHECKING:
     from codex_a2a.jsonrpc.application import CodexSessionQueryJSONRPCApplication
@@ -70,10 +71,12 @@ def _to_upper_snake_case(name: str) -> str:
 
 def _stringify_metadata_value(value: Any) -> str:
     if isinstance(value, str):
-        return value
+        return redact_absolute_paths(value)
     if isinstance(value, bool | int | float):
         return str(value)
-    return json.dumps(value, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+    return redact_absolute_paths(
+        json.dumps(value, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+    )
 
 
 def _build_error_info_detail(
@@ -98,7 +101,7 @@ def _build_error_info_detail(
 def _build_context_detail(type_name: str, payload: Mapping[str, Any]) -> dict[str, Any]:
     return {
         "@type": f"type.googleapis.com/codex_a2a.{type_name}",
-        **dict(payload),
+        **{str(key): redact_paths_in_value(value) for key, value in payload.items()},
     }
 
 
@@ -129,9 +132,13 @@ def adapt_jsonrpc_error(error: JSONRPCError | A2AError) -> JSONRPCError | A2AErr
     if root_code in STANDARD_JSONRPC_ERROR_CODES:
         adapted_data = None
         if isinstance(root_data, Mapping):
-            adapted_data = {str(key): value for key, value in root_data.items() if key != "type"}
+            adapted_data = {
+                str(key): redact_paths_in_value(value)
+                for key, value in root_data.items()
+                if key != "type"
+            }
         elif root_data is not None:
-            adapted_data = root_data
+            adapted_data = redact_paths_in_value(root_data)
         return JSONRPCError(
             code=root_code,
             message=STANDARD_JSONRPC_ERROR_MESSAGES[root_code],
@@ -149,6 +156,7 @@ def adapt_jsonrpc_error(error: JSONRPCError | A2AError) -> JSONRPCError | A2AErr
     message = getattr(root_error, "message", None) or str(root_error)
     if message is None:
         message = STANDARD_JSONRPC_ERROR_MESSAGES.get(root_code or -32603, "Internal error")
+    message = redact_absolute_paths(message)
 
     if root_code is None:
         root_code = _SDK_ERROR_CODE_BY_TYPE.get(type(root_error).__name__, -32603)
@@ -177,7 +185,7 @@ def build_http_error_body(
     error_payload: dict[str, Any] = {
         "code": status_code,
         "status": status,
-        "message": message,
+        "message": redact_absolute_paths(message),
     }
     if details:
         error_payload["details"] = details

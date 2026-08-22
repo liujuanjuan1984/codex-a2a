@@ -5,7 +5,7 @@ from typing import Any
 
 from a2a.server.jsonrpc_models import InvalidParamsError, JSONRPCError
 from a2a.server.routes.jsonrpc_dispatcher import JsonRpcDispatcher
-from a2a.utils.errors import A2AError, ContentTypeNotSupportedError
+from a2a.utils.errors import A2AError, ContentTypeNotSupportedError, InternalError
 from fastapi.responses import JSONResponse
 from starlette.requests import Request
 from starlette.responses import Response
@@ -29,6 +29,7 @@ from codex_a2a.jsonrpc.session_query import handle_session_query_request
 from codex_a2a.jsonrpc.thread_lifecycle_control import handle_thread_lifecycle_control_request
 from codex_a2a.jsonrpc.turn_control import handle_turn_control_request
 from codex_a2a.protocol_versions import get_current_protocol_version
+from codex_a2a.redact import redact_absolute_paths
 from codex_a2a.server.runtime_limits import apply_stream_budget
 from codex_a2a.upstream.client import CodexClient
 
@@ -276,7 +277,7 @@ class CodexSessionQueryJSONRPCApplication(JsonRpcDispatcher):
         if isinstance(error, JSONRPCError | A2AError):
             adapted_error: Exception | JSONRPCError | A2AError = adapt_jsonrpc_error(error)
         else:
-            adapted_error = error
+            adapted_error = InternalError(message=redact_absolute_paths(str(error)))
         return super()._generate_error_response(
             request_id,
             adapted_error,
