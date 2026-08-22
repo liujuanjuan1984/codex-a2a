@@ -43,6 +43,29 @@ if [[ "${#release_assets[@]}" -eq 0 ]]; then
   exit 1
 fi
 
+checksum_manifest_name="SHA256SUMS"
+checksum_path="${dist_dir}/${checksum_manifest_name}"
+
+# Regenerate the checksum manifest for the current release assets so every
+# published artifact can be verified against the release (sha256sum -c).
+"${python_bin}" - "${checksum_path}" "${release_assets[@]}" <<'PY'
+from __future__ import annotations
+
+import hashlib
+import sys
+from pathlib import Path
+
+manifest_path = Path(sys.argv[1])
+assets = [Path(arg) for arg in sys.argv[2:]]
+lines = []
+for asset in sorted(assets, key=lambda item: item.name):
+    digest = hashlib.sha256(asset.read_bytes()).hexdigest()
+    lines.append(f"{digest}  {asset.name}")
+manifest_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+PY
+
+release_assets+=("${checksum_path}")
+
 retry() {
   local attempt=1
   local exit_code=0

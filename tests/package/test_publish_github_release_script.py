@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import stat
@@ -131,6 +132,7 @@ def test_publish_release_script_creates_missing_release_before_upload(tmp_path: 
     assert set(state["assets"]) == {
         "codex_a2a-0.5.1.tar.gz",
         "codex_a2a-0.5.1-py3-none-any.whl",
+        "SHA256SUMS",
     }
     log_lines = log_path.read_text(encoding="utf-8").splitlines()
     assert "release create v0.5.1 --generate-notes --verify-tag" in log_lines
@@ -138,6 +140,16 @@ def test_publish_release_script_creates_missing_release_before_upload(tmp_path: 
     assert (
         "release upload v0.5.1 " + str(dist_dir / "codex_a2a-0.5.1-py3-none-any.whl") in log_lines
     )
+    assert "release upload v0.5.1 " + str(dist_dir / "SHA256SUMS") in log_lines
+
+    manifest = (dist_dir / "SHA256SUMS").read_text(encoding="utf-8")
+    wheel = dist_dir / "codex_a2a-0.5.1-py3-none-any.whl"
+    sdist = dist_dir / "codex_a2a-0.5.1.tar.gz"
+    expected_lines = [
+        f"{hashlib.sha256(wheel.read_bytes()).hexdigest()}  {wheel.name}",
+        f"{hashlib.sha256(sdist.read_bytes()).hexdigest()}  {sdist.name}",
+    ]
+    assert manifest.splitlines() == expected_lines
 
 
 def test_publish_release_script_fails_when_asset_upload_keeps_failing(tmp_path: Path) -> None:
