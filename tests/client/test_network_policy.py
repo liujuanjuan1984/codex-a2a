@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import socket
 
 import pytest
@@ -7,18 +8,65 @@ import pytest
 from codex_a2a.client.network_policy import (
     A2ANetworkPolicyError,
     matches_allowed_host,
+    resolve_host_addresses,
     validate_agent_url,
 )
 
 
 def test_matches_allowed_host_exact_and_wildcard() -> None:
+    assert not matches_allowed_host("", ["peer.example.com"])
+    assert not matches_allowed_host(None, ["peer.example.com"])
+    assert matches_allowed_host("peer.example.com", ["", "peer.example.com"])
     assert matches_allowed_host("peer.example.com", ["peer.example.com"])
     assert matches_allowed_host("a.example.com", ["*.example.com"])
     assert matches_allowed_host("b.a.example.com", ["*.example.com"])
     assert not matches_allowed_host("example.com", ["*.example.com"])
     assert not matches_allowed_host("other.org", ["*.example.com"])
     assert not matches_allowed_host("evil-example.com", ["*.example.com"])
-    assert not matches_allowed_host("", ["peer.example.com"])
+
+
+@pytest.mark.asyncio
+async def test_resolve_host_addresses_resolves_localhost() -> None:
+    addresses = await resolve_host_addresses("localhost")
+
+    assert addresses
+    assert all(address for address in addresses)
+
+
+@pytest.mark.asyncio
+async def test_resolve_host_addresses_deduplicates(monkeypatch: pytest.MonkeyPatch) -> None:
+    loop = asyncio.get_running_loop()
+    infos = [
+        (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 0)),
+        (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 0)),
+        (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.35", 0)),
+    ]
+
+    async def fake_getaddrinfo(*args: object, **kwargs: object) -> list[tuple]:
+        del args, kwargs
+        return infos
+
+    monkeypatch.setattr(loop, "getaddrinfo", fake_getaddrinfo)
+
+    addresses = await resolve_host_addresses("peer.example.com")
+
+    assert addresses == ("93.184.216.34", "93.184.216.35")
+
+
+@pytest.mark.asyncio
+async def test_resolve_host_addresses_rejects_dns_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    loop = asyncio.get_running_loop()
+
+    async def fake_getaddrinfo(*args: object, **kwargs: object) -> list[tuple]:
+        del args, kwargs
+        raise socket.gaierror("no such host")
+
+    monkeypatch.setattr(loop, "getaddrinfo", fake_getaddrinfo)
+
+    with pytest.raises(A2ANetworkPolicyError, match="could not be resolved"):
+        await resolve_host_addresses("peer.example.com")
 
 
 def _patch_public_dns(monkeypatch: pytest.MonkeyPatch, *addresses: str) -> None:
@@ -42,6 +90,14 @@ async def test_validate_rejects_non_http_schemes(monkeypatch: pytest.MonkeyPatch
         await validate_agent_url("ftp://peer.example.com/")
     with pytest.raises(A2ANetworkPolicyError, match="scheme"):
         await validate_agent_url("peer.example.com/path")
+
+
+@pytest.mark.asyncio
+async def test_validate_rejects_empty_url() -> None:
+    with pytest.raises(A2ANetworkPolicyError, match="agent_url is required"):
+        await validate_agent_url("")
+    with pytest.raises(A2ANetworkPolicyError, match="agent_url is required"):
+        await validate_agent_url("   ")
 
 
 @pytest.mark.asyncio
@@ -134,4 +190,21 @@ async def test_validate_rejects_dns_failure(monkeypatch: pytest.MonkeyPatch) -> 
     )
 
     with pytest.raises(A2ANetworkPolicyError, match="could not be resolved"):
+        await validate_agent_url("https://peer.example.com/")
+
+
+@pytest.mark.asyncio
+async def test_validate_propagates_resolver_policy_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def fake_resolve(host: str) -> tuple[str, ...]:
+        del host
+        raise A2ANetworkPolicyError("resolver blocked")
+
+    monkeypatch.setattr(
+        "codex_a2a.client.network_policy.resolve_host_addresses",
+        fake_resolve,
+    )
+
+    with pytest.raises(A2ANetworkPolicyError, match="resolver blocked"):
         await validate_agent_url("https://peer.example.com/")
