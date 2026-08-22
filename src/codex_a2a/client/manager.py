@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 
 from codex_a2a.config import Settings
 from codex_a2a.contracts import extensions as extension_contracts
 
 from .client import A2AClient
 from .config import A2AClientConfig
+from .network_policy import validate_agent_url
 from .request_context import build_default_headers
+
+logger = logging.getLogger(__name__)
 
 
 class A2AClientManager:
@@ -30,6 +34,23 @@ class A2AClientManager:
         normalized = agent_url.rstrip("/")
         if not normalized:
             raise ValueError("agent_url is required")
+        policy = await validate_agent_url(
+            normalized,
+            allowed_hosts=self._settings.a2a_client_allowed_hosts,
+            allow_private_hosts=self._settings.a2a_client_allow_private_hosts,
+        )
+        default_headers: dict[str, str] = {}
+        if policy.credentials_allowed:
+            default_headers = build_default_headers(
+                self._settings.a2a_client_bearer_token,
+                self._settings.a2a_client_basic_auth,
+            )
+        elif self._settings.a2a_client_bearer_token or self._settings.a2a_client_basic_auth:
+            logger.warning(
+                "Outbound A2A credentials are configured but host=%s is not in "
+                "A2A_CLIENT_ALLOWED_HOSTS; credentials will not be sent",
+                policy.host,
+            )
         async with self._lock:
             client = self._clients.get(normalized)
             if client is not None:
@@ -40,10 +61,7 @@ class A2AClientManager:
                     request_timeout_seconds=self._settings.a2a_client_timeout_seconds,
                     card_fetch_timeout_seconds=self._settings.a2a_client_card_fetch_timeout_seconds,
                     use_client_preference=self._settings.a2a_client_use_client_preference,
-                    default_headers=build_default_headers(
-                        self._settings.a2a_client_bearer_token,
-                        self._settings.a2a_client_basic_auth,
-                    ),
+                    default_headers=default_headers,
                     supported_transports=list(self._settings.a2a_client_supported_transports),
                     accepted_output_modes=["text/plain"],
                     extensions=[
