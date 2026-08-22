@@ -24,6 +24,8 @@ def map_skill_scopes(raw_result: Any) -> list[dict[str, Any]]:
         cwd = scope_entry.get("cwd")
         skills = scope_entry.get("skills")
         errors = scope_entry.get("errors")
+        # cwd and skill.path stay validated for upstream conformance but are never
+        # exposed: local paths are intentionally excluded from discovery responses.
         if not isinstance(cwd, str) or not isinstance(skills, list) or not isinstance(errors, list):
             continue
         normalized_skills: list[dict[str, Any]] = []
@@ -87,6 +89,8 @@ def map_plugin_marketplaces(raw_result: Any) -> dict[str, Any]:
         marketplace_name = marketplace.get("name")
         marketplace_path = marketplace.get("path")
         plugins = marketplace.get("plugins")
+        # marketplace_path stays validated for upstream conformance but is never
+        # exposed: local paths are intentionally excluded from discovery responses.
         if not isinstance(marketplace_name, str) or not marketplace_name.strip():
             continue
         if not isinstance(marketplace_path, str) or not marketplace_path.strip():
