@@ -14,6 +14,7 @@ from a2a.utils.constants import TransportProtocol
 from codex_a2a.auth import has_configured_auth_scheme
 from codex_a2a.config import Settings
 from codex_a2a.contracts.extension_registry import build_agent_card_extensions_from_registry
+from codex_a2a.contracts.extensions import REST_API_PATH_PREFIX
 from codex_a2a.media_modes import (
     DEFAULT_INPUT_MEDIA_MODES,
     DEFAULT_OUTPUT_MEDIA_MODES,
@@ -387,7 +388,13 @@ def _build_agent_card(
 
     supported_interfaces = [
         AgentInterface(
-            url=public_url,
+            # The HTTP+JSON surface lives under /v1 (REST_API_PATH_PREFIX), so
+            # the advertised interface URL must carry that prefix: A2A clients
+            # resolve REST paths relative to the advertised URL (e.g. the
+            # official JS SDK appends `/message:send` to it). Advertising the
+            # bare base URL made conforming clients call the root path, which
+            # this server does not serve.
+            url=public_url + REST_API_PATH_PREFIX,
             protocol_binding=TransportProtocol.HTTP_JSON,
             protocol_version=settings.a2a_protocol_version,
         ),

@@ -125,11 +125,11 @@ def test_agent_card_declares_bearer_only_security() -> None:
     assert _security_requirements(card) == [{"schemes": {"bearerAuth": {}}}]
 
 
-def test_agent_card_supported_interfaces_share_same_public_url() -> None:
+def test_agent_card_http_json_interface_advertises_v1_prefix() -> None:
     card = build_agent_card(make_settings(a2a_bearer_token="test-token"))
 
     assert [interface.url for interface in card.supported_interfaces] == [
-        "http://127.0.0.1:8000",
+        "http://127.0.0.1:8000/v1",
         "http://127.0.0.1:8000",
     ]
 
