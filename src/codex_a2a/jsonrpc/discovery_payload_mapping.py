@@ -24,6 +24,8 @@ def map_skill_scopes(raw_result: Any) -> list[dict[str, Any]]:
         cwd = scope_entry.get("cwd")
         skills = scope_entry.get("skills")
         errors = scope_entry.get("errors")
+        # cwd and skill.path stay validated for upstream conformance but are never
+        # exposed: local paths are intentionally excluded from discovery responses.
         if not isinstance(cwd, str) or not isinstance(skills, list) or not isinstance(errors, list):
             continue
         normalized_skills: list[dict[str, Any]] = []
@@ -48,20 +50,16 @@ def map_skill_scopes(raw_result: Any) -> list[dict[str, Any]]:
             normalized_skills.append(
                 {
                     "name": name.strip(),
-                    "path": path.strip(),
                     "description": description.strip(),
                     "enabled": enabled,
                     "scope": scope.strip(),
                     "interface": _normalized_interface(skill.get("interface")),
-                    "codex": {"raw": skill},
                 }
             )
         items.append(
             {
-                "cwd": cwd.strip(),
                 "skills": normalized_skills,
                 "errors": [error for error in errors if isinstance(error, dict)],
-                "codex": {"raw": scope_entry},
             }
         )
     return items
@@ -91,6 +89,8 @@ def map_plugin_marketplaces(raw_result: Any) -> dict[str, Any]:
         marketplace_name = marketplace.get("name")
         marketplace_path = marketplace.get("path")
         plugins = marketplace.get("plugins")
+        # marketplace_path stays validated for upstream conformance but is never
+        # exposed: local paths are intentionally excluded from discovery responses.
         if not isinstance(marketplace_name, str) or not marketplace_name.strip():
             continue
         if not isinstance(marketplace_path, str) or not marketplace_path.strip():
@@ -111,16 +111,13 @@ def map_plugin_marketplaces(raw_result: Any) -> dict[str, Any]:
                     "enabled": plugin.get("enabled"),
                     "interface": _normalized_interface(plugin.get("interface")),
                     "mention_path": f"plugin://{name.strip()}@{marketplace_name.strip()}",
-                    "codex": {"raw": plugin},
                 }
             )
         items.append(
             {
                 "marketplace_name": marketplace_name.strip(),
-                "marketplace_path": marketplace_path.strip(),
                 "interface": _normalized_interface(marketplace.get("interface")),
                 "plugins": normalized_plugins,
-                "codex": {"raw": marketplace},
             }
         )
     return {
@@ -159,12 +156,10 @@ def map_plugin_detail(raw_result: Any) -> dict[str, Any]:
     return {
         "name": name.strip(),
         "marketplace_name": marketplace_name.strip(),
-        "marketplace_path": marketplace_path.strip(),
         "mention_path": f"plugin://{name.strip()}@{marketplace_name.strip()}",
         "summary": [value for value in plugin.get("summary", []) if isinstance(value, str)],
         "skills": [value for value in plugin.get("skills", []) if isinstance(value, dict)],
         "apps": [value for value in plugin.get("apps", []) if isinstance(value, dict)],
         "mcp_servers": [value for value in plugin.get("mcpServers", []) if isinstance(value, str)],
         "interface": _normalized_interface(plugin.get("interface")),
-        "codex": {"raw": plugin},
     }

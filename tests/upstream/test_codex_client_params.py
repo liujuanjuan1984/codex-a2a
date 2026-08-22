@@ -714,18 +714,6 @@ async def test_discovery_notifications_map_to_stream_events() -> None:
                         "is_enabled": True,
                         "install_url": "https://example.com/apps/demo-app",
                         "mention_path": "app://demo-app",
-                        "branding": None,
-                        "labels": None,
-                        "codex": {
-                            "raw": {
-                                "id": "demo-app",
-                                "name": "Demo App",
-                                "description": "Example connector",
-                                "installUrl": "https://example.com/apps/demo-app",
-                                "isAccessible": True,
-                                "isEnabled": True,
-                            }
-                        },
                     }
                 ]
             },

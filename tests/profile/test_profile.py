@@ -18,6 +18,7 @@ def test_runtime_profile_splits_stable_deployment_and_runtime_features() -> None
             codex_model_id="gemini-2.5-flash",
             codex_agent="code-reviewer",
             codex_variant="safe",
+            a2a_expose_workspace_root_in_card=True,
             a2a_execution_sandbox_mode="workspace-write",
             a2a_execution_sandbox_writable_roots=["/srv/workspaces/alpha", "/tmp/cache"],
             a2a_execution_network_access="restricted",
@@ -98,3 +99,15 @@ def test_runtime_profile_splits_stable_deployment_and_runtime_features() -> None
         "variant": "safe",
     }
     assert profile.summary_dict()["runtime_context"]["workspace_root"] == "/srv/workspaces/alpha"
+
+
+def test_profile_omits_workspace_root_from_runtime_context_by_default() -> None:
+    profile = build_runtime_profile(
+        make_settings(
+            a2a_bearer_token="test-token",
+            a2a_project="alpha",
+            codex_workspace_root="/srv/workspaces/alpha",
+        )
+    )
+
+    assert profile.runtime_context.as_dict() == {"project": "alpha"}

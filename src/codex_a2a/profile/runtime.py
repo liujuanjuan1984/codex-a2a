@@ -359,7 +359,11 @@ def build_runtime_profile(settings: Settings) -> RuntimeProfile:
         ),
         runtime_context=RuntimeContext(
             project=settings.a2a_project,
-            workspace_root=settings.codex_workspace_root,
+            workspace_root=(
+                settings.codex_workspace_root
+                if settings.a2a_expose_workspace_root_in_card
+                else None
+            ),
             provider_id=settings.codex_provider_id,
             model_id=settings.codex_model_id,
             agent=settings.codex_agent,

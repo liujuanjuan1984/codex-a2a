@@ -410,8 +410,9 @@ def build_compatibility_profile_params(
                 "than portable A2A baseline capabilities."
             ),
             (
-                "Use codex.discovery.* methods to discover stable skill.path and "
-                "mention.path identifiers before constructing rich input items."
+                "Use codex.discovery.* methods to discover stable mention_path identifiers "
+                "and normalized skill/app/plugin summaries before constructing rich input "
+                "items; local skill paths are intentionally not exposed by discovery."
             ),
             (
                 "Treat codex.threads.* as provider-private lifecycle management surfaces "
@@ -718,12 +719,10 @@ def build_discovery_extension_params(
         "stable_item_fields": {
             "skill": [
                 "name",
-                "path",
                 "description",
                 "enabled",
                 "scope",
                 "interface",
-                "codex.raw",
             ],
             "app": [
                 "id",
@@ -733,14 +732,11 @@ def build_discovery_extension_params(
                 "is_enabled",
                 "install_url",
                 "mention_path",
-                "codex.raw",
             ],
             "plugin_marketplace": [
                 "marketplace_name",
-                "marketplace_path",
                 "interface",
                 "plugins",
-                "codex.raw",
             ],
             "plugin_summary": [
                 "name",
@@ -748,18 +744,15 @@ def build_discovery_extension_params(
                 "enabled",
                 "mention_path",
                 "interface",
-                "codex.raw",
             ],
             "plugin_detail": [
                 "name",
                 "marketplace_name",
-                "marketplace_path",
                 "mention_path",
                 "summary",
                 "skills",
                 "apps",
                 "mcp_servers",
-                "codex.raw",
             ],
         },
         "notification_bridge": {
@@ -788,14 +781,17 @@ def build_discovery_extension_params(
             },
         },
         "consumer_guidance": [
-            "Use codex.discovery.skills.list to obtain stable skill.path values.",
+            (
+                "Use codex.discovery.skills.list to obtain stable skill name/scope values; "
+                "local skill paths are intentionally not exposed."
+            ),
             (
                 "Use codex.discovery.apps.list or codex.discovery.plugins.list to obtain "
                 "stable mention_path values."
             ),
             (
-                "Prefer stable normalized fields for portability; inspect codex.raw only for "
-                "provider-specific details not covered by the declared contract."
+                "Discovery responses are whitelisted summaries; raw upstream records and "
+                "local paths are intentionally excluded."
             ),
         ],
         "errors": {

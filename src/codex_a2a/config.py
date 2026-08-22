@@ -330,6 +330,10 @@ class Settings(BaseSettings):
     a2a_enable_turn_control: bool = Field(default=True, alias="A2A_ENABLE_TURN_CONTROL")
     a2a_enable_review_control: bool = Field(default=False, alias="A2A_ENABLE_REVIEW_CONTROL")
     a2a_enable_exec_control: bool = Field(default=False, alias="A2A_ENABLE_EXEC_CONTROL")
+    a2a_expose_workspace_root_in_card: bool = Field(
+        default=False,
+        alias="A2A_EXPOSE_WORKSPACE_ROOT_IN_CARD",
+    )
     a2a_log_level: str = Field(default="WARNING", alias="A2A_LOG_LEVEL")
     a2a_log_payloads: bool = Field(default=False, alias="A2A_LOG_PAYLOADS")
     a2a_log_body_limit: int = Field(default=0, alias="A2A_LOG_BODY_LIMIT")

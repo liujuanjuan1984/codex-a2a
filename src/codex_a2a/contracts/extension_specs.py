@@ -247,12 +247,12 @@ DISCOVERY_METHOD_CONTRACTS: dict[str, DiscoveryMethodContract] = {
         notification_response_status=204,
         notes=(
             (
-                "Each item represents one cwd scope and includes normalized skill entries "
-                "with stable fields plus codex.raw passthrough payloads."
+                "Each item represents one scope and includes normalized skill entries; "
+                "responses never include local paths or raw upstream records."
             ),
             (
-                "Use item.skills[].path directly when constructing rich-input skill items "
-                "for core A2A Part(data) payloads."
+                "Use stable skill name/scope fields when constructing rich-input skill items; "
+                "local skill paths are intentionally not exposed."
             ),
         ),
     ),
@@ -285,7 +285,7 @@ DISCOVERY_METHOD_CONTRACTS: dict[str, DiscoveryMethodContract] = {
         notes=(
             (
                 "plugin/list remains upstream experimental; this contract exposes a stable "
-                "minimum subset plus codex.raw passthrough payloads."
+                "minimum subset; local paths and raw upstream records are excluded."
             ),
             (
                 "Use plugin summaries' mention_path directly when constructing rich-input "
@@ -301,7 +301,7 @@ DISCOVERY_METHOD_CONTRACTS: dict[str, DiscoveryMethodContract] = {
         notes=(
             (
                 "plugin/read remains upstream experimental; this contract exposes a stable "
-                "minimum subset plus codex.raw passthrough payloads."
+                "minimum subset; local paths and raw upstream records are excluded."
             ),
         ),
     ),
