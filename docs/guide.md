@@ -189,6 +189,8 @@ Use the grouped sections below as the deployment-first reading order:
 - `A2A_HOST`: bind host, default `127.0.0.1`
 - `A2A_PORT`: bind port, default `8000`
 - `A2A_PUBLIC_URL`: externally reachable A2A URL prefix, default `http://127.0.0.1:8000`
+- `A2A_ALLOWED_ORIGINS`: comma-separated extra browser-origin allowlist for inbound requests. Requests carrying an `Origin` header must match the origin of `A2A_PUBLIC_URL` or an entry here; mismatches are rejected with `403` (CSRF guard). Requests without an `Origin` header (CLI/SDK clients) are unaffected.
+- `A2A_ALLOWED_HOSTS`: comma-separated `Host` header allowlist (exact names or `*.example.com` wildcards). When configured, every inbound request must present a matching `Host` header. Binding to a non-loopback address without this allowlist logs a startup warning (DNS rebinding risk).
 - `A2A_DATABASE_URL`: SQLAlchemy async database URL. Defaults to SQLite under `${CODEX_WORKSPACE_ROOT}/.codex-a2a/codex-a2a.db`.
 - `A2A_DATABASE_URL` also owns the adapter-managed runtime-state schema lifecycle. On startup, `codex-a2a` auto-creates the runtime-state tables, records a schema version for the `runtime_state` scope, and applies in-place migrations for those tables only.
 - The adapter-managed runtime-state schema is limited to `a2a_session_bindings`, `a2a_session_owners`, `a2a_pending_session_claims`, `a2a_pending_interrupt_requests`, and `a2a_schema_version`. It does not own the A2A SDK task-store tables or any upstream Codex/provider-local state.
@@ -211,6 +213,17 @@ Deployment requirements:
 - run `codex-a2a` as a dedicated user and keep the database directory outside world-readable workspace trees;
 - do not place the SQLite file on network-mounted or sync-managed directories;
 - when migrating an existing database, fix ownership and mode before startup: `chown <service-user> <db>` and `chmod 600 <db>`, and ensure the parent directory is not group/world accessible.
+
+### Inbound Origin and Host Boundary
+
+Browsers store and automatically attach Basic credentials, and they send an `Origin` header with every request. Without an origin boundary, a malicious web page could cross-site trigger `SendMessage`, `CancelTask`, or task subscription against a Basic-protected service. The service therefore enforces:
+
+- every request carrying an `Origin` header must match the origin of `A2A_PUBLIC_URL` (scheme, host, and non-default port) or an entry in `A2A_ALLOWED_ORIGINS`; mismatches return `403` before authentication. `Origin: null` (sandboxed iframes) is rejected unless explicitly allowlisted;
+- requests without an `Origin` header — normal CLI/SDK peers — are not subject to origin checks;
+- when `A2A_ALLOWED_HOSTS` is configured, every request must present a matching `Host` header (exact names, optional `host:port`, or `*.example.com` wildcards); mismatches return `403`. This also blocks DNS rebinding, where an attacker-controlled hostname resolves to the service address and the browser sends that hostname as `Host`;
+- binding to a non-loopback address (`0.0.0.0`, `::`, or a LAN/interface address) without `A2A_ALLOWED_HOSTS` logs a startup warning: the service is then exposed to DNS rebinding and should only run behind a trusted network boundary or a reverse proxy that validates `Host`.
+
+For browser-based clients, prefer the same origin as `A2A_PUBLIC_URL`, or explicitly allow the dashboard origin via `A2A_ALLOWED_ORIGINS` and treat `A2A_ALLOWED_HOSTS` as part of the deployment contract. Basic authentication should not be relied on as the sole browser-facing boundary: combine it with the origin/host checks above, short-lived credentials, and TLS at the public URL.
 
 - `A2A_LOG_LEVEL`: `DEBUG/INFO/WARNING/ERROR`, default `WARNING`
 - `A2A_LOG_PAYLOADS`: log A2A/Codex payload bodies, default `false`
@@ -308,6 +321,8 @@ These variables are forwarded to the local `codex app-server` subprocess.
 | `A2A_HOST` | Bind host |
 | `A2A_PORT` | Bind port |
 | `A2A_PUBLIC_URL` | Public URL prefix |
+| `A2A_ALLOWED_ORIGINS` | Inbound browser-origin allowlist (CSRF guard) |
+| `A2A_ALLOWED_HOSTS` | Inbound Host allowlist (DNS rebinding guard) |
 | `A2A_DATABASE_URL` | Persistence DB URL |
 | `A2A_LOG_LEVEL` | Log level |
 | `A2A_LOG_PAYLOADS` | Log bodies |

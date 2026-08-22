@@ -5,7 +5,7 @@ import json
 import logging
 import time
 from typing import Any, cast
-from urllib.parse import unquote
+from urllib.parse import unquote, urlsplit
 
 from a2a.server.context import ServerCallContext
 from a2a.server.jsonrpc_models import JSONRPCError
@@ -23,6 +23,7 @@ from codex_a2a.auth import (
     authenticate_static_credential,
     build_static_auth_credentials,
 )
+from codex_a2a.client.network_policy import matches_allowed_host
 from codex_a2a.config import Settings
 from codex_a2a.contracts import extensions as extension_contracts
 from codex_a2a.jsonrpc.errors import (
@@ -154,6 +155,64 @@ def _merge_vary(*values: str) -> str:
             seen.add(key)
             ordered.append(normalized)
     return ", ".join(ordered)
+
+
+def _origin_of_url(value: str) -> str | None:
+    """Return the normalized ``scheme://host[:port]`` origin of a URL."""
+
+    parsed = urlsplit((value or "").strip())
+    scheme = (parsed.scheme or "").lower()
+    hostname = parsed.hostname
+    if scheme not in {"http", "https"} or not hostname:
+        return None
+    try:
+        port = parsed.port
+    except ValueError:
+        return None
+    hostname = hostname.lower()
+    if port is None or (scheme == "http" and port == 80) or (scheme == "https" and port == 443):
+        return f"{scheme}://{hostname}"
+    return f"{scheme}://{hostname}:{port}"
+
+
+def _normalized_origins(values: list[str] | tuple[str, ...] | None) -> set[str]:
+    normalized: set[str] = set()
+    for raw in values or ():
+        value = (raw or "").strip().lower().rstrip("/")
+        if value:
+            normalized.add(value)
+    return normalized
+
+
+_LOOPBACK_BIND_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
+
+
+def _is_loopback_bind(host: str) -> bool:
+    normalized = (host or "").strip().lower()
+    if normalized in _LOOPBACK_BIND_HOSTS:
+        return True
+    return normalized.startswith("127.")
+
+
+def _hostname_from_host_header(host: str) -> str:
+    try:
+        parsed = urlsplit(f"//{host.strip()}")
+    except ValueError:
+        return ""
+    return (parsed.hostname or "").lower()
+
+
+def _boundary_rejection_response(message: str) -> JSONResponse:
+    return JSONResponse(
+        {
+            "error": {
+                "code": 403,
+                "status": "FORBIDDEN",
+                "message": message,
+            }
+        },
+        status_code=403,
+    )
 
 
 class PathScopedGZipMiddleware:
@@ -678,6 +737,84 @@ def _install_bearer_auth_middleware(
         return await call_next(request)
 
 
+def _install_http_boundary_middleware(app: FastAPI, *, settings: Settings) -> None:
+    """Enforce the inbound Origin/Host boundary (CSRF and DNS rebinding guard).
+
+    Browsers attach stored Basic credentials to every request and send an
+    ``Origin`` header, so a cross-origin page could otherwise trigger task
+    submission, cancellation, or subscription. Requests carrying an ``Origin``
+    header must match the origin derived from ``A2A_PUBLIC_URL`` or an entry in
+    ``A2A_ALLOWED_ORIGINS``; requests without an ``Origin`` header (CLI/SDK
+    clients) are unaffected.
+
+    When ``A2A_ALLOWED_HOSTS`` is configured, the ``Host`` header is validated
+    for every request (exact names or ``*.example.com`` wildcards). Binding to
+    a non-loopback address without a host allowlist logs a startup warning
+    because the service is then exposed to DNS rebinding.
+    """
+
+    allowed_origins = _normalized_origins(settings.a2a_allowed_origins)
+    for entry in allowed_origins:
+        canonical_entry = _origin_of_url(entry)
+        if canonical_entry is not None and canonical_entry != entry:
+            logger.warning(
+                "A2A_ALLOWED_ORIGINS entry %r is not a normalized origin "
+                "(scheme://host[:port]); only %r will match requests",
+                entry,
+                canonical_entry,
+            )
+    public_origin = _origin_of_url(settings.a2a_public_url)
+    if public_origin is not None:
+        allowed_origins.add(public_origin)
+    else:
+        logger.warning(
+            "A2A_PUBLIC_URL=%r is not a valid http(s) URL; requests carrying an "
+            "Origin header will be rejected unless A2A_ALLOWED_ORIGINS matches",
+            settings.a2a_public_url,
+        )
+    allowed_hosts = tuple(settings.a2a_allowed_hosts or ())
+    allowed_host_headers = {entry.strip().lower() for entry in allowed_hosts if entry.strip()}
+    enforce_host = bool(allowed_hosts)
+    if not enforce_host and not _is_loopback_bind(settings.a2a_host):
+        logger.warning(
+            "A2A server is bound to non-loopback host=%s without A2A_ALLOWED_HOSTS; "
+            "set a Host allowlist to defend against DNS rebinding",
+            settings.a2a_host,
+        )
+    if enforce_host and public_origin is not None:
+        public_host = public_origin.split("://", 1)[1]
+        if public_host.lower() not in allowed_host_headers and not matches_allowed_host(
+            _hostname_from_host_header(public_host),
+            allowed_hosts,
+        ):
+            logger.warning(
+                "A2A_PUBLIC_URL host %r is not covered by A2A_ALLOWED_HOSTS; "
+                "requests matching the public origin may be rejected on Host",
+                public_host,
+            )
+
+    @app.middleware("http")
+    async def enforce_http_boundary(request: Request, call_next):
+        origin = request.headers.get("origin")
+        if origin is not None:
+            normalized_origin = origin.strip().lower().rstrip("/")
+            if normalized_origin not in allowed_origins:
+                canonical_origin = _origin_of_url(origin)
+                if canonical_origin is None or canonical_origin not in allowed_origins:
+                    return _boundary_rejection_response("Cross-origin request rejected")
+
+        if enforce_host:
+            host = request.headers.get("host")
+            hostname = _hostname_from_host_header(host or "")
+            host_header_allowed = (host or "").strip().lower() in allowed_host_headers
+            if not hostname or not (
+                host_header_allowed or matches_allowed_host(hostname, allowed_hosts)
+            ):
+                return _boundary_rejection_response("Host not allowed")
+
+        return await call_next(request)
+
+
 def _install_correlation_id_middleware(app: FastAPI) -> None:
     @app.middleware("http")
     async def correlation_id_middleware(request: Request, call_next):
@@ -741,4 +878,5 @@ def install_http_middlewares(
         configured_credentials=configured_credentials,
         advertised_schemes=advertised_schemes,
     )
+    _install_http_boundary_middleware(app, settings=settings)
     _install_correlation_id_middleware(app)
