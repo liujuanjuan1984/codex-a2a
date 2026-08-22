@@ -217,6 +217,18 @@ These settings affect peer calls made through `codex-a2a call` or the embedded `
 - `A2A_CLIENT_SUPPORTED_TRANSPORTS`: comma-separated outbound transport preference list, default `JSONRPC,HTTP+JSON`
 - `A2A_CLIENT_BEARER_TOKEN`: optional bearer token for the target peer service
 - `A2A_CLIENT_BASIC_AUTH`: optional Basic auth credential for the target peer service when bearer auth is not configured
+- `A2A_CLIENT_ALLOWED_HOSTS`: comma-separated allowlist of outbound target hosts for `a2a_call(...)` (exact names or `*.example.com` wildcards). When configured, outbound calls are restricted to matching hosts, and outbound credentials (`A2A_CLIENT_BEARER_TOKEN` / `A2A_CLIENT_BASIC_AUTH`) are only sent to allowlisted hosts.
+- `A2A_CLIENT_ALLOW_PRIVATE_HOSTS`: default `false`. When `false`, outbound `a2a_call(...)` targets that resolve to private, loopback, link-local, reserved, or multicast addresses are rejected (SSRF / DNS-rebinding guard). Set to `true` only when the deployment intentionally targets A2A peers on the local network.
+
+### Outbound Network Policy
+
+The embedded `a2a_call(...)` tool lets the upstream model choose the target URL, so the adapter applies a fail-closed network policy before opening any connection:
+
+- only `http`/`https` schemes are accepted, and URLs carrying userinfo credentials are rejected;
+- when `A2A_CLIENT_ALLOWED_HOSTS` is set, the target host must match the allowlist (exact or `*.example.com` wildcard);
+- unless `A2A_CLIENT_ALLOW_PRIVATE_HOSTS=true`, the resolved addresses must be public; private/loopback/link-local/reserved addresses are rejected even when the hostname matches the allowlist (DNS rebinding defense);
+- outbound credentials are only attached to allowlisted hosts. If credentials are configured without an allowlist, they are never sent and a warning is logged;
+- the `codex-a2a call` CLI remains a manual operator action and is not subject to the allowlist, but still rejects non-http(s) schemes through the shared client URL handling.
 
 ### Upstream Codex Configuration
 
@@ -302,6 +314,8 @@ These variables are forwarded to the local `codex app-server` subprocess.
 | `A2A_CLIENT_CARD_FETCH_TIMEOUT_SECONDS` | Card fetch timeout |
 | `A2A_CLIENT_USE_CLIENT_PREFERENCE` | Transport preference |
 | `A2A_CLIENT_SUPPORTED_TRANSPORTS` | Supported transports |
+| `A2A_CLIENT_ALLOWED_HOSTS` | Outbound host allowlist (SSRF / credential binding) |
+| `A2A_CLIENT_ALLOW_PRIVATE_HOSTS` | Allow private/loopback outbound targets |
 | `A2A_INTERRUPT_REQUEST_TTL_SECONDS` | Interrupt TTL |
 | `A2A_EXECUTION_SANDBOX_MODE` | Discovery sandbox mode |
 | `A2A_EXECUTION_SANDBOX_FILESYSTEM_SCOPE` | Discovery FS scope |

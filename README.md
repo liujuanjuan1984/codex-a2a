@@ -117,7 +117,7 @@ Authenticated extended card:
 - JSON-RPC: `agent/getAuthenticatedExtendedCard`
 - HTTP: `GET /extendedAgentCard`
 
-Outbound peer auth is configured with `A2A_CLIENT_BEARER_TOKEN` or `A2A_CLIENT_BASIC_AUTH`; see the Usage Guide for the complete client-side matrix.
+Outbound peer auth is configured with `A2A_CLIENT_BEARER_TOKEN` or `A2A_CLIENT_BASIC_AUTH`; credentials are only sent to hosts listed in `A2A_CLIENT_ALLOWED_HOSTS`. The embedded `a2a_call(...)` tool also rejects private/loopback targets unless `A2A_CLIENT_ALLOW_PRIVATE_HOSTS=true`; see the Usage Guide for the complete client-side matrix.
 
 ## When To Use It
 

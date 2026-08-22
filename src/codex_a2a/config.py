@@ -386,6 +386,14 @@ class Settings(BaseSettings):
         default_factory=lambda: ["JSONRPC", "HTTP+JSON"],
         alias="A2A_CLIENT_SUPPORTED_TRANSPORTS",
     )
+    a2a_client_allowed_hosts: Annotated[list[str], NoDecode] = Field(
+        default_factory=list,
+        alias="A2A_CLIENT_ALLOWED_HOSTS",
+    )
+    a2a_client_allow_private_hosts: bool = Field(
+        default=False,
+        alias="A2A_CLIENT_ALLOW_PRIVATE_HOSTS",
+    )
     a2a_interrupt_request_ttl_seconds: int = Field(
         default=3600,
         alias="A2A_INTERRUPT_REQUEST_TTL_SECONDS",
@@ -459,6 +467,7 @@ class Settings(BaseSettings):
         "codex_sandbox_workspace_write_writable_roots",
         "a2a_execution_sandbox_writable_roots",
         "a2a_execution_network_allowed_domains",
+        "a2a_client_allowed_hosts",
         mode="before",
     )
     @classmethod
