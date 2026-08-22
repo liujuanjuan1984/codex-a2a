@@ -11,6 +11,8 @@ INTERRUPT_RESOLVED_TOTAL = "interrupt_resolved_total"
 A2A_REQUEST_BODY_REJECTED_TOTAL = "a2a_request_body_rejected_total"
 A2A_OPERATION_REJECTED_TOTAL = "a2a_operation_rejected_total"
 A2A_OPERATION_ACTIVE = "a2a_operation_active"
+A2A_RATE_LIMIT_REJECTED_TOTAL = "a2a_rate_limit_rejected_total"
+A2A_STREAM_BUDGET_REJECTED_TOTAL = "a2a_stream_budget_rejected_total"
 
 _COUNTER_NAMES = (
     A2A_STREAM_REQUESTS_TOTAL,
@@ -20,6 +22,8 @@ _COUNTER_NAMES = (
     INTERRUPT_RESOLVED_TOTAL,
     A2A_REQUEST_BODY_REJECTED_TOTAL,
     A2A_OPERATION_REJECTED_TOTAL,
+    A2A_RATE_LIMIT_REJECTED_TOTAL,
+    A2A_STREAM_BUDGET_REJECTED_TOTAL,
 )
 _GAUGE_NAMES = (A2A_STREAM_ACTIVE, A2A_OPERATION_ACTIVE)
 _METRIC_HELP = {
@@ -32,6 +36,8 @@ _METRIC_HELP = {
     A2A_REQUEST_BODY_REJECTED_TOTAL: "Total requests rejected by the body size limit.",
     A2A_OPERATION_REJECTED_TOTAL: "Total requests rejected by operation capacity.",
     A2A_OPERATION_ACTIVE: "Current operations admitted by the capacity limit.",
+    A2A_RATE_LIMIT_REJECTED_TOTAL: "Total requests rejected by the sliding-window rate limit.",
+    A2A_STREAM_BUDGET_REJECTED_TOTAL: "Total streaming responses rejected by output budgets.",
 }
 
 

@@ -6,10 +6,15 @@ from typing import Any
 
 import uvicorn
 from a2a.server.routes.agent_card_routes import create_agent_card_routes
+from a2a.server.routes.rest_dispatcher import RestDispatcher
 from a2a.server.routes.rest_routes import create_rest_routes
+from a2a.types import SubscribeToTaskRequest, a2a_pb2
+from a2a.utils import proto_utils
 from fastapi import FastAPI
-from starlette.responses import JSONResponse, PlainTextResponse
-from starlette.routing import BaseRoute, Mount
+from google.protobuf.json_format import MessageToDict, Parse  # type: ignore[import-untyped]
+from starlette.requests import Request
+from starlette.responses import JSONResponse, PlainTextResponse, Response
+from starlette.routing import BaseRoute, Mount, Route
 
 from codex_a2a.client.manager import A2AClientManager
 from codex_a2a.config import Settings
@@ -23,6 +28,7 @@ from codex_a2a.jsonrpc.application import (
     CodexSessionQueryJSONRPCApplication,
     create_extension_jsonrpc_routes,
 )
+from codex_a2a.jsonrpc.errors import build_http_error_body
 from codex_a2a.jsonrpc.hooks import SessionGuardHooks
 from codex_a2a.logging_context import install_log_record_factory
 from codex_a2a.metrics import get_metrics_registry
@@ -40,6 +46,8 @@ from codex_a2a.server.runtime_limits import (
     OperationCapacity,
     OperationCapacityMiddleware,
     RequestBodyLimitMiddleware,
+    StreamBudgetExceeded,
+    apply_stream_budget,
 )
 from codex_a2a.server.runtime_state import build_runtime_state_runtime
 from codex_a2a.server.task_store import build_task_store_runtime, describe_persistence_backend
@@ -58,13 +66,142 @@ def _is_sdk_tenant_mount(route: BaseRoute) -> bool:
     return isinstance(route, Mount) and route.path == "/{tenant}"
 
 
-def _create_single_tenant_rest_routes(**kwargs: Any) -> list[BaseRoute]:
+_STREAMING_REST_PATHS = frozenset({"/message:stream", "/tasks/{id}:subscribe"})
+_STREAM_BUDGET_REJECT_REASON = "STREAM_BUDGET_EXCEEDED"
+
+
+class BudgetedRestDispatcher(RestDispatcher):
+    """REST dispatcher that applies streaming output budgets to SSE streams."""
+
+    def __init__(
+        self,
+        request_handler: Any,
+        context_builder: Any,
+        *,
+        stream_budget_max_bytes: int,
+        stream_budget_max_duration_seconds: float,
+        stream_budget_idle_timeout_seconds: float,
+    ) -> None:
+        super().__init__(
+            request_handler=request_handler,
+            context_builder=context_builder,
+        )
+        self._stream_budget_max_bytes = stream_budget_max_bytes
+        self._stream_budget_max_duration_seconds = stream_budget_max_duration_seconds
+        self._stream_budget_idle_timeout_seconds = stream_budget_idle_timeout_seconds
+
+    async def _handle_streaming(
+        self,
+        request: Request,
+        handler_func: Any,
+    ) -> Any:
+        async def budgeted_handler(context: Any) -> Any:
+            async for item in apply_stream_budget(
+                aiter(handler_func(context)),
+                max_bytes=self._stream_budget_max_bytes,
+                max_duration_seconds=self._stream_budget_max_duration_seconds,
+                idle_timeout_seconds=self._stream_budget_idle_timeout_seconds,
+            ):
+                yield item
+
+        return await super()._handle_streaming(request, budgeted_handler)
+
+
+def _stream_budget_error_response(error: StreamBudgetExceeded) -> JSONResponse:
+    return JSONResponse(
+        build_http_error_body(
+            status_code=429,
+            status="RESOURCE_EXHAUSTED",
+            message=str(error),
+            reason=_STREAM_BUDGET_REJECT_REASON,
+        ),
+        status_code=429,
+    )
+
+
+def _create_single_tenant_rest_routes(
+    *,
+    request_handler: Any,
+    context_builder: Any = None,
+    path_prefix: str = "",
+    enable_v0_3_compat: bool = False,
+    stream_budget_max_bytes: int = 0,
+    stream_budget_max_duration_seconds: float = 0.0,
+    stream_budget_idle_timeout_seconds: float = 0.0,
+) -> list[BaseRoute]:
     # The SDK exposes a tenant-prefixed REST alias by default. This service's
     # supported HTTP+JSON contract is the spec-rooted single-tenant surface
     # (A2A 1.0 resolves REST paths from the advertised interface URL, with no
     # version prefix in the URL), so the application assembly narrows the route
-    # set explicitly.
-    return [route for route in create_rest_routes(**kwargs) if not _is_sdk_tenant_mount(route)]
+    # set explicitly and replaces the streaming routes with budgeted ones.
+    sdk_routes = create_rest_routes(
+        request_handler=request_handler,
+        context_builder=context_builder,
+        enable_v0_3_compat=enable_v0_3_compat,
+        path_prefix=path_prefix,
+    )
+    base_routes = [route for route in sdk_routes if not _is_sdk_tenant_mount(route)]
+
+    dispatcher = BudgetedRestDispatcher(
+        request_handler=request_handler,
+        context_builder=context_builder,
+        stream_budget_max_bytes=stream_budget_max_bytes,
+        stream_budget_max_duration_seconds=stream_budget_max_duration_seconds,
+        stream_budget_idle_timeout_seconds=stream_budget_idle_timeout_seconds,
+    )
+
+    async def _handle_streaming_route(request: Request, handler_func: Any) -> Response:
+        try:
+            return await dispatcher._handle_streaming(request, handler_func)
+        except StreamBudgetExceeded as error:
+            return _stream_budget_error_response(error)
+
+    async def message_stream_route(request: Request) -> Response:
+        async def _handler(context: Any) -> Any:
+            body = await request.body()
+            params = a2a_pb2.SendMessageRequest()
+            Parse(body, params)
+            async for event in request_handler.on_message_send_stream(params, context):
+                yield MessageToDict(proto_utils.to_stream_response(event))
+
+        return await _handle_streaming_route(request, _handler)
+
+    async def subscribe_route(request: Request) -> Response:
+        task_id = request.path_params["id"]
+
+        async def _handler(context: Any) -> Any:
+            async for event in request_handler.on_subscribe_to_task(
+                SubscribeToTaskRequest(id=task_id),
+                context,
+            ):
+                yield MessageToDict(proto_utils.to_stream_response(event))
+
+        return await _handle_streaming_route(request, _handler)
+
+    prefixed_streaming_paths = {f"{path_prefix}{path}" for path in _STREAMING_REST_PATHS}
+    retained = [
+        route
+        for route in base_routes
+        if not (hasattr(route, "path") and route.path in prefixed_streaming_paths)
+    ]
+    streaming_routes = [
+        Route(
+            path=f"{path_prefix}/message:stream",
+            endpoint=message_stream_route,
+            methods=["POST"],
+        ),
+        Route(
+            path=f"{path_prefix}/tasks/{{id}}:subscribe",
+            endpoint=subscribe_route,
+            methods=["GET"],
+        ),
+        Route(
+            path=f"{path_prefix}/tasks/{{id}}:subscribe",
+            endpoint=subscribe_route,
+            methods=["POST"],
+        ),
+    ]
+    return retained + streaming_routes
 
 
 def create_app(settings: Settings) -> FastAPI:
@@ -221,6 +358,9 @@ def create_app(settings: Settings) -> FastAPI:
             guard_hooks=session_guard_hooks,
             rpc_url=extension_contracts.CORE_JSONRPC_PATH,
             dispatcher_factory=CodexSessionQueryJSONRPCApplication,
+            stream_budget_max_bytes=settings.a2a_stream_max_bytes,
+            stream_budget_max_duration_seconds=settings.a2a_stream_max_duration_seconds,
+            stream_budget_idle_timeout_seconds=settings.a2a_stream_idle_timeout_seconds,
         )
     )
     app.router.routes.extend(
@@ -230,6 +370,9 @@ def create_app(settings: Settings) -> FastAPI:
             # A2A 1.0 roots the HTTP+JSON surface at the service root; the SDK
             # default prefix is empty, matching the URL the Agent Card advertises.
             path_prefix="",
+            stream_budget_max_bytes=settings.a2a_stream_max_bytes,
+            stream_budget_max_duration_seconds=settings.a2a_stream_max_duration_seconds,
+            stream_budget_idle_timeout_seconds=settings.a2a_stream_idle_timeout_seconds,
         )
     )
     app.state.codex_client = client

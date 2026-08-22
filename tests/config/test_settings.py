@@ -215,6 +215,17 @@ def test_settings_enable_turn_control_by_default() -> None:
     assert settings.a2a_enable_turn_control is True
 
 
+def test_settings_use_bounded_admission_defaults() -> None:
+    settings = make_settings()
+
+    assert settings.a2a_rate_limit_enabled is True
+    assert settings.a2a_rate_limit_window_seconds == 60.0
+    assert settings.a2a_rate_limit_max_requests == 120
+    assert settings.a2a_stream_max_bytes == 64 * 1024 * 1024
+    assert settings.a2a_stream_max_duration_seconds == 3600.0
+    assert settings.a2a_stream_idle_timeout_seconds == 120.0
+
+
 def test_make_settings_ignores_ambient_environment_sources() -> None:
     polluted_env = {
         "A2A_HOST": "100.89.160.53",
@@ -273,6 +284,12 @@ def test_settings_parse_ops_flags_and_timeouts():
         "A2A_INTERRUPT_REQUEST_TTL_SECONDS": "90",
         "A2A_REQUEST_BODY_MAX_BYTES": "1024",
         "A2A_MAX_CONCURRENT_OPERATIONS": "7",
+        "A2A_RATE_LIMIT_ENABLED": "false",
+        "A2A_RATE_LIMIT_WINDOW_SECONDS": "30",
+        "A2A_RATE_LIMIT_MAX_REQUESTS": "45",
+        "A2A_STREAM_MAX_BYTES": "1048576",
+        "A2A_STREAM_MAX_DURATION_SECONDS": "900",
+        "A2A_STREAM_IDLE_TIMEOUT_SECONDS": "45",
     }
     with mock.patch.dict(os.environ, env, clear=True):
         settings = Settings.from_env()
@@ -286,6 +303,12 @@ def test_settings_parse_ops_flags_and_timeouts():
         assert settings.a2a_interrupt_request_ttl_seconds == 90
         assert settings.a2a_request_body_max_bytes == 1024
         assert settings.a2a_max_concurrent_operations == 7
+        assert settings.a2a_rate_limit_enabled is False
+        assert settings.a2a_rate_limit_window_seconds == 30.0
+        assert settings.a2a_rate_limit_max_requests == 45
+        assert settings.a2a_stream_max_bytes == 1_048_576
+        assert settings.a2a_stream_max_duration_seconds == 900.0
+        assert settings.a2a_stream_idle_timeout_seconds == 45.0
 
 
 def test_settings_parse_task_store_configuration() -> None:
@@ -345,6 +368,24 @@ def test_settings_reject_invalid_stream_idle_diagnostic_seconds():
         with pytest.raises(ValidationError) as excinfo:
             Settings()
     assert "A2A_STREAM_IDLE_DIAGNOSTIC_SECONDS" in str(excinfo.value)
+
+
+@pytest.mark.parametrize(
+    "env_name",
+    [
+        "A2A_RATE_LIMIT_WINDOW_SECONDS",
+        "A2A_RATE_LIMIT_MAX_REQUESTS",
+        "A2A_STREAM_MAX_BYTES",
+        "A2A_STREAM_MAX_DURATION_SECONDS",
+        "A2A_STREAM_IDLE_TIMEOUT_SECONDS",
+    ],
+)
+def test_settings_reject_invalid_admission_limits(env_name: str) -> None:
+    env = {**_registry_env(), env_name: "-1"}
+    with mock.patch.dict(os.environ, env, clear=True):
+        with pytest.raises(ValidationError) as excinfo:
+            Settings.from_env()
+    assert env_name in str(excinfo.value)
 
 
 @pytest.mark.parametrize(
