@@ -72,6 +72,8 @@ def redact_paths_in_value(value: Any) -> Any:
         return redact_absolute_paths(value)
     if isinstance(value, list):
         return [redact_paths_in_value(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(redact_paths_in_value(item) for item in value)
     if isinstance(value, dict):
         return {str(key): redact_paths_in_value(item) for key, item in value.items()}
     return value

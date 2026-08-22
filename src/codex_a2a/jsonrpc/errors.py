@@ -132,9 +132,13 @@ def adapt_jsonrpc_error(error: JSONRPCError | A2AError) -> JSONRPCError | A2AErr
     if root_code in STANDARD_JSONRPC_ERROR_CODES:
         adapted_data = None
         if isinstance(root_data, Mapping):
-            adapted_data = {str(key): value for key, value in root_data.items() if key != "type"}
+            adapted_data = {
+                str(key): redact_paths_in_value(value)
+                for key, value in root_data.items()
+                if key != "type"
+            }
         elif root_data is not None:
-            adapted_data = root_data
+            adapted_data = redact_paths_in_value(root_data)
         return JSONRPCError(
             code=root_code,
             message=STANDARD_JSONRPC_ERROR_MESSAGES[root_code],

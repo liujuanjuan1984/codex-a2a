@@ -4,7 +4,7 @@ import json
 from typing import cast
 from unittest.mock import AsyncMock, MagicMock
 
-from a2a.server.jsonrpc_models import JSONRPCError
+from a2a.server.jsonrpc_models import InvalidParamsError, JSONRPCError
 
 from codex_a2a.contracts.extensions import (
     DISCOVERY_METHODS,
@@ -47,6 +47,20 @@ def test_adapt_jsonrpc_error_redacts_message_and_metadata() -> None:
     assert REDACTED_PATH_PLACEHOLDER in dumped
     assert "/home/ubuntu/sessions/s1.json" not in dumped
     assert r"C:\Users\alice\x" not in dumped
+
+
+def test_adapt_jsonrpc_error_redacts_data_for_standard_codes() -> None:
+    error = InvalidParamsError(
+        message="Invalid params",
+        data={"field": "directory", "value": "/home/ubuntu/project"},
+    )
+
+    adapted = adapt_jsonrpc_error(error)
+
+    assert adapted.code == -32602
+    dumped = json.dumps(adapted.data)
+    assert REDACTED_PATH_PLACEHOLDER in dumped
+    assert "/home/ubuntu/project" not in dumped
 
 
 def test_build_http_error_body_redacts_message_and_metadata() -> None:

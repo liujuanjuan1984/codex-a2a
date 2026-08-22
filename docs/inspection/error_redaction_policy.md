@@ -17,6 +17,12 @@ Masked output uses the fixed placeholder `<redacted-path>`.
 - Raw exception fallback in
   `codex_a2a.jsonrpc.application._generate_error_response`.
 - Streaming task error messages — `codex_a2a.execution.executor._emit_error`.
+- Interactive exec session failure messages and metadata —
+  `codex_a2a.execution.exec_runtime._run_exec_session`.
+- A2A tool-call error results —
+  `codex_a2a.execution.executor._handle_a2a_call_tool`; the error text is
+  embedded in follow-up turns within the same upstream session, which session
+  queries can later expose.
 
 ## Masking rules
 
@@ -25,6 +31,9 @@ Masked:
 - POSIX absolute paths (`/a/b/c`).
 - Windows drive paths (`C:\a\b`, `C:/a/b`) and UNC paths (`\\server\share`).
 - `file://` URIs that embed a local path (`file:///tmp/x`, `file://C:/tmp/x`).
+- Any other slash-prefixed token (for example API route strings such as
+  `/tasks/123`) — masking is deliberately conservative; a slash-prefixed
+  token is treated as a potential path rather than risk leaking a real one.
 
 Preserved:
 

@@ -77,3 +77,8 @@ def test_redact_paths_in_value_recurses() -> None:
     assert result["nested"][1]["url"] == "https://example.com/a"
     assert result["count"] == 3
     assert result["flag"] is True
+
+
+def test_redact_paths_in_value_handles_tuples() -> None:
+    result = redact_paths_in_value(("ok", "/tmp/x", ["/var/log/y"]))
+    assert result == ("ok", REDACTED_PATH_PLACEHOLDER, [REDACTED_PATH_PLACEHOLDER])

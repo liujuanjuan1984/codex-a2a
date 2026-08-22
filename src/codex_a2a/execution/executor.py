@@ -484,7 +484,7 @@ class CodexAgentExecutor(AgentExecutor):
             }
         except Exception as exc:
             logger.exception("A2A tool call failed")
-            return {"call_id": call_id, "tool": tool_name, "error": str(exc)}
+            return {"call_id": call_id, "tool": tool_name, "error": redact_absolute_paths(str(exc))}
 
     @staticmethod
     def _build_tool_followup_prompt(tool_results: list[dict[str, Any]]) -> str:
