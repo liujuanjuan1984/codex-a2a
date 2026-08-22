@@ -128,7 +128,7 @@ def _is_capacity_managed_request(scope: Scope) -> bool:
     method = scope.get("method", "")
     path = scope.get("path", "")
     return method == "POST" or (
-        method == "GET" and path.startswith("/v1/tasks/") and path.endswith(":subscribe")
+        method == "GET" and path.startswith("/tasks/") and path.endswith(":subscribe")
     )
 
 

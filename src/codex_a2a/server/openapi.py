@@ -196,7 +196,7 @@ def patch_openapi_contract(
                         }
 
             rest_post_contracts: dict[str, dict[str, Any]] = {
-                "/v1/message:send": {
+                "/message:send": {
                     "summary": "Send Message (HTTP+JSON)",
                     "description": (
                         "A2A HTTP+JSON message send endpoint. "
@@ -207,7 +207,7 @@ def patch_openapi_contract(
                         "session_binding": a2a_extension_contracts["session_binding"],
                     },
                 },
-                "/v1/message:stream": {
+                "/message:stream": {
                     "summary": "Stream Message (HTTP+JSON)",
                     "description": (
                         "A2A HTTP+JSON streaming endpoint. "
@@ -232,7 +232,7 @@ def patch_openapi_contract(
                 rest_post["description"] = contract["description"]
                 rest_post["x-a2a-extension-contracts"] = contract["contracts"]
                 rest_post.setdefault("responses", {"200": {"description": "A2A response"}})
-                if rest_path == "/v1/message:stream":
+                if rest_path == "/message:stream":
                     rest_post["x-a2a-streaming"] = a2a_extension_contracts["streaming"]
 
                 request_body = rest_post.setdefault("requestBody", {})

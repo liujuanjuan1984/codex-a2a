@@ -115,7 +115,7 @@ Agent Card: `http://127.0.0.1:8000/.well-known/agent-card.json`
 
 Authenticated extended card:
 - JSON-RPC: `agent/getAuthenticatedExtendedCard`
-- HTTP: `GET /v1/card`
+- HTTP: `GET /extendedAgentCard`
 
 Outbound peer auth is configured with `A2A_CLIENT_BEARER_TOKEN` or `A2A_CLIENT_BASIC_AUTH`; see the Usage Guide for the complete client-side matrix.
 
@@ -138,7 +138,7 @@ Look elsewhere if:
 
 ## Highlights
 
-- A2A HTTP+JSON endpoints such as `/v1/message:send` and `/v1/message:stream`
+- A2A HTTP+JSON endpoints such as `/message:send` and `/message:stream`
 - A2A JSON-RPC support on `POST /`
 - Embedded client access through `codex-a2a call`
 - Autonomous outbound peer calls through the `a2a_call` tool

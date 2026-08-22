@@ -210,14 +210,28 @@ def _is_jsonrpc_path(path: str) -> bool:
     }
 
 
+def _is_rest_path(path: str) -> bool:
+    return (
+        path in _REST_MESSAGE_PATHS
+        or path in _AUTHENTICATED_EXTENDED_CARD_PATHS
+        or path == "/tasks"
+        or path.startswith("/tasks/")
+    )
+
+
 def _canonical_rest_path(path: str) -> str:
-    rest_prefix = extension_contracts.REST_API_PATH_PREFIX
-    if path == rest_prefix or path.startswith(f"{rest_prefix}/"):
+    # The HTTP+JSON surface is rooted at the service root (A2A 1.0 resolves
+    # REST paths from the advertised interface URL, with no version prefix in
+    # the URL). A single leading tenant segment from the SDK's legacy alias
+    # layout is canonicalized away for middleware classification; the route
+    # layer still rejects those aliases.
+    if _is_rest_path(path):
         return path
-    marker = f"{rest_prefix}/"
-    marker_index = path.find(marker, 1)
-    if marker_index > 0 and "/" not in path[1:marker_index]:
-        return path[marker_index:]
+    tenant_end = path.find("/", 1)
+    if tenant_end > 0 and "/" not in path[1:tenant_end]:
+        candidate = path[tenant_end:]
+        if _is_rest_path(candidate):
+            return candidate
     return path
 
 
@@ -225,7 +239,7 @@ def _requires_protocol_negotiation(request: Request) -> bool:
     path = _canonical_rest_path(request.url.path)
     if request.method == "OPTIONS":
         return False
-    return _is_jsonrpc_path(path) or path.startswith(f"{extension_contracts.REST_API_PATH_PREFIX}/")
+    return _is_jsonrpc_path(path) or _is_rest_path(path)
 
 
 def _jsonrpc_request_id(payload: dict | None) -> str | int | None:
@@ -437,10 +451,10 @@ def _install_subscribe_task_guard(app: FastAPI, *, task_store: TaskStore) -> Non
     @app.middleware("http")
     async def guard_missing_subscribe_task(request: Request, call_next):
         path = _canonical_rest_path(request.url.path)
-        if not path.startswith("/v1/tasks/") or not path.endswith(":subscribe"):
+        if not path.startswith("/tasks/") or not path.endswith(":subscribe"):
             return await call_next(request)
 
-        encoded_task_id = path.removeprefix("/v1/tasks/").removesuffix(":subscribe")
+        encoded_task_id = path.removeprefix("/tasks/").removesuffix(":subscribe")
         task_id = unquote(encoded_task_id).strip()
         if not task_id:
             return JSONResponse({"error": "Task not found"}, status_code=404)

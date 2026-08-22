@@ -53,7 +53,7 @@ EXTENSION_SPEC_DOCUMENT_PATHS_BY_URI = MappingProxyType(
 )
 
 TASKS_RESUBSCRIBE_METHOD = "SubscribeToTask"
-TASKS_SUBSCRIBE_HTTP_ENDPOINT = "/v1/tasks/{id}:subscribe"
+TASKS_SUBSCRIBE_HTTP_ENDPOINT = "/tasks/{id}:subscribe"
 
 SHARED_SESSION_BINDING_FIELD = "metadata.shared.session.id"
 SHARED_SESSION_METADATA_FIELD = "metadata.shared.session"
@@ -822,16 +822,16 @@ INTERRUPT_INVALID_PARAMS_DATA_FIELDS: tuple[str, ...] = (
 
 CORE_JSONRPC_METHODS: tuple[str, ...] = tuple(JsonRpcDispatcher.METHOD_TO_MODEL)
 CORE_HTTP_ENDPOINTS: tuple[str, ...] = (
-    "POST /v1/message:send",
-    "POST /v1/message:stream",
-    "GET /v1/tasks",
-    "GET /v1/tasks/{id}",
-    "POST /v1/tasks/{id}:cancel",
-    "GET /v1/tasks/{id}:subscribe",
-    "GET /v1/tasks/{id}/pushNotificationConfigs",
-    "POST /v1/tasks/{id}/pushNotificationConfigs",
-    "GET /v1/tasks/{id}/pushNotificationConfigs/{push_id}",
-    "GET /v1/extendedAgentCard",
+    "POST /message:send",
+    "POST /message:stream",
+    "GET /tasks",
+    "GET /tasks/{id}",
+    "POST /tasks/{id}:cancel",
+    "GET /tasks/{id}:subscribe",
+    "GET /tasks/{id}/pushNotificationConfigs",
+    "POST /tasks/{id}/pushNotificationConfigs",
+    "GET /tasks/{id}/pushNotificationConfigs/{push_id}",
+    "GET /extendedAgentCard",
 )
 WIRE_CONTRACT_UNSUPPORTED_METHOD_DATA_FIELDS: tuple[str, ...] = (
     "method",

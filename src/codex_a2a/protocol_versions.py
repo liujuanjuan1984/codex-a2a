@@ -17,7 +17,7 @@ PROVIDER_PRIVATE_PROTOCOL_VERSION = SUPPORTED_PROTOCOL_VERSION
 
 V1_SUPPORTED_FEATURES: tuple[str, ...] = (
     "A2A-Version request-time negotiation and response header echo.",
-    "Official A2A 1.0 JSON-RPC methods and /v1 HTTP endpoints.",
+    "Official A2A 1.0 JSON-RPC methods and spec-rooted HTTP+JSON endpoints.",
     "Unified Part(text|data|url|raw) payloads, task streaming, and protocol-aware error shaping.",
 )
 

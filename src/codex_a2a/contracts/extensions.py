@@ -24,7 +24,12 @@ from .extension_registry import build_extension_taxonomy_from_registry
 
 CORE_JSONRPC_PATH = "/"
 EXTENSION_JSONRPC_PATH = CORE_JSONRPC_PATH
-REST_API_PATH_PREFIX = "/v1"
+# A2A 1.0 locates the HTTP+JSON surface at the service root: version is
+# negotiated via the A2A-Version header, not a URL path prefix (spec 8.5.1).
+# The adapter therefore passes an empty prefix to the SDK's create_rest_routes
+# so that /message:send, /tasks/... and /extendedAgentCard are served at the
+# same root the Agent Card advertises.
+REST_API_PATH_PREFIX = ""
 
 # Explicit re-exports preserve the public contracts surface without wildcard imports.
 COMPATIBILITY_PROFILE_EXTENSION_URI = extension_specs.COMPATIBILITY_PROFILE_EXTENSION_URI

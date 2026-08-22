@@ -83,7 +83,7 @@ The current service profile is intentionally:
 
 One deployed instance should be treated as a single-tenant trust boundary, not as a secure multi-tenant runtime boundary.
 
-The supported HTTP+JSON contract is rooted at `/v1/...` only. Tenant-prefixed REST aliases such as `/{tenant}/v1/...` are intentionally not part of the supported surface for this single-tenant deployment profile.
+The supported HTTP+JSON contract is rooted at the service root (A2A 1.0 resolves REST paths from the advertised interface URL, and protocol version is negotiated via the `A2A-Version` header rather than a URL prefix). Tenant-prefixed REST aliases such as `/{tenant}/...` are intentionally not part of the supported surface for this single-tenant deployment profile.
 
 The compatibility surface distinguishes between:
 

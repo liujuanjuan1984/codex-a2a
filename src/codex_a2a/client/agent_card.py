@@ -10,7 +10,7 @@ from a2a.utils.constants import AGENT_CARD_WELL_KNOWN_PATH
 from .config import A2AClientConfig
 from .errors import A2AClientConfigError
 
-EXTENDED_AGENT_CARD_PATH = "/v1/extendedAgentCard"
+EXTENDED_AGENT_CARD_PATH = "/extendedAgentCard"
 
 
 @dataclass(frozen=True)
