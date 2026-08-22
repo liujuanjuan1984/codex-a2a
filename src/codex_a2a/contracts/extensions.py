@@ -103,10 +103,6 @@ def build_wire_contract_extension_params(
             {
                 "protocol_binding": "HTTP+JSON",
                 "protocol_version": declared_protocol_version,
-                # A2A 1.0 roots the HTTP+JSON surface at the interface URL;
-                # version is negotiated via the A2A-Version header (spec 8.5.1),
-                # so there is no URL path prefix to advertise.
-                "url_path_prefix": "",
             },
             {
                 "protocol_binding": "JSON-RPC",

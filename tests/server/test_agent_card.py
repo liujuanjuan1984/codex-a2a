@@ -735,7 +735,6 @@ def test_authenticated_extended_agent_card_injects_profile_into_extensions() -> 
         {
             "protocol_binding": "HTTP+JSON",
             "protocol_version": "1.0",
-            "url_path_prefix": "",
         },
         {
             "protocol_binding": "JSON-RPC",
