@@ -193,6 +193,25 @@ Use the grouped sections below as the deployment-first reading order:
 - `A2A_DATABASE_URL` also owns the adapter-managed runtime-state schema lifecycle. On startup, `codex-a2a` auto-creates the runtime-state tables, records a schema version for the `runtime_state` scope, and applies in-place migrations for those tables only.
 - The adapter-managed runtime-state schema is limited to `a2a_session_bindings`, `a2a_session_owners`, `a2a_pending_session_claims`, `a2a_pending_interrupt_requests`, and `a2a_schema_version`. It does not own the A2A SDK task-store tables or any upstream Codex/provider-local state.
 - For deployment-specific durability constraints and migration-scope boundaries, see [compatibility.md](./compatibility.md).
+
+### SQLite Persistence Hardening
+
+File-backed SQLite databases are hardened at startup and on every new connection on POSIX systems:
+
+- the database file must be a regular file; symlinks are rejected and fail startup;
+- the file must be owned by the user running `codex-a2a`; a database owned by another user fails startup;
+- the database file is forced to mode `0600`, and existing SQLite sidecar files (`-wal`/`-shm`/`-journal`) are converged to the same mode;
+- the parent directory is created with mode `0700` when it does not exist; keep the `.codex-a2a` directory private (no group/world access);
+- if the database is replaced by a symlink, a special file, or a foreign-owned file while the service is running, the next connection fails closed.
+
+`A2A_DATABASE_URL` values that do not map to a plain file path are exempt: `:memory:` and `file:` URI-style database components (including in-memory shared-cache databases) are not hardened. Prefer a plain absolute file path for deployments that need the startup guarantees. Non-POSIX platforms rely on the user account ACLs of the hosting directory; the same private-directory requirement applies there.
+
+Deployment requirements:
+
+- run `codex-a2a` as a dedicated user and keep the database directory outside world-readable workspace trees;
+- do not place the SQLite file on network-mounted or sync-managed directories;
+- when migrating an existing database, fix ownership and mode before startup: `chown <service-user> <db>` and `chmod 600 <db>`, and ensure the parent directory is not group/world accessible.
+
 - `A2A_LOG_LEVEL`: `DEBUG/INFO/WARNING/ERROR`, default `WARNING`
 - `A2A_LOG_PAYLOADS`: log A2A/Codex payload bodies, default `false`
 - `A2A_LOG_BODY_LIMIT`: payload log body size limit, default `0` (no truncation)
