@@ -6,7 +6,7 @@ import math
 import time
 from collections import deque
 from collections.abc import AsyncGenerator, AsyncIterator, Callable
-from typing import Any
+from typing import Any, NoReturn
 
 from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
@@ -157,19 +157,18 @@ async def apply_stream_budget(
                 return
             except TimeoutError:
                 _reject_budget("idle timeout")
-                return
 
-            now = resolve_clock()
-            if started_at is None:
-                started_at = now
-            elif max_duration_seconds > 0 and now - started_at >= max_duration_seconds:
-                _reject_budget("duration budget")
-                return
+            if max_duration_seconds > 0:
+                now = resolve_clock()
+                if started_at is None:
+                    started_at = now
+                elif now - started_at >= max_duration_seconds:
+                    _reject_budget("duration budget")
 
-            total_bytes += size_of(event)
-            if max_bytes > 0 and total_bytes > max_bytes:
-                _reject_budget("byte budget")
-                return
+            if max_bytes > 0:
+                total_bytes += size_of(event)
+                if total_bytes > max_bytes:
+                    _reject_budget("byte budget")
 
             yield event
     finally:
@@ -180,7 +179,7 @@ async def apply_stream_budget(
             await close()
 
 
-def _reject_budget(reason: str) -> None:
+def _reject_budget(reason: str) -> NoReturn:
     get_metrics_registry().inc_counter(A2A_STREAM_BUDGET_REJECTED_TOTAL)
     raise StreamBudgetExceeded(reason)
 
