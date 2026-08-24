@@ -605,8 +605,16 @@ def build_session_query_extension_params(
                     "path_examples": ["app://<connector-id>", "plugin://<name>@<marketplace>"],
                 },
                 "skill": {
-                    "fields": ["type", "name", "path"],
-                    "path_examples": ["/abs/path/to/SKILL.md"],
+                    "fields": ["type", "handle"],
+                    "handle_format": "skill:v1:<base64url-sha256>",
+                    "handle_source": "codex.discovery.skills.list items[].skills[].handle",
+                    "resolution_errors": [
+                        "SKILL_HANDLE_INVALID",
+                        "SKILL_HANDLE_NOT_FOUND_OR_EXPIRED",
+                        "SKILL_HANDLE_DISABLED",
+                        "SKILL_HANDLE_AMBIGUOUS",
+                        "SKILL_DISCOVERY_UNAVAILABLE",
+                    ],
                 },
             },
             "core_message_part_mapping": {
@@ -623,6 +631,10 @@ def build_session_query_extension_params(
                 (
                     "mention.path values are forwarded verbatim. The server does not infer "
                     "app or plugin identifiers from names."
+                ),
+                (
+                    "skill.handle is resolved against the current enabled skills/list result; "
+                    "client-supplied skill paths are rejected."
                 ),
                 (
                     "local_image is not currently declared as part of the stable Codex A2A "
@@ -734,6 +746,7 @@ def build_discovery_extension_params(
                 "description",
                 "enabled",
                 "scope",
+                "handle",
                 "interface",
             ],
             "app": [
@@ -800,7 +813,7 @@ def build_discovery_extension_params(
         },
         "consumer_guidance": [
             (
-                "Use codex.discovery.skills.list to obtain stable skill name/scope values; "
+                "Use codex.discovery.skills.list to obtain opaque skill handle values; "
                 "local skill paths are intentionally not exposed."
             ),
             ("Use codex.discovery.apps.list to obtain stable app mention_path values."),

@@ -17,17 +17,36 @@ from codex_a2a.input_mapping import (
     normalize_prompt_request_parts,
     summarize_normalized_items,
 )
+from codex_a2a.skill_handles import build_skill_handle, resolve_skill_input_items
 
 
 def test_convert_request_parts_to_turn_input_supports_rich_inputs() -> None:
+    skill_path = "/workspace/.codex/skills/skill-creator/SKILL.md"
+    handle = build_skill_handle(cwd="/workspace", name="skill-creator", path=skill_path)
     result = build_turn_input_from_normalized_items(
-        normalize_prompt_request_parts(
-            [
-                {"type": "text", "text": "Review this."},
-                {"type": "image", "bytes": "YWJj", "mime_type": "image/png"},
-                {"type": "mention", "name": "Demo App", "path": "app://demo-app"},
-                {"type": "skill", "name": "skill-creator", "path": "/tmp/SKILL.md"},
-            ]
+        resolve_skill_input_items(
+            normalize_prompt_request_parts(
+                [
+                    {"type": "text", "text": "Review this."},
+                    {"type": "image", "bytes": "YWJj", "mime_type": "image/png"},
+                    {"type": "mention", "name": "Demo App", "path": "app://demo-app"},
+                    {"type": "skill", "handle": handle},
+                ]
+            ),
+            {
+                "data": [
+                    {
+                        "cwd": "/workspace",
+                        "skills": [
+                            {
+                                "name": "skill-creator",
+                                "path": skill_path,
+                                "enabled": True,
+                            }
+                        ],
+                    }
+                ]
+            },
         )
     )
 
@@ -35,7 +54,7 @@ def test_convert_request_parts_to_turn_input_supports_rich_inputs() -> None:
         {"type": "text", "text": "Review this.", "text_elements": []},
         {"type": "input_image", "image_url": "data:image/png;base64,YWJj"},
         {"type": "mention", "name": "Demo App", "path": "app://demo-app"},
-        {"type": "skill", "name": "skill-creator", "path": "/tmp/SKILL.md"},
+        {"type": "skill", "name": "skill-creator", "path": skill_path},
     ]
 
 
@@ -80,7 +99,7 @@ def test_convert_request_parts_to_turn_input_rejects_legacy_image_aliases(
         ),
         (
             {"parts": [{"type": "skill", "name": "skill-creator"}]},
-            "request.parts\\[\\]\\.path must be a string",
+            "request.parts\\[\\]\\.handle must be a valid skill:v1 opaque handle",
         ),
         (
             {"parts": [{"type": "audio"}]},
@@ -97,6 +116,7 @@ def test_convert_request_parts_to_turn_input_rejects_invalid_shapes(
 
 
 def test_map_a2a_message_parts_supports_v1_parts_and_image_variants() -> None:
+    handle = build_skill_handle(cwd="/workspace", name="skill-creator", path="/tmp/SKILL.md")
     parts = [
         new_text_part("hello"),
         new_file_url_part(
@@ -107,7 +127,7 @@ def test_map_a2a_message_parts_supports_v1_parts_and_image_variants() -> None:
         new_file_url_part("data:image/png;base64,AAAA"),
         new_file_bytes_part(b"\x00\x00\x00", media_type="image/jpeg"),
         new_data_part({"type": "mention", "name": "Demo App", "path": "app://demo"}),
-        new_data_part({"type": "skill", "name": "skill-creator", "path": "/tmp/SKILL.md"}),
+        new_data_part({"type": "skill", "handle": handle}),
     ]
 
     assert map_a2a_message_parts_to_normalized_items(parts) == [
@@ -116,8 +136,23 @@ def test_map_a2a_message_parts_supports_v1_parts_and_image_variants() -> None:
         {"type": "image", "url": "data:image/png;base64,AAAA"},
         {"type": "image", "url": "data:image/jpeg;base64,AAAA"},
         {"type": "mention", "name": "Demo App", "path": "app://demo"},
-        {"type": "skill", "name": "skill-creator", "path": "/tmp/SKILL.md"},
+        {"type": "skill", "handle": handle},
     ]
+
+
+def test_skill_rich_input_rejects_client_supplied_path() -> None:
+    with pytest.raises(UnsupportedInputError, match="do not accept path"):
+        map_a2a_message_parts_to_normalized_items(
+            [
+                new_data_part(
+                    {
+                        "type": "skill",
+                        "handle": "skill:v1:" + "a" * 43,
+                        "path": "/tmp/forged/SKILL.md",
+                    }
+                )
+            ]
+        )
 
 
 @pytest.mark.parametrize(

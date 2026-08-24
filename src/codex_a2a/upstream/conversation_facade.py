@@ -359,14 +359,18 @@ class CodexConversationFacade:
         *,
         expected_turn_id: str,
         request: dict[str, Any],
+        input_items: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
+        normalized_items = (
+            input_items
+            if input_items is not None
+            else normalize_prompt_request_parts(request.get("parts"))
+        )
         result = await self._rpc_request(
             "turn/steer",
             {
                 "threadId": thread_id,
-                "input": build_turn_input_from_normalized_items(
-                    normalize_prompt_request_parts(request.get("parts"))
-                ),
+                "input": build_turn_input_from_normalized_items(normalized_items),
                 "expectedTurnId": expected_turn_id,
             },
         )

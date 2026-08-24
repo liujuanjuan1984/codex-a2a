@@ -26,6 +26,7 @@ from codex_a2a.jsonrpc.turn_control_params import (
     TurnSteerControlParams,
     raise_turn_control_validation_error,
 )
+from codex_a2a.skill_handles import SkillHandleResolutionError
 from codex_a2a.upstream.models import CodexRPCError
 
 if TYPE_CHECKING:
@@ -35,6 +36,7 @@ logger = logging.getLogger(__name__)
 
 ERR_TURN_NOT_STEERABLE = -32012
 ERR_TURN_FORBIDDEN = -32013
+ERR_SKILL_HANDLE = -32016
 
 
 async def handle_turn_control_request(
@@ -111,6 +113,15 @@ async def handle_turn_control_request(
                     "upstream_code": exc.code,
                     "detail": str(exc),
                 },
+            ),
+        )
+    except SkillHandleResolutionError as exc:
+        return app._generate_error_response(
+            base_request.id,
+            JSONRPCError(
+                code=ERR_SKILL_HANDLE,
+                message="Skill handle unavailable",
+                data={"type": exc.code, "handle": exc.handle},
             ),
         )
     except Exception as exc:

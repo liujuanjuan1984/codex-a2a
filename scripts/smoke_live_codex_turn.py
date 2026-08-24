@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from codex_a2a.config import Settings
+from codex_a2a.jsonrpc.discovery_payload_mapping import map_skill_scopes
 from codex_a2a.upstream.client import CodexClient
 
 _PROMPT = "Reply with the configured smoke response."
@@ -179,9 +180,29 @@ async def _run_turn(*, wrapper: Path, workspace: Path) -> None:
     client = CodexClient(settings)
     try:
         await asyncio.wait_for(client.startup_preflight(), timeout=45.0)
+        skill_scopes = map_skill_scopes(
+            await asyncio.wait_for(
+                client.list_skills(params={"cwds": [str(workspace)], "force_reload": True}),
+                timeout=30.0,
+            )
+        )
+        smoke_skill = next(
+            skill
+            for scope in skill_scopes
+            for skill in scope["skills"]
+            if skill["name"] == "codex-a2a-smoke"
+        )
         session_id = await asyncio.wait_for(client.create_session(), timeout=30.0)
         message = await asyncio.wait_for(
-            client.send_message(session_id, _PROMPT),
+            client.send_message(
+                session_id,
+                _PROMPT,
+                input_items=[
+                    {"type": "text", "text": _PROMPT},
+                    {"type": "skill", "handle": smoke_skill["handle"]},
+                ],
+                directory=str(workspace),
+            ),
             timeout=45.0,
         )
     finally:
@@ -203,6 +224,16 @@ def main() -> None:
             temp_path = Path(temp_dir)
             workspace = temp_path / "workspace"
             workspace.mkdir()
+            skill_dir = workspace / ".agents" / "skills" / "codex-a2a-smoke"
+            skill_dir.mkdir(parents=True)
+            (skill_dir / "SKILL.md").write_text(
+                "---\n"
+                "name: codex-a2a-smoke\n"
+                "description: Exercise opaque skill handles in the live smoke test.\n"
+                "---\n\n"
+                "Preserve the requested smoke response exactly.\n",
+                encoding="utf-8",
+            )
             wrapper = temp_path / "codex-smoke-wrapper"
             _write_codex_wrapper(wrapper, codex_bin=codex_bin, provider_url=server.base_url)
             asyncio.run(_run_turn(wrapper=wrapper, workspace=workspace))

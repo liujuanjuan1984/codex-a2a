@@ -92,15 +92,10 @@ def test_build_discovery_param_helpers_map_repo_shape_to_rpc_shape() -> None:
         {
             "cwds": ["/repo"],
             "force_reload": True,
-            "per_cwd_extra_user_roots": [
-                {"cwd": "/repo", "extra_user_roots": ["/alt"]},
-                {"cwd": "/skip"},
-            ],
         }
     ) == {
         "cwds": ["/repo"],
         "forceReload": True,
-        "perCwdExtraUserRoots": [{"cwd": "/repo", "extraUserRoots": ["/alt"]}],
     }
 
 

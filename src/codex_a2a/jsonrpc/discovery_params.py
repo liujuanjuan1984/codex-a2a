@@ -17,32 +17,9 @@ from codex_a2a.jsonrpc.params_common import (
 )
 
 
-class SkillsExtraRootsParams(_StrictModel):
-    cwd: str
-    extra_user_roots: list[str]
-
-    @field_validator("cwd", mode="before")
-    @classmethod
-    def _validate_cwd(cls, value: Any) -> str:
-        return normalize_non_empty_string(value, message="request.cwd must be a non-empty string")
-
-    @field_validator("extra_user_roots", mode="before")
-    @classmethod
-    def _validate_extra_user_roots(cls, value: Any) -> list[str]:
-        if not isinstance(value, list) or not value:
-            raise ValueError("request.extra_user_roots must be a non-empty array")
-        roots: list[str] = []
-        for item in value:
-            if not isinstance(item, str) or not item.strip():
-                raise ValueError("request.extra_user_roots entries must be non-empty strings")
-            roots.append(item.strip())
-        return roots
-
-
 class DiscoverySkillsListParams(_StrictModel):
     cwds: list[str] | None = None
     force_reload: bool | None = None
-    per_cwd_extra_user_roots: list[SkillsExtraRootsParams] | None = None
 
     _validate_cwds = field_validator("cwds", mode="before")(validate_cwds)
 

@@ -4,6 +4,7 @@ import httpx
 import pytest
 
 from codex_a2a.contracts.extensions import EXTENSION_JSONRPC_PATH
+from codex_a2a.skill_handles import SkillHandleResolutionError
 from tests.support.dummy_clients import DummySessionQueryCodexClient as DummyCodexClient
 from tests.support.jsonrpc_errors import (
     error_context as _error_context,
@@ -124,6 +125,59 @@ async def test_turn_and_review_control_methods_route_to_client(monkeypatch) -> N
             "title": "Polish tui colors",
         },
     }
+
+
+@pytest.mark.asyncio
+async def test_turn_control_returns_stable_skill_handle_error(monkeypatch) -> None:
+    import codex_a2a.server.application as app_module
+
+    settings = make_settings(
+        a2a_static_auth_credentials=(
+            {
+                "id": "bot-turn-control",
+                "scheme": "bearer",
+                "token": "t-1",
+                "principal": "automation",
+                "capabilities": ["turn_control"],
+            },
+        ),
+        a2a_log_payloads=False,
+        **_BASE_SETTINGS,
+    )
+    dummy = DummyCodexClient(settings)
+    handle = "skill:v1:" + "a" * 43
+    monkeypatch.setattr(
+        dummy,
+        "turn_steer",
+        AsyncMock(side_effect=SkillHandleResolutionError("SKILL_HANDLE_DISABLED", handle)),
+    )
+    monkeypatch.setattr(app_module, "CodexClient", lambda _settings, **kwargs: dummy)
+    app = app_module.create_app(settings)
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post(
+            EXTENSION_JSONRPC_PATH,
+            headers={"Authorization": "Bearer t-1"},
+            json={
+                "jsonrpc": "2.0",
+                "id": 503,
+                "method": "codex.turns.steer",
+                "params": {
+                    "thread_id": "thr-1",
+                    "expected_turn_id": "turn-9",
+                    "request": {"parts": [{"type": "skill", "handle": handle}]},
+                },
+            },
+        )
+
+    assert response.status_code == 200
+    payload = response.json()
+    error = payload["error"]
+    assert error["code"] == -32016
+    assert error["message"] == "Skill handle unavailable"
+    assert _error_reason(payload) == "SKILL_HANDLE_DISABLED"
+    assert _error_context(payload)["handle"] == handle
 
 
 @pytest.mark.asyncio

@@ -511,6 +511,18 @@ def test_authenticated_extended_agent_card_injects_profile_into_extensions() -> 
         session_query_params["rich_input"]["part_contracts"]["image"]["maps_to"]
         == "turn/start.input[].type=input_image"
     )
+    assert session_query_params["rich_input"]["part_contracts"]["skill"] == {
+        "fields": ["type", "handle"],
+        "handle_format": "skill:v1:<base64url-sha256>",
+        "handle_source": "codex.discovery.skills.list items[].skills[].handle",
+        "resolution_errors": [
+            "SKILL_HANDLE_INVALID",
+            "SKILL_HANDLE_NOT_FOUND_OR_EXPIRED",
+            "SKILL_HANDLE_DISABLED",
+            "SKILL_HANDLE_AMBIGUOUS",
+            "SKILL_DISCOVERY_UNAVAILABLE",
+        ],
+    }
     assert any(
         "mention.path values are forwarded verbatim" in note
         for note in session_query_params["rich_input"]["notes"]
@@ -556,6 +568,7 @@ def test_authenticated_extended_agent_card_injects_profile_into_extensions() -> 
         "codex.discovery.watch task stream"
     )
     assert "mention_path" in discovery_params["stable_item_fields"]["app"]
+    assert "handle" in discovery_params["stable_item_fields"]["skill"]
     apps_contract = discovery_params["method_contracts"]["codex.discovery.apps.list"]
     assert apps_contract["result"]["fields"] == ["items", "next_cursor"]
     assert any("mention_path" in note for note in apps_contract["notes"])

@@ -12,6 +12,7 @@ from codex_a2a.jsonrpc.payload_mapping import (
     as_a2a_session_task,
     extract_raw_items,
 )
+from codex_a2a.skill_handles import build_skill_handle
 
 
 def test_map_skill_scopes_filters_invalid_entries_and_normalizes_strings() -> None:
@@ -34,7 +35,7 @@ def test_map_skill_scopes_filters_invalid_entries_and_normalizes_strings() -> No
                 "scope": "repo",
             },
         ],
-        "errors": [{"message": "warn"}],
+        "errors": [{"message": "failed to load /workspace/private/SKILL.md"}],
     }
 
     items = map_skill_scopes(
@@ -49,10 +50,15 @@ def test_map_skill_scopes_filters_invalid_entries_and_normalizes_strings() -> No
                     "description": "Demo skill",
                     "enabled": True,
                     "scope": "repo",
+                    "handle": build_skill_handle(
+                        cwd="/workspace/repo",
+                        name="demo-skill",
+                        path="/workspace/repo/.codex/skills/demo/SKILL.md",
+                    ),
                     "interface": {"displayName": "Demo Skill"},
                 }
             ],
-            "errors": [{"message": "warn"}],
+            "errors": [{"message": "failed to load <redacted-path>"}],
         }
     ]
     assert "/workspace" not in str(items)

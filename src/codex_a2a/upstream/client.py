@@ -10,9 +10,11 @@ from typing import TYPE_CHECKING, Any
 from codex_a2a import __version__
 from codex_a2a.config import Settings
 from codex_a2a.execution.request_overrides import RequestExecutionOptions
+from codex_a2a.input_mapping import normalize_prompt_request_parts
 from codex_a2a.logging_context import (
     install_log_record_factory,
 )
+from codex_a2a.skill_handles import resolve_skill_input_items
 from codex_a2a.upstream.conversation_facade import CodexConversationFacade
 from codex_a2a.upstream.interrupt_bridge import CodexInterruptBridge
 from codex_a2a.upstream.interrupts import (
@@ -169,7 +171,7 @@ class CodexClient:
                 continue
             if key == "directory":
                 continue
-            params[key] = value if isinstance(value, str) else str(value)
+            params[key] = value
         return params
 
     async def startup_preflight(self) -> None:
@@ -286,9 +288,12 @@ class CodexClient:
         )
 
     async def list_skills(self, *, params: dict[str, Any] | None = None) -> Any:
+        rpc_params = build_discovery_skills_params(params)
+        if "cwds" not in rpc_params and self._workspace_root:
+            rpc_params["cwds"] = [self._workspace_root]
         return await self._rpc_request(
             "skills/list",
-            self._merge_params(build_discovery_skills_params(params)),
+            rpc_params,
         )
 
     async def list_apps(self, *, params: dict[str, Any] | None = None) -> Any:
@@ -377,10 +382,19 @@ class CodexClient:
         execution_options: RequestExecutionOptions | None = None,
         timeout_override: float | None | _UnsetType = _UNSET,
     ) -> CodexMessage:
+        resolved_input_items = input_items
+        if input_items is not None and any(item.get("type") == "skill" for item in input_items):
+            skill_params: dict[str, Any] = {"force_reload": True}
+            if directory:
+                skill_params["cwds"] = [directory]
+            resolved_input_items = resolve_skill_input_items(
+                input_items,
+                await self.list_skills(params=skill_params),
+            )
         return await self._conversation_facade.send_message(
             session_id,
             text,
-            input_items=input_items,
+            input_items=resolved_input_items,
             directory=directory,
             execution_options=execution_options,
             timeout_seconds=self._resolve_timeout_seconds(timeout_override=timeout_override),
@@ -393,10 +407,17 @@ class CodexClient:
         expected_turn_id: str,
         request: dict[str, Any],
     ) -> dict[str, Any]:
+        normalized_items = normalize_prompt_request_parts(request.get("parts"))
+        if any(item.get("type") == "skill" for item in normalized_items):
+            normalized_items = resolve_skill_input_items(
+                normalized_items,
+                await self.list_skills(params={"force_reload": True}),
+            )
         return await self._conversation_facade.turn_steer(
             thread_id,
             expected_turn_id=expected_turn_id,
-            request=request,
+            request={"parts": normalized_items},
+            input_items=normalized_items,
         )
 
     async def review_start(

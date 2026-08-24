@@ -14,6 +14,7 @@ from codex_a2a.jsonrpc.params_common import (
     validate_non_empty_parts,
     validate_required_thread_id,
 )
+from codex_a2a.skill_handles import is_skill_handle
 
 
 class TurnTextPart(_StrictModel):
@@ -62,13 +63,15 @@ class TurnMentionPart(_StrictModel):
 
 class TurnSkillPart(_StrictModel):
     type: Literal["skill"]
-    name: str
-    path: str
+    handle: str
 
-    @field_validator("name", "path", mode="before")
+    @field_validator("handle", mode="before")
     @classmethod
-    def _validate_strings(cls, value: Any) -> str:
-        return normalize_non_empty_string(value, message="must be a non-empty string")
+    def _validate_handle(cls, value: Any) -> str:
+        handle = normalize_non_empty_string(value, message="must be a non-empty string")
+        if not is_skill_handle(handle):
+            raise ValueError("must be a valid skill:v1 opaque handle")
+        return handle
 
 
 TurnInputPart = Annotated[

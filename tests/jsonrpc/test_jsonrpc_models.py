@@ -262,6 +262,7 @@ def test_parse_turn_and_review_control_params_use_canonical_shapes() -> None:
                 "parts": [
                     {"type": "text", "text": "Focus on the failing tests first."},
                     {"type": "mention", "name": "Demo App", "path": "app://demo-app"},
+                    {"type": "skill", "handle": "skill:v1:" + "a" * 43},
                 ]
             },
         },
@@ -294,6 +295,7 @@ def test_parse_turn_and_review_control_params_use_canonical_shapes() -> None:
         "parts": [
             {"type": "text", "text": "Focus on the failing tests first."},
             {"type": "mention", "name": "Demo App", "path": "app://demo-app"},
+            {"type": "skill", "handle": "skill:v1:" + "a" * 43},
         ]
     }
     assert review.thread_id == "thr-1"
@@ -400,6 +402,24 @@ def test_parse_thread_lifecycle_params_reject_invalid_fields(
             "request.parts[0].type",
         ),
         (
+            _parse_turn_control_params,
+            {
+                "thread_id": "thr-1",
+                "expected_turn_id": "turn-1",
+                "request": {
+                    "parts": [
+                        {
+                            "type": "skill",
+                            "name": "demo",
+                            "path": "/tmp/forged/SKILL.md",
+                        }
+                    ]
+                },
+            },
+            "Field required",
+            "request.parts[0].skill.handle",
+        ),
+        (
             lambda payload: _parse_review_control_params(ReviewStartControlParams, payload),
             {"thread_id": "thr-1", "delivery": "queued", "target": {"type": "commit", "sha": "a"}},
             "delivery must be one of: inline, detached",
@@ -463,12 +483,6 @@ def test_parse_discovery_params_use_canonical_shapes() -> None:
         {
             "cwds": ["/workspace/project"],
             "force_reload": True,
-            "per_cwd_extra_user_roots": [
-                {
-                    "cwd": "/workspace/project",
-                    "extra_user_roots": ["/workspace/shared-skills"],
-                }
-            ],
         }
     )
     apps = parse_discovery_apps_list_params(
@@ -494,12 +508,6 @@ def test_parse_discovery_params_use_canonical_shapes() -> None:
     assert skills == {
         "cwds": ["/workspace/project"],
         "force_reload": True,
-        "per_cwd_extra_user_roots": [
-            {
-                "cwd": "/workspace/project",
-                "extra_user_roots": ["/workspace/shared-skills"],
-            }
-        ],
     }
     assert apps == {"limit": 20, "thread_id": "thr-1", "force_refetch": False}
     assert plugins == {

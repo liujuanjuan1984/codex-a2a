@@ -240,7 +240,7 @@ SESSION_QUERY_INVALID_PARAMS_DATA_FIELDS: tuple[str, ...] = (
 DISCOVERY_METHOD_CONTRACTS: dict[str, DiscoveryMethodContract] = {
     "list_skills": DiscoveryMethodContract(
         method="codex.discovery.skills.list",
-        optional_params=("cwds", "force_reload", "per_cwd_extra_user_roots"),
+        optional_params=("cwds", "force_reload"),
         result_fields=("items",),
         items_type="DiscoverySkillScope[]",
         items_field="items",
@@ -251,7 +251,7 @@ DISCOVERY_METHOD_CONTRACTS: dict[str, DiscoveryMethodContract] = {
                 "responses never include local paths or raw upstream records."
             ),
             (
-                "Use stable skill name/scope fields when constructing rich-input skill items; "
+                "Use the opaque skill handle when constructing rich-input skill items; "
                 "local skill paths are intentionally not exposed."
             ),
         ),

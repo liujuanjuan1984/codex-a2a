@@ -476,6 +476,8 @@ def test_guide_mentions_declared_rich_input_contract() -> None:
     assert "core A2A `SendMessage` and `SendStreamingMessage`" in guide_text
     assert 'Part(data={"type":"mention"|"skill", ...})' in guide_text
     assert "turn/start.input[].type=input_image" in guide_text
+    assert "skill:v1:<base64url-sha256>" in guide_text
+    assert "client-supplied `skill.path` is rejected" in guide_text
     assert "local_image" in guide_text
 
     for fragment in rich_input["supported_part_types"]:
