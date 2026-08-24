@@ -252,13 +252,17 @@ async def test_runtime_state_runtime_does_not_dispose_shared_engine(
         a2a_database_url=f"sqlite+aiosqlite:///{(tmp_path / 'shared-runtime.db').resolve()}",
     )
     engine = build_database_engine(settings)
+    original_dispose = engine.dispose
     dispose_spy = AsyncMock()
     monkeypatch.setattr(type(engine), "dispose", dispose_spy)
 
-    runtime_state = build_runtime_state_runtime(settings, engine=engine)
-    await runtime_state.shutdown()
+    try:
+        runtime_state = build_runtime_state_runtime(settings, engine=engine)
+        await runtime_state.shutdown()
 
-    dispose_spy.assert_not_awaited()
+        dispose_spy.assert_not_awaited()
+    finally:
+        await original_dispose()
 
 
 async def _return_session(session_id: str) -> str:
