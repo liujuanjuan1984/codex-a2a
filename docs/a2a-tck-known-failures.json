@@ -1,6 +1,11 @@
 {
   "schema_version": 1,
+  "scope": "non_normative_tck_behavior_snapshot",
   "tck_commit": "5996b79f9cefa6fc390980e383e358a66fb9e49e",
+  "tck_spec_snapshot": {
+    "release": "v1.0.0",
+    "commit": "173695755607e884aa9acf8ce4feed90e32727a1"
+  },
   "category": "must",
   "transports": {
     "jsonrpc": [

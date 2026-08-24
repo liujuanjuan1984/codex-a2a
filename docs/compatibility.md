@@ -8,11 +8,11 @@ This document explains the compatibility promises this repository currently trie
 | --- | --- | --- |
 | Python | 3.11–3.14 | Package classifiers cover all four versions; CI runs 3.13 as the quality gate and 3.11, 3.12, and 3.14 in the runtime matrix. |
 | A2A Python SDK | Exactly `a2a-sdk==1.1.2` | Pinned in `pyproject.toml`; this is the [official A2A Python SDK](https://github.com/a2aproject/a2a-python), not a fork. |
-| A2A protocol | `1.0` only | Advertised default and normalized compatibility line. SDK compatibility with other protocol versions does not extend this adapter's claim. |
-| Inbound A2A transports | JSON-RPC and HTTP+JSON | Both are repository-owned runtime and scheduled incremental-TCK surfaces. gRPC is not exposed by this adapter. |
+| A2A protocol | `1.0` wire line | The released upstream A2A specification is normative for portable core semantics; the current compatible release is `v1.0.1`. SDK compatibility with other protocol versions does not extend this adapter's claim. |
+| Inbound A2A transports | JSON-RPC and HTTP+JSON | Both are repository-owned runtime surfaces. gRPC is not exposed by this adapter. |
 | Codex local runtime | Codex CLI/App Server | The local [Apache-2.0 Codex CLI](https://github.com/openai/codex) is the upstream process boundary. Scheduled smoke tests install the latest stable CLI and complete a real local App Server turn. |
 | Codex App Server API | Stable methods by default | Stable and opt-in experimental schema dependencies are checked; the real turn smoke stays on the stable API. Experimental plugin methods require `CODEX_ENABLE_EXPERIMENTAL_API=true` and are not part of the default contract. |
-| External conformance | Pinned incremental A2A TCK gate | New or reclassified failures block; reviewed dummy/auth differences remain visible. A green comparison is not a formal conformance certificate. |
+| External observation | Pinned A2A TCK behavior probe | The current TCK embeds an older `v1.0.0` spec snapshot. Its result detects drift only against the fixed tool observation and is neither protocol authority nor evidence of current-spec conformance. |
 
 The repository pins the SDK version in `pyproject.toml` and validates the published CLI build in CI. Upgrade the SDK deliberately rather than relying on floating dependency resolution.
 
@@ -44,11 +44,14 @@ Open-source consumption guidance:
 
 ## Normative Sources
 
-When documentation or reference material disagrees, treat these as normative in this order:
+For portable A2A core semantics, treat these sources in this order:
 
-- runtime behavior validated by tests
-- machine-readable discovery output such as Agent Card, authenticated extended card, and OpenAPI metadata
+- the latest compatible released upstream A2A specification (`v1.0.x` for this repository's `1.0` wire line)
+- machine-readable discovery output such as Agent Card, authenticated extended card, and OpenAPI metadata, which declares the subset implemented here but cannot override the upstream core protocol
+- runtime behavior validated by tests, which is implementation evidence rather than authority when it disagrees with the protocol
 - repository-owned docs in `README.md`, `docs/`, and `CONTRIBUTING.md`
+
+The pinned A2A TCK is deliberately excluded from this normative order. Its embedded spec snapshot and test assumptions may lag the released protocol; use it only to detect changes relative to the same fixed observation tool, then adjudicate every difference against the released specification.
 
 Maintainer-local upstream Codex snapshots generated via `scripts/sync_codex_docs.sh` are optional reference inputs for comparison and protocol context. They do not override this repository's declared service contract.
 

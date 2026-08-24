@@ -59,7 +59,7 @@ def test_readme_documents_released_cli_installation_via_uv_tool() -> None:
     assert "create a PR from the working branch" in README_TEXT
     assert "merge into `main` after human review" in README_TEXT
     assert "[Compatibility Guide](docs/compatibility.md)" in README_TEXT
-    assert "[External Conformance Experiments](docs/conformance.md)" in README_TEXT
+    assert "[External TCK Behavior Probe](docs/conformance.md)" in README_TEXT
     assert "[Contributing Guide](CONTRIBUTING.md)" in README_TEXT
     assert "single-tenant trust boundary" in README_TEXT
     assert "Portable vs Private Surface" in README_TEXT
@@ -77,7 +77,10 @@ def test_ecosystem_and_compatibility_claims_match_repository_evidence() -> None:
     assert "3.11–3.14" in COMPATIBILITY_TEXT
     assert PYPROJECT_DATA["project"]["dependencies"][0] in COMPATIBILITY_TEXT
     assert "gRPC is not exposed by this adapter" in COMPATIBILITY_TEXT
-    assert "not a formal conformance certificate" in COMPATIBILITY_TEXT
+    assert "neither protocol authority nor evidence of current-spec conformance" in (
+        COMPATIBILITY_TEXT
+    )
+    assert "latest compatible released upstream A2A specification" in COMPATIBILITY_TEXT
     assert "Python 3.11 through 3.14" in CONTRIBUTING_TEXT
 
 
@@ -126,7 +129,8 @@ def test_dependency_health_workflow_runs_as_a_standalone_check() -> None:
 
 
 def test_scheduled_compatibility_workflow_pins_tck_and_smokes_latest_codex() -> None:
-    assert "name: Scheduled Compatibility" in COMPATIBILITY_WORKFLOW_TEXT
+    assert "name: Scheduled Upstream Probes" in COMPATIBILITY_WORKFLOW_TEXT
+    assert "Pinned TCK Behavior Drift" in COMPATIBILITY_WORKFLOW_TEXT
     assert 'cron: "17 4 * * 1"' in COMPATIBILITY_WORKFLOW_TEXT
     assert "CONFORMANCE_TCK_REF: 5996b79f9cefa6fc390980e383e358a66fb9e49e" in (
         COMPATIBILITY_WORKFLOW_TEXT

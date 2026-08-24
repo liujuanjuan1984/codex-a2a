@@ -1,11 +1,13 @@
-# External Conformance Triage
+# External TCK Observation Triage
 
 This document is the standing triage template for local `./scripts/conformance.sh` runs against the official `a2aproject/a2a-tck`.
 
-## Standards Used For Triage
+## Authorities and Evidence Used For Triage
 
+- The latest compatible released upstream A2A specification: currently `v1.0.1` for the repository's advertised `1.0` wire line.
 - `a2a-sdk==1.1.2` as installed in this repository.
 - The default A2A protocol version advertised by this repository: `1.0`.
+- The pinned TCK embeds the older `v1.0.0@173695755607e884aa9acf8ce4feed90e32727a1` spec snapshot. Its assertions are evidence to inspect, never protocol authority.
 - Repository compatibility policy:
   - machine-readable Agent Card and OpenAPI contracts must reflect implemented runtime behavior;
   - external TCK results are investigation input rather than default merge gates;
@@ -14,7 +16,7 @@ This document is the standing triage template for local `./scripts/conformance.s
 ## Classification Labels
 
 - `Runtime issue`: the failure reproduces against the repository's declared runtime behavior and should be fixed here.
-- `TCK mismatch`: the failure appears to conflict with the installed SDK line or this repository's declared `1.0` baseline.
+- `TCK mismatch`: the failure appears to conflict with the latest compatible released A2A specification, including because the TCK embeds an older spec snapshot or carries a test-specific assumption.
 - `Protocol gap`: the failure identifies work needed to complete the repository's declared `1.0` surface.
 - `Local experiment artifact`: the failure comes from the dummy-backed SUT, local auth, local URLs, timing, or other experiment setup details.
 - `Needs repro`: the failure needs a focused local probe before assigning ownership.
@@ -27,9 +29,10 @@ For each failed or errored node ID:
 
 1. Copy the node ID from `failed-tests.json`.
 2. Inspect the corresponding raw details in `pytest-report.json` and `tck.log`.
-3. Compare the expectation with `docs/compatibility.md`, authenticated extended card skills/examples, and OpenAPI `x-a2a-extension-contracts`.
-4. Assign one classification label.
-5. Record whether the next action belongs in this repository, the TCK, or a future protocol compatibility issue.
+3. Compare the expectation first with the latest compatible released A2A specification, then with `docs/compatibility.md`, authenticated extended card skills/examples, and OpenAPI `x-a2a-extension-contracts`.
+4. Check whether the TCK's embedded spec snapshot differs for the affected semantics.
+5. Assign one classification label.
+6. Record whether the next action belongs in this repository, the TCK, or a future protocol compatibility issue.
 
 ## Per-Test Triage
 
@@ -57,7 +60,7 @@ YYYY-MM-DD:
 - `test_http_status.py::TestHttpJsonStatusCodes::test_content_type_not_supported_returns_415`: Local experiment artifact. Static authentication rejects the unauthenticated probe with 401 before protocol content-type validation. Next action: none.
 - `test_http_status.py::TestHttpJsonStatusCodes::test_version_not_supported_returns_400`: Local experiment artifact. Static authentication rejects the unauthenticated probe with 401 before version validation. Next action: none.
 
-Both transport result sets are encoded as exact node IDs plus narrow failure-message categories in the known-failure baseline. The incremental gate permits these reviewed differences and fails on additions or category drift; it is not a formal conformance claim.
+Both transport result sets are encoded as exact node IDs plus narrow failure-message categories in a historical observation snapshot. The drift check permits these reviewed differences and stops on additions or category changes for human/spec review; it is not a formal conformance claim and cannot establish compatibility with the newer `v1.0.1` release.
 
 Previously failing adapter defects fixed in this pass (verified by the same pinned TCK run and repository regression tests):
 

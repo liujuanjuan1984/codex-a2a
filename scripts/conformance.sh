@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run an external A2A conformance experiment with an incremental known-failure gate.
+# Run a non-normative external A2A TCK behavior probe.
 set -euo pipefail
 
 # shellcheck source=./health_common.sh
@@ -11,9 +11,10 @@ Usage:
   bash ./scripts/conformance.sh [category]
 
 Purpose:
-  Run the official A2A TCK and preserve its raw evidence.
-  Mandatory single-transport runs compare failures with the version-controlled
-  baseline so known differences pass while new or changed failures fail.
+  Run the official A2A TCK and preserve its raw evidence. The TCK is a historical
+  behavior probe, not the protocol authority or a conformance certificate.
+  Mandatory single-transport runs compare failures with a version-controlled
+  observation snapshot so known differences pass while unexpected drift fails.
 
 Category:
   Defaults to "mandatory", which aliases the current TCK "must" level.
@@ -97,6 +98,13 @@ fi
 git -C "${tck_dir}" fetch --depth 1 origin "${tck_ref}" >"${output_dir}/tck-fetch.log" 2>&1
 git -C "${tck_dir}" checkout --quiet FETCH_HEAD
 tck_commit="$(git -C "${tck_dir}" rev-parse HEAD)"
+tck_spec_version_file="${tck_dir}/specification/version.json"
+if [[ ! -f "${tck_spec_version_file}" ]]; then
+  echo "TCK checkout does not expose specification/version.json" >&2
+  exit 2
+fi
+tck_spec_release="$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["branch"])' "${tck_spec_version_file}")"
+tck_spec_commit="$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["commitHash"])' "${tck_spec_version_file}")"
 
 if [[ "${CONFORMANCE_SKIP_TCK_SYNC:-0}" != "1" ]]; then
   (
@@ -242,6 +250,8 @@ CONFORMANCE_OUTPUT_DIR="${output_dir}" \
 CONFORMANCE_SUT_URL="${sut_url}" \
 CONFORMANCE_TCK_DIR="${tck_dir}" \
 CONFORMANCE_TCK_REF="${tck_ref}" \
+CONFORMANCE_TCK_SPEC_RELEASE="${tck_spec_release}" \
+CONFORMANCE_TCK_SPEC_COMMIT="${tck_spec_commit}" \
 CONFORMANCE_TRANSPORTS="${transports}" \
 CONFORMANCE_TRANSPORT_STRATEGY="${transport_strategy}" \
 CONFORMANCE_TCK_EXIT="${tck_exit}" \
@@ -268,6 +278,10 @@ metadata = {
     "tck_commit": subprocess.check_output(
         ["git", "-C", os.environ["CONFORMANCE_TCK_DIR"], "rev-parse", "HEAD"], text=True
     ).strip(),
+    "tck_spec_snapshot": {
+        "release": os.environ["CONFORMANCE_TCK_SPEC_RELEASE"],
+        "commit": os.environ["CONFORMANCE_TCK_SPEC_COMMIT"],
+    },
 }
 
 (output_dir / "metadata.json").write_text(json.dumps(metadata, indent=2) + "\n")
@@ -309,6 +323,8 @@ if [[ "${should_compare}" == "1" ]]; then
     --transport "${normalized_transport}" \
     --category "${category}" \
     --tck-commit "${tck_commit}" \
+    --tck-spec-release "${tck_spec_release}" \
+    --tck-spec-commit "${tck_spec_commit}" \
     --tck-exit "${tck_exit}" \
     --json-report "${output_dir}/pytest-report.json" \
     --junit-report "${output_dir}/junitreport.xml" \
@@ -326,7 +342,7 @@ if [[ -f "${output_dir}/failed-tests.json" ]]; then
   echo "Failed tests index: ${output_dir}/failed-tests.json"
 fi
 if [[ -f "${output_dir}/baseline-comparison.json" ]]; then
-  echo "Baseline comparison: ${output_dir}/baseline-comparison.json"
+  echo "TCK observation comparison: ${output_dir}/baseline-comparison.json"
 fi
 
 exit "${gate_exit}"

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compare A2A TCK failures with the version-controlled known-failure baseline."""
+"""Compare a pinned, non-normative A2A TCK observation with its snapshot."""
 
 from __future__ import annotations
 
@@ -161,7 +161,7 @@ def compare_failures(
                 }
             )
     return {
-        "status": "regressed" if regressions else "compatible",
+        "status": "drifted" if regressions else "unchanged",
         "transport": transport,
         "counts": {
             "actual_failures": len(actual),
@@ -175,12 +175,42 @@ def compare_failures(
     }
 
 
+def snapshot_metadata_mismatch(
+    baseline: dict[str, Any],
+    *,
+    tck_commit: str,
+    tck_spec_release: str,
+    tck_spec_commit: str,
+) -> str | None:
+    if baseline.get("scope") != "non_normative_tck_behavior_snapshot":
+        return "TCK observation file does not declare its non-normative scope"
+    if baseline.get("tck_commit") != tck_commit:
+        return (
+            "TCK commit does not match observation snapshot: "
+            f"expected {baseline.get('tck_commit')}, got {tck_commit}"
+        )
+    spec_snapshot = baseline.get("tck_spec_snapshot")
+    if not isinstance(spec_snapshot, dict):
+        return "TCK observation file does not record its embedded protocol snapshot"
+    expected_release = spec_snapshot.get("release")
+    expected_commit = spec_snapshot.get("commit")
+    if expected_release != tck_spec_release or expected_commit != tck_spec_commit:
+        return (
+            "TCK embedded protocol snapshot does not match observation snapshot: "
+            f"expected {expected_release}@{expected_commit}, "
+            f"got {tck_spec_release}@{tck_spec_commit}"
+        )
+    return None
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--baseline", type=Path, required=True)
     parser.add_argument("--transport", choices=("jsonrpc", "http_json"), required=True)
     parser.add_argument("--category", required=True)
     parser.add_argument("--tck-commit", required=True)
+    parser.add_argument("--tck-spec-release", required=True)
+    parser.add_argument("--tck-spec-commit", required=True)
     parser.add_argument("--tck-exit", type=int, required=True)
     parser.add_argument("--json-report", type=Path)
     parser.add_argument("--junit-report", type=Path)
@@ -188,11 +218,14 @@ def main() -> int:
     args = parser.parse_args()
 
     baseline = json.loads(args.baseline.read_text(encoding="utf-8"))
-    if baseline.get("tck_commit") != args.tck_commit:
-        raise SystemExit(
-            "TCK commit does not match known-failure baseline: "
-            f"expected {baseline.get('tck_commit')}, got {args.tck_commit}"
-        )
+    metadata_mismatch = snapshot_metadata_mismatch(
+        baseline,
+        tck_commit=args.tck_commit,
+        tck_spec_release=args.tck_spec_release,
+        tck_spec_commit=args.tck_spec_commit,
+    )
+    if metadata_mismatch is not None:
+        raise SystemExit(metadata_mismatch)
     category = "must" if args.category == "mandatory" else args.category
     if baseline.get("category") != category:
         raise SystemExit(
@@ -221,6 +254,10 @@ def main() -> int:
     summary["baseline"] = str(args.baseline)
     summary["evidence"] = evidence
     summary["tck_commit"] = args.tck_commit
+    summary["tck_spec_snapshot"] = {
+        "release": args.tck_spec_release,
+        "commit": args.tck_spec_commit,
+    }
     summary["category"] = category
     summary["raw_tck_exit"] = args.tck_exit
     args.output.write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
@@ -231,7 +268,7 @@ def main() -> int:
 
     counts = summary["counts"]
     print(
-        "TCK incremental gate "
+        "Pinned TCK behavior probe "
         f"{summary['status']}: transport={args.transport} "
         f"known={counts['known_failures']} "
         f"resolved={counts['resolved_known_failures']} "

@@ -16,8 +16,8 @@ This document only explains the remaining repository-local maintainer scripts. U
 - [`scripts/check_dead_code.py`](./check_dead_code.py): run the conservative private dead-code guard used by the default validation baseline.
 - [`scripts/audit_low_call_sites.py`](./audit_low_call_sites.py): report low-call-count function and method candidates for manual wrapper/abstraction review.
 - [`scripts/validate_runtime_matrix.sh`](./validate_runtime_matrix.sh): run the reduced runtime-only validation used by the multi-version CI matrix.
-- [`scripts/conformance.sh`](./conformance.sh): run the official A2A TCK, preserve raw evidence, and compare mandatory single-transport failures with the reviewed incremental baseline.
-- [`scripts/check_tck_regressions.py`](./check_tck_regressions.py): compare exact pytest node IDs, outcomes, failure categories, and raw TCK exit semantics with `docs/a2a-tck-known-failures.json`.
+- [`scripts/conformance.sh`](./conformance.sh): run a pinned, non-normative A2A TCK behavior probe, preserve raw evidence, and compare mandatory single-transport failures with the reviewed observation snapshot.
+- [`scripts/check_tck_regressions.py`](./check_tck_regressions.py): compare exact pytest node IDs, outcomes, failure categories, raw TCK exit semantics, and the TCK's embedded spec snapshot with `docs/a2a-tck-known-failures.json`.
 - [`scripts/dependency_health.sh`](./dependency_health.sh): run the standalone dependency review flow (`sync`/`pip check`, outdated package listing, and dev vulnerability audit).
 - [`scripts/smoke_test_built_cli.sh`](./smoke_test_built_cli.sh): validate that a built wheel can be installed through `uv tool` and becomes healthy.
 - [`scripts/smoke_test_live_codex.sh`](./smoke_test_live_codex.sh): verify the installed Codex app-server stable and opt-in experimental schema dependencies, discover and resolve an opaque workspace-skill handle, and drive one real stable-API thread/turn against an isolated local Responses provider.
@@ -34,7 +34,7 @@ The `Publish` workflow now separates build, PyPI publish, and GitHub Release syn
 
 ## Notes
 
-- `conformance.sh` intentionally stays outside the default local regression baseline. The scheduled compatibility workflow uses its incremental TCK gate for both JSON-RPC and HTTP+JSON; triage evidence in [`docs/conformance-triage.md`](../docs/conformance-triage.md).
+- `conformance.sh` intentionally stays outside the default local regression baseline. The scheduled upstream-probe workflow uses the pinned TCK only as a historical behavior-drift probe for JSON-RPC and HTTP+JSON, never as protocol authority; triage evidence in [`docs/conformance-triage.md`](../docs/conformance-triage.md).
 - `validate_baseline.sh` and `dependency_health.sh` intentionally remain separate entrypoints and share common prerequisites through [`health_common.sh`](./health_common.sh).
 - `validate_baseline.sh` now includes a conservative private dead-code check before type-checking and test execution.
 - `audit_low_call_sites.py` is intentionally advisory only. Use it to surface low-call-count candidates, then inspect the actual consumer chain before removing an abstraction.
