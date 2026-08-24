@@ -5,6 +5,8 @@ from typing import Any
 
 from a2a.client import ClientCallContext
 
+from codex_a2a.protocol_versions import ADVERTISED_PROTOCOL_VERSION
+
 from .auth import encode_basic_auth
 from .extension_negotiation import merge_extension_service_parameters, parse_requested_extensions
 
@@ -13,11 +15,12 @@ def build_default_headers(
     bearer_token: str | None,
     basic_auth: str | None = None,
 ) -> dict[str, str]:
+    headers = {"A2A-Version": ADVERTISED_PROTOCOL_VERSION}
     if bearer_token:
-        return {"Authorization": f"Bearer {bearer_token}"}
-    if basic_auth:
-        return {"Authorization": f"Basic {encode_basic_auth(basic_auth)}"}
-    return {}
+        headers["Authorization"] = f"Bearer {bearer_token}"
+    elif basic_auth:
+        headers["Authorization"] = f"Basic {encode_basic_auth(basic_auth)}"
+    return headers
 
 
 def split_request_metadata(
@@ -29,12 +32,14 @@ def split_request_metadata(
     for key, value in dict(metadata or {}).items():
         if isinstance(key, str) and key.lower() == "authorization":
             if value is not None:
-                extra_headers["Authorization"] = str(value)
+                if not isinstance(value, str):
+                    raise ValueError("Authorization metadata header must be a string")
+                extra_headers["Authorization"] = value
             continue
         if isinstance(key, str) and key.lower() == "a2a-version":
-            if value is not None:
-                extra_headers["A2A-Version"] = str(value)
-            continue
+            raise ValueError(
+                f"A2A-Version is fixed to {ADVERTISED_PROTOCOL_VERSION} and must not be overridden"
+            )
         if isinstance(key, str) and key.lower() == "a2a-extensions":
             if isinstance(value, str):
                 requested_extensions.append(value)
@@ -54,8 +59,13 @@ def split_request_metadata(
 def build_call_context(
     extra_headers: Mapping[str, str] | None,
     extensions: tuple[str, ...] | None = None,
+    *,
+    default_headers: Mapping[str, str] | None = None,
 ) -> ClientCallContext | None:
-    service_parameters = merge_extension_service_parameters(extra_headers, extensions)
+    merged_headers = dict(default_headers or {})
+    if extra_headers:
+        merged_headers.update(extra_headers)
+    service_parameters = merge_extension_service_parameters(merged_headers, extensions)
     if not service_parameters:
         return None
     return ClientCallContext(service_parameters=service_parameters)

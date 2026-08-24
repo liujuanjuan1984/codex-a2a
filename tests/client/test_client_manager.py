@@ -56,7 +56,10 @@ async def test_manager_normalizes_config_and_transports(monkeypatch: pytest.Monk
     assert client.config.request_timeout_seconds == 41.0
     assert client.config.card_fetch_timeout_seconds == 7.0
     assert client.config.use_client_preference is True
-    assert client.config.default_headers == {"Authorization": "Bearer peer-token"}
+    assert client.config.default_headers == {
+        "A2A-Version": "1.0",
+        "Authorization": "Bearer peer-token",
+    }
     assert client.config.supported_transports == ["HTTP+JSON", "JSONRPC"]
     assert client.config.extensions == [
         SESSION_BINDING_EXTENSION_URI,
@@ -77,7 +80,10 @@ async def test_manager_uses_basic_auth_when_bearer_is_absent(
     manager = A2AClientManager(settings, client_factory=factory)
     client = await manager.get_client("https://peer.example.com/")
 
-    assert client.config.default_headers == {"Authorization": "Basic dXNlcjpwYXNz"}
+    assert client.config.default_headers == {
+        "A2A-Version": "1.0",
+        "Authorization": "Basic dXNlcjpwYXNz",
+    }
 
 
 @pytest.mark.asyncio
@@ -92,7 +98,7 @@ async def test_manager_does_not_send_credentials_without_allowlist(
     manager = A2AClientManager(settings, client_factory=factory)
     client = await manager.get_client("https://peer.example.com/")
 
-    assert client.config.default_headers == {}
+    assert client.config.default_headers == {"A2A-Version": "1.0"}
 
 
 @pytest.mark.asyncio

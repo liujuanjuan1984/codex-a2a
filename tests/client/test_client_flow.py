@@ -156,7 +156,10 @@ async def test_send_get_task_and_cancel_use_sdk_methods() -> None:
     assert send_result.task.id == "task-1"
     send_call = sdk_client.send_calls[0]
     assert proto_to_python(send_call["request"].metadata) == {"trace_id": "trace-1"}
-    assert send_call["context"].service_parameters == {"Authorization": "Bearer token"}
+    assert send_call["context"].service_parameters == {
+        "A2A-Version": "1.0",
+        "Authorization": "Bearer token",
+    }
     assert send_call["request"].configuration.accepted_output_modes == ["text/plain"]
     assert send_call["request"].configuration.history_length == 3
     assert send_call["request"].configuration.return_immediately is True
@@ -173,7 +176,10 @@ async def test_send_get_task_and_cancel_use_sdk_methods() -> None:
         "id": "task-1",
         "history_length": 2,
     }
-    assert sdk_client.get_task_contexts[0].service_parameters == {"Authorization": "Bearer token"}
+    assert sdk_client.get_task_contexts[0].service_parameters == {
+        "A2A-Version": "1.0",
+        "Authorization": "Bearer token",
+    }
 
     cancel_result = await client.cancel(
         CancelTaskRequest(
@@ -186,7 +192,10 @@ async def test_send_get_task_and_cancel_use_sdk_methods() -> None:
         "id": "task-1",
         "metadata": {"trace_id": "trace-3"},
     }
-    assert sdk_client.cancel_contexts[0].service_parameters == {"Authorization": "Bearer token"}
+    assert sdk_client.cancel_contexts[0].service_parameters == {
+        "A2A-Version": "1.0",
+        "Authorization": "Bearer token",
+    }
 
 
 @pytest.mark.asyncio
@@ -218,6 +227,7 @@ async def test_send_negotiates_extensions_from_config_and_metadata() -> None:
 
     send_call = sdk_client.send_calls[0]
     assert send_call["context"].service_parameters == {
+        "A2A-Version": "1.0",
         "Authorization": "Bearer token",
         "A2A-Extensions": SESSION_BINDING_EXTENSION_URI,
     }
