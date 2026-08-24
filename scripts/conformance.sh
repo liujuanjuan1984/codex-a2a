@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run a non-normative external A2A TCK behavior probe.
+# Run a local-only external A2A conformance experiment without changing default gates.
 set -euo pipefail
 
 # shellcheck source=./health_common.sh
@@ -11,10 +11,8 @@ Usage:
   bash ./scripts/conformance.sh [category]
 
 Purpose:
-  Run the official A2A TCK and preserve its raw evidence. The TCK is a historical
-  behavior probe, not the protocol authority or a conformance certificate.
-  Mandatory single-transport runs compare failures with a version-controlled
-  observation snapshot so known differences pass while unexpected drift fails.
+  Run the official A2A TCK as a local/manual experiment.
+  This script is intentionally separate from validate_baseline.sh and CI gates.
 
 Category:
   Defaults to "mandatory", which aliases the current TCK "must" level.
@@ -26,8 +24,6 @@ Selected environment variables:
   CONFORMANCE_TCK_REPO                Override TCK repo URL (default: https://github.com/a2aproject/a2a-tck.git)
   CONFORMANCE_TCK_REF                 Override TCK git ref (default: main)
   CONFORMANCE_TRANSPORTS              Override requested transports (default: jsonrpc)
-  CONFORMANCE_BASELINE_FILE           Override known-failure baseline JSON
-  CONFORMANCE_BASELINE_MODE           auto (default), on, or off
   CONFORMANCE_TRANSPORT_STRATEGY      Override TCK transport strategy (default: agent_preferred)
   CONFORMANCE_SUT_URL                 Use an already running SUT instead of the local dummy-backed runtime
   CONFORMANCE_SUT_PORT                Override local dummy-backed SUT port (default: 8011)
@@ -63,8 +59,6 @@ tck_repo="${CONFORMANCE_TCK_REPO:-https://github.com/a2aproject/a2a-tck.git}"
 tck_ref="${CONFORMANCE_TCK_REF:-main}"
 transport_strategy="${CONFORMANCE_TRANSPORT_STRATEGY:-agent_preferred}"
 transports="${CONFORMANCE_TRANSPORTS:-jsonrpc}"
-baseline_file="${CONFORMANCE_BASELINE_FILE:-${ROOT_DIR}/docs/a2a-tck-known-failures.json}"
-baseline_mode="${CONFORMANCE_BASELINE_MODE:-auto}"
 sut_port="${CONFORMANCE_SUT_PORT:-8011}"
 repo_log="${output_dir}/repo-health.log"
 tck_sync_log="${output_dir}/tck-sync.log"
@@ -97,14 +91,6 @@ fi
 
 git -C "${tck_dir}" fetch --depth 1 origin "${tck_ref}" >"${output_dir}/tck-fetch.log" 2>&1
 git -C "${tck_dir}" checkout --quiet FETCH_HEAD
-tck_commit="$(git -C "${tck_dir}" rev-parse HEAD)"
-tck_spec_version_file="${tck_dir}/specification/version.json"
-if [[ ! -f "${tck_spec_version_file}" ]]; then
-  echo "TCK checkout does not expose specification/version.json" >&2
-  exit 2
-fi
-tck_spec_release="$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["branch"])' "${tck_spec_version_file}")"
-tck_spec_commit="$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["commitHash"])' "${tck_spec_version_file}")"
 
 if [[ "${CONFORMANCE_SKIP_TCK_SYNC:-0}" != "1" ]]; then
   (
@@ -167,13 +153,6 @@ else
 fi
 
 json_report_name="pytest-${category}.json"
-
-rm -f \
-  "${tck_dir}/reports/${json_report_name}" \
-  "${tck_dir}/reports/compatibility.json" \
-  "${tck_dir}/reports/compatibility.html" \
-  "${tck_dir}/reports/tck_report.html" \
-  "${tck_dir}/reports/junitreport.xml"
 
 set +e
 (
@@ -250,11 +229,8 @@ CONFORMANCE_OUTPUT_DIR="${output_dir}" \
 CONFORMANCE_SUT_URL="${sut_url}" \
 CONFORMANCE_TCK_DIR="${tck_dir}" \
 CONFORMANCE_TCK_REF="${tck_ref}" \
-CONFORMANCE_TCK_SPEC_RELEASE="${tck_spec_release}" \
-CONFORMANCE_TCK_SPEC_COMMIT="${tck_spec_commit}" \
 CONFORMANCE_TRANSPORTS="${transports}" \
 CONFORMANCE_TRANSPORT_STRATEGY="${transport_strategy}" \
-CONFORMANCE_TCK_EXIT="${tck_exit}" \
 uv run python - <<'PY'
 from __future__ import annotations
 
@@ -273,15 +249,11 @@ metadata = {
     "tck_ref": os.environ["CONFORMANCE_TCK_REF"],
     "transports": os.environ["CONFORMANCE_TRANSPORTS"],
     "transport_strategy": os.environ["CONFORMANCE_TRANSPORT_STRATEGY"],
-    "raw_tck_exit": int(os.environ["CONFORMANCE_TCK_EXIT"]),
     "repo_commit": subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip(),
     "tck_commit": subprocess.check_output(
-        ["git", "-C", os.environ["CONFORMANCE_TCK_DIR"], "rev-parse", "HEAD"], text=True
+        ["git", "-C", os.environ["CONFORMANCE_TCK_DIR"], "rev-parse", "HEAD"],
+        text=True,
     ).strip(),
-    "tck_spec_snapshot": {
-        "release": os.environ["CONFORMANCE_TCK_SPEC_RELEASE"],
-        "commit": os.environ["CONFORMANCE_TCK_SPEC_COMMIT"],
-    },
 }
 
 (output_dir / "metadata.json").write_text(json.dumps(metadata, indent=2) + "\n")
@@ -302,37 +274,6 @@ if report_path.exists():
     (output_dir / "failed-tests.json").write_text(json.dumps(failures, indent=2) + "\n")
 PY
 
-gate_exit="${tck_exit}"
-normalized_transport="${transports//http-json/http_json}"
-should_compare=0
-if [[ "${baseline_mode}" == "on" ]]; then
-  should_compare=1
-elif [[ "${baseline_mode}" == "auto" && ( "${category}" == "mandatory" || "${category}" == "must" ) ]]; then
-  if [[ "${normalized_transport}" == "jsonrpc" || "${normalized_transport}" == "http_json" ]]; then
-    should_compare=1
-  fi
-elif [[ "${baseline_mode}" != "off" && "${baseline_mode}" != "auto" ]]; then
-  echo "CONFORMANCE_BASELINE_MODE must be auto, on, or off" >&2
-  exit 2
-fi
-
-if [[ "${should_compare}" == "1" ]]; then
-  set +e
-  uv run python scripts/check_tck_regressions.py \
-    --baseline "${baseline_file}" \
-    --transport "${normalized_transport}" \
-    --category "${category}" \
-    --tck-commit "${tck_commit}" \
-    --tck-spec-release "${tck_spec_release}" \
-    --tck-spec-commit "${tck_spec_commit}" \
-    --tck-exit "${tck_exit}" \
-    --json-report "${output_dir}/pytest-report.json" \
-    --junit-report "${output_dir}/junitreport.xml" \
-    --output "${output_dir}/baseline-comparison.json"
-  gate_exit="$?"
-  set -e
-fi
-
 echo "Conformance artifacts: ${output_dir}"
 echo "TCK log: ${tck_log}"
 if [[ -f "${output_dir}/pytest-report.json" ]]; then
@@ -341,8 +282,5 @@ fi
 if [[ -f "${output_dir}/failed-tests.json" ]]; then
   echo "Failed tests index: ${output_dir}/failed-tests.json"
 fi
-if [[ -f "${output_dir}/baseline-comparison.json" ]]; then
-  echo "TCK observation comparison: ${output_dir}/baseline-comparison.json"
-fi
 
-exit "${gate_exit}"
+exit "${tck_exit}"

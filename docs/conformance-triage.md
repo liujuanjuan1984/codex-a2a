@@ -1,13 +1,13 @@
-# External TCK Observation Triage
+# Optional TCK Observation Triage
 
 This document is the standing triage template for local `./scripts/conformance.sh` runs against the official `a2aproject/a2a-tck`.
 
-## Authorities and Evidence Used For Triage
+## Authorities Used For Triage
 
-- The latest compatible released upstream A2A specification: currently `v1.0.1` for the repository's advertised `1.0` wire line.
+- The latest compatible released upstream A2A specification is authoritative; currently this is `v1.0.1` for the repository's advertised `1.0` wire line.
 - `a2a-sdk==1.1.2` as installed in this repository.
 - The default A2A protocol version advertised by this repository: `1.0`.
-- The pinned TCK embeds the older `v1.0.0@173695755607e884aa9acf8ce4feed90e32727a1` spec snapshot. Its assertions are evidence to inspect, never protocol authority.
+- TCK assertions are non-normative observations and may lag the released specification.
 - Repository compatibility policy:
   - machine-readable Agent Card and OpenAPI contracts must reflect implemented runtime behavior;
   - external TCK results are investigation input rather than default merge gates;
@@ -16,12 +16,10 @@ This document is the standing triage template for local `./scripts/conformance.s
 ## Classification Labels
 
 - `Runtime issue`: the failure reproduces against the repository's declared runtime behavior and should be fixed here.
-- `TCK mismatch`: the failure appears to conflict with the latest compatible released A2A specification, including because the TCK embeds an older spec snapshot or carries a test-specific assumption.
+- `TCK mismatch`: the failure conflicts with the latest compatible released A2A specification or relies on a TCK-specific assumption.
 - `Protocol gap`: the failure identifies work needed to complete the repository's declared `1.0` surface.
 - `Local experiment artifact`: the failure comes from the dummy-backed SUT, local auth, local URLs, timing, or other experiment setup details.
 - `Needs repro`: the failure needs a focused local probe before assigning ownership.
-
-The machine-enforced representation of reviewed failures lives in [`a2a-tck-known-failures.json`](./a2a-tck-known-failures.json). Its `failure_category` values are stable comparison labels, while this document retains the human rationale.
 
 ## Triage Workflow
 
@@ -30,9 +28,8 @@ For each failed or errored node ID:
 1. Copy the node ID from `failed-tests.json`.
 2. Inspect the corresponding raw details in `pytest-report.json` and `tck.log`.
 3. Compare the expectation first with the latest compatible released A2A specification, then with `docs/compatibility.md`, authenticated extended card skills/examples, and OpenAPI `x-a2a-extension-contracts`.
-4. Check whether the TCK's embedded spec snapshot differs for the affected semantics.
-5. Assign one classification label.
-6. Record whether the next action belongs in this repository, the TCK, or a future protocol compatibility issue.
+4. Assign one classification label.
+5. Record whether the next action belongs in this repository, the TCK, or a future protocol compatibility issue. A TCK failure alone is never sufficient evidence for a runtime change.
 
 ## Per-Test Triage
 
@@ -53,14 +50,6 @@ YYYY-MM-DD:
 - `test_error_codes.py::TestJsonRpcErrorCodeMappings::test_content_type_not_supported_error[jsonrpc]`: Local experiment artifact. The TCK sends a raw unauthenticated request; the repository's auth wall (by design) returns 401 before the content-type check can produce `ContentTypeNotSupportedError` (-32005). The authenticated path returns -32005 (covered by repository regression tests). Next action: none.
 - `test_error_codes.py::TestJsonRpcErrorCodeMappings::test_version_not_supported_error[jsonrpc]`: Local experiment artifact. Same raw unauthenticated call; the authenticated path returns `VersionNotSupportedError` (-32009). Next action: none.
 - `test_error_codes.py::TestJsonRpcErrorCodeRange::test_error_code_in_valid_range[SendMessage-bad-version]`: Local experiment artifact. Same raw unauthenticated call; the authenticated path returns -32009, which is in the valid A2A range. Next action: none.
-
-2026-08-24 (same pinned TCK, HTTP+JSON transport, `must` level; 7 failed / 57 passed / 171 skipped):
-
-- The five artifact/message failures are the HTTP+JSON parametrizations of the same dummy-backend limitations classified above.
-- `test_http_status.py::TestHttpJsonStatusCodes::test_content_type_not_supported_returns_415`: Local experiment artifact. Static authentication rejects the unauthenticated probe with 401 before protocol content-type validation. Next action: none.
-- `test_http_status.py::TestHttpJsonStatusCodes::test_version_not_supported_returns_400`: Local experiment artifact. Static authentication rejects the unauthenticated probe with 401 before version validation. Next action: none.
-
-Both transport result sets are encoded as exact node IDs plus narrow failure-message categories in a historical observation snapshot. The drift check permits these reviewed differences and stops on additions or category changes for human/spec review; it is not a formal conformance claim and cannot establish compatibility with the newer `v1.0.1` release.
 
 Previously failing adapter defects fixed in this pass (verified by the same pinned TCK run and repository regression tests):
 

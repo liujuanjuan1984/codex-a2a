@@ -56,15 +56,12 @@ def test_low_call_audit_stays_manual_and_non_blocking() -> None:
 
 
 def test_conformance_keeps_external_tck_experiment_scope() -> None:
-    assert "Run the official A2A TCK and preserve its raw evidence." in CONFORMANCE_TEXT
+    assert "Run the official A2A TCK as a local/manual experiment." in CONFORMANCE_TEXT
     assert 'run_shared_repo_health_prerequisites "conformance"' in CONFORMANCE_TEXT
     assert "https://github.com/a2aproject/a2a-tck.git" in CONFORMANCE_TEXT
     assert "DummyChatCodexClient" in CONFORMANCE_TEXT
     assert "run_tck.run_test_category" in CONFORMANCE_TEXT
     assert "failed-tests.json" in CONFORMANCE_TEXT
-    assert "scripts/check_tck_regressions.py" in CONFORMANCE_TEXT
-    assert "baseline-comparison.json" in CONFORMANCE_TEXT
-    assert "CONFORMANCE_BASELINE_MODE" in CONFORMANCE_TEXT
     assert "uv run pre-commit run --all-files" not in CONFORMANCE_TEXT
     assert "uv run mypy" not in CONFORMANCE_TEXT
 
@@ -90,7 +87,7 @@ def test_scripts_index_documents_split_health_entrypoints() -> None:
     assert "doctor.sh" not in SCRIPTS_INDEX_TEXT
     assert "conformance.sh" in SCRIPTS_INDEX_TEXT
     assert "audit_low_call_sites.py" in SCRIPTS_INDEX_TEXT
-    assert "outside the default local regression baseline" in SCRIPTS_INDEX_TEXT
+    assert "outside CI and the default regression baseline" in SCRIPTS_INDEX_TEXT
     assert "default local validation baseline used by contributors and CI" in SCRIPTS_INDEX_TEXT
     assert "standalone dependency review flow" in SCRIPTS_INDEX_TEXT
     assert "health_common.sh" in SCRIPTS_INDEX_TEXT

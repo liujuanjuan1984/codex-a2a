@@ -12,7 +12,6 @@ This document explains the compatibility promises this repository currently trie
 | Inbound A2A transports | JSON-RPC and HTTP+JSON | Both are repository-owned runtime surfaces. gRPC is not exposed by this adapter. |
 | Codex local runtime | Codex CLI/App Server | The local [Apache-2.0 Codex CLI](https://github.com/openai/codex) is the upstream process boundary. Scheduled smoke tests install the latest stable CLI and complete a real local App Server turn. |
 | Codex App Server API | Stable methods by default | Stable and opt-in experimental schema dependencies are checked; the real turn smoke stays on the stable API. Experimental plugin methods require `CODEX_ENABLE_EXPERIMENTAL_API=true` and are not part of the default contract. |
-| External observation | Pinned A2A TCK behavior probe | The current TCK embeds an older `v1.0.0` spec snapshot. Its result detects drift only against the fixed tool observation and is neither protocol authority nor evidence of current-spec conformance. |
 
 The repository pins the SDK version in `pyproject.toml` and validates the published CLI build in CI. Upgrade the SDK deliberately rather than relying on floating dependency resolution.
 
@@ -51,7 +50,7 @@ For portable A2A core semantics, treat these sources in this order:
 - runtime behavior validated by tests, which is implementation evidence rather than authority when it disagrees with the protocol
 - repository-owned docs in `README.md`, `docs/`, and `CONTRIBUTING.md`
 
-The pinned A2A TCK is deliberately excluded from this normative order. Its embedded spec snapshot and test assumptions may lag the released protocol; use it only to detect changes relative to the same fixed observation tool, then adjudicate every difference against the released specification.
+The A2A TCK is deliberately excluded from this normative order and from automated repository gates. Its spec snapshot and test assumptions may lag the released protocol; maintainers may run it manually as optional investigation input, but its result does not establish or reject compatibility.
 
 Maintainer-local upstream Codex snapshots generated via `scripts/sync_codex_docs.sh` are optional reference inputs for comparison and protocol context. They do not override this repository's declared service contract.
 

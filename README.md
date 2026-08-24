@@ -165,7 +165,7 @@ The normative compatibility split and deployment model live in [Compatibility Gu
 - [Architecture Guide](docs/architecture.md) System structure, boundaries, and request flow.
 - [Maintainer Architecture Guide](docs/maintainer-architecture.md) Internal module structure, request call chains, and persistence touchpoints for contributors.
 - [Compatibility Guide](docs/compatibility.md) Supported Python/runtime surface, extension stability, and ecosystem-facing compatibility expectations.
-- [External TCK Behavior Probe](docs/conformance.md) Non-normative pinned-tool drift probe and spec-first triage workflow.
+- [Optional External TCK Experiment](docs/conformance.md) Manual, non-normative investigation guidance; it is not part of CI or compatibility claims.
 - [Security Policy](SECURITY.md) Threat model, deployment caveats, and vulnerability disclosure guidance.
 
 ## Ecosystem
