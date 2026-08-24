@@ -4,12 +4,18 @@ This document explains the compatibility promises this repository currently trie
 
 ## Runtime Support
 
-- Python versions: 3.11, 3.12, 3.13
-- A2A SDK line: `1.0.x`
-- A2A protocol version advertised by default: `1.0`
-- Normalized protocol compatibility lines declared today: `1.0`
+| Layer | Supported contract | Evidence and boundary |
+| --- | --- | --- |
+| Python | 3.11–3.14 | Package classifiers cover all four versions; CI runs 3.13 as the quality gate and 3.11, 3.12, and 3.14 in the runtime matrix. |
+| A2A Python SDK | Exactly `a2a-sdk==1.1.2` | Pinned in `pyproject.toml`; this is the [official A2A Python SDK](https://github.com/a2aproject/a2a-python), not a fork. |
+| A2A protocol | `1.0` wire line | The released upstream A2A specification is normative for portable core semantics; the current compatible release is `v1.0.1`. SDK compatibility with other protocol versions does not extend this adapter's claim. |
+| Inbound A2A transports | JSON-RPC and HTTP+JSON | Both are repository-owned runtime surfaces. gRPC is not exposed by this adapter. |
+| Codex local runtime | Codex CLI/App Server | The local [Apache-2.0 Codex CLI](https://github.com/openai/codex) is the upstream process boundary. Scheduled smoke tests install the latest stable CLI and complete a real local App Server turn. |
+| Codex App Server API | Stable methods by default | Stable and opt-in experimental schema dependencies are checked; the real turn smoke stays on the stable API. Experimental plugin methods require `CODEX_ENABLE_EXPERIMENTAL_API=true` and are not part of the default contract. |
 
 The repository pins the SDK version in `pyproject.toml` and validates the published CLI build in CI. Upgrade the SDK deliberately rather than relying on floating dependency resolution.
+
+This repository is an independent community project. The [A2A Protocol project](https://github.com/a2aproject/A2A), its official SDK, and the OpenAI Codex CLI are upstream dependencies or specifications, not organizational ownership or endorsement of `codex-a2a`. OpenAI's [open-source component list](https://developers.openai.com/codex/open-source) identifies the IDE extension and Codex cloud as not open source. Desktop and web products are also separate product surfaces; their availability and behavior are not inherited from the open-source CLI/App Server contract and are outside this compatibility matrix.
 
 The OpenAPI-published compatibility profile and wire contract publish `default_protocol_version`, `supported_protocol_versions`, and `protocol_compatibility`. Request-time `A2A-Version` negotiation now targets the repository's `1.0` baseline only, and the published contracts should describe the implemented `1.0` transport surface rather than any legacy compatibility line.
 
@@ -37,13 +43,18 @@ Open-source consumption guidance:
 
 ## Normative Sources
 
-When documentation or reference material disagrees, treat these as normative in this order:
+For portable A2A core semantics, treat these sources in this order:
 
-- runtime behavior validated by tests
-- machine-readable discovery output such as Agent Card, authenticated extended card, and OpenAPI metadata
+- the latest compatible released upstream A2A specification (`v1.0.x` for this repository's `1.0` wire line)
+- machine-readable discovery output such as Agent Card, authenticated extended card, and OpenAPI metadata, which declares the subset implemented here but cannot override the upstream core protocol
+- runtime behavior validated by tests, which is implementation evidence rather than authority when it disagrees with the protocol
 - repository-owned docs in `README.md`, `docs/`, and `CONTRIBUTING.md`
 
+The A2A TCK is deliberately excluded from this normative order and from automated repository gates. Its spec snapshot and test assumptions may lag the released protocol; maintainers may run it manually as optional investigation input, but its result does not establish or reject compatibility.
+
 Maintainer-local upstream Codex snapshots generated via `scripts/sync_codex_docs.sh` are optional reference inputs for comparison and protocol context. They do not override this repository's declared service contract.
+
+Upstream App Server stability labels also do not become repository promises automatically. Stable upstream methods enter this adapter's contract only after mapping, disclosure, and regression coverage; experimental upstream methods remain opt-in and may change with the installed Codex version.
 
 ## Compatibility-Sensitive Surface
 
@@ -99,9 +110,9 @@ Execution-environment boundary fields are also published through the runtime pro
 - Only shared request/response extensions currently participate in request-level `A2A-Extensions` negotiation. Provider-private extension URIs declared on the authenticated extended card are declaration-only unless explicitly documented otherwise; clients discover them there and then invoke their documented methods directly.
 - Product-specific extensions should remain stable within the current major line unless explicitly documented otherwise.
 - Deployment-conditional methods must be declared as conditional rather than silently disappearing.
-- Rich input mapping is compatibility-sensitive across the core A2A message surface and `codex.turns.steer`. Changes to supported part types, `Part(url|raw)` image handling, or `Part(data)` mention/skill mapping should be treated as wire-level behavior changes.
+- Rich input mapping is compatibility-sensitive across the core A2A message surface and `codex.turns.steer`. Changes to supported part types, `Part(url|raw)` image handling, `Part(data)` mention mapping, or the opaque `skill:v1` handle resolution/error contract should be treated as wire-level behavior changes. Client-supplied `skill.path` is never part of the accepted contract.
 - `codex.exec.*` is compatibility-sensitive as the standalone interactive exec contract. Changes to handle shapes, task-stream delivery, or lifecycle method names should be treated as wire-level changes.
-- `codex.discovery.*` is compatibility-sensitive as the stable discovery contract for normalized skill/app/plugin summaries and `mention_path` identifiers. Local paths (`skill.path`, marketplace paths) and raw upstream records are intentionally excluded from discovery responses; changes to normalized item fields, plugin marketplace mapping, or discovery watch task payload kinds should be treated as wire-level changes.
+- `codex.discovery.*` is compatibility-sensitive as the stable discovery contract for normalized skill/app/plugin summaries, opaque skill handles, and `mention_path` identifiers. Local paths (`skill.path`, marketplace paths) and raw upstream records are intentionally excluded from discovery responses; changes to normalized item fields, handle format/resolution, plugin marketplace mapping, or discovery watch task payload kinds should be treated as wire-level changes.
 - `codex.threads.*` is compatibility-sensitive as the provider-private thread lifecycle contract. Changes to lifecycle method names, watch payload kinds, or watch-task bridge event names should be treated as wire-level changes.
 - `codex.turns.*` is compatibility-sensitive as the active-turn control contract. Changes to `expected_turn_id` semantics, same-turn rich-input handling, or rejected override fields should be treated as wire-level changes.
 - `codex.review.*` is compatibility-sensitive as the review control and watch contract. Changes to supported target types, `delivery` semantics, review watch payload kinds, or review watch event names should be treated as wire-level changes.
@@ -160,7 +171,8 @@ This repository distinguishes between three layers:
 
 Discovery note:
 
-- `codex.discovery.skills.list`, `codex.discovery.apps.list`, `codex.discovery.plugins.list`, and `codex.discovery.plugins.read` are declared read-only discovery methods.
+- `codex.discovery.skills.list` and `codex.discovery.apps.list` are stable read-only discovery methods. Experimental `codex.discovery.plugins.list` and `codex.discovery.plugins.read` are disabled and omitted from discovery by default; enable them explicitly with `CODEX_ENABLE_EXPERIMENTAL_API=true`.
+- Skill discovery returns opaque `skill:v1` handles. Core A2A skill data parts and `codex.turns.steer` accept the handle, resolve it only against the current enabled `skills/list` result, and reject client-supplied local paths.
 - `codex.discovery.watch` is the declared bridge for upstream `skills/changed` and `app/list/updated` notifications.
 - `codex.threads.watch` is the declared thread lifecycle watch-task bridge for upstream `thread/started`, `thread/status/changed`, `thread/archived`, `thread/unarchived`, and `thread/closed` notifications.
 - `codex.threads.watch.release` is the declared ownership-scoped control method for releasing a watch task created by `codex.threads.watch`.

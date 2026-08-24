@@ -16,8 +16,10 @@ SMOKE_TEST_SCRIPT_TEXT = Path("scripts/smoke_test_built_cli.sh").read_text()
 RUNTIME_MATRIX_SCRIPT_TEXT = Path("scripts/validate_runtime_matrix.sh").read_text()
 SYNC_CODEX_DOCS_TEXT = Path("scripts/sync_codex_docs.sh").read_text()
 LIVE_CODEX_SMOKE_TEXT = Path("scripts/smoke_test_live_codex.sh").read_text()
+LIVE_CODEX_TURN_SMOKE_TEXT = Path("scripts/smoke_live_codex_turn.py").read_text()
 CONFORMANCE_TEXT = Path("docs/conformance.md").read_text()
 CONFORMANCE_TRIAGE_TEXT = Path("docs/conformance-triage.md").read_text()
+COMPATIBILITY_TEXT = Path("docs/compatibility.md").read_text()
 GUIDE_TEXT = Path("docs/guide.md").read_text()
 MAINTAINER_ARCHITECTURE_TEXT = Path("docs/maintainer-architecture.md").read_text()
 
@@ -57,11 +59,29 @@ def test_readme_documents_released_cli_installation_via_uv_tool() -> None:
     assert "create a PR from the working branch" in README_TEXT
     assert "merge into `main` after human review" in README_TEXT
     assert "[Compatibility Guide](docs/compatibility.md)" in README_TEXT
-    assert "[External Conformance Experiments](docs/conformance.md)" in README_TEXT
+    assert "[Optional External TCK Experiment](docs/conformance.md)" in README_TEXT
     assert "[Contributing Guide](CONTRIBUTING.md)" in README_TEXT
     assert "single-tenant trust boundary" in README_TEXT
     assert "Portable vs Private Surface" in README_TEXT
     assert "Codex-specific control plane" in README_TEXT
+
+
+def test_ecosystem_and_compatibility_claims_match_repository_evidence() -> None:
+    assert "https://github.com/a2aproject/A2A" in README_TEXT
+    assert "https://github.com/a2aproject/a2a-python" in README_TEXT
+    assert "https://github.com/openai/codex" in README_TEXT
+    assert "Intelligent-Internet/a2a-python" not in README_TEXT
+    assert "Codex Runtime (Proprietary)" not in README_TEXT
+    assert "not an OpenAI or A2A Project distribution or endorsement" in README_TEXT
+    assert "identifies the IDE extension and Codex cloud as not open source" in README_TEXT
+    assert "3.11–3.14" in COMPATIBILITY_TEXT
+    assert PYPROJECT_DATA["project"]["dependencies"][0] in COMPATIBILITY_TEXT
+    assert "gRPC is not exposed by this adapter" in COMPATIBILITY_TEXT
+    assert "excluded from this normative order and from automated repository gates" in (
+        COMPATIBILITY_TEXT
+    )
+    assert "latest compatible released upstream A2A specification" in COMPATIBILITY_TEXT
+    assert "Python 3.11 through 3.14" in CONTRIBUTING_TEXT
 
 
 def test_publish_workflow_builds_and_smoke_tests_release_artifacts() -> None:
@@ -108,17 +128,18 @@ def test_dependency_health_workflow_runs_as_a_standalone_check() -> None:
     assert "uv run pip-audit" in DEPENDENCY_HEALTH_SCRIPT_TEXT
 
 
-def test_scheduled_compatibility_workflow_pins_tck_and_smokes_latest_codex() -> None:
-    assert "name: Scheduled Compatibility" in COMPATIBILITY_WORKFLOW_TEXT
+def test_scheduled_compatibility_workflow_only_smokes_latest_codex() -> None:
+    assert "name: Scheduled Codex Compatibility" in COMPATIBILITY_WORKFLOW_TEXT
     assert 'cron: "17 4 * * 1"' in COMPATIBILITY_WORKFLOW_TEXT
-    assert "CONFORMANCE_TCK_REF: 5996b79f9cefa6fc390980e383e358a66fb9e49e" in (
-        COMPATIBILITY_WORKFLOW_TEXT
-    )
-    assert "bash ./scripts/conformance.sh mandatory" in COMPATIBILITY_WORKFLOW_TEXT
+    assert "a2a-tck" not in COMPATIBILITY_WORKFLOW_TEXT
+    assert "scripts/conformance.sh" not in COMPATIBILITY_WORKFLOW_TEXT
     assert "npm install --global @openai/codex@latest" in COMPATIBILITY_WORKFLOW_TEXT
     assert "bash ./scripts/smoke_test_live_codex.sh" in COMPATIBILITY_WORKFLOW_TEXT
-    assert "client.startup_preflight()" in LIVE_CODEX_SMOKE_TEXT
-    assert "send_message" not in LIVE_CODEX_SMOKE_TEXT
+    assert "scripts/smoke_live_codex_turn.py" in LIVE_CODEX_SMOKE_TEXT
+    assert "client.startup_preflight()" in LIVE_CODEX_TURN_SMOKE_TEXT
+    assert "client.create_session()" in LIVE_CODEX_TURN_SMOKE_TEXT
+    assert "client.send_message(" in LIVE_CODEX_TURN_SMOKE_TEXT
+    assert "client.list_skills(" in LIVE_CODEX_TURN_SMOKE_TEXT
     assert "scripts.tck_auth_plugin" in Path("scripts/conformance.sh").read_text()
 
 

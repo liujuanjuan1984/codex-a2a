@@ -97,6 +97,26 @@ def test_capability_snapshot_tracks_session_query_only_surface() -> None:
     )
     assert "codex.sessions.command" not in snapshot.supported_jsonrpc_methods
     assert "codex.sessions.prompt_async" not in snapshot.supported_jsonrpc_methods
+    assert "codex.discovery.plugins.list" not in snapshot.discovery_methods
+    assert snapshot.conditional_methods["codex.discovery.plugins.list"] == {
+        "reason": "upstream_experimental_api_disabled",
+        "toggle": "CODEX_ENABLE_EXPERIMENTAL_API",
+    }
+
+
+def test_capability_snapshot_includes_opted_in_experimental_discovery() -> None:
+    runtime_profile = build_runtime_profile(
+        make_settings(
+            a2a_bearer_token="test-token",
+            codex_enable_experimental_api=True,
+        )
+    )
+
+    snapshot = build_capability_snapshot(runtime_profile=runtime_profile)
+
+    assert "codex.discovery.plugins.list" in snapshot.discovery_methods
+    assert "codex.discovery.plugins.read" in snapshot.discovery_methods
+    assert "codex.discovery.plugins.list" not in snapshot.conditional_methods
 
 
 def test_provider_private_contract_builders_reject_non_1_0_protocol_version() -> None:
@@ -456,6 +476,8 @@ def test_guide_mentions_declared_rich_input_contract() -> None:
     assert "core A2A `SendMessage` and `SendStreamingMessage`" in guide_text
     assert 'Part(data={"type":"mention"|"skill", ...})' in guide_text
     assert "turn/start.input[].type=input_image" in guide_text
+    assert "skill:v1:<base64url-sha256>" in guide_text
+    assert "client-supplied `skill.path` is rejected" in guide_text
     assert "local_image" in guide_text
 
     for fragment in rich_input["supported_part_types"]:

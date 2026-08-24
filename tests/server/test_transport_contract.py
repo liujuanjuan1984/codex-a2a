@@ -690,6 +690,11 @@ async def test_health_endpoint_with_bearer_token_reports_profile(monkeypatch) ->
                     "allow_override": True,
                     "scope": "workspace_root_or_descendant",
                 },
+                "codex_experimental_api": {
+                    "enabled": False,
+                    "availability": "disabled",
+                    "toggle": "CODEX_ENABLE_EXPERIMENTAL_API",
+                },
                 "turn_control": {
                     "enabled": True,
                     "availability": "enabled",

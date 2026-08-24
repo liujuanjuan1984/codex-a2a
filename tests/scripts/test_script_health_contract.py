@@ -87,7 +87,7 @@ def test_scripts_index_documents_split_health_entrypoints() -> None:
     assert "doctor.sh" not in SCRIPTS_INDEX_TEXT
     assert "conformance.sh" in SCRIPTS_INDEX_TEXT
     assert "audit_low_call_sites.py" in SCRIPTS_INDEX_TEXT
-    assert "outside the default regression gate" in SCRIPTS_INDEX_TEXT
+    assert "outside CI and the default regression baseline" in SCRIPTS_INDEX_TEXT
     assert "default local validation baseline used by contributors and CI" in SCRIPTS_INDEX_TEXT
     assert "standalone dependency review flow" in SCRIPTS_INDEX_TEXT
     assert "health_common.sh" in SCRIPTS_INDEX_TEXT

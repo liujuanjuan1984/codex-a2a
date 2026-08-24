@@ -197,6 +197,21 @@ class CodexConversationFacade:
             messages = messages[-limit:]
         return messages
 
+    async def thread_cwd(self, thread_id: str) -> str:
+        result = await self._rpc_request(
+            "thread/read",
+            {"threadId": thread_id, "includeTurns": False},
+        )
+        if not isinstance(result, dict):
+            raise RuntimeError("codex thread/read response missing result object")
+        thread = result.get("thread")
+        if not isinstance(thread, dict):
+            raise RuntimeError("codex thread/read response missing thread")
+        cwd = thread.get("cwd")
+        if not isinstance(cwd, str) or not cwd.strip():
+            raise RuntimeError("codex thread/read response missing thread cwd")
+        return cwd.strip()
+
     async def send_message(
         self,
         session_id: str,
@@ -359,14 +374,18 @@ class CodexConversationFacade:
         *,
         expected_turn_id: str,
         request: dict[str, Any],
+        input_items: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
+        normalized_items = (
+            input_items
+            if input_items is not None
+            else normalize_prompt_request_parts(request.get("parts"))
+        )
         result = await self._rpc_request(
             "turn/steer",
             {
                 "threadId": thread_id,
-                "input": build_turn_input_from_normalized_items(
-                    normalize_prompt_request_parts(request.get("parts"))
-                ),
+                "input": build_turn_input_from_normalized_items(normalized_items),
                 "expectedTurnId": expected_turn_id,
             },
         )

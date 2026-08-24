@@ -41,6 +41,11 @@ def test_runtime_profile_splits_stable_deployment_and_runtime_features() -> None
             "allow_override": False,
             "scope": "workspace_root_only",
         },
+        "codex_experimental_api": {
+            "enabled": False,
+            "availability": "disabled",
+            "toggle": "CODEX_ENABLE_EXPERIMENTAL_API",
+        },
         "turn_control": {
             "enabled": False,
             "availability": "disabled",

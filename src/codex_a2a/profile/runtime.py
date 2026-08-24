@@ -178,6 +178,7 @@ class RuntimeProfile:
     profile_id: str
     deployment: DeploymentProfile
     directory_binding: DirectoryBindingProfile
+    codex_experimental_api: ConditionalSurfaceProfile
     turn_control: ConditionalSurfaceProfile
     review_control: ConditionalSurfaceProfile
     exec_control: ConditionalSurfaceProfile
@@ -191,6 +192,10 @@ class RuntimeProfile:
         return self.turn_control.enabled
 
     @property
+    def codex_experimental_api_enabled(self) -> bool:
+        return self.codex_experimental_api.enabled
+
+    @property
     def review_control_enabled(self) -> bool:
         return self.review_control.enabled
 
@@ -201,6 +206,7 @@ class RuntimeProfile:
     def runtime_features_dict(self) -> dict[str, Any]:
         return {
             "directory_binding": self.directory_binding.as_dict(),
+            "codex_experimental_api": self.codex_experimental_api.as_dict(),
             "turn_control": self.turn_control.as_dict(),
             "review_control": self.review_control.as_dict(),
             "exec_control": self.exec_control.as_dict(),
@@ -311,6 +317,13 @@ def build_runtime_profile(settings: Settings) -> RuntimeProfile:
         directory_binding=DirectoryBindingProfile(
             allow_override=settings.a2a_allow_directory_override,
             scope=directory_scope,
+        ),
+        codex_experimental_api=ConditionalSurfaceProfile(
+            enabled=settings.codex_enable_experimental_api,
+            availability=(
+                "experimental_enabled" if settings.codex_enable_experimental_api else "disabled"
+            ),
+            toggle="CODEX_ENABLE_EXPERIMENTAL_API",
         ),
         turn_control=ConditionalSurfaceProfile(
             enabled=settings.a2a_enable_turn_control,

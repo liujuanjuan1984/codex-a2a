@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from codex_a2a.redact import redact_paths_in_value
+from codex_a2a.skill_handles import build_skill_handle
 from codex_a2a.upstream.discovery_payloads import normalize_app_items
 
 
@@ -53,13 +55,20 @@ def map_skill_scopes(raw_result: Any) -> list[dict[str, Any]]:
                     "description": description.strip(),
                     "enabled": enabled,
                     "scope": scope.strip(),
+                    "handle": build_skill_handle(
+                        cwd=cwd,
+                        name=name,
+                        path=path,
+                    ),
                     "interface": _normalized_interface(skill.get("interface")),
                 }
             )
         items.append(
             {
                 "skills": normalized_skills,
-                "errors": [error for error in errors if isinstance(error, dict)],
+                "errors": [
+                    redact_paths_in_value(error) for error in errors if isinstance(error, dict)
+                ],
             }
         )
     return items

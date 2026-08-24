@@ -605,8 +605,16 @@ def build_session_query_extension_params(
                     "path_examples": ["app://<connector-id>", "plugin://<name>@<marketplace>"],
                 },
                 "skill": {
-                    "fields": ["type", "name", "path"],
-                    "path_examples": ["/abs/path/to/SKILL.md"],
+                    "fields": ["type", "handle"],
+                    "handle_format": "skill:v1:<base64url-sha256>",
+                    "handle_source": "codex.discovery.skills.list items[].skills[].handle",
+                    "resolution_errors": [
+                        "SKILL_HANDLE_INVALID",
+                        "SKILL_HANDLE_NOT_FOUND_OR_EXPIRED",
+                        "SKILL_HANDLE_DISABLED",
+                        "SKILL_HANDLE_AMBIGUOUS",
+                        "SKILL_DISCOVERY_UNAVAILABLE",
+                    ],
                 },
             },
             "core_message_part_mapping": {
@@ -623,6 +631,10 @@ def build_session_query_extension_params(
                 (
                     "mention.path values are forwarded verbatim. The server does not infer "
                     "app or plugin identifiers from names."
+                ),
+                (
+                    "skill.handle is resolved against the current enabled skills/list result; "
+                    "client-supplied skill paths are rejected."
                 ),
                 (
                     "local_image is not currently declared as part of the stable Codex A2A "
@@ -713,8 +725,20 @@ def build_discovery_extension_params(
 
     return {
         "jsonrpc_endpoint": _extension_jsonrpc_endpoint_contract(),
-        "methods": dict(extension_specs.DISCOVERY_METHODS),
+        "methods": {key: contract.method for key, contract in active_method_contracts.items()},
         "profile": runtime_profile.summary_dict(),
+        "upstream_api_maturity": {
+            "stable_methods": ["skills/list", "app/list"],
+            "experimental": {
+                "enabled": runtime_profile.codex_experimental_api_enabled,
+                "toggle": "CODEX_ENABLE_EXPERIMENTAL_API",
+                "upstream_methods": ["plugin/list", "plugin/read"],
+                "adapter_methods": [
+                    extension_specs.DISCOVERY_METHODS["list_plugins"],
+                    extension_specs.DISCOVERY_METHODS["read_plugin"],
+                ],
+            },
+        },
         "method_contracts": method_contracts,
         "stable_item_fields": {
             "skill": [
@@ -722,6 +746,7 @@ def build_discovery_extension_params(
                 "description",
                 "enabled",
                 "scope",
+                "handle",
                 "interface",
             ],
             "app": [
@@ -733,27 +758,33 @@ def build_discovery_extension_params(
                 "install_url",
                 "mention_path",
             ],
-            "plugin_marketplace": [
-                "marketplace_name",
-                "interface",
-                "plugins",
-            ],
-            "plugin_summary": [
-                "name",
-                "description",
-                "enabled",
-                "mention_path",
-                "interface",
-            ],
-            "plugin_detail": [
-                "name",
-                "marketplace_name",
-                "mention_path",
-                "summary",
-                "skills",
-                "apps",
-                "mcp_servers",
-            ],
+            **(
+                {
+                    "plugin_marketplace": [
+                        "marketplace_name",
+                        "interface",
+                        "plugins",
+                    ],
+                    "plugin_summary": [
+                        "name",
+                        "description",
+                        "enabled",
+                        "mention_path",
+                        "interface",
+                    ],
+                    "plugin_detail": [
+                        "name",
+                        "marketplace_name",
+                        "mention_path",
+                        "summary",
+                        "skills",
+                        "apps",
+                        "mcp_servers",
+                    ],
+                }
+                if runtime_profile.codex_experimental_api_enabled
+                else {}
+            ),
         },
         "notification_bridge": {
             "upstream_notifications": ["skills/changed", "app/list/updated"],
@@ -782,12 +813,19 @@ def build_discovery_extension_params(
         },
         "consumer_guidance": [
             (
-                "Use codex.discovery.skills.list to obtain stable skill name/scope values; "
+                "Use codex.discovery.skills.list to obtain opaque skill handle values; "
                 "local skill paths are intentionally not exposed."
             ),
-            (
-                "Use codex.discovery.apps.list or codex.discovery.plugins.list to obtain "
-                "stable mention_path values."
+            ("Use codex.discovery.apps.list to obtain stable app mention_path values."),
+            *(
+                [
+                    (
+                        "When CODEX_ENABLE_EXPERIMENTAL_API is enabled, use "
+                        "codex.discovery.plugins.list for plugin mention_path values."
+                    )
+                ]
+                if runtime_profile.codex_experimental_api_enabled
+                else []
             ),
             (
                 "Discovery responses are whitelisted summaries; raw upstream records and "

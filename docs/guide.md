@@ -271,7 +271,8 @@ These variables are forwarded to the local `codex app-server` subprocess.
 - `CODEX_WORKSPACE_ROOT`: default Codex workspace root (optional)
 - `CODEX_CLI_BIN`: Codex CLI binary path, default `codex`
   - For long-running Linux deployments managed by PM2, systemd, or similar supervisors, set this explicitly to the bundled native Codex binary.
-- `CODEX_MODEL`: default Codex model, default `gpt-5.1-codex`
+- `CODEX_ENABLE_EXPERIMENTAL_API`: opt in to Codex App Server experimental APIs, default `false`; currently enables plugin discovery only
+- `CODEX_MODEL`: optional startup model override; when unset, Codex selects its configured/default model
 - `CODEX_APPROVAL_POLICY`: default approval policy (`never`, `on-request`, etc.)
 - `CODEX_SANDBOX_MODE`: default sandbox mode (`danger-full-access`, `read-only`, etc.)
 - `CODEX_TIMEOUT`: request timeout in seconds, default `120`
@@ -371,6 +372,7 @@ These variables are forwarded to the local `codex app-server` subprocess.
 | `A2A_EXECUTION_WRITE_OUTSIDE_WORKSPACE` | Discovery write outside |
 | `CODEX_CLI_BIN` | Codex CLI path |
 | `CODEX_APP_SERVER_LISTEN` | Codex listen target |
+| `CODEX_ENABLE_EXPERIMENTAL_API` | Opt in to experimental App Server APIs |
 | `CODEX_WORKSPACE_ROOT` | Workspace root |
 | `CODEX_MODEL` | Default model |
 | `CODEX_MODEL_ID` | Turn model override |
@@ -434,7 +436,6 @@ A2A_PORT=8000 \
 A2A_PUBLIC_URL=http://127.0.0.1:8000 \
 A2A_DATABASE_URL=sqlite+aiosqlite:////abs/path/to/workspace/.codex-a2a/codex-a2a.db \
 CODEX_WORKSPACE_ROOT=/abs/path/to/workspace \
-CODEX_MODEL=gpt-5.1-codex \
 CODEX_APPROVAL_POLICY=never \
 CODEX_SANDBOX_MODE=danger-full-access \
 CODEX_MODEL_REASONING_EFFORT=high \
@@ -529,8 +530,9 @@ On the current npm global install layout for Linux x64, the command above resolv
 - Those provider-private skills use narrower `output_modes` where practical: query/control/watch handle surfaces declare `application/json` when their primary contract is a structured JSON-RPC result or `Part(data)` watch payload, while `codex.exec.stream` declares `text/plain` because stdout/stderr deltas and terminal summaries are emitted as `Part(text)`.
 - On the core chat surface, the `application/json` input mode is intentionally narrower than arbitrary JSON: only `Part(data={"type":"mention"|"skill", ...})` is part of the declared stable contract.
 - Image input maps to upstream `turn/start.input[].type=input_image`.
-- `mention.path` and `skill.path` are forwarded verbatim. The service does not guess app or plugin identifiers from display names.
-- Discovery responses no longer expose local `skill.path` values; callers that need rich-input skill items must supply the path from their own context.
+- `mention.path` is forwarded verbatim. The service does not guess app or plugin identifiers from display names.
+- Skill input accepts only the opaque `handle` returned by `codex.discovery.skills.list`; client-supplied `skill.path` is rejected. The service refreshes `skills/list`, verifies that the handle still resolves uniquely to an enabled skill, and only then supplies the current local name/path to Codex.
+- Skill handles use `skill:v1:<base64url-sha256>`. They are opaque, contain no reversible local path, and may expire when the discovered skill identity changes. Stable resolution errors distinguish invalid, missing/expired, disabled, ambiguous, and unavailable-discovery cases.
 - `local_image` is not part of the current declared stable rich-input contract.
 - Session query projections currently use the upstream Codex `session_id` as the A2A `contextId`. In that projection surface, `contextId` is the canonical session identity and the adapter does not duplicate the same value under `metadata.shared.session.id`.
 - Completed chat turns are persisted as `completed`; `input-required` is reserved for active interrupt asks that still need a reply.
@@ -707,12 +709,12 @@ This service exposes read-only Codex discovery methods through JSON-RPC:
 
 - `codex.discovery.skills.list`
 - `codex.discovery.apps.list`
-- `codex.discovery.plugins.list`
-- `codex.discovery.plugins.read`
+- `codex.discovery.plugins.list` (experimental; requires `CODEX_ENABLE_EXPERIMENTAL_API=true`)
+- `codex.discovery.plugins.read` (experimental; requires `CODEX_ENABLE_EXPERIMENTAL_API=true`)
 
 Use these methods before constructing rich input:
 
-- `skills.list` returns stable skill `name`/`scope` values; local skill paths are intentionally not exposed
+- `skills.list` returns stable skill metadata plus an opaque `handle`; local skill paths are intentionally not exposed
 - `apps.list` returns stable `mention_path=app://<id>` values
 - `plugins.list` and `plugins.read` return stable `mention_path=plugin://<plugin>@<marketplace>` values
 
@@ -720,7 +722,8 @@ Result-shape guidance:
 
 - use the normalized stable fields declared in Agent Card / OpenAPI first
 - discovery responses are whitelisted summaries; raw upstream records and local paths are intentionally excluded
-- `plugin/list` and `plugin/read` remain upstream experimental; this service exposes a stable minimum subset without raw passthrough
+- `plugin/list` and `plugin/read` remain upstream experimental, are disabled by default, and are advertised only after `CODEX_ENABLE_EXPERIMENTAL_API=true`; the opt-in adapter response remains a whitelisted minimum subset without raw passthrough
+- construct skill rich input as `Part(data={"type":"skill","handle":"skill:v1:..."})`; never send a server-local path
 
 ### Skills List (`codex.discovery.skills.list`)
 
@@ -734,7 +737,7 @@ curl -sS http://127.0.0.1:8000/ \
     "method": "codex.discovery.skills.list",
     "params": {
       "cwds": ["/workspace/project"],
-      "forceReload": true
+      "force_reload": true
     }
   }'
 ```
@@ -751,12 +754,14 @@ curl -sS http://127.0.0.1:8000/ \
     "method": "codex.discovery.apps.list",
     "params": {
       "limit": 20,
-      "forceRefetch": false
+      "force_refetch": false
     }
   }'
 ```
 
 ### Plugins List (`codex.discovery.plugins.list`)
+
+This method is available only when the service starts with `CODEX_ENABLE_EXPERIMENTAL_API=true`.
 
 ```bash
 curl -sS http://127.0.0.1:8000/ \
@@ -768,12 +773,14 @@ curl -sS http://127.0.0.1:8000/ \
     "method": "codex.discovery.plugins.list",
     "params": {
       "cwds": ["/workspace/project"],
-      "forceRemoteSync": false
+      "force_remote_sync": false
     }
   }'
 ```
 
 ### Plugin Read (`codex.discovery.plugins.read`)
+
+This method is available only when the service starts with `CODEX_ENABLE_EXPERIMENTAL_API=true`.
 
 ```bash
 curl -sS http://127.0.0.1:8000/ \
@@ -784,8 +791,8 @@ curl -sS http://127.0.0.1:8000/ \
     "id": 14,
     "method": "codex.discovery.plugins.read",
     "params": {
-      "marketplacePath": "/workspace/project/.codex/plugins/marketplace.json",
-      "pluginName": "sample"
+      "marketplace_path": "/workspace/project/.codex/plugins/marketplace.json",
+      "plugin_name": "sample"
     }
   }'
 ```

@@ -133,16 +133,6 @@ def build_discovery_skills_params(params: dict[str, Any] | None) -> dict[str, An
         rpc_params["cwds"] = params["cwds"]
     if "force_reload" in params:
         rpc_params["forceReload"] = params["force_reload"]
-    extra_roots = params.get("per_cwd_extra_user_roots")
-    if isinstance(extra_roots, list):
-        rpc_params["perCwdExtraUserRoots"] = [
-            {
-                "cwd": item["cwd"],
-                "extraUserRoots": item["extra_user_roots"],
-            }
-            for item in extra_roots
-            if isinstance(item, dict) and "cwd" in item and "extra_user_roots" in item
-        ]
     return rpc_params
 
 

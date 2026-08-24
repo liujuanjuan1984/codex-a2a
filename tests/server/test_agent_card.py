@@ -358,6 +358,11 @@ def test_authenticated_extended_agent_card_injects_profile_into_extensions() -> 
         "allow_override": False,
         "scope": "workspace_root_only",
     }
+    assert profile["runtime_features"]["codex_experimental_api"] == {
+        "enabled": False,
+        "availability": "disabled",
+        "toggle": "CODEX_ENABLE_EXPERIMENTAL_API",
+    }
     assert profile["runtime_features"]["turn_control"] == {
         "enabled": True,
         "availability": "enabled",
@@ -506,6 +511,18 @@ def test_authenticated_extended_agent_card_injects_profile_into_extensions() -> 
         session_query_params["rich_input"]["part_contracts"]["image"]["maps_to"]
         == "turn/start.input[].type=input_image"
     )
+    assert session_query_params["rich_input"]["part_contracts"]["skill"] == {
+        "fields": ["type", "handle"],
+        "handle_format": "skill:v1:<base64url-sha256>",
+        "handle_source": "codex.discovery.skills.list items[].skills[].handle",
+        "resolution_errors": [
+            "SKILL_HANDLE_INVALID",
+            "SKILL_HANDLE_NOT_FOUND_OR_EXPIRED",
+            "SKILL_HANDLE_DISABLED",
+            "SKILL_HANDLE_AMBIGUOUS",
+            "SKILL_DISCOVERY_UNAVAILABLE",
+        ],
+    }
     assert any(
         "mention.path values are forwarded verbatim" in note
         for note in session_query_params["rich_input"]["notes"]
@@ -536,12 +553,22 @@ def test_authenticated_extended_agent_card_injects_profile_into_extensions() -> 
     assert discovery_params["profile"] == profile
     assert discovery_params["methods"]["list_skills"] == "codex.discovery.skills.list"
     assert discovery_params["methods"]["list_apps"] == "codex.discovery.apps.list"
-    assert discovery_params["methods"]["list_plugins"] == "codex.discovery.plugins.list"
-    assert discovery_params["methods"]["read_plugin"] == "codex.discovery.plugins.read"
+    assert "list_plugins" not in discovery_params["methods"]
+    assert "read_plugin" not in discovery_params["methods"]
+    assert discovery_params["upstream_api_maturity"]["experimental"] == {
+        "enabled": False,
+        "toggle": "CODEX_ENABLE_EXPERIMENTAL_API",
+        "upstream_methods": ["plugin/list", "plugin/read"],
+        "adapter_methods": [
+            "codex.discovery.plugins.list",
+            "codex.discovery.plugins.read",
+        ],
+    }
     assert discovery_params["notification_bridge"]["current_delivery"] == (
         "codex.discovery.watch task stream"
     )
     assert "mention_path" in discovery_params["stable_item_fields"]["app"]
+    assert "handle" in discovery_params["stable_item_fields"]["skill"]
     apps_contract = discovery_params["method_contracts"]["codex.discovery.apps.list"]
     assert apps_contract["result"]["fields"] == ["items", "next_cursor"]
     assert any("mention_path" in note for note in apps_contract["notes"])
@@ -960,6 +987,14 @@ def test_agent_card_hides_boundary_sensitive_control_surfaces_when_disabled() ->
     assert "codex.review.watch" not in wire_contract_params["all_jsonrpc_methods"]
     assert "codex.exec.start" not in wire_contract_params["all_jsonrpc_methods"]
     assert wire_contract_params["extensions"]["conditionally_available_methods"] == {
+        "codex.discovery.plugins.list": {
+            "reason": "upstream_experimental_api_disabled",
+            "toggle": "CODEX_ENABLE_EXPERIMENTAL_API",
+        },
+        "codex.discovery.plugins.read": {
+            "reason": "upstream_experimental_api_disabled",
+            "toggle": "CODEX_ENABLE_EXPERIMENTAL_API",
+        },
         "codex.turns.steer": {
             "reason": "disabled_by_configuration",
             "toggle": "A2A_ENABLE_TURN_CONTROL",

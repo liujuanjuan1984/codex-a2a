@@ -21,9 +21,8 @@ def build_startup_config_overrides(settings: Settings) -> dict[str, Any]:
     overrides: dict[str, Any] = {}
     profile = optional_string(settings.codex_profile)
     model = optional_string(settings.codex_model)
-    model_explicit = "codex_model" in settings.model_fields_set
 
-    if model is not None and (model_explicit or profile is None):
+    if model is not None:
         overrides["model"] = model
 
     for key, value in (

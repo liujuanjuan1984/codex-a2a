@@ -4,12 +4,13 @@ import logging
 import os
 import shutil
 import time
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from codex_a2a.execution.request_overrides import RequestExecutionOptions
 from codex_a2a.logging_context import bind_correlation_id
+from codex_a2a.skill_handles import SkillHandleResolutionError, build_skill_handle
 from codex_a2a.upstream.client import (
     CodexClient,
     CodexStartupPrerequisiteError,
@@ -85,10 +86,6 @@ async def test_discovery_calls_use_expected_rpc_params() -> None:
         params={
             "cwds": ["/repo"],
             "force_reload": True,
-            "per_cwd_extra_user_roots": [
-                {"cwd": "/repo", "extra_user_roots": ["/alt"]},
-                {"cwd": "/skip"},
-            ],
         }
     )
     await client.list_apps(
@@ -117,10 +114,8 @@ async def test_discovery_calls_use_expected_rpc_params() -> None:
         (
             "skills/list",
             {
-                "directory": "/safe",
-                "cwds": "['/repo']",
-                "forceReload": "True",
-                "perCwdExtraUserRoots": "[{'cwd': '/repo', 'extraUserRoots': ['/alt']}]",
+                "cwds": ["/repo"],
+                "forceReload": True,
             },
         ),
         (
@@ -128,17 +123,17 @@ async def test_discovery_calls_use_expected_rpc_params() -> None:
             {
                 "directory": "/safe",
                 "cursor": "next-1",
-                "limit": "10",
+                "limit": 10,
                 "threadId": "thr-1",
-                "forceRefetch": "True",
+                "forceRefetch": True,
             },
         ),
         (
             "plugin/list",
             {
                 "directory": "/safe",
-                "cwds": "['/repo']",
-                "forceRemoteSync": "False",
+                "cwds": ["/repo"],
+                "forceRemoteSync": False,
             },
         ),
         (
@@ -325,9 +320,30 @@ async def test_send_message_maps_rich_input_parts_to_turn_start() -> None:
     )
 
     seen: list[tuple[str, dict | None]] = []
+    skill_path = "/safe/.codex/skills/skill-creator/SKILL.md"
+    skill_handle = build_skill_handle(
+        cwd="/safe",
+        name="skill-creator",
+        path=skill_path,
+    )
 
     async def fake_rpc_request(method: str, params: dict | None = None):
         seen.append((method, params))
+        if method == "skills/list":
+            return {
+                "data": [
+                    {
+                        "cwd": "/safe",
+                        "skills": [
+                            {
+                                "name": "skill-creator",
+                                "path": skill_path,
+                                "enabled": True,
+                            }
+                        ],
+                    }
+                ]
+            }
         return {"turn": {"id": "turn-42"}}
 
     _bind_rpc_request(client, fake_rpc_request)
@@ -346,8 +362,7 @@ async def test_send_message_maps_rich_input_parts_to_turn_start() -> None:
             {"type": "mention", "name": "Demo App", "path": "app://demo-app"},
             {
                 "type": "skill",
-                "name": "skill-creator",
-                "path": "/tmp/skill-creator/SKILL.md",
+                "handle": skill_handle,
             },
         ],
     )
@@ -356,6 +371,7 @@ async def test_send_message_maps_rich_input_parts_to_turn_start() -> None:
     assert result.session_id == "thr-1"
     assert result.message_id == "m-42"
     assert seen == [
+        ("skills/list", {"forceReload": True, "cwds": ["/safe"]}),
         (
             "turn/start",
             {
@@ -370,13 +386,95 @@ async def test_send_message_maps_rich_input_parts_to_turn_start() -> None:
                     {
                         "type": "skill",
                         "name": "skill-creator",
-                        "path": "/tmp/skill-creator/SKILL.md",
+                        "path": skill_path,
                     },
                 ],
                 "cwd": "/safe",
             },
-        )
+        ),
     ]
+
+
+@pytest.mark.asyncio
+async def test_turn_steer_resolves_skill_handle_before_upstream_call() -> None:
+    client = CodexClient(
+        make_settings(
+            a2a_bearer_token="t-1",
+            codex_workspace_root="/safe",
+            codex_timeout=1.0,
+        )
+    )
+    skill_path = "/safe/.codex/skills/demo/SKILL.md"
+    handle = build_skill_handle(cwd="/safe/nested", name="demo", path=skill_path)
+    seen: list[tuple[str, dict | None]] = []
+
+    async def fake_rpc_request(method: str, params: dict | None = None):
+        seen.append((method, params))
+        if method == "thread/read":
+            return {"thread": {"id": "thr-1", "cwd": "/safe/nested"}}
+        if method == "skills/list":
+            return {
+                "data": [
+                    {
+                        "cwd": "/safe/nested",
+                        "skills": [{"name": "demo", "path": skill_path, "enabled": True}],
+                    }
+                ]
+            }
+        return {"turnId": "turn-2"}
+
+    _bind_rpc_request(client, fake_rpc_request)
+
+    result = await client.turn_steer(
+        "thr-1",
+        expected_turn_id="turn-1",
+        request={"parts": [{"type": "skill", "handle": handle}]},
+    )
+
+    assert result == {"ok": True, "thread_id": "thr-1", "turn_id": "turn-2"}
+    assert seen == [
+        ("thread/read", {"threadId": "thr-1", "includeTurns": False}),
+        ("skills/list", {"forceReload": True, "cwds": ["/safe/nested"]}),
+        (
+            "turn/steer",
+            {
+                "threadId": "thr-1",
+                "input": [{"type": "skill", "name": "demo", "path": skill_path}],
+                "expectedTurnId": "turn-1",
+            },
+        ),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_send_message_maps_skill_discovery_rpc_failure_to_stable_error() -> None:
+    client = CodexClient(
+        make_settings(
+            a2a_bearer_token="t-1",
+            codex_workspace_root="/safe",
+            codex_timeout=1.0,
+        )
+    )
+    handle = build_skill_handle(cwd="/safe", name="demo", path="/safe/demo/SKILL.md")
+
+    async def fake_rpc_request(method: str, params: dict | None = None):
+        del params
+        if method == "skills/list":
+            raise RuntimeError("discovery transport failed")
+        raise AssertionError(f"unexpected RPC method: {method}")
+
+    _bind_rpc_request(client, fake_rpc_request)
+
+    with pytest.raises(SkillHandleResolutionError) as exc_info:
+        await client.send_message(
+            "thr-1",
+            "Use the skill.",
+            input_items=[{"type": "skill", "handle": handle}],
+            directory="/safe",
+        )
+
+    assert exc_info.value.code == "SKILL_DISCOVERY_UNAVAILABLE"
+    assert exc_info.value.handle == handle
 
 
 @pytest.mark.asyncio
@@ -1888,6 +1986,38 @@ async def test_question_request_promotes_nested_context_details() -> None:
 
 
 @pytest.mark.asyncio
+async def test_ensure_started_opts_in_to_experimental_api_explicitly() -> None:
+    client = CodexClient(
+        make_settings(
+            a2a_bearer_token="t-1",
+            codex_timeout=1.0,
+            codex_enable_experimental_api=True,
+        )
+    )
+    captured_params: list[dict] = []
+
+    async def fake_rpc_request(
+        method: str, params: dict | None = None, *, _skip_ensure: bool = False
+    ):
+        assert method == "initialize"
+        assert _skip_ensure is True
+        assert params is not None
+        captured_params.append(params)
+        return {}
+
+    async def fake_ensure_started(**kwargs) -> None:
+        await kwargs["initialize_client"]()
+
+    _bind_rpc_request(client, fake_rpc_request)
+    client._transport.ensure_started = fake_ensure_started
+    client._transport.send_json_message = AsyncMock()
+
+    await client._ensure_started()
+
+    assert captured_params[0]["capabilities"] == {"experimentalApi": True}
+
+
+@pytest.mark.asyncio
 async def test_ensure_started_passes_runtime_overrides_to_codex_cli(monkeypatch) -> None:  # noqa: ANN001
     client = CodexClient(
         make_settings(
@@ -1939,10 +2069,7 @@ async def test_ensure_started_passes_runtime_overrides_to_codex_cli(monkeypatch)
                 "name": "codex_a2a",
                 "title": "Codex A2A",
                 "version": client.settings.a2a_version,
-            },
-            "capabilities": {
-                "experimentalApi": True,
-            },
+            }
         }
         return {}
 
@@ -2004,7 +2131,7 @@ async def test_ensure_started_passes_runtime_overrides_to_codex_cli(monkeypatch)
 def test_build_startup_config_overrides_omits_empty_workspace_write_config() -> None:
     client = CodexClient(make_settings(a2a_bearer_token="t-1", codex_timeout=1.0))
 
-    assert client._startup_config_overrides == {"model": "gpt-5.1-codex"}
+    assert client._startup_config_overrides == {}
 
 
 def test_build_startup_config_overrides_prefers_profile_when_model_not_explicit() -> None:
@@ -2017,6 +2144,22 @@ def test_build_startup_config_overrides_prefers_profile_when_model_not_explicit(
     )
 
     assert client._startup_config_overrides == {"profile": "coding"}
+
+
+def test_build_startup_config_overrides_keeps_explicit_model_with_profile() -> None:
+    client = CodexClient(
+        make_settings(
+            a2a_bearer_token="t-1",
+            codex_timeout=1.0,
+            codex_model="explicit-model",
+            codex_profile="coding",
+        )
+    )
+
+    assert client._startup_config_overrides == {
+        "model": "explicit-model",
+        "profile": "coding",
+    }
 
 
 @pytest.mark.asyncio

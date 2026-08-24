@@ -1,13 +1,14 @@
-# External Conformance Experiments
+# Optional External TCK Experiment
 
-This repository keeps internal regression and external interoperability experiments separate on purpose.
+The A2A TCK is an optional manual investigation tool. It is not a repository compatibility dependency, protocol authority, CI job, or merge gate.
 
 ## Scope
 
 - `./scripts/validate_baseline.sh` remains the default internal regression entrypoint.
-- `./scripts/conformance.sh` is a local/manual experiment entrypoint for official external tooling.
-- External conformance output is investigation input, not an automatic merge gate.
-- `.github/workflows/compatibility.yml` runs the mandatory TCK weekly against a pinned TCK commit and preserves its evidence as a workflow artifact.
+- `./scripts/conformance.sh` is a local/manual experiment entrypoint for external tooling.
+- TCK output is untrusted investigation input and cannot establish or reject protocol compatibility.
+- The current TCK embeds an A2A `v1.0.0` specification snapshot while the compatible released protocol has advanced to `v1.0.1`; maintainers must check the released specification directly.
+- No repository workflow runs or gates on the TCK.
 
 ## Current Experiment Shape
 
@@ -33,7 +34,7 @@ bash ./scripts/conformance.sh
 Run a different TCK category:
 
 ```bash
-bash ./scripts/conformance.sh capabilities
+bash ./scripts/conformance.sh should
 ```
 
 Target an already running runtime instead of the local dummy-backed SUT:
@@ -72,13 +73,14 @@ Each run keeps the following artifacts in the selected output directory:
 When a TCK run fails, inspect the raw report before changing the runtime:
 
 - Some failures may point to real runtime gaps.
+- Some failures may reflect an outdated embedded specification or a TCK-specific interpretation. Resolve those disagreements against the latest compatible released A2A specification.
 - Some failures may come from TCK assumptions that do not match `a2a-sdk==1.1.2`.
 - Some failures may come from older A2A naming or schema expectations that no longer match the repository's `1.0` contract.
 - Some failures may be local experiment artifacts from the dummy-backed runtime.
 
-The experiment is useful only if those categories stay separate during triage.
+The experiment is useful only if those categories stay separate during triage. Never convert a TCK result directly into a compatibility claim or an implementation change.
 Use the authenticated compatibility profile and wire contract `protocol_compatibility` fields as the repository-owned declaration of which protocol lines are supported today.
 
-The same scheduled workflow installs the latest stable Codex CLI and runs `scripts/smoke_test_live_codex.sh`. The smoke check only verifies the real stdio app-server initialization and shutdown handshake; it does not send a model request or require provider credentials.
+The separate scheduled Codex workflow installs the latest stable Codex CLI and runs `scripts/smoke_test_live_codex.sh`. It does not invoke the A2A TCK.
 
 Record first-pass classifications in [conformance-triage.md](./conformance-triage.md).

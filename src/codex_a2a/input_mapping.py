@@ -8,6 +8,7 @@ from typing import Any
 from a2a.types import Part
 
 from codex_a2a.a2a_proto import is_data_part, is_file_part, is_text_part, part_data, part_text
+from codex_a2a.skill_handles import is_skill_handle
 
 
 class UnsupportedInputError(ValueError):
@@ -19,6 +20,13 @@ def _optional_string(value: Any) -> str | None:
         return None
     normalized = value.strip()
     return normalized or None
+
+
+def _normalize_skill_handle(value: Any) -> str:
+    handle = _optional_string(value)
+    if not handle or not is_skill_handle(handle):
+        raise UnsupportedInputError("request.parts[].handle must be a valid skill:v1 opaque handle")
+    return handle
 
 
 def _guess_mime_type(*candidates: Any) -> str | None:
@@ -82,7 +90,7 @@ def normalize_prompt_request_parts(parts: Any) -> list[dict[str, Any]]:
         if part_type == "image":
             normalized.append(_normalize_prompt_image_part(part))
             continue
-        if part_type in {"mention", "skill"}:
+        if part_type == "mention":
             name = _optional_string(part.get("name"))
             path = _optional_string(part.get("path"))
             if not name:
@@ -90,6 +98,15 @@ def normalize_prompt_request_parts(parts: Any) -> list[dict[str, Any]]:
             if not path:
                 raise UnsupportedInputError("request.parts[].path must be a string")
             normalized.append({"type": part_type, "name": name, "path": path})
+            continue
+        if part_type == "skill":
+            if "path" in part:
+                raise UnsupportedInputError(
+                    "request.parts[].path is not accepted for skill input; use handle"
+                )
+            normalized.append(
+                {"type": "skill", "handle": _normalize_skill_handle(part.get("handle"))}
+            )
             continue
         raise UnsupportedInputError(
             "request.parts[].type must be one of: text, image, mention, skill"
@@ -107,8 +124,15 @@ def build_turn_input_from_normalized_items(items: list[dict[str, Any]]) -> list[
         if item_type == "image":
             converted.append({"type": "input_image", "image_url": item["url"]})
             continue
-        if item_type in {"mention", "skill"}:
+        if item_type == "mention":
             converted.append({"type": item_type, "name": item["name"], "path": item["path"]})
+            continue
+        if item_type == "skill":
+            name = _optional_string(item.get("name"))
+            path = _optional_string(item.get("path"))
+            if not name or not path:
+                raise UnsupportedInputError("Skill handle must be resolved before Codex turn input")
+            converted.append({"type": "skill", "name": name, "path": path})
             continue
         raise UnsupportedInputError(f"Unsupported normalized input item type: {item_type}")
     return converted
@@ -172,7 +196,7 @@ def map_a2a_message_parts_to_normalized_items(parts: Any) -> list[dict[str, Any]
                     "codex rich input data parts must be structured objects."
                 )
             item_type = _optional_string(data_payload.get("type"))
-            if item_type in {"mention", "skill"}:
+            if item_type == "mention":
                 name = _optional_string(data_payload.get("name"))
                 path = _optional_string(data_payload.get("path"))
                 if not name or not path:
@@ -180,6 +204,18 @@ def map_a2a_message_parts_to_normalized_items(parts: Any) -> list[dict[str, Any]
                         "codex rich input data parts require string type, name, and path fields."
                     )
                 normalized.append({"type": item_type, "name": name, "path": path})
+                continue
+            if item_type == "skill":
+                if "path" in data_payload:
+                    raise UnsupportedInputError(
+                        "skill rich input data parts do not accept path; use handle"
+                    )
+                normalized.append(
+                    {
+                        "type": "skill",
+                        "handle": _normalize_skill_handle(data_payload.get("handle")),
+                    }
+                )
                 continue
             raise UnsupportedInputError(
                 "Only mention and skill codex rich input data parts are supported."
