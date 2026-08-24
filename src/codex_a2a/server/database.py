@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import stat
+from contextlib import suppress
 from functools import partial
 from pathlib import Path
 from typing import Any
@@ -108,15 +109,46 @@ def _configure_sqlite_connection(
     *,
     database_path: Path | None = None,
 ) -> None:
-    if database_path is not None:
-        _harden_sqlite_file(database_path)
-    cursor = dbapi_connection.cursor()
     try:
-        cursor.execute(f"PRAGMA journal_mode={_SQLITE_JOURNAL_MODE}")
-        cursor.execute(f"PRAGMA busy_timeout={_SQLITE_BUSY_TIMEOUT_MS}")
-        cursor.execute(f"PRAGMA synchronous={_SQLITE_SYNCHRONOUS_MODE}")
-    finally:
-        cursor.close()
+        if database_path is not None:
+            # Keep the post-connect re-check as defense in depth: the file
+            # may have been swapped between the do_connect pre-check and the
+            # physical connection.
+            _harden_sqlite_file(database_path)
+        cursor = dbapi_connection.cursor()
+        try:
+            cursor.execute(f"PRAGMA journal_mode={_SQLITE_JOURNAL_MODE}")
+            cursor.execute(f"PRAGMA busy_timeout={_SQLITE_BUSY_TIMEOUT_MS}")
+            cursor.execute(f"PRAGMA synchronous={_SQLITE_SYNCHRONOUS_MODE}")
+        finally:
+            cursor.close()
+    except BaseException:
+        # The DBAPI connection was already created by the time the ``connect``
+        # event fires; close it explicitly so a failed configuration cannot
+        # leak an aiosqlite connection (and its worker thread). The close
+        # itself may raise (e.g. loop teardown), so absorb it and keep the
+        # original exception.
+        with suppress(Exception):
+            dbapi_connection.close()
+        raise
+
+
+def _harden_sqlite_before_connect(
+    _dialect: Any,
+    _connection_record: Any,
+    _connection_args: tuple[Any, ...],
+    _connection_params: dict[str, Any],
+    *,
+    database_path: Path,
+) -> None:
+    """Fail-closed hardening before a DBAPI connection is created.
+
+    Registered on the ``do_connect`` event, which fires before SQLAlchemy
+    instantiates the underlying aiosqlite connection. Rejecting a symlink or
+    an untrusted file here never allocates a connection (or its worker
+    thread), so no resource can be leaked.
+    """
+    _harden_sqlite_file(database_path)
 
 
 def build_database_engine(settings: Settings) -> AsyncEngine:
@@ -136,6 +168,12 @@ def build_database_engine(settings: Settings) -> AsyncEngine:
         pool_pre_ping=not url.drivername.startswith("sqlite"),
     )
     if url.drivername.startswith("sqlite"):
+        if sqlite_path is not None:
+            event.listen(
+                engine.sync_engine,
+                "do_connect",
+                partial(_harden_sqlite_before_connect, database_path=sqlite_path),
+            )
         event.listen(
             engine.sync_engine,
             "connect",

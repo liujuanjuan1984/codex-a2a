@@ -91,6 +91,9 @@ tag_regex = "^v?(?P<version>.+)$"
 addopts = "--cov=src/codex_a2a --cov-branch --cov-report=term-missing:skip-covered --cov-report=xml"
 filterwarnings = [
     "ignore:'HTTP_413_REQUEST_ENTITY_TOO_LARGE' is deprecated. Use 'HTTP_413_CONTENT_TOO_LARGE' instead.:DeprecationWarning:a2a\\.server\\.apps\\.jsonrpc\\.fastapi_app",
+    "error::pytest.PytestUnhandledThreadExceptionWarning",
+    "error::pytest.PytestUnraisableExceptionWarning",
+    "always:.*was deleted before being closed.*:ResourceWarning:aiosqlite.core",
 ]
 
 [tool.coverage.report]

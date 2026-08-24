@@ -133,13 +133,17 @@ async def test_task_store_runtime_does_not_dispose_shared_engine(
         a2a_database_url=database_url,
     )
     engine = build_database_engine(settings)
+    original_dispose = engine.dispose
     dispose_spy = AsyncMock()
     monkeypatch.setattr(type(engine), "dispose", dispose_spy)
 
-    runtime = build_task_store_runtime(settings, engine=engine)
-    await runtime.shutdown()
+    try:
+        runtime = build_task_store_runtime(settings, engine=engine)
+        await runtime.shutdown()
 
-    dispose_spy.assert_not_awaited()
+        dispose_spy.assert_not_awaited()
+    finally:
+        await original_dispose()
 
 
 @pytest.mark.asyncio
