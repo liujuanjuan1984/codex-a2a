@@ -19,6 +19,8 @@ This document is the standing triage template for local `./scripts/conformance.s
 - `Local experiment artifact`: the failure comes from the dummy-backed SUT, local auth, local URLs, timing, or other experiment setup details.
 - `Needs repro`: the failure needs a focused local probe before assigning ownership.
 
+The machine-enforced representation of reviewed failures lives in [`a2a-tck-known-failures.json`](./a2a-tck-known-failures.json). Its `failure_category` values are stable comparison labels, while this document retains the human rationale.
+
 ## Triage Workflow
 
 For each failed or errored node ID:
@@ -48,6 +50,14 @@ YYYY-MM-DD:
 - `test_error_codes.py::TestJsonRpcErrorCodeMappings::test_content_type_not_supported_error[jsonrpc]`: Local experiment artifact. The TCK sends a raw unauthenticated request; the repository's auth wall (by design) returns 401 before the content-type check can produce `ContentTypeNotSupportedError` (-32005). The authenticated path returns -32005 (covered by repository regression tests). Next action: none.
 - `test_error_codes.py::TestJsonRpcErrorCodeMappings::test_version_not_supported_error[jsonrpc]`: Local experiment artifact. Same raw unauthenticated call; the authenticated path returns `VersionNotSupportedError` (-32009). Next action: none.
 - `test_error_codes.py::TestJsonRpcErrorCodeRange::test_error_code_in_valid_range[SendMessage-bad-version]`: Local experiment artifact. Same raw unauthenticated call; the authenticated path returns -32009, which is in the valid A2A range. Next action: none.
+
+2026-08-24 (same pinned TCK, HTTP+JSON transport, `must` level; 7 failed / 57 passed / 171 skipped):
+
+- The five artifact/message failures are the HTTP+JSON parametrizations of the same dummy-backend limitations classified above.
+- `test_http_status.py::TestHttpJsonStatusCodes::test_content_type_not_supported_returns_415`: Local experiment artifact. Static authentication rejects the unauthenticated probe with 401 before protocol content-type validation. Next action: none.
+- `test_http_status.py::TestHttpJsonStatusCodes::test_version_not_supported_returns_400`: Local experiment artifact. Static authentication rejects the unauthenticated probe with 401 before version validation. Next action: none.
+
+Both transport result sets are encoded as exact node IDs plus narrow failure-message categories in the known-failure baseline. The incremental gate permits these reviewed differences and fails on additions or category drift; it is not a formal conformance claim.
 
 Previously failing adapter defects fixed in this pass (verified by the same pinned TCK run and repository regression tests):
 

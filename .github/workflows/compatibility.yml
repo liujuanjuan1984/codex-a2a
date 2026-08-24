@@ -10,9 +10,15 @@ permissions:
 
 jobs:
   a2a-tck:
-    name: A2A Mandatory TCK
+    name: A2A Mandatory TCK (${{ matrix.transport }})
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        transport:
+          - jsonrpc
+          - http-json
 
     steps:
       - name: Checkout
@@ -31,13 +37,14 @@ jobs:
       - name: Run pinned mandatory TCK
         env:
           CONFORMANCE_TCK_REF: 5996b79f9cefa6fc390980e383e358a66fb9e49e # pragma: allowlist secret
+          CONFORMANCE_TRANSPORTS: ${{ matrix.transport }}
         run: bash ./scripts/conformance.sh mandatory
 
       - name: Upload TCK evidence
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: a2a-tck-evidence
+          name: a2a-tck-evidence-${{ matrix.transport }}
           path: run/conformance/
           if-no-files-found: error
           retention-days: 14

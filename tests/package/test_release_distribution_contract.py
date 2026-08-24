@@ -116,12 +116,17 @@ def test_scheduled_compatibility_workflow_pins_tck_and_smokes_latest_codex() -> 
         COMPATIBILITY_WORKFLOW_TEXT
     )
     assert "bash ./scripts/conformance.sh mandatory" in COMPATIBILITY_WORKFLOW_TEXT
+    assert "transport:" in COMPATIBILITY_WORKFLOW_TEXT
+    assert "- jsonrpc" in COMPATIBILITY_WORKFLOW_TEXT
+    assert "- http-json" in COMPATIBILITY_WORKFLOW_TEXT
+    assert "CONFORMANCE_TRANSPORTS: ${{ matrix.transport }}" in COMPATIBILITY_WORKFLOW_TEXT
     assert "npm install --global @openai/codex@latest" in COMPATIBILITY_WORKFLOW_TEXT
     assert "bash ./scripts/smoke_test_live_codex.sh" in COMPATIBILITY_WORKFLOW_TEXT
     assert "scripts/smoke_live_codex_turn.py" in LIVE_CODEX_SMOKE_TEXT
     assert "client.startup_preflight()" in LIVE_CODEX_TURN_SMOKE_TEXT
     assert "client.create_session()" in LIVE_CODEX_TURN_SMOKE_TEXT
     assert "client.send_message(" in LIVE_CODEX_TURN_SMOKE_TEXT
+    assert "client.list_skills(" in LIVE_CODEX_TURN_SMOKE_TEXT
     assert "scripts.tck_auth_plugin" in Path("scripts/conformance.sh").read_text()
 
 
