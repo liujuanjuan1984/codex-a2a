@@ -4,7 +4,7 @@ import logging
 import os
 import shutil
 import time
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -1888,6 +1888,38 @@ async def test_question_request_promotes_nested_context_details() -> None:
 
 
 @pytest.mark.asyncio
+async def test_ensure_started_opts_in_to_experimental_api_explicitly() -> None:
+    client = CodexClient(
+        make_settings(
+            a2a_bearer_token="t-1",
+            codex_timeout=1.0,
+            codex_enable_experimental_api=True,
+        )
+    )
+    captured_params: list[dict] = []
+
+    async def fake_rpc_request(
+        method: str, params: dict | None = None, *, _skip_ensure: bool = False
+    ):
+        assert method == "initialize"
+        assert _skip_ensure is True
+        assert params is not None
+        captured_params.append(params)
+        return {}
+
+    async def fake_ensure_started(**kwargs) -> None:
+        await kwargs["initialize_client"]()
+
+    _bind_rpc_request(client, fake_rpc_request)
+    client._transport.ensure_started = fake_ensure_started
+    client._transport.send_json_message = AsyncMock()
+
+    await client._ensure_started()
+
+    assert captured_params[0]["capabilities"] == {"experimentalApi": True}
+
+
+@pytest.mark.asyncio
 async def test_ensure_started_passes_runtime_overrides_to_codex_cli(monkeypatch) -> None:  # noqa: ANN001
     client = CodexClient(
         make_settings(
@@ -1939,10 +1971,7 @@ async def test_ensure_started_passes_runtime_overrides_to_codex_cli(monkeypatch)
                 "name": "codex_a2a",
                 "title": "Codex A2A",
                 "version": client.settings.a2a_version,
-            },
-            "capabilities": {
-                "experimentalApi": True,
-            },
+            }
         }
         return {}
 

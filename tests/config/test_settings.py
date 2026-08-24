@@ -36,6 +36,7 @@ def test_settings_valid():
     env = {
         **_registry_env(),
         "CODEX_TIMEOUT": "300",
+        "CODEX_ENABLE_EXPERIMENTAL_API": "true",
         "CODEX_MODEL_REASONING_EFFORT": "high",
         "CODEX_MODEL_REASONING_SUMMARY": "concise",
         "CODEX_MODEL_VERBOSITY": "medium",
@@ -54,6 +55,7 @@ def test_settings_valid():
         settings = Settings.from_env()
         assert settings.a2a_static_auth_credentials[0].credential_id == "test-bearer"
         assert settings.codex_timeout == 300.0
+        assert settings.codex_enable_experimental_api is True
         assert settings.codex_model_reasoning_effort == "high"
         assert settings.codex_model_reasoning_summary == "concise"
         assert settings.codex_model_verbosity == "medium"
@@ -245,6 +247,7 @@ def test_make_settings_ignores_ambient_environment_sources() -> None:
     assert settings.a2a_port == 8000
     assert settings.a2a_public_url == "http://127.0.0.1:8000"
     assert settings.codex_model is None
+    assert settings.codex_enable_experimental_api is False
     assert settings.codex_web_search is None
     assert settings.codex_approval_policy is None
     assert settings.codex_sandbox_mode is None

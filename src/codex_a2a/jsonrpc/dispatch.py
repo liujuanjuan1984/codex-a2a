@@ -26,6 +26,8 @@ class ExtensionMethodRegistry:
         exec_resize_method = methods.get("exec_resize")
         exec_terminate_method = methods.get("exec_terminate")
         interrupt_list_method = methods.get("interrupts_list")
+        discovery_plugin_list_method = methods.get("list_plugins")
+        discovery_plugin_read_method = methods.get("read_plugin")
         session_query_methods = frozenset(
             {
                 methods["list_sessions"],
@@ -33,12 +35,14 @@ class ExtensionMethodRegistry:
             }
         )
         discovery_query_methods = frozenset(
-            {
+            method
+            for method in (
                 methods["list_skills"],
                 methods["list_apps"],
-                methods["list_plugins"],
-                methods["read_plugin"],
-            }
+                discovery_plugin_list_method,
+                discovery_plugin_read_method,
+            )
+            if method is not None
         )
         discovery_control_methods = frozenset({methods["watch"]})
         thread_lifecycle_control_methods = frozenset(

@@ -157,14 +157,25 @@ def _build_agent_skills(
             id="codex.discovery.query",
             name="Codex Discovery Query",
             description=(
-                "List runtime skill scopes, apps, plugins, and stable path identifiers via "
-                "provider-private codex.discovery.* query methods."
+                "List runtime skill scopes, apps, and stable path identifiers via "
+                "provider-private codex.discovery.* query methods"
+                + (
+                    "; experimental plugin discovery is enabled."
+                    if runtime_profile.codex_experimental_api_enabled
+                    else "."
+                )
             ),
-            tags=["codex", "discovery", "skills", "apps", "plugins"],
+            tags=["codex", "discovery", "skills", "apps"]
+            + (["plugins"] if runtime_profile.codex_experimental_api_enabled else []),
             examples=[
                 "List runtime-discovered Codex skill scopes (method codex.discovery.skills.list).",
-                "List available apps or plugins before constructing mention.path values.",
-            ],
+                "List available apps before constructing mention.path values.",
+            ]
+            + (
+                ["List experimental plugins before constructing mention.path values."]
+                if runtime_profile.codex_experimental_api_enabled
+                else []
+            ),
             input_modes=list(JSON_RPC_INPUT_MEDIA_MODES),
             output_modes=list(JSON_OUTPUT_MEDIA_MODES),
         ),

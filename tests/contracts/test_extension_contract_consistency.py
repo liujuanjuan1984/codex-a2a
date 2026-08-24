@@ -97,6 +97,26 @@ def test_capability_snapshot_tracks_session_query_only_surface() -> None:
     )
     assert "codex.sessions.command" not in snapshot.supported_jsonrpc_methods
     assert "codex.sessions.prompt_async" not in snapshot.supported_jsonrpc_methods
+    assert "codex.discovery.plugins.list" not in snapshot.discovery_methods
+    assert snapshot.conditional_methods["codex.discovery.plugins.list"] == {
+        "reason": "upstream_experimental_api_disabled",
+        "toggle": "CODEX_ENABLE_EXPERIMENTAL_API",
+    }
+
+
+def test_capability_snapshot_includes_opted_in_experimental_discovery() -> None:
+    runtime_profile = build_runtime_profile(
+        make_settings(
+            a2a_bearer_token="test-token",
+            codex_enable_experimental_api=True,
+        )
+    )
+
+    snapshot = build_capability_snapshot(runtime_profile=runtime_profile)
+
+    assert "codex.discovery.plugins.list" in snapshot.discovery_methods
+    assert "codex.discovery.plugins.read" in snapshot.discovery_methods
+    assert "codex.discovery.plugins.list" not in snapshot.conditional_methods
 
 
 def test_provider_private_contract_builders_reject_non_1_0_protocol_version() -> None:

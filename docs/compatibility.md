@@ -160,7 +160,7 @@ This repository distinguishes between three layers:
 
 Discovery note:
 
-- `codex.discovery.skills.list`, `codex.discovery.apps.list`, `codex.discovery.plugins.list`, and `codex.discovery.plugins.read` are declared read-only discovery methods.
+- `codex.discovery.skills.list` and `codex.discovery.apps.list` are stable read-only discovery methods. Experimental `codex.discovery.plugins.list` and `codex.discovery.plugins.read` are disabled and omitted from discovery by default; enable them explicitly with `CODEX_ENABLE_EXPERIMENTAL_API=true`.
 - `codex.discovery.watch` is the declared bridge for upstream `skills/changed` and `app/list/updated` notifications.
 - `codex.threads.watch` is the declared thread lifecycle watch-task bridge for upstream `thread/started`, `thread/status/changed`, `thread/archived`, `thread/unarchived`, and `thread/closed` notifications.
 - `codex.threads.watch.release` is the declared ownership-scoped control method for releasing a watch task created by `codex.threads.watch`.

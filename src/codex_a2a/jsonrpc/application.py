@@ -106,7 +106,8 @@ class CodexSessionQueryJSONRPCApplication(JsonRpcDispatcher):
         self._method_get_session_messages = methods["get_session_messages"]
         self._method_discovery_skills_list = methods["list_skills"]
         self._method_discovery_apps_list = methods["list_apps"]
-        self._method_discovery_plugins_list = methods["list_plugins"]
+        self._method_discovery_plugins_list = methods.get("list_plugins")
+        self._method_discovery_plugin_read = methods.get("read_plugin")
         self._method_thread_fork = methods["thread_fork"]
         self._method_thread_archive = methods["thread_archive"]
         self._method_thread_unarchive = methods["thread_unarchive"]

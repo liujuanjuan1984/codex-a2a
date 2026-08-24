@@ -53,10 +53,12 @@ async def handle_discovery_query_request(
             rpc_params = parse_discovery_plugins_list_params(params)
             raw_result = await app._codex_client.list_plugins(params=rpc_params)
             result = map_plugin_marketplaces(raw_result)
-        else:
+        elif base_request.method == app._method_discovery_plugin_read:
             rpc_params = parse_discovery_plugin_read_params(params)
             raw_result = await app._codex_client.read_plugin(params=rpc_params)
             result = {"item": map_plugin_detail(raw_result)}
+        else:
+            raise RuntimeError(f"Unregistered discovery method: {base_request.method}")
     except JsonRpcParamsValidationError as exc:
         return invalid_params_response(app, base_request.id, exc)
     except httpx.HTTPStatusError as exc:

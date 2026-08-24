@@ -18,11 +18,21 @@ async def test_discovery_extension_routes_read_only_methods(monkeypatch) -> None
     import codex_a2a.server.application as app_module
 
     dummy = DummyCodexClient(
-        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+        make_settings(
+            a2a_bearer_token="t-1",
+            a2a_log_payloads=False,
+            codex_enable_experimental_api=True,
+            **_BASE_SETTINGS,
+        )
     )
     monkeypatch.setattr(app_module, "CodexClient", lambda _settings, **kwargs: dummy)
     app = app_module.create_app(
-        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+        make_settings(
+            a2a_bearer_token="t-1",
+            a2a_log_payloads=False,
+            codex_enable_experimental_api=True,
+            **_BASE_SETTINGS,
+        )
     )
 
     transport = httpx.ASGITransport(app=app)
@@ -106,11 +116,21 @@ async def test_discovery_responses_exclude_local_paths_and_raw_records(monkeypat
     import codex_a2a.server.application as app_module
 
     dummy = DummyCodexClient(
-        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+        make_settings(
+            a2a_bearer_token="t-1",
+            a2a_log_payloads=False,
+            codex_enable_experimental_api=True,
+            **_BASE_SETTINGS,
+        )
     )
     monkeypatch.setattr(app_module, "CodexClient", lambda _settings, **kwargs: dummy)
     app = app_module.create_app(
-        make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+        make_settings(
+            a2a_bearer_token="t-1",
+            a2a_log_payloads=False,
+            codex_enable_experimental_api=True,
+            **_BASE_SETTINGS,
+        )
     )
 
     transport = httpx.ASGITransport(app=app)
@@ -185,7 +205,7 @@ async def test_discovery_watch_routes_to_runtime(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
-async def test_discovery_extension_rejects_invalid_request_shapes(monkeypatch) -> None:
+async def test_experimental_plugin_discovery_is_disabled_by_default(monkeypatch) -> None:
     import codex_a2a.server.application as app_module
 
     dummy = DummyCodexClient(
@@ -194,6 +214,46 @@ async def test_discovery_extension_rejects_invalid_request_shapes(monkeypatch) -
     monkeypatch.setattr(app_module, "CodexClient", lambda _settings, **kwargs: dummy)
     app = app_module.create_app(
         make_settings(a2a_bearer_token="t-1", a2a_log_payloads=False, **_BASE_SETTINGS)
+    )
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post(
+            EXTENSION_JSONRPC_PATH,
+            headers={"Authorization": "Bearer t-1"},
+            json={
+                "jsonrpc": "2.0",
+                "id": 309,
+                "method": "codex.discovery.plugins.list",
+                "params": {},
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.json()["error"]["code"] == -32601
+    assert dummy.last_plugins_params is None
+
+
+@pytest.mark.asyncio
+async def test_discovery_extension_rejects_invalid_request_shapes(monkeypatch) -> None:
+    import codex_a2a.server.application as app_module
+
+    dummy = DummyCodexClient(
+        make_settings(
+            a2a_bearer_token="t-1",
+            a2a_log_payloads=False,
+            codex_enable_experimental_api=True,
+            **_BASE_SETTINGS,
+        )
+    )
+    monkeypatch.setattr(app_module, "CodexClient", lambda _settings, **kwargs: dummy)
+    app = app_module.create_app(
+        make_settings(
+            a2a_bearer_token="t-1",
+            a2a_log_payloads=False,
+            codex_enable_experimental_api=True,
+            **_BASE_SETTINGS,
+        )
     )
 
     transport = httpx.ASGITransport(app=app)

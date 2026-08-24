@@ -63,7 +63,9 @@ def test_extension_method_registry_without_optional_surfaces() -> None:
         {
             "list_sessions": SESSION_QUERY_METHODS["list_sessions"],
             "get_session_messages": SESSION_QUERY_METHODS["get_session_messages"],
-            **DISCOVERY_METHODS,
+            "list_skills": DISCOVERY_METHODS["list_skills"],
+            "list_apps": DISCOVERY_METHODS["list_apps"],
+            "watch": DISCOVERY_METHODS["watch"],
             "thread_fork": THREAD_LIFECYCLE_METHODS["fork"],
             "thread_archive": THREAD_LIFECYCLE_METHODS["archive"],
             "thread_unarchive": THREAD_LIFECYCLE_METHODS["unarchive"],
@@ -87,8 +89,6 @@ def test_extension_method_registry_without_optional_surfaces() -> None:
         {
             DISCOVERY_METHODS["list_skills"],
             DISCOVERY_METHODS["list_apps"],
-            DISCOVERY_METHODS["list_plugins"],
-            DISCOVERY_METHODS["read_plugin"],
         }
     )
     assert registry.discovery_control_methods == frozenset({DISCOVERY_METHODS["watch"]})

@@ -308,7 +308,11 @@ def create_app(settings: Settings) -> FastAPI:
     context_builder = IdentityAwareCallContextBuilder()
     jsonrpc_methods = {
         **extension_contracts.SESSION_QUERY_METHODS,
-        **extension_contracts.DISCOVERY_METHODS,
+        **{
+            key: method
+            for key, method in extension_contracts.DISCOVERY_METHODS.items()
+            if method in capability_snapshot.discovery_methods
+        },
         "thread_fork": extension_contracts.THREAD_LIFECYCLE_METHODS["fork"],
         "thread_archive": extension_contracts.THREAD_LIFECYCLE_METHODS["archive"],
         "thread_unarchive": extension_contracts.THREAD_LIFECYCLE_METHODS["unarchive"],

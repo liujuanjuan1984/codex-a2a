@@ -69,6 +69,7 @@ class CodexClient:
         self._request_timeout = settings.codex_timeout
         self._cli_bin = settings.codex_cli_bin
         self._listen = settings.codex_app_server_listen
+        self._experimental_api_enabled = settings.codex_enable_experimental_api
         self._startup_config_overrides = build_startup_config_overrides(settings)
         self._interrupt_request_ttl_seconds = settings.a2a_interrupt_request_ttl_seconds
         self._interrupt_request_tombstone_ttl_seconds = int(INTERRUPT_REQUEST_TOMBSTONE_TTL_SECONDS)
@@ -192,18 +193,18 @@ class CodexClient:
 
     async def _ensure_started(self) -> None:
         async def initialize_client() -> None:
+            initialize_params: dict[str, Any] = {
+                "clientInfo": {
+                    "name": _DEFAULT_CLIENT_NAME,
+                    "title": _DEFAULT_CLIENT_TITLE,
+                    "version": __version__,
+                }
+            }
+            if self._experimental_api_enabled:
+                initialize_params["capabilities"] = {"experimentalApi": True}
             init_result = await self._rpc_request(
                 "initialize",
-                {
-                    "clientInfo": {
-                        "name": _DEFAULT_CLIENT_NAME,
-                        "title": _DEFAULT_CLIENT_TITLE,
-                        "version": __version__,
-                    },
-                    "capabilities": {
-                        "experimentalApi": True,
-                    },
-                },
+                initialize_params,
                 _skip_ensure=True,
             )
             if self._log_payloads:

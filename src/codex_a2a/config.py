@@ -265,6 +265,10 @@ class Settings(BaseSettings):
         default="stdio://",
         alias="CODEX_APP_SERVER_LISTEN",
     )
+    codex_enable_experimental_api: bool = Field(
+        default=False,
+        alias="CODEX_ENABLE_EXPERIMENTAL_API",
+    )
     codex_model: str | None = Field(
         default=None,
         alias="CODEX_MODEL",

@@ -862,7 +862,16 @@ def build_capability_snapshot(*, runtime_profile: RuntimeProfile) -> CapabilityS
     ]
     conditional_methods: dict[str, dict[str, str]] = {}
     session_query_methods = tuple(SESSION_QUERY_METHODS[key] for key in session_query_method_keys)
-    discovery_methods = tuple(DISCOVERY_METHODS.values())
+    discovery_method_keys = ["list_skills", "list_apps", "watch"]
+    if runtime_profile.codex_experimental_api_enabled:
+        discovery_method_keys.extend(("list_plugins", "read_plugin"))
+    else:
+        for key in ("list_plugins", "read_plugin"):
+            conditional_methods[DISCOVERY_METHODS[key]] = {
+                "reason": "upstream_experimental_api_disabled",
+                "toggle": "CODEX_ENABLE_EXPERIMENTAL_API",
+            }
+    discovery_methods = tuple(DISCOVERY_METHODS[key] for key in discovery_method_keys)
     thread_lifecycle_methods = tuple(THREAD_LIFECYCLE_METHODS.values())
     interrupt_recovery_methods = tuple(INTERRUPT_RECOVERY_METHODS.values())
     if runtime_profile.turn_control_enabled:

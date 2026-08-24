@@ -271,6 +271,7 @@ These variables are forwarded to the local `codex app-server` subprocess.
 - `CODEX_WORKSPACE_ROOT`: default Codex workspace root (optional)
 - `CODEX_CLI_BIN`: Codex CLI binary path, default `codex`
   - For long-running Linux deployments managed by PM2, systemd, or similar supervisors, set this explicitly to the bundled native Codex binary.
+- `CODEX_ENABLE_EXPERIMENTAL_API`: opt in to Codex App Server experimental APIs, default `false`; currently enables plugin discovery only
 - `CODEX_MODEL`: optional startup model override; when unset, Codex selects its configured/default model
 - `CODEX_APPROVAL_POLICY`: default approval policy (`never`, `on-request`, etc.)
 - `CODEX_SANDBOX_MODE`: default sandbox mode (`danger-full-access`, `read-only`, etc.)
@@ -371,6 +372,7 @@ These variables are forwarded to the local `codex app-server` subprocess.
 | `A2A_EXECUTION_WRITE_OUTSIDE_WORKSPACE` | Discovery write outside |
 | `CODEX_CLI_BIN` | Codex CLI path |
 | `CODEX_APP_SERVER_LISTEN` | Codex listen target |
+| `CODEX_ENABLE_EXPERIMENTAL_API` | Opt in to experimental App Server APIs |
 | `CODEX_WORKSPACE_ROOT` | Workspace root |
 | `CODEX_MODEL` | Default model |
 | `CODEX_MODEL_ID` | Turn model override |
@@ -706,8 +708,8 @@ This service exposes read-only Codex discovery methods through JSON-RPC:
 
 - `codex.discovery.skills.list`
 - `codex.discovery.apps.list`
-- `codex.discovery.plugins.list`
-- `codex.discovery.plugins.read`
+- `codex.discovery.plugins.list` (experimental; requires `CODEX_ENABLE_EXPERIMENTAL_API=true`)
+- `codex.discovery.plugins.read` (experimental; requires `CODEX_ENABLE_EXPERIMENTAL_API=true`)
 
 Use these methods before constructing rich input:
 
@@ -719,7 +721,7 @@ Result-shape guidance:
 
 - use the normalized stable fields declared in Agent Card / OpenAPI first
 - discovery responses are whitelisted summaries; raw upstream records and local paths are intentionally excluded
-- `plugin/list` and `plugin/read` remain upstream experimental; this service exposes a stable minimum subset without raw passthrough
+- `plugin/list` and `plugin/read` remain upstream experimental, are disabled by default, and are advertised only after `CODEX_ENABLE_EXPERIMENTAL_API=true`; the opt-in adapter response remains a whitelisted minimum subset without raw passthrough
 
 ### Skills List (`codex.discovery.skills.list`)
 
@@ -757,6 +759,8 @@ curl -sS http://127.0.0.1:8000/ \
 
 ### Plugins List (`codex.discovery.plugins.list`)
 
+This method is available only when the service starts with `CODEX_ENABLE_EXPERIMENTAL_API=true`.
+
 ```bash
 curl -sS http://127.0.0.1:8000/ \
   -H 'content-type: application/json' \
@@ -773,6 +777,8 @@ curl -sS http://127.0.0.1:8000/ \
 ```
 
 ### Plugin Read (`codex.discovery.plugins.read`)
+
+This method is available only when the service starts with `CODEX_ENABLE_EXPERIMENTAL_API=true`.
 
 ```bash
 curl -sS http://127.0.0.1:8000/ \
