@@ -430,9 +430,6 @@ class SessionRuntime:
             if pending_owner == identity:
                 await self._delete_pending_claim(session_id=session_id)
 
-    async def release_session_claim(self, *, identity: str, session_id: str) -> None:
-        await self.release_preferred_session_claim(identity=identity, session_id=session_id)
-
     async def session_owner_matches(self, *, identity: str, session_id: str) -> bool | None:
         async with self._lock:
             owner = await self._load_session_owner(session_id=session_id)

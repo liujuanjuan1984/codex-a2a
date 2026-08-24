@@ -95,7 +95,7 @@ class CodexAgentExecutor(AgentExecutor):
         self._session_guard_bindings = SessionGuardBindings(
             session_claim=self._session_runtime.claim_session,
             session_claim_finalize=self._session_runtime.finalize_session_claim,
-            session_claim_release=self._session_runtime.release_session_claim,
+            session_claim_release=self._session_runtime.release_preferred_session_claim,
             session_owner_matcher=self._session_runtime.session_owner_matches,
             directory_resolver=self._resolve_and_validate_directory,
         )

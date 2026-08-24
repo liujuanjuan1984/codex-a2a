@@ -122,14 +122,6 @@ class StreamEventProcessor:
         self._buffered_text_chunk: BufferedTextChunk | None = None
         self._diagnostics = StreamDiagnostics(started_at=time.monotonic())
 
-    def log_started(self, logger) -> None:  # noqa: ANN001
-        logger.debug(
-            "Codex event stream started task_id=%s session_id=%s idle_diagnostic_seconds=%.1f",
-            self._task_id,
-            self._session_id,
-            self._idle_diagnostic_seconds,
-        )
-
     def seconds_until_buffer_flush(self) -> float | None:
         if self._buffered_text_chunk is None:
             return None

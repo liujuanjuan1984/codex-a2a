@@ -7,6 +7,13 @@ from codex_a2a.contracts.extensions import (
     SESSION_QUERY_DEFAULT_LIMIT,
     SESSION_QUERY_MAX_LIMIT,
 )
+from codex_a2a.jsonrpc.discovery_params import (
+    parse_discovery_apps_list_params,
+    parse_discovery_plugin_read_params,
+    parse_discovery_plugins_list_params,
+    parse_discovery_skills_list_params,
+    parse_discovery_watch_params,
+)
 from codex_a2a.jsonrpc.interrupt_params import (
     ElicitationReplyParams,
     PermissionReplyParams,
@@ -17,17 +24,14 @@ from codex_a2a.jsonrpc.interrupt_recovery_params import (
     InterruptRecoveryListParams,
     raise_interrupt_recovery_validation_error,
 )
-from codex_a2a.jsonrpc.params import (
+from codex_a2a.jsonrpc.params_common import (
     JsonRpcParamsValidationError,
-    parse_discovery_apps_list_params,
-    parse_discovery_plugin_read_params,
-    parse_discovery_plugins_list_params,
-    parse_discovery_skills_list_params,
-    parse_discovery_watch_params,
+    validate_params_model,
+)
+from codex_a2a.jsonrpc.query_params import (
     parse_get_session_messages_params,
     parse_list_sessions_params,
 )
-from codex_a2a.jsonrpc.params_common import validate_params_model
 from codex_a2a.jsonrpc.review_control_params import (
     ReviewStartControlParams,
     ReviewWatchControlParams,

@@ -198,7 +198,7 @@ class CodexExecRuntime:
         }
         stream_append_seen: dict[str, bool] = {"stdout": False, "stderr": False}
         sequence = 0
-        pending_event_task: asyncio.Task[dict[str, Any]] | None = None
+        pending_event_task: asyncio.Future[dict[str, Any]] | None = None
         stream_iter = self._client.stream_events(stop_event=handle.stop_event, directory=directory)
         exec_task = asyncio.create_task(
             self._client.exec_start(
@@ -212,7 +212,7 @@ class CodexExecRuntime:
         try:
             while True:
                 if pending_event_task is None:
-                    pending_event_task = asyncio.create_task(self._next_stream_event(stream_iter))
+                    pending_event_task = asyncio.ensure_future(anext(stream_iter))
                 done, _ = await asyncio.wait(
                     {exec_task, pending_event_task},
                     return_when=asyncio.FIRST_COMPLETED,
@@ -282,10 +282,6 @@ class CodexExecRuntime:
                 pending_event_task.cancel()
                 with contextlib.suppress(asyncio.CancelledError):
                     await pending_event_task
-
-    @staticmethod
-    async def _next_stream_event(stream_iter) -> dict[str, Any]:  # noqa: ANN001
-        return await anext(stream_iter)
 
     async def _emit_output_delta(
         self,

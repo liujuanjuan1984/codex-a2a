@@ -53,7 +53,7 @@ def test_executor_exposes_public_session_guard_bindings(mock_client) -> None:
     assert bindings.session_claim_release.__self__ is executor._session_runtime
     assert (
         bindings.session_claim_release.__func__
-        is executor._session_runtime.release_session_claim.__func__
+        is executor._session_runtime.release_preferred_session_claim.__func__
     )
     assert bindings.session_owner_matcher.__self__ is executor._session_runtime
     assert (

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import AsyncIterator
 from contextlib import suppress
 from typing import Any
 
@@ -40,10 +39,6 @@ __all__ = [
 ]
 
 
-async def _next_stream_event(stream_iter: AsyncIterator[dict[str, Any]]) -> dict[str, Any]:
-    return await anext(stream_iter)
-
-
 async def consume_codex_stream(
     *,
     client: CodexClient,
@@ -75,7 +70,12 @@ async def consume_codex_stream(
         completion_event=completion_event,
         idle_diagnostic_seconds=resolved_idle_diagnostic_seconds,
     )
-    processor.log_started(logger)
+    logger.debug(
+        "Codex event stream started task_id=%s session_id=%s idle_diagnostic_seconds=%.1f",
+        task_id,
+        session_id,
+        resolved_idle_diagnostic_seconds,
+    )
 
     try:
         while not stop_event.is_set():
@@ -84,10 +84,10 @@ async def consume_codex_stream(
                     stop_event=stop_event,
                     directory=directory,
                 ).__aiter__()
-                pending_event_task: asyncio.Task[dict[str, Any]] | None = None
+                pending_event_task: asyncio.Future[dict[str, Any]] | None = None
                 while not stop_event.is_set():
                     if pending_event_task is None:
-                        pending_event_task = asyncio.create_task(_next_stream_event(stream_iter))
+                        pending_event_task = asyncio.ensure_future(anext(stream_iter))
                     wait_timeout = processor.seconds_until_buffer_flush()
                     idle_timeout = processor.seconds_until_idle_diagnostic()
                     if idle_timeout is not None:
