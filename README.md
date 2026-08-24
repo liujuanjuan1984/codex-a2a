@@ -176,7 +176,7 @@ The normative compatibility split and deployment model live in [Compatibility Gu
 
 - **[A2A Protocol](https://github.com/a2aproject/A2A)**: The Linux Foundation open protocol implemented by this adapter at the declared A2A `1.0` line.
 - **[a2aproject/a2a-python](https://github.com/a2aproject/a2a-python)**: The official Apache-2.0 Python SDK; this repository pins the `a2a-sdk` package to `1.1.2`.
-- **[openai/codex](https://github.com/openai/codex)**: The Apache-2.0 Codex CLI repository containing the local App Server used by this adapter. Codex IDE, desktop, web, and cloud product surfaces are separate from this local open-source runtime and are outside this repository's compatibility claim.
+- **[openai/codex](https://github.com/openai/codex)**: The Apache-2.0 Codex CLI repository containing the local App Server used by this adapter. OpenAI's [open-source component list](https://developers.openai.com/codex/open-source) identifies the IDE extension and Codex cloud as not open source. Desktop and web product behavior is also separate from this local runtime and outside this repository's compatibility claim.
 
 ### Community Gateways and Hubs
 

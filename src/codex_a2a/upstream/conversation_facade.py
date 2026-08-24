@@ -197,6 +197,21 @@ class CodexConversationFacade:
             messages = messages[-limit:]
         return messages
 
+    async def thread_cwd(self, thread_id: str) -> str:
+        result = await self._rpc_request(
+            "thread/read",
+            {"threadId": thread_id, "includeTurns": False},
+        )
+        if not isinstance(result, dict):
+            raise RuntimeError("codex thread/read response missing result object")
+        thread = result.get("thread")
+        if not isinstance(thread, dict):
+            raise RuntimeError("codex thread/read response missing thread")
+        cwd = thread.get("cwd")
+        if not isinstance(cwd, str) or not cwd.strip():
+            raise RuntimeError("codex thread/read response missing thread cwd")
+        return cwd.strip()
+
     async def send_message(
         self,
         session_id: str,

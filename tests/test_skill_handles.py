@@ -87,3 +87,13 @@ def test_resolve_skill_handle_rejects_colliding_candidates(monkeypatch) -> None:
         resolve_skill_input_items([{"type": "skill", "handle": handle}], payload)
 
     assert exc_info.value.code == "SKILL_HANDLE_AMBIGUOUS"
+
+
+def test_resolution_reports_requested_handle_when_discovery_payload_is_unavailable() -> None:
+    handle = build_skill_handle(cwd="/repo", name="demo", path="/repo/demo/SKILL.md")
+
+    with pytest.raises(SkillHandleResolutionError) as exc_info:
+        resolve_skill_input_items([{"type": "skill", "handle": handle}], {"data": None})
+
+    assert exc_info.value.code == "SKILL_DISCOVERY_UNAVAILABLE"
+    assert exc_info.value.handle == handle

@@ -8,7 +8,7 @@ if ! command -v codex >/dev/null 2>&1; then
 fi
 
 codex --version
-uv run python scripts/check_codex_app_server_schema.py
+uv run python scripts/check_codex_app_server_schema.py --include-experimental
 uv run python scripts/smoke_live_codex_turn.py
 
-echo "Codex app-server schema and real thread/turn smoke tests passed."
+echo "Codex app-server stable/experimental schema and real thread/turn smoke tests passed."

@@ -17,10 +17,10 @@ This document only explains the remaining repository-local maintainer scripts. U
 - [`scripts/audit_low_call_sites.py`](./audit_low_call_sites.py): report low-call-count function and method candidates for manual wrapper/abstraction review.
 - [`scripts/validate_runtime_matrix.sh`](./validate_runtime_matrix.sh): run the reduced runtime-only validation used by the multi-version CI matrix.
 - [`scripts/conformance.sh`](./conformance.sh): run the official A2A TCK, preserve raw evidence, and compare mandatory single-transport failures with the reviewed incremental baseline.
-- [`scripts/check_tck_regressions.py`](./check_tck_regressions.py): compare exact pytest node IDs, outcomes, and failure categories with `docs/a2a-tck-known-failures.json`.
+- [`scripts/check_tck_regressions.py`](./check_tck_regressions.py): compare exact pytest node IDs, outcomes, failure categories, and raw TCK exit semantics with `docs/a2a-tck-known-failures.json`.
 - [`scripts/dependency_health.sh`](./dependency_health.sh): run the standalone dependency review flow (`sync`/`pip check`, outdated package listing, and dev vulnerability audit).
 - [`scripts/smoke_test_built_cli.sh`](./smoke_test_built_cli.sh): validate that a built wheel can be installed through `uv tool` and becomes healthy.
-- [`scripts/smoke_test_live_codex.sh`](./smoke_test_live_codex.sh): verify the installed Codex app-server stable schema, discover and resolve an opaque workspace-skill handle, and drive one real thread/turn against an isolated local Responses provider.
+- [`scripts/smoke_test_live_codex.sh`](./smoke_test_live_codex.sh): verify the installed Codex app-server stable and opt-in experimental schema dependencies, discover and resolve an opaque workspace-skill handle, and drive one real stable-API thread/turn against an isolated local Responses provider.
 - [`scripts/check_codex_app_server_schema.py`](./check_codex_app_server_schema.py): compare generated Codex app-server schema tokens with the stable adapter dependencies; pass `--include-experimental` when validating the opt-in plugin API.
 - [`scripts/sync_codex_docs.sh`](./sync_codex_docs.sh): refresh local upstream Codex reference snapshots when maintainers need them.
 

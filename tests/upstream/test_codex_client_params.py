@@ -10,7 +10,7 @@ import pytest
 
 from codex_a2a.execution.request_overrides import RequestExecutionOptions
 from codex_a2a.logging_context import bind_correlation_id
-from codex_a2a.skill_handles import build_skill_handle
+from codex_a2a.skill_handles import SkillHandleResolutionError, build_skill_handle
 from codex_a2a.upstream.client import (
     CodexClient,
     CodexStartupPrerequisiteError,
@@ -405,16 +405,18 @@ async def test_turn_steer_resolves_skill_handle_before_upstream_call() -> None:
         )
     )
     skill_path = "/safe/.codex/skills/demo/SKILL.md"
-    handle = build_skill_handle(cwd="/safe", name="demo", path=skill_path)
+    handle = build_skill_handle(cwd="/safe/nested", name="demo", path=skill_path)
     seen: list[tuple[str, dict | None]] = []
 
     async def fake_rpc_request(method: str, params: dict | None = None):
         seen.append((method, params))
+        if method == "thread/read":
+            return {"thread": {"id": "thr-1", "cwd": "/safe/nested"}}
         if method == "skills/list":
             return {
                 "data": [
                     {
-                        "cwd": "/safe",
+                        "cwd": "/safe/nested",
                         "skills": [{"name": "demo", "path": skill_path, "enabled": True}],
                     }
                 ]
@@ -431,7 +433,8 @@ async def test_turn_steer_resolves_skill_handle_before_upstream_call() -> None:
 
     assert result == {"ok": True, "thread_id": "thr-1", "turn_id": "turn-2"}
     assert seen == [
-        ("skills/list", {"forceReload": True, "cwds": ["/safe"]}),
+        ("thread/read", {"threadId": "thr-1", "includeTurns": False}),
+        ("skills/list", {"forceReload": True, "cwds": ["/safe/nested"]}),
         (
             "turn/steer",
             {
@@ -441,6 +444,37 @@ async def test_turn_steer_resolves_skill_handle_before_upstream_call() -> None:
             },
         ),
     ]
+
+
+@pytest.mark.asyncio
+async def test_send_message_maps_skill_discovery_rpc_failure_to_stable_error() -> None:
+    client = CodexClient(
+        make_settings(
+            a2a_bearer_token="t-1",
+            codex_workspace_root="/safe",
+            codex_timeout=1.0,
+        )
+    )
+    handle = build_skill_handle(cwd="/safe", name="demo", path="/safe/demo/SKILL.md")
+
+    async def fake_rpc_request(method: str, params: dict | None = None):
+        del params
+        if method == "skills/list":
+            raise RuntimeError("discovery transport failed")
+        raise AssertionError(f"unexpected RPC method: {method}")
+
+    _bind_rpc_request(client, fake_rpc_request)
+
+    with pytest.raises(SkillHandleResolutionError) as exc_info:
+        await client.send_message(
+            "thr-1",
+            "Use the skill.",
+            input_items=[{"type": "skill", "handle": handle}],
+            directory="/safe",
+        )
+
+    assert exc_info.value.code == "SKILL_DISCOVERY_UNAVAILABLE"
+    assert exc_info.value.handle == handle
 
 
 @pytest.mark.asyncio

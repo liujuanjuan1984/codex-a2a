@@ -106,3 +106,37 @@ def test_incremental_gate_rejects_new_or_changed_failures() -> None:
         "failure_category_changed",
         "new_failure",
     }
+
+
+def test_incremental_gate_rejects_infrastructure_and_unreported_failures() -> None:
+    infrastructure = compare_failures(
+        actual=[],
+        expected=_EXPECTED,
+        transport="jsonrpc",
+        tck_exit=2,
+    )
+    unreported = compare_failures(
+        actual=[],
+        expected=_EXPECTED,
+        transport="jsonrpc",
+        tck_exit=1,
+    )
+
+    assert infrastructure["status"] == "regressed"
+    assert infrastructure["regressions"][-1]["reason"] == "tck_execution_failed"
+    assert infrastructure["counts"]["resolved_known_failures"] == 0
+    assert unreported["status"] == "regressed"
+    assert unreported["regressions"][-1]["reason"] == "unreported_tck_failure"
+    assert unreported["counts"]["resolved_known_failures"] == 0
+
+
+def test_incremental_gate_accepts_resolved_baseline_only_on_successful_tck_exit() -> None:
+    summary = compare_failures(
+        actual=[],
+        expected=_EXPECTED,
+        transport="jsonrpc",
+        tck_exit=0,
+    )
+
+    assert summary["status"] == "compatible"
+    assert summary["counts"]["resolved_known_failures"] == 1

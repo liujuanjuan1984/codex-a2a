@@ -14,7 +14,11 @@ from codex_a2a.input_mapping import normalize_prompt_request_parts
 from codex_a2a.logging_context import (
     install_log_record_factory,
 )
-from codex_a2a.skill_handles import resolve_skill_input_items
+from codex_a2a.skill_handles import (
+    SkillHandleResolutionError,
+    first_skill_handle,
+    resolve_skill_input_items,
+)
 from codex_a2a.upstream.conversation_facade import CodexConversationFacade
 from codex_a2a.upstream.interrupt_bridge import CodexInterruptBridge
 from codex_a2a.upstream.interrupts import (
@@ -296,6 +300,24 @@ class CodexClient:
             rpc_params,
         )
 
+    async def _resolve_skill_input_items(
+        self,
+        items: list[dict[str, Any]],
+        *,
+        directory: str | None,
+    ) -> list[dict[str, Any]]:
+        skill_params: dict[str, Any] = {"force_reload": True}
+        if directory:
+            skill_params["cwds"] = [directory]
+        try:
+            raw_skills = await self.list_skills(params=skill_params)
+        except Exception as exc:
+            raise SkillHandleResolutionError(
+                "SKILL_DISCOVERY_UNAVAILABLE",
+                first_skill_handle(items),
+            ) from exc
+        return resolve_skill_input_items(items, raw_skills)
+
     async def list_apps(self, *, params: dict[str, Any] | None = None) -> Any:
         return await self._rpc_request(
             "app/list",
@@ -384,12 +406,9 @@ class CodexClient:
     ) -> CodexMessage:
         resolved_input_items = input_items
         if input_items is not None and any(item.get("type") == "skill" for item in input_items):
-            skill_params: dict[str, Any] = {"force_reload": True}
-            if directory:
-                skill_params["cwds"] = [directory]
-            resolved_input_items = resolve_skill_input_items(
+            resolved_input_items = await self._resolve_skill_input_items(
                 input_items,
-                await self.list_skills(params=skill_params),
+                directory=directory,
             )
         return await self._conversation_facade.send_message(
             session_id,
@@ -409,9 +428,16 @@ class CodexClient:
     ) -> dict[str, Any]:
         normalized_items = normalize_prompt_request_parts(request.get("parts"))
         if any(item.get("type") == "skill" for item in normalized_items):
-            normalized_items = resolve_skill_input_items(
+            try:
+                thread_cwd = await self._conversation_facade.thread_cwd(thread_id)
+            except Exception as exc:
+                raise SkillHandleResolutionError(
+                    "SKILL_DISCOVERY_UNAVAILABLE",
+                    first_skill_handle(normalized_items),
+                ) from exc
+            normalized_items = await self._resolve_skill_input_items(
                 normalized_items,
-                await self.list_skills(params={"force_reload": True}),
+                directory=thread_cwd,
             )
         return await self._conversation_facade.turn_steer(
             thread_id,

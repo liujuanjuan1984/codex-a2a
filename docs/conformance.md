@@ -85,10 +85,10 @@ When a TCK run fails, inspect the raw report before changing the runtime:
 - Some failures may come from older A2A naming or schema expectations that no longer match the repository's `1.0` contract.
 - Some failures may be local experiment artifacts from the dummy-backed runtime.
 
-The experiment is useful only if those categories stay separate during triage. The gate fails when a new node ID appears, an expected `failed`/`error` outcome changes, or the failure message no longer matches its reviewed category. A known failure disappearing is reported as resolved and does not fail the run.
+The experiment is useful only if those categories stay separate during triage. The gate fails when a new node ID appears, an expected `failed`/`error` outcome changes, the failure message no longer matches its reviewed category, or the raw TCK exit indicates collection, startup, interruption, or another unreported execution failure. A known failure disappearing is reported as resolved only when the raw TCK exit and report agree, and does not fail the run.
 Use the authenticated compatibility profile and wire contract `protocol_compatibility` fields as the repository-owned declaration of which protocol lines are supported today.
 
-The same scheduled workflow installs the latest stable Codex CLI and runs `scripts/smoke_test_live_codex.sh`. The smoke check uses an isolated local Responses provider, verifies generated stable schema tokens, discovers/resolves a workspace skill handle, and completes a real App Server thread/turn without external provider credentials.
+The same scheduled workflow installs the latest stable Codex CLI and runs `scripts/smoke_test_live_codex.sh`. The smoke check uses an isolated local Responses provider, verifies generated stable and opt-in experimental schema dependencies, discovers/resolves a workspace skill handle, and completes a real stable-API App Server thread/turn without external provider credentials.
 
 ## Updating the Known-Failure Baseline
 

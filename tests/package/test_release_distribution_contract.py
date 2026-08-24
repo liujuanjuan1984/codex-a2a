@@ -73,6 +73,7 @@ def test_ecosystem_and_compatibility_claims_match_repository_evidence() -> None:
     assert "Intelligent-Internet/a2a-python" not in README_TEXT
     assert "Codex Runtime (Proprietary)" not in README_TEXT
     assert "not an OpenAI or A2A Project distribution or endorsement" in README_TEXT
+    assert "identifies the IDE extension and Codex cloud as not open source" in README_TEXT
     assert "3.11–3.14" in COMPATIBILITY_TEXT
     assert PYPROJECT_DATA["project"]["dependencies"][0] in COMPATIBILITY_TEXT
     assert "gRPC is not exposed by this adapter" in COMPATIBILITY_TEXT

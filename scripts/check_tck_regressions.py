@@ -74,11 +74,12 @@ def compare_failures(
     actual: list[dict[str, str]],
     expected: list[dict[str, str]],
     transport: str,
+    tck_exit: int | None = None,
 ) -> dict[str, Any]:
     expected_by_nodeid = {item["nodeid"]: item for item in expected}
     actual_by_nodeid = {item["nodeid"]: item for item in actual}
     known: list[dict[str, str]] = []
-    regressions: list[dict[str, str]] = []
+    regressions: list[dict[str, Any]] = []
 
     for nodeid, failure in sorted(actual_by_nodeid.items()):
         baseline = expected_by_nodeid.get(nodeid)
@@ -113,14 +114,52 @@ def compare_failures(
             }
         )
 
-    resolved = [
-        {
-            "nodeid": nodeid,
-            "failure_category": baseline["failure_category"],
-        }
-        for nodeid, baseline in sorted(expected_by_nodeid.items())
-        if nodeid not in actual_by_nodeid
-    ]
+    report_exit_consistent = (
+        tck_exit is None or (tck_exit == 0 and not actual) or (tck_exit == 1 and bool(actual))
+    )
+    resolved = (
+        [
+            {
+                "nodeid": nodeid,
+                "failure_category": baseline["failure_category"],
+            }
+            for nodeid, baseline in sorted(expected_by_nodeid.items())
+            if nodeid not in actual_by_nodeid
+        ]
+        if report_exit_consistent
+        else []
+    )
+    if tck_exit is not None:
+        if tck_exit not in {0, 1}:
+            regressions.append(
+                {
+                    "nodeid": "<tck-run>",
+                    "outcome": "error",
+                    "message": f"pytest/TCK exited with infrastructure status {tck_exit}",
+                    "reason": "tck_execution_failed",
+                    "raw_tck_exit": tck_exit,
+                }
+            )
+        elif tck_exit == 1 and not actual:
+            regressions.append(
+                {
+                    "nodeid": "<tck-run>",
+                    "outcome": "error",
+                    "message": "pytest/TCK failed without a reported test failure",
+                    "reason": "unreported_tck_failure",
+                    "raw_tck_exit": tck_exit,
+                }
+            )
+        elif tck_exit == 0 and actual:
+            regressions.append(
+                {
+                    "nodeid": "<tck-run>",
+                    "outcome": "error",
+                    "message": "pytest/TCK reported failures with a successful exit status",
+                    "reason": "inconsistent_tck_report",
+                    "raw_tck_exit": tck_exit,
+                }
+            )
     return {
         "status": "regressed" if regressions else "compatible",
         "transport": transport,
@@ -142,6 +181,7 @@ def main() -> int:
     parser.add_argument("--transport", choices=("jsonrpc", "http_json"), required=True)
     parser.add_argument("--category", required=True)
     parser.add_argument("--tck-commit", required=True)
+    parser.add_argument("--tck-exit", type=int, required=True)
     parser.add_argument("--json-report", type=Path)
     parser.add_argument("--junit-report", type=Path)
     parser.add_argument("--output", type=Path, required=True)
@@ -172,11 +212,17 @@ def main() -> int:
     else:
         raise SystemExit("No pytest JSON or JUnit report is available for comparison")
 
-    summary = compare_failures(actual=actual, expected=expected, transport=args.transport)
+    summary = compare_failures(
+        actual=actual,
+        expected=expected,
+        transport=args.transport,
+        tck_exit=args.tck_exit,
+    )
     summary["baseline"] = str(args.baseline)
     summary["evidence"] = evidence
     summary["tck_commit"] = args.tck_commit
     summary["category"] = category
+    summary["raw_tck_exit"] = args.tck_exit
     args.output.write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
     (args.output.parent / "failed-tests.json").write_text(
         json.dumps(actual, indent=2) + "\n",

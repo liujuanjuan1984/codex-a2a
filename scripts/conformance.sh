@@ -309,6 +309,7 @@ if [[ "${should_compare}" == "1" ]]; then
     --transport "${normalized_transport}" \
     --category "${category}" \
     --tck-commit "${tck_commit}" \
+    --tck-exit "${tck_exit}" \
     --json-report "${output_dir}/pytest-report.json" \
     --junit-report "${output_dir}/junitreport.xml" \
     --output "${output_dir}/baseline-comparison.json"

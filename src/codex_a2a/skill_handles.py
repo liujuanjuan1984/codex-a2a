@@ -39,10 +39,22 @@ def is_skill_handle(value: Any) -> bool:
     return isinstance(value, str) and _SKILL_HANDLE_PATTERN.fullmatch(value.strip()) is not None
 
 
-def _skill_candidates(raw_result: Any) -> dict[str, list[_SkillCandidate]]:
+def first_skill_handle(items: list[dict[str, Any]]) -> str:
+    for item in items:
+        if item.get("type") == "skill":
+            handle = item.get("handle")
+            return handle.strip() if isinstance(handle, str) else str(handle or "")
+    return ""
+
+
+def _skill_candidates(
+    raw_result: Any,
+    *,
+    requested_handle: str,
+) -> dict[str, list[_SkillCandidate]]:
     candidates: dict[str, list[_SkillCandidate]] = {}
     if not isinstance(raw_result, dict) or not isinstance(raw_result.get("data"), list):
-        raise SkillHandleResolutionError("SKILL_DISCOVERY_UNAVAILABLE", "")
+        raise SkillHandleResolutionError("SKILL_DISCOVERY_UNAVAILABLE", requested_handle)
     for scope_entry in raw_result["data"]:
         if not isinstance(scope_entry, dict):
             continue
@@ -72,7 +84,12 @@ def _skill_candidates(raw_result: Any) -> dict[str, list[_SkillCandidate]]:
 
 
 def resolve_skill_input_items(items: list[dict[str, Any]], raw_result: Any) -> list[dict[str, Any]]:
-    candidates = _skill_candidates(raw_result)
+    if not any(item.get("type") == "skill" for item in items):
+        return [dict(item) for item in items]
+    requested_handle = first_skill_handle(items)
+    if not is_skill_handle(requested_handle):
+        raise SkillHandleResolutionError("SKILL_HANDLE_INVALID", requested_handle)
+    candidates = _skill_candidates(raw_result, requested_handle=requested_handle)
     resolved: list[dict[str, Any]] = []
     for item in items:
         if item.get("type") != "skill":
