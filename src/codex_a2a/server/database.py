@@ -141,12 +141,16 @@ def _harden_sqlite_before_connect(
     *,
     database_path: Path,
 ) -> None:
-    """Fail-closed hardening before a DBAPI connection is created.
+    """Event-signature adapter for the SQLAlchemy ``do_connect`` hook.
 
-    Registered on the ``do_connect`` event, which fires before SQLAlchemy
-    instantiates the underlying aiosqlite connection. Rejecting a symlink or
-    an untrusted file here never allocates a connection (or its worker
-    thread), so no resource can be leaked.
+    ``do_connect`` listeners receive ``(dialect, connection_record, cargs,
+    cparams)`` and SQLAlchemy binds them by parameter name, so
+    ``_harden_sqlite_file(path)`` cannot be registered directly (a bare
+    ``partial`` fails at runtime with a TypeError). This adapter exists solely
+    to translate that signature while keeping the fail-closed hardening
+    before any physical connection is created: rejecting a symlink or an
+    untrusted file here never allocates a connection (or its worker thread),
+    so no resource can be leaked.
     """
     _harden_sqlite_file(database_path)
 

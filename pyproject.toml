@@ -96,6 +96,12 @@ filterwarnings = [
     "always:.*was deleted before being closed.*:ResourceWarning:aiosqlite.core",
 ]
 
+[tool.coverage.run]
+# SQLAlchemy's async engine runs connect listeners inside greenlets; without
+# this, coverage.py's tracer loses line events there on CPython 3.13 (and
+# diff-cover under-reports the SQLite connection setup paths).
+concurrency = ["greenlet"]
+
 [tool.coverage.report]
 fail_under = 84
 show_missing = true
