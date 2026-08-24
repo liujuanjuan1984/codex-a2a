@@ -244,7 +244,7 @@ def test_make_settings_ignores_ambient_environment_sources() -> None:
     assert settings.a2a_host == "127.0.0.1"
     assert settings.a2a_port == 8000
     assert settings.a2a_public_url == "http://127.0.0.1:8000"
-    assert settings.codex_model == "gpt-5.1-codex"
+    assert settings.codex_model is None
     assert settings.codex_web_search is None
     assert settings.codex_approval_policy is None
     assert settings.codex_sandbox_mode is None

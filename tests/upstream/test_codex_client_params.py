@@ -2004,7 +2004,7 @@ async def test_ensure_started_passes_runtime_overrides_to_codex_cli(monkeypatch)
 def test_build_startup_config_overrides_omits_empty_workspace_write_config() -> None:
     client = CodexClient(make_settings(a2a_bearer_token="t-1", codex_timeout=1.0))
 
-    assert client._startup_config_overrides == {"model": "gpt-5.1-codex"}
+    assert client._startup_config_overrides == {}
 
 
 def test_build_startup_config_overrides_prefers_profile_when_model_not_explicit() -> None:
@@ -2017,6 +2017,22 @@ def test_build_startup_config_overrides_prefers_profile_when_model_not_explicit(
     )
 
     assert client._startup_config_overrides == {"profile": "coding"}
+
+
+def test_build_startup_config_overrides_keeps_explicit_model_with_profile() -> None:
+    client = CodexClient(
+        make_settings(
+            a2a_bearer_token="t-1",
+            codex_timeout=1.0,
+            codex_model="explicit-model",
+            codex_profile="coding",
+        )
+    )
+
+    assert client._startup_config_overrides == {
+        "model": "explicit-model",
+        "profile": "coding",
+    }
 
 
 @pytest.mark.asyncio

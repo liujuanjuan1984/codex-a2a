@@ -16,6 +16,7 @@ SMOKE_TEST_SCRIPT_TEXT = Path("scripts/smoke_test_built_cli.sh").read_text()
 RUNTIME_MATRIX_SCRIPT_TEXT = Path("scripts/validate_runtime_matrix.sh").read_text()
 SYNC_CODEX_DOCS_TEXT = Path("scripts/sync_codex_docs.sh").read_text()
 LIVE_CODEX_SMOKE_TEXT = Path("scripts/smoke_test_live_codex.sh").read_text()
+LIVE_CODEX_TURN_SMOKE_TEXT = Path("scripts/smoke_live_codex_turn.py").read_text()
 CONFORMANCE_TEXT = Path("docs/conformance.md").read_text()
 CONFORMANCE_TRIAGE_TEXT = Path("docs/conformance-triage.md").read_text()
 GUIDE_TEXT = Path("docs/guide.md").read_text()
@@ -117,8 +118,10 @@ def test_scheduled_compatibility_workflow_pins_tck_and_smokes_latest_codex() -> 
     assert "bash ./scripts/conformance.sh mandatory" in COMPATIBILITY_WORKFLOW_TEXT
     assert "npm install --global @openai/codex@latest" in COMPATIBILITY_WORKFLOW_TEXT
     assert "bash ./scripts/smoke_test_live_codex.sh" in COMPATIBILITY_WORKFLOW_TEXT
-    assert "client.startup_preflight()" in LIVE_CODEX_SMOKE_TEXT
-    assert "send_message" not in LIVE_CODEX_SMOKE_TEXT
+    assert "scripts/smoke_live_codex_turn.py" in LIVE_CODEX_SMOKE_TEXT
+    assert "client.startup_preflight()" in LIVE_CODEX_TURN_SMOKE_TEXT
+    assert "client.create_session()" in LIVE_CODEX_TURN_SMOKE_TEXT
+    assert "client.send_message(" in LIVE_CODEX_TURN_SMOKE_TEXT
     assert "scripts.tck_auth_plugin" in Path("scripts/conformance.sh").read_text()
 
 

@@ -265,8 +265,8 @@ class Settings(BaseSettings):
         default="stdio://",
         alias="CODEX_APP_SERVER_LISTEN",
     )
-    codex_model: str = Field(
-        default="gpt-5.1-codex",
+    codex_model: str | None = Field(
+        default=None,
         alias="CODEX_MODEL",
     )
     codex_model_reasoning_effort: str | None = Field(

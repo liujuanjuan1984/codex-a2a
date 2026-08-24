@@ -19,7 +19,7 @@ This document only explains the remaining repository-local maintainer scripts. U
 - [`scripts/conformance.sh`](./conformance.sh): run the official A2A TCK as a local/manual external compatibility experiment.
 - [`scripts/dependency_health.sh`](./dependency_health.sh): run the standalone dependency review flow (`sync`/`pip check`, outdated package listing, and dev vulnerability audit).
 - [`scripts/smoke_test_built_cli.sh`](./smoke_test_built_cli.sh): validate that a built wheel can be installed through `uv tool` and becomes healthy.
-- [`scripts/smoke_test_live_codex.sh`](./smoke_test_live_codex.sh): initialize and close a real locally installed Codex app-server without making a model request.
+- [`scripts/smoke_test_live_codex.sh`](./smoke_test_live_codex.sh): drive a real locally installed Codex app-server through one thread/turn against an isolated local Responses provider.
 - [`scripts/sync_codex_docs.sh`](./sync_codex_docs.sh): refresh local upstream Codex reference snapshots when maintainers need them.
 
 ## Release Recovery

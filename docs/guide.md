@@ -271,7 +271,7 @@ These variables are forwarded to the local `codex app-server` subprocess.
 - `CODEX_WORKSPACE_ROOT`: default Codex workspace root (optional)
 - `CODEX_CLI_BIN`: Codex CLI binary path, default `codex`
   - For long-running Linux deployments managed by PM2, systemd, or similar supervisors, set this explicitly to the bundled native Codex binary.
-- `CODEX_MODEL`: default Codex model, default `gpt-5.1-codex`
+- `CODEX_MODEL`: optional startup model override; when unset, Codex selects its configured/default model
 - `CODEX_APPROVAL_POLICY`: default approval policy (`never`, `on-request`, etc.)
 - `CODEX_SANDBOX_MODE`: default sandbox mode (`danger-full-access`, `read-only`, etc.)
 - `CODEX_TIMEOUT`: request timeout in seconds, default `120`
@@ -434,7 +434,6 @@ A2A_PORT=8000 \
 A2A_PUBLIC_URL=http://127.0.0.1:8000 \
 A2A_DATABASE_URL=sqlite+aiosqlite:////abs/path/to/workspace/.codex-a2a/codex-a2a.db \
 CODEX_WORKSPACE_ROOT=/abs/path/to/workspace \
-CODEX_MODEL=gpt-5.1-codex \
 CODEX_APPROVAL_POLICY=never \
 CODEX_SANDBOX_MODE=danger-full-access \
 CODEX_MODEL_REASONING_EFFORT=high \
