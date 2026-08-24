@@ -4,6 +4,8 @@ from collections.abc import Mapping, Sequence
 
 from pydantic import BaseModel, Field, field_validator
 
+from codex_a2a.protocol_versions import ADVERTISED_PROTOCOL_VERSION
+
 from .request_context import build_default_headers
 
 
@@ -34,8 +36,17 @@ class A2AClientConfig(BaseModel):
     def include_protocol_version_header(cls, value: object) -> object:
         if not isinstance(value, Mapping):
             return value
-        headers = build_default_headers(None)
-        headers.update({str(key): str(item) for key, item in value.items()})
+        headers: dict[object, object] = {}
+        headers.update(build_default_headers(None))
+        for key, item in value.items():
+            if isinstance(key, str) and key.lower() == "a2a-version":
+                if item != ADVERTISED_PROTOCOL_VERSION:
+                    raise ValueError(
+                        "A2A-Version is fixed to "
+                        f"{ADVERTISED_PROTOCOL_VERSION} and must not be overridden"
+                    )
+                continue
+            headers[key] = item
         return headers
 
     @field_validator("extensions", mode="before")

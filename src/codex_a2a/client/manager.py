@@ -39,7 +39,7 @@ class A2AClientManager:
             allowed_hosts=self._settings.a2a_client_allowed_hosts,
             allow_private_hosts=self._settings.a2a_client_allow_private_hosts,
         )
-        default_headers = build_default_headers(None)
+        default_headers: dict[str, str] = {}
         if policy.credentials_allowed:
             default_headers = build_default_headers(
                 self._settings.a2a_client_bearer_token,

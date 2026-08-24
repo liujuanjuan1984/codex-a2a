@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import pytest
+from pydantic import ValidationError
 
+from codex_a2a.client.config import A2AClientConfig
 from codex_a2a.client.request_context import (
     build_call_context,
     build_default_headers,
@@ -18,6 +20,16 @@ def test_split_request_metadata_separates_authorization_header() -> None:
     assert request_metadata == {"trace_id": "trace-1"}
     assert extra_headers == {"Authorization": "Bearer explicit-token"}
     assert requested_extensions is None
+
+
+def test_split_request_metadata_rejects_non_string_authorization_header() -> None:
+    with pytest.raises(ValueError, match="Authorization metadata header must be a string"):
+        split_request_metadata({"authorization": 123})
+
+
+def test_split_request_metadata_rejects_protocol_version_override() -> None:
+    with pytest.raises(ValueError, match="A2A-Version is fixed to 1.0"):
+        split_request_metadata({"a2a-version": "1.0"})
 
 
 def test_split_request_metadata_extracts_a2a_extensions_header() -> None:
@@ -47,11 +59,31 @@ def test_split_request_metadata_ignores_empty_input() -> None:
     assert requested_extensions is None
 
 
-def test_build_call_context_returns_header_state() -> None:
+def test_build_call_context_carries_headers_via_service_parameters() -> None:
     context = build_call_context({"Authorization": "Bearer explicit-token"})
 
     assert context is not None
     assert context.service_parameters == {"Authorization": "Bearer explicit-token"}
+
+
+def test_client_config_canonicalizes_fixed_protocol_version_header() -> None:
+    config = A2AClientConfig(
+        agent_url="https://example.org",
+        default_headers={"a2a-version": "1.0", "X-Trace-Id": "trace-1"},
+    )
+
+    assert config.default_headers == {
+        "A2A-Version": "1.0",
+        "X-Trace-Id": "trace-1",
+    }
+
+
+def test_client_config_rejects_protocol_version_override() -> None:
+    with pytest.raises(ValidationError, match="A2A-Version is fixed to 1.0"):
+        A2AClientConfig(
+            agent_url="https://example.org",
+            default_headers={"A2A-Version": "0.3"},
+        )
 
 
 def test_build_call_context_merges_extensions_into_service_parameters() -> None:

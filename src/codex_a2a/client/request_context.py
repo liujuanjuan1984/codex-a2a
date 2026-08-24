@@ -32,12 +32,14 @@ def split_request_metadata(
     for key, value in dict(metadata or {}).items():
         if isinstance(key, str) and key.lower() == "authorization":
             if value is not None:
-                extra_headers["Authorization"] = str(value)
+                if not isinstance(value, str):
+                    raise ValueError("Authorization metadata header must be a string")
+                extra_headers["Authorization"] = value
             continue
         if isinstance(key, str) and key.lower() == "a2a-version":
-            if value is not None:
-                extra_headers["A2A-Version"] = str(value)
-            continue
+            raise ValueError(
+                f"A2A-Version is fixed to {ADVERTISED_PROTOCOL_VERSION} and must not be overridden"
+            )
         if isinstance(key, str) and key.lower() == "a2a-extensions":
             if isinstance(value, str):
                 requested_extensions.append(value)
