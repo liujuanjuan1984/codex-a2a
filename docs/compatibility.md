@@ -4,12 +4,19 @@ This document explains the compatibility promises this repository currently trie
 
 ## Runtime Support
 
-- Python versions: 3.11, 3.12, 3.13
-- A2A SDK line: `1.0.x`
-- A2A protocol version advertised by default: `1.0`
-- Normalized protocol compatibility lines declared today: `1.0`
+| Layer | Supported contract | Evidence and boundary |
+| --- | --- | --- |
+| Python | 3.11–3.14 | Package classifiers cover all four versions; CI runs 3.13 as the quality gate and 3.11, 3.12, and 3.14 in the runtime matrix. |
+| A2A Python SDK | Exactly `a2a-sdk==1.1.2` | Pinned in `pyproject.toml`; this is the [official A2A Python SDK](https://github.com/a2aproject/a2a-python), not a fork. |
+| A2A protocol | `1.0` only | Advertised default and normalized compatibility line. SDK compatibility with other protocol versions does not extend this adapter's claim. |
+| Inbound A2A transports | JSON-RPC and HTTP+JSON | Both are repository-owned runtime and scheduled incremental-TCK surfaces. gRPC is not exposed by this adapter. |
+| Codex local runtime | Codex CLI/App Server | The local [Apache-2.0 Codex CLI](https://github.com/openai/codex) is the upstream process boundary. Scheduled smoke tests install the latest stable CLI and complete a real local App Server turn. |
+| Codex App Server API | Stable methods by default | Stable schema tokens and the real turn path are checked. Experimental plugin methods require `CODEX_ENABLE_EXPERIMENTAL_API=true` and are not part of the default contract. |
+| External conformance | Pinned incremental A2A TCK gate | New or reclassified failures block; reviewed dummy/auth differences remain visible. A green comparison is not a formal conformance certificate. |
 
 The repository pins the SDK version in `pyproject.toml` and validates the published CLI build in CI. Upgrade the SDK deliberately rather than relying on floating dependency resolution.
+
+This repository is an independent community project. The [A2A Protocol project](https://github.com/a2aproject/A2A), its official SDK, and the OpenAI Codex CLI are upstream dependencies or specifications, not organizational ownership or endorsement of `codex-a2a`. Codex IDE, desktop, web, and cloud products are separate product surfaces; their availability and product behavior are not inherited from the open-source CLI/App Server contract and are outside this compatibility matrix.
 
 The OpenAPI-published compatibility profile and wire contract publish `default_protocol_version`, `supported_protocol_versions`, and `protocol_compatibility`. Request-time `A2A-Version` negotiation now targets the repository's `1.0` baseline only, and the published contracts should describe the implemented `1.0` transport surface rather than any legacy compatibility line.
 
@@ -44,6 +51,8 @@ When documentation or reference material disagrees, treat these as normative in 
 - repository-owned docs in `README.md`, `docs/`, and `CONTRIBUTING.md`
 
 Maintainer-local upstream Codex snapshots generated via `scripts/sync_codex_docs.sh` are optional reference inputs for comparison and protocol context. They do not override this repository's declared service contract.
+
+Upstream App Server stability labels also do not become repository promises automatically. Stable upstream methods enter this adapter's contract only after mapping, disclosure, and regression coverage; experimental upstream methods remain opt-in and may change with the installed Codex version.
 
 ## Compatibility-Sensitive Surface
 

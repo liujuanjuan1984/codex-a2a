@@ -19,6 +19,7 @@ LIVE_CODEX_SMOKE_TEXT = Path("scripts/smoke_test_live_codex.sh").read_text()
 LIVE_CODEX_TURN_SMOKE_TEXT = Path("scripts/smoke_live_codex_turn.py").read_text()
 CONFORMANCE_TEXT = Path("docs/conformance.md").read_text()
 CONFORMANCE_TRIAGE_TEXT = Path("docs/conformance-triage.md").read_text()
+COMPATIBILITY_TEXT = Path("docs/compatibility.md").read_text()
 GUIDE_TEXT = Path("docs/guide.md").read_text()
 MAINTAINER_ARCHITECTURE_TEXT = Path("docs/maintainer-architecture.md").read_text()
 
@@ -63,6 +64,20 @@ def test_readme_documents_released_cli_installation_via_uv_tool() -> None:
     assert "single-tenant trust boundary" in README_TEXT
     assert "Portable vs Private Surface" in README_TEXT
     assert "Codex-specific control plane" in README_TEXT
+
+
+def test_ecosystem_and_compatibility_claims_match_repository_evidence() -> None:
+    assert "https://github.com/a2aproject/A2A" in README_TEXT
+    assert "https://github.com/a2aproject/a2a-python" in README_TEXT
+    assert "https://github.com/openai/codex" in README_TEXT
+    assert "Intelligent-Internet/a2a-python" not in README_TEXT
+    assert "Codex Runtime (Proprietary)" not in README_TEXT
+    assert "not an OpenAI or A2A Project distribution or endorsement" in README_TEXT
+    assert "3.11–3.14" in COMPATIBILITY_TEXT
+    assert PYPROJECT_DATA["project"]["dependencies"][0] in COMPATIBILITY_TEXT
+    assert "gRPC is not exposed by this adapter" in COMPATIBILITY_TEXT
+    assert "not a formal conformance certificate" in COMPATIBILITY_TEXT
+    assert "Python 3.11 through 3.14" in CONTRIBUTING_TEXT
 
 
 def test_publish_workflow_builds_and_smoke_tests_release_artifacts() -> None:

@@ -74,7 +74,7 @@ If `pre-commit` rewrites files, review the rewritten output and re-run the check
 
 ## Compatibility Expectations
 
-- The repository targets Python 3.11, 3.12, and 3.13.
+- The repository targets Python 3.11 through 3.14. CI uses 3.13 for the full quality gate and exercises 3.11, 3.12, and 3.14 in the runtime matrix.
 - Machine-readable declarations should match actual runtime behavior.
 - Custom extensions must remain stable within the current major line unless a change is explicitly documented as breaking.
 - Shared metadata and wire contracts should not drift between Agent Card, OpenAPI, and runtime behavior.
