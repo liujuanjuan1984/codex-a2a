@@ -396,7 +396,7 @@ For more details on each variable, see the internal configuration schema in `src
 
 Configuration note:
 - The service configuration layer only accepts `CODEX_*` names for Codex-facing settings.
-- Outbound auth prefers `A2A_CLIENT_BEARER_TOKEN` when both bearer and basic credentials are configured; otherwise it uses `A2A_CLIENT_BASIC_AUTH`.
+- Outbound auth prefers `A2A_CLIENT_BEARER_TOKEN` when both bearer and basic credentials are configured; otherwise it uses `A2A_CLIENT_BASIC_AUTH`. Agent Card discovery and subsequent peer operations such as `SendMessage`, `GetTask`, and `CancelTask` send the selected credential together with the fixed `A2A-Version` header.
 
 YOLO-equivalent execution note:
 - `codex-a2a` does not expose a separate `--yolo` flag or `YOLO` environment variable.

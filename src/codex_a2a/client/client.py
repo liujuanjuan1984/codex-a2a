@@ -96,7 +96,6 @@ class A2AClient:
                 if config.request_timeout_seconds is None
                 else httpx.Timeout(config.request_timeout_seconds)
             ),
-            headers=config.default_headers,
         )
         self._owns_http_client = httpx_client is None
         self._closed = False
@@ -239,7 +238,11 @@ class A2AClient:
         try:
             task = await sdk_client.get_task(
                 task_request,
-                context=build_call_context(extra_headers, requested_extensions),
+                context=build_call_context(
+                    extra_headers,
+                    requested_extensions,
+                    default_headers=self._config.default_headers,
+                ),
             )
             return filter_negotiated_extensions_from_task(task, requested_extensions)
         except Exception as exc:
@@ -271,7 +274,11 @@ class A2AClient:
             cancel_request = self._with_request_metadata(cancel_request, request_metadata)
             task = await sdk_client.cancel_task(
                 cancel_request,
-                context=build_call_context(extra_headers, requested_extensions),
+                context=build_call_context(
+                    extra_headers,
+                    requested_extensions,
+                    default_headers=self._config.default_headers,
+                ),
             )
             return filter_negotiated_extensions_from_task(task, requested_extensions)
         except Exception as exc:
@@ -354,7 +361,11 @@ class A2AClient:
         try:
             async for item in sdk_client.send_message(
                 normalized_request,
-                context=build_call_context(extra_headers, requested_extensions),
+                context=build_call_context(
+                    extra_headers,
+                    requested_extensions,
+                    default_headers=self._config.default_headers,
+                ),
             ):
                 yield filter_negotiated_extensions_from_stream_response(
                     item,

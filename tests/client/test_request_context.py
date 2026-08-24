@@ -67,6 +67,22 @@ def test_build_call_context_merges_extensions_into_service_parameters() -> None:
     }
 
 
+def test_build_call_context_merges_defaults_before_explicit_headers() -> None:
+    context = build_call_context(
+        {"Authorization": "Bearer explicit-token"},
+        default_headers={
+            "A2A-Version": "1.0",
+            "Authorization": "Bearer default-token",
+        },
+    )
+
+    assert context is not None
+    assert context.service_parameters == {
+        "A2A-Version": "1.0",
+        "Authorization": "Bearer explicit-token",
+    }
+
+
 def test_build_call_context_returns_none_without_headers() -> None:
     assert build_call_context(None) is None
 
@@ -82,16 +98,23 @@ def test_build_call_context_returns_extensions_without_headers() -> None:
 
 def test_build_default_headers_prefers_bearer_over_basic_auth() -> None:
     assert build_default_headers("peer-token", "user:pass") == {
-        "Authorization": "Bearer peer-token"
+        "A2A-Version": "1.0",
+        "Authorization": "Bearer peer-token",
     }
 
 
 def test_build_default_headers_encodes_basic_auth() -> None:
-    assert build_default_headers(None, "user:pass") == {"Authorization": "Basic dXNlcjpwYXNz"}
+    assert build_default_headers(None, "user:pass") == {
+        "A2A-Version": "1.0",
+        "Authorization": "Basic dXNlcjpwYXNz",
+    }
 
 
 def test_build_default_headers_accepts_pre_encoded_basic_auth() -> None:
-    assert build_default_headers(None, "dXNlcjpwYXNz") == {"Authorization": "Basic dXNlcjpwYXNz"}
+    assert build_default_headers(None, "dXNlcjpwYXNz") == {
+        "A2A-Version": "1.0",
+        "Authorization": "Basic dXNlcjpwYXNz",
+    }
 
 
 def test_build_default_headers_rejects_invalid_basic_auth() -> None:
