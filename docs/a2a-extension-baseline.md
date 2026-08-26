@@ -97,6 +97,6 @@ That inventory must be reusable by:
 
 ## Follow-On Phases
 
-Phase 2 will unify request-level negotiation, disclosure layering, and runtime behavior around the authenticated extension declaration model.
+Phase 2 will build on the unified request-level negotiation, disclosure layering, and runtime behavior established around the authenticated extension declaration model.
 
 Canonical URI and spec-hosting strategy remain a separate follow-up track after declaration-path convergence.

@@ -318,6 +318,38 @@ async def test_activated_extension_notification_echoes_activation(
 
 
 @pytest.mark.asyncio
+async def test_extension_method_rejects_non_2_0_jsonrpc_before_dispatch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    dummy = DummyCodexClient(
+        make_settings(
+            a2a_bearer_token="t-1",
+            a2a_log_payloads=False,
+            **_BASE_SETTINGS,
+        )
+    )
+    dummy.list_sessions = AsyncMock(side_effect=AssertionError("should not be called"))  # type: ignore[method-assign]
+    app = _build_app(monkeypatch, dummy)
+    transport = httpx.ASGITransport(app=app)
+
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post(
+            EXTENSION_JSONRPC_PATH,
+            headers=_EXTENSION_HEADERS,
+            json={
+                "jsonrpc": "1.0",
+                "id": 34,
+                "method": "codex.sessions.list",
+                "params": {},
+            },
+        )
+
+    assert response.json()["error"]["code"] == -32600
+    assert "A2A-Extensions" not in response.headers
+    dummy.list_sessions.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_interrupt_recovery_uses_its_declared_extension_uri(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

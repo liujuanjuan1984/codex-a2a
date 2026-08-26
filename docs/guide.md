@@ -54,7 +54,7 @@ Current behavior:
 - extension JSON-RPC methods are declared separately from the core baseline even though they share the same `POST /` endpoint
 - each extension JSON-RPC method requires the declaring URI in the request `A2A-Extensions` header
 - a handled extension method response echoes only the URI activated for that method in its `A2A-Extensions` header
-- `codex.interrupts.list` is an always-on adapter-local recovery surface for pending interrupt request IDs
+- `codex.interrupts.list` is an always-declared adapter-local recovery surface for pending interrupt request IDs; invocation still requires its extension URI
 - `codex.turns.steer` becomes deployment-conditional when `A2A_ENABLE_TURN_CONTROL=false`
 - `codex.review.start` and `codex.review.watch` become deployment-conditional when `A2A_ENABLE_REVIEW_CONTROL=false`
 - `codex.exec.*` becomes deployment-conditional when `A2A_ENABLE_EXEC_CONTROL=false`

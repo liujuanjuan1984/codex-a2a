@@ -75,11 +75,6 @@ def test_extension_registry_captures_phase1_inventory() -> None:
     negotiated_keys = [
         descriptor.key for descriptor in descriptors if descriptor.negotiation_mode == "negotiated"
     ]
-    declaration_only_keys = [
-        descriptor.key
-        for descriptor in descriptors
-        if descriptor.negotiation_mode == "declaration_only"
-    ]
     not_applicable_keys = [
         descriptor.key
         for descriptor in descriptors
@@ -97,7 +92,6 @@ def test_extension_registry_captures_phase1_inventory() -> None:
         "exec_control",
         "interrupt_callback",
     ]
-    assert declaration_only_keys == []
     assert not_applicable_keys == ["wire_contract", "compatibility_profile"]
 
 
