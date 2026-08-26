@@ -85,8 +85,9 @@ def test_extension_registry_captures_phase1_inventory() -> None:
         for descriptor in descriptors
         if descriptor.negotiation_mode == "not_applicable"
     ]
-    assert negotiated_keys == ["session_binding", "streaming"]
-    assert declaration_only_keys == [
+    assert negotiated_keys == [
+        "session_binding",
+        "streaming",
         "session_query",
         "discovery",
         "thread_lifecycle",
@@ -96,6 +97,7 @@ def test_extension_registry_captures_phase1_inventory() -> None:
         "exec_control",
         "interrupt_callback",
     ]
+    assert declaration_only_keys == []
     assert not_applicable_keys == ["wire_contract", "compatibility_profile"]
 
 
@@ -171,7 +173,7 @@ def test_interrupt_callback_public_disclosure_does_not_imply_anonymous_invocatio
         if descriptor.uri == INTERRUPT_CALLBACK_EXTENSION_URI
     )
 
-    assert interrupt_descriptor.negotiation_mode == "declaration_only"
+    assert interrupt_descriptor.negotiation_mode == "negotiated"
     assert interrupt_descriptor.public_agent_card is True
     assert interrupt_descriptor.authenticated_agent_card is True
     assert interrupt_descriptor.openapi_group == "a2a"

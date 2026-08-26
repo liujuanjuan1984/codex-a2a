@@ -58,9 +58,9 @@ Phase 1 is intentionally internal-facing. The goal is to establish a single sour
 
 ## Negotiation Rules
 
-- Shared request/response extensions are the only extensions treated as negotiated by default in phase 1.
-- Shared request/response extensions use request-level `A2A-Extensions` activation only when the request depends on that negotiated behavior.
-- Provider-private `codex.*` contracts and shared callback contracts marked `declaration_only` are used by directly invoking their documented methods. They do not require a separate `A2A-Extensions` activation header.
+- Shared request/response extensions use request-level `A2A-Extensions` activation when the request depends on that negotiated behavior.
+- Provider-private `codex.*` method extensions and shared `a2a.interrupt.*` callback method extensions also require request-level activation of the URI that declares the invoked method.
+- The server rejects an extension method when its URI was not requested and echoes the URI in the response `A2A-Extensions` header when activation succeeds.
 - Shared callback contracts may publish minimal public discovery metadata, but their detailed method contracts and reply schemas remain on authenticated discovery surfaces.
 - Compatibility and wire-profile documents are not negotiable extensions.
 

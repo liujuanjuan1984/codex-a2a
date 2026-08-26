@@ -256,7 +256,10 @@ async def test_session_query_runtime_result_envelope_matches_declared_contract(
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.post(
             EXTENSION_JSONRPC_PATH,
-            headers={"Authorization": "Bearer t-1"},
+            headers={
+                "Authorization": "Bearer t-1",
+                "A2A-Extensions": SESSION_QUERY_EXTENSION_URI,
+            },
             json={"jsonrpc": "2.0", "id": 1, "method": method, "params": params},
         )
 
@@ -428,6 +431,25 @@ def test_extension_uris_map_to_repository_spec_index() -> None:
             f"Extension URI {uri!r} does not map to a checked-in spec document."
         )
         assert uri in index_text
+
+
+@pytest.mark.parametrize(
+    "extension_uri",
+    [
+        SESSION_QUERY_EXTENSION_URI,
+        DISCOVERY_EXTENSION_URI,
+        THREAD_LIFECYCLE_EXTENSION_URI,
+        INTERRUPT_RECOVERY_EXTENSION_URI,
+        TURN_CONTROL_EXTENSION_URI,
+        REVIEW_CONTROL_EXTENSION_URI,
+        EXEC_CONTROL_EXTENSION_URI,
+        INTERRUPT_CALLBACK_EXTENSION_URI,
+    ],
+)
+def test_guide_documents_method_extension_activation(extension_uri: str) -> None:
+    guide_text = Path("docs/guide.md").read_text()
+
+    assert f"A2A-Extensions: {extension_uri}" in guide_text
 
 
 def test_guide_mentions_declared_streaming_contract_fields() -> None:

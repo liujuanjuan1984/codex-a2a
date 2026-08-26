@@ -18,7 +18,7 @@ class ExtensionContractDescriptor:
     title: str
     description: str
     # negotiated: request-level activation via A2A-Extensions is meaningful
-    # declaration_only: discover through Agent Card/OpenAPI and invoke directly
+    # declaration_only: discover through Agent Card/OpenAPI; no runtime behavior to activate
     # not_applicable: descriptive metadata, not an activatable runtime extension
     negotiation_mode: Literal["negotiated", "declaration_only", "not_applicable"]
     public_agent_card: bool
@@ -158,7 +158,7 @@ EXTENSION_CONTRACT_REGISTRY: tuple[ExtensionContractDescriptor, ...] = (
         uri=extension_specs.SESSION_QUERY_EXTENSION_URI,
         title="Codex Session Query v1",
         description="Provider-private Codex session history and low-risk control methods.",
-        negotiation_mode="declaration_only",
+        negotiation_mode="negotiated",
         public_agent_card=False,
         authenticated_agent_card=True,
         openapi_group="codex",
@@ -171,7 +171,7 @@ EXTENSION_CONTRACT_REGISTRY: tuple[ExtensionContractDescriptor, ...] = (
         uri=extension_specs.DISCOVERY_EXTENSION_URI,
         title="Codex Discovery v1",
         description="Provider-private skills, apps, plugins, and watch bridge methods.",
-        negotiation_mode="declaration_only",
+        negotiation_mode="negotiated",
         public_agent_card=False,
         authenticated_agent_card=True,
         openapi_group="codex",
@@ -184,7 +184,7 @@ EXTENSION_CONTRACT_REGISTRY: tuple[ExtensionContractDescriptor, ...] = (
         uri=extension_specs.THREAD_LIFECYCLE_EXTENSION_URI,
         title="Codex Thread Lifecycle v1",
         description="Provider-private thread lifecycle control and watch bridge methods.",
-        negotiation_mode="declaration_only",
+        negotiation_mode="negotiated",
         public_agent_card=False,
         authenticated_agent_card=True,
         openapi_group="codex",
@@ -197,7 +197,7 @@ EXTENSION_CONTRACT_REGISTRY: tuple[ExtensionContractDescriptor, ...] = (
         uri=extension_specs.INTERRUPT_RECOVERY_EXTENSION_URI,
         title="Codex Interrupt Recovery v1",
         description="Provider-private interrupt rediscovery contract for authenticated callers.",
-        negotiation_mode="declaration_only",
+        negotiation_mode="negotiated",
         public_agent_card=False,
         authenticated_agent_card=True,
         openapi_group="codex",
@@ -210,7 +210,7 @@ EXTENSION_CONTRACT_REGISTRY: tuple[ExtensionContractDescriptor, ...] = (
         uri=extension_specs.TURN_CONTROL_EXTENSION_URI,
         title="Codex Turn Control v1",
         description="Provider-private active-turn steering for already-running regular turns.",
-        negotiation_mode="declaration_only",
+        negotiation_mode="negotiated",
         public_agent_card=False,
         authenticated_agent_card=True,
         openapi_group="codex",
@@ -223,7 +223,7 @@ EXTENSION_CONTRACT_REGISTRY: tuple[ExtensionContractDescriptor, ...] = (
         uri=extension_specs.REVIEW_CONTROL_EXTENSION_URI,
         title="Codex Review Control v1",
         description="Provider-private review control and lifecycle watch bridge.",
-        negotiation_mode="declaration_only",
+        negotiation_mode="negotiated",
         public_agent_card=False,
         authenticated_agent_card=True,
         openapi_group="codex",
@@ -236,7 +236,7 @@ EXTENSION_CONTRACT_REGISTRY: tuple[ExtensionContractDescriptor, ...] = (
         uri=extension_specs.EXEC_CONTROL_EXTENSION_URI,
         title="Codex Exec v1",
         description="Provider-private standalone interactive command execution.",
-        negotiation_mode="declaration_only",
+        negotiation_mode="negotiated",
         public_agent_card=False,
         authenticated_agent_card=True,
         openapi_group="codex",
@@ -249,7 +249,7 @@ EXTENSION_CONTRACT_REGISTRY: tuple[ExtensionContractDescriptor, ...] = (
         uri=extension_specs.INTERRUPT_CALLBACK_EXTENSION_URI,
         title="Shared Interactive Interrupt v1",
         description="Shared interrupt callback reply methods.",
-        negotiation_mode="declaration_only",
+        negotiation_mode="negotiated",
         public_agent_card=True,
         authenticated_agent_card=True,
         openapi_group="a2a",

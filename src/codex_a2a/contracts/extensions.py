@@ -390,14 +390,14 @@ def build_compatibility_profile_params(
                 "claims that they are part of the A2A core baseline."
             ),
             (
-                "Treat shared session-binding and stream-hints as the negotiated "
-                "Agent Card extension surface for this deployment."
+                "Treat shared session-binding and stream-hints plus declared JSON-RPC "
+                "method extensions as request-level negotiated surfaces."
             ),
             (
                 "Treat a2a.interrupt.* callback methods as a shared callback contract "
-                "declared on the public and authenticated discovery surfaces, then "
-                "invoked directly on the shared JSON-RPC endpoint rather than treated "
-                "as core A2A behavior."
+                "declared on the public and authenticated discovery surfaces. Request "
+                "the callback extension URI through A2A-Extensions before invoking a "
+                "callback method on the shared JSON-RPC endpoint."
             ),
             (
                 f"Use {CORE_JSONRPC_PATH} for both core A2A JSON-RPC methods and "

@@ -3,9 +3,15 @@ from __future__ import annotations
 from collections.abc import AsyncGenerator
 from typing import Any
 
+from a2a.extensions.common import HTTP_EXTENSION_HEADER
 from a2a.server.jsonrpc_models import InvalidParamsError, JSONRPCError
 from a2a.server.routes.jsonrpc_dispatcher import JsonRpcDispatcher
-from a2a.utils.errors import A2AError, ContentTypeNotSupportedError, InternalError
+from a2a.utils.errors import (
+    A2AError,
+    ContentTypeNotSupportedError,
+    InternalError,
+    UnsupportedOperationError,
+)
 from fastapi.responses import JSONResponse
 from starlette.requests import Request
 from starlette.responses import Response
@@ -186,6 +192,28 @@ class CodexSessionQueryJSONRPCApplication(JsonRpcDispatcher):
                 return self._unsupported_method_response(base_request.id, base_request.method)
             return await super().handle_requests(request)
 
+        extension_uri = self._method_registry.extension_uri_by_method[base_request.method]
+        call_context = self._context_builder.build(request)
+        if extension_uri not in call_context.requested_extensions:
+            if base_request.id is None:
+                return Response(status_code=204)
+            return self._generate_error_response(
+                base_request.id,
+                UnsupportedOperationError(
+                    message=(
+                        f"Method {base_request.method} requires explicit A2A extension "
+                        f"negotiation via the {HTTP_EXTENSION_HEADER} header."
+                    ),
+                    data={
+                        "type": "EXTENSION_NEGOTIATION_REQUIRED",
+                        "method": base_request.method,
+                        "required_extensions": [extension_uri],
+                        "requested_extensions": sorted(call_context.requested_extensions),
+                        "header": HTTP_EXTENSION_HEADER,
+                    },
+                ),
+            )
+
         params = base_request.params or {}
         if not isinstance(params, dict):
             return self._generate_error_response(
@@ -194,57 +222,60 @@ class CodexSessionQueryJSONRPCApplication(JsonRpcDispatcher):
             )
 
         if base_request.method in self._method_registry.session_query_methods:
-            return await handle_session_query_request(self, base_request, params)
-        if base_request.method in self._method_registry.discovery_query_methods:
-            return await handle_discovery_query_request(self, base_request, params)
-        if base_request.method in self._method_registry.discovery_control_methods:
-            return await handle_discovery_control_request(
+            response = await handle_session_query_request(self, base_request, params)
+        elif base_request.method in self._method_registry.discovery_query_methods:
+            response = await handle_discovery_query_request(self, base_request, params)
+        elif base_request.method in self._method_registry.discovery_control_methods:
+            response = await handle_discovery_control_request(
                 self,
                 base_request,
                 params,
                 request=request,
             )
-        if base_request.method in self._method_registry.thread_lifecycle_control_methods:
-            return await handle_thread_lifecycle_control_request(
+        elif base_request.method in self._method_registry.thread_lifecycle_control_methods:
+            response = await handle_thread_lifecycle_control_request(
                 self,
                 base_request,
                 params,
                 request=request,
             )
-        if base_request.method in self._method_registry.interrupt_recovery_methods:
-            return await handle_interrupt_recovery_request(
+        elif base_request.method in self._method_registry.interrupt_recovery_methods:
+            response = await handle_interrupt_recovery_request(
                 self,
                 base_request,
                 params,
                 request=request,
             )
-        if base_request.method in self._method_registry.turn_control_methods:
-            return await handle_turn_control_request(
+        elif base_request.method in self._method_registry.turn_control_methods:
+            response = await handle_turn_control_request(
                 self,
                 base_request,
                 params,
                 request=request,
             )
-        if base_request.method in self._method_registry.review_control_methods:
-            return await handle_review_control_request(
+        elif base_request.method in self._method_registry.review_control_methods:
+            response = await handle_review_control_request(
                 self,
                 base_request,
                 params,
                 request=request,
             )
-        if base_request.method in self._method_registry.exec_control_methods:
-            return await handle_exec_control_request(
+        elif base_request.method in self._method_registry.exec_control_methods:
+            response = await handle_exec_control_request(
                 self,
                 base_request,
                 params,
                 request=request,
             )
-        return await handle_interrupt_callback_request(
-            self,
-            base_request,
-            params,
-            request=request,
-        )
+        else:
+            response = await handle_interrupt_callback_request(
+                self,
+                base_request,
+                params,
+                request=request,
+            )
+        response.headers[HTTP_EXTENSION_HEADER] = extension_uri
+        return response
 
     @staticmethod
     def _looks_like_extension_method(method: str) -> bool:

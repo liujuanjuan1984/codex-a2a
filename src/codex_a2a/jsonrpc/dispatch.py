@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
+from types import MappingProxyType
+
+from codex_a2a.contracts import extension_specs
 
 
 @dataclass(frozen=True)
@@ -15,6 +19,7 @@ class ExtensionMethodRegistry:
     exec_control_methods: frozenset[str]
     interrupt_callback_methods: frozenset[str]
     extension_methods: frozenset[str]
+    extension_uri_by_method: Mapping[str, str]
 
     @classmethod
     def from_methods(cls, methods: dict[str, str]) -> ExtensionMethodRegistry:
@@ -92,6 +97,25 @@ class ExtensionMethodRegistry:
             | exec_control_methods
             | interrupt_callback_methods
         )
+        method_groups = (
+            (session_query_methods, extension_specs.SESSION_QUERY_EXTENSION_URI),
+            (
+                discovery_query_methods | discovery_control_methods,
+                extension_specs.DISCOVERY_EXTENSION_URI,
+            ),
+            (thread_lifecycle_control_methods, extension_specs.THREAD_LIFECYCLE_EXTENSION_URI),
+            (interrupt_recovery_methods, extension_specs.INTERRUPT_RECOVERY_EXTENSION_URI),
+            (turn_control_methods, extension_specs.TURN_CONTROL_EXTENSION_URI),
+            (review_control_methods, extension_specs.REVIEW_CONTROL_EXTENSION_URI),
+            (exec_control_methods, extension_specs.EXEC_CONTROL_EXTENSION_URI),
+            (interrupt_callback_methods, extension_specs.INTERRUPT_CALLBACK_EXTENSION_URI),
+        )
+        extension_uri_by_method: dict[str, str] = {}
+        for method_group, extension_uri in method_groups:
+            for method in method_group:
+                if method in extension_uri_by_method:
+                    raise ValueError(f"Extension method maps to multiple extension URIs: {method}")
+                extension_uri_by_method[method] = extension_uri
         return cls(
             session_query_methods=session_query_methods,
             discovery_query_methods=discovery_query_methods,
@@ -103,7 +127,11 @@ class ExtensionMethodRegistry:
             exec_control_methods=exec_control_methods,
             interrupt_callback_methods=interrupt_callback_methods,
             extension_methods=extension_methods,
+            extension_uri_by_method=MappingProxyType(extension_uri_by_method),
         )
 
     def is_extension_method(self, method: str) -> bool:
         return method in self.extension_methods
+
+    def extension_uri_for_method(self, method: str) -> str | None:
+        return self.extension_uri_by_method.get(method)
