@@ -11,4 +11,6 @@ class JSONRPCRequestModel(BaseModel):
     jsonrpc: str
     method: str
     id: str | int | None = None
-    params: dict[str, Any] | None = None
+    # Keep the preliminary request model permissive enough to identify extension
+    # methods before method-specific params validation runs in the dispatcher.
+    params: Any = None

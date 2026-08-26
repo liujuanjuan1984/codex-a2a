@@ -214,12 +214,17 @@ class CodexSessionQueryJSONRPCApplication(JsonRpcDispatcher):
                 ),
             )
 
-        params = base_request.params or {}
+        params = {} if base_request.params is None else base_request.params
         if not isinstance(params, dict):
-            return self._generate_error_response(
-                base_request.id,
-                InvalidParamsError(message="params must be an object"),
+            response = (
+                Response(status_code=204)
+                if base_request.id is None
+                else self._generate_error_response(
+                    base_request.id,
+                    InvalidParamsError(message="params must be an object"),
+                )
             )
+            return self._with_activated_extension(response, extension_uri)
 
         if base_request.method in self._method_registry.session_query_methods:
             response = await handle_session_query_request(self, base_request, params)
@@ -274,6 +279,10 @@ class CodexSessionQueryJSONRPCApplication(JsonRpcDispatcher):
                 params,
                 request=request,
             )
+        return self._with_activated_extension(response, extension_uri)
+
+    @staticmethod
+    def _with_activated_extension(response: Response, extension_uri: str) -> Response:
         response.headers[HTTP_EXTENSION_HEADER] = extension_uri
         return response
 
