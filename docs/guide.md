@@ -79,10 +79,10 @@ Unsupported method contract on the shared JSON-RPC endpoint (`POST /`):
   - error context fields: `method`, `required_extensions`, `requested_extensions`, and `header`
   - error semantics: project-level `codex-a2a` convention carried by the standard A2A `UnsupportedOperationError`; it is not the standard `ExtensionSupportRequiredError`, which applies to Agent Card extensions declared with `required: true`
 - Registered and requested extension method rejected by the deployment activation authorizer:
-  - JSON-RPC error code: `-32007`
+  - JSON-RPC error code: `-32004`
   - error reason: `EXTENSION_ACTIVATION_FORBIDDEN`
   - error context fields: `method`, `extension_uri`, and `capability`
-  - error semantics: project-level `codex-a2a` authorization convention; the extension is not activated or echoed and the handler is not executed
+  - error semantics: project-level `codex-a2a` reason carried by the standard A2A `UnsupportedOperationError`; the extension is not activated or echoed and the handler is not executed
 
 Consumer guidance:
 

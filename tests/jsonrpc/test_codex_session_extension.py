@@ -261,7 +261,7 @@ async def test_extension_capability_policy_can_deny_activation_for_call_context(
         )
 
     payload = response.json()
-    assert payload["error"]["code"] == -32007
+    assert payload["error"]["code"] == -32004
     assert error_reason(payload) == "EXTENSION_ACTIVATION_FORBIDDEN"
     assert error_context(payload) == {
         "@type": "type.googleapis.com/codex_a2a.ErrorContext",

@@ -19,7 +19,6 @@ from starlette.routing import Route
 
 from codex_a2a.contracts.extension_activation import (
     METHOD_EXTENSION_NEGOTIATION_ERROR_REASON,
-    METHOD_EXTENSION_POLICY_ERROR_CODE,
     METHOD_EXTENSION_POLICY_ERROR_REASON,
 )
 from codex_a2a.execution.discovery_runtime import CodexDiscoveryRuntime
@@ -216,8 +215,7 @@ class CodexSessionQueryJSONRPCApplication(JsonRpcDispatcher):
             if activation.denial_reason == "activation_forbidden":
                 return self._generate_error_response(
                     base_request.id,
-                    JSONRPCError(
-                        code=METHOD_EXTENSION_POLICY_ERROR_CODE,
+                    UnsupportedOperationError(
                         message="Extension activation forbidden",
                         data={
                             "type": METHOD_EXTENSION_POLICY_ERROR_REASON,

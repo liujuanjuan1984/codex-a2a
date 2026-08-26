@@ -444,7 +444,7 @@ def test_method_extensions_publish_machine_readable_activation_contract(
     }
     assert activation["errors"]["negotiation_required"]["jsonrpc_code"] == -32004
     assert activation["errors"]["negotiation_required"]["convention"] == "codex-a2a"
-    assert activation["errors"]["activation_forbidden"]["jsonrpc_code"] == -32007
+    assert activation["errors"]["activation_forbidden"]["jsonrpc_code"] == -32004
     assert activation["errors"]["activation_forbidden"]["convention"] == "codex-a2a"
 
 

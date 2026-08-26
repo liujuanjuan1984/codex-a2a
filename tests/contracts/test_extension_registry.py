@@ -1,4 +1,3 @@
-from codex_a2a.contracts import extension_specs
 from codex_a2a.contracts.extension_registry import (
     EXTENSION_CONTRACT_REGISTRY,
     build_agent_card_extensions_from_registry,
@@ -187,13 +186,10 @@ def test_registry_is_authoritative_for_method_extension_uri_mapping() -> None:
     mapping = build_method_extension_uri_by_method()
 
     for descriptor in EXTENSION_CONTRACT_REGISTRY:
-        if descriptor.method_contracts_name is None:
+        if not descriptor.methods:
             continue
         assert descriptor.negotiation_mode == "negotiated"
-        assert {
-            mapping[contract.method]
-            for contract in getattr(extension_specs, descriptor.method_contracts_name).values()
-        } == {descriptor.uri}
+        assert {mapping[method] for method in descriptor.methods} == {descriptor.uri}
 
 
 def test_extension_taxonomy_is_derived_from_registry() -> None:

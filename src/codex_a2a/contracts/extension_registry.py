@@ -37,7 +37,7 @@ class ExtensionContractDescriptor:
     params_builder_signature: Literal["no_args", "runtime_profile", "protocol_version"]
     public_params_keys: tuple[str, ...] | None = None
     public_params_transform: Literal["streaming_public"] | None = None
-    method_contracts_name: str | None = None
+    methods: tuple[str, ...] = ()
 
 
 def _select_public_extension_params(
@@ -121,17 +121,16 @@ def build_method_extension_uri_by_method(
 ) -> Mapping[str, str]:
     declared: dict[str, str] = {}
     for descriptor in EXTENSION_CONTRACT_REGISTRY:
-        if descriptor.method_contracts_name is None:
+        if not descriptor.methods:
             continue
-        contracts = getattr(extension_specs, descriptor.method_contracts_name)
-        for contract in contracts.values():
-            existing_uri = declared.get(contract.method)
+        for method in descriptor.methods:
+            existing_uri = declared.get(method)
             if existing_uri is not None:
                 raise ValueError(
                     "Extension method maps to multiple extension URIs: "
-                    f"{contract.method} ({existing_uri}, {descriptor.uri})"
+                    f"{method} ({existing_uri}, {descriptor.uri})"
                 )
-            declared[contract.method] = descriptor.uri
+            declared[method] = descriptor.uri
 
     if enabled_methods is None:
         return MappingProxyType(declared)
@@ -196,7 +195,7 @@ EXTENSION_CONTRACT_REGISTRY: tuple[ExtensionContractDescriptor, ...] = (
         taxonomy_group="codex_provider_private_contracts",
         params_builder_name="build_session_query_extension_params",
         params_builder_signature="runtime_profile",
-        method_contracts_name="SESSION_QUERY_METHOD_CONTRACTS",
+        methods=tuple(extension_specs.SESSION_QUERY_METHODS.values()),
     ),
     ExtensionContractDescriptor(
         key="discovery",
@@ -210,7 +209,7 @@ EXTENSION_CONTRACT_REGISTRY: tuple[ExtensionContractDescriptor, ...] = (
         taxonomy_group="codex_provider_private_contracts",
         params_builder_name="build_discovery_extension_params",
         params_builder_signature="runtime_profile",
-        method_contracts_name="DISCOVERY_METHOD_CONTRACTS",
+        methods=tuple(extension_specs.DISCOVERY_METHODS.values()),
     ),
     ExtensionContractDescriptor(
         key="thread_lifecycle",
@@ -224,7 +223,7 @@ EXTENSION_CONTRACT_REGISTRY: tuple[ExtensionContractDescriptor, ...] = (
         taxonomy_group="codex_provider_private_contracts",
         params_builder_name="build_thread_lifecycle_extension_params",
         params_builder_signature="runtime_profile",
-        method_contracts_name="THREAD_LIFECYCLE_METHOD_CONTRACTS",
+        methods=tuple(extension_specs.THREAD_LIFECYCLE_METHODS.values()),
     ),
     ExtensionContractDescriptor(
         key="interrupt_recovery",
@@ -238,7 +237,7 @@ EXTENSION_CONTRACT_REGISTRY: tuple[ExtensionContractDescriptor, ...] = (
         taxonomy_group="codex_provider_private_contracts",
         params_builder_name="build_interrupt_recovery_extension_params",
         params_builder_signature="runtime_profile",
-        method_contracts_name="INTERRUPT_RECOVERY_METHOD_CONTRACTS",
+        methods=tuple(extension_specs.INTERRUPT_RECOVERY_METHODS.values()),
     ),
     ExtensionContractDescriptor(
         key="turn_control",
@@ -252,7 +251,7 @@ EXTENSION_CONTRACT_REGISTRY: tuple[ExtensionContractDescriptor, ...] = (
         taxonomy_group="codex_provider_private_contracts",
         params_builder_name="build_turn_control_extension_params",
         params_builder_signature="runtime_profile",
-        method_contracts_name="TURN_CONTROL_METHOD_CONTRACTS",
+        methods=tuple(extension_specs.TURN_CONTROL_METHODS.values()),
     ),
     ExtensionContractDescriptor(
         key="review_control",
@@ -266,7 +265,7 @@ EXTENSION_CONTRACT_REGISTRY: tuple[ExtensionContractDescriptor, ...] = (
         taxonomy_group="codex_provider_private_contracts",
         params_builder_name="build_review_control_extension_params",
         params_builder_signature="runtime_profile",
-        method_contracts_name="REVIEW_CONTROL_METHOD_CONTRACTS",
+        methods=tuple(extension_specs.REVIEW_CONTROL_METHODS.values()),
     ),
     ExtensionContractDescriptor(
         key="exec_control",
@@ -280,7 +279,7 @@ EXTENSION_CONTRACT_REGISTRY: tuple[ExtensionContractDescriptor, ...] = (
         taxonomy_group="codex_provider_private_contracts",
         params_builder_name="build_exec_control_extension_params",
         params_builder_signature="runtime_profile",
-        method_contracts_name="EXEC_CONTROL_METHOD_CONTRACTS",
+        methods=tuple(extension_specs.EXEC_CONTROL_METHODS.values()),
     ),
     ExtensionContractDescriptor(
         key="interrupt_callback",
@@ -302,7 +301,7 @@ EXTENSION_CONTRACT_REGISTRY: tuple[ExtensionContractDescriptor, ...] = (
             "authorization",
             "activation",
         ),
-        method_contracts_name="INTERRUPT_CALLBACK_METHOD_CONTRACTS",
+        methods=tuple(extension_specs.INTERRUPT_CALLBACK_METHODS.values()),
     ),
     ExtensionContractDescriptor(
         key="wire_contract",

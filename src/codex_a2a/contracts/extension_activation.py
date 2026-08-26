@@ -4,7 +4,7 @@ from typing import Any
 
 METHOD_EXTENSION_NEGOTIATION_ERROR_CODE = -32004
 METHOD_EXTENSION_NEGOTIATION_ERROR_REASON = "EXTENSION_NEGOTIATION_REQUIRED"
-METHOD_EXTENSION_POLICY_ERROR_CODE = -32007
+METHOD_EXTENSION_POLICY_ERROR_CODE = -32004
 METHOD_EXTENSION_POLICY_ERROR_REASON = "EXTENSION_ACTIVATION_FORBIDDEN"
 
 METHOD_EXTENSION_ACTIVATION_ERROR_DATA_FIELDS: tuple[str, ...] = (
@@ -48,7 +48,7 @@ def build_method_extension_activation_contract(extension_uri: str) -> dict[str, 
                 "convention": "codex-a2a",
             },
             "activation_forbidden": {
-                "a2a_error_type": "project_authorization_error",
+                "a2a_error_type": "UnsupportedOperationError",
                 "jsonrpc_code": METHOD_EXTENSION_POLICY_ERROR_CODE,
                 "reason": METHOD_EXTENSION_POLICY_ERROR_REASON,
                 "data_fields": list(METHOD_EXTENSION_POLICY_ERROR_DATA_FIELDS),
