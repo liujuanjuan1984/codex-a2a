@@ -30,6 +30,7 @@ from codex_a2a.jsonrpc.application import (
     create_extension_jsonrpc_routes,
 )
 from codex_a2a.jsonrpc.errors import build_http_error_body
+from codex_a2a.jsonrpc.extension_policy import ExtensionActivationAuthorizer
 from codex_a2a.jsonrpc.hooks import SessionGuardHooks
 from codex_a2a.logging_context import install_log_record_factory
 from codex_a2a.metrics import get_metrics_registry
@@ -214,7 +215,11 @@ def _create_single_tenant_rest_routes(
     return retained + streaming_routes
 
 
-def create_app(settings: Settings) -> FastAPI:
+def create_app(
+    settings: Settings,
+    *,
+    extension_activation_authorizer: ExtensionActivationAuthorizer | None = None,
+) -> FastAPI:
     install_log_record_factory()
     shared_database_engine = (
         build_database_engine(settings) if settings.a2a_database_url is not None else None
@@ -370,6 +375,7 @@ def create_app(settings: Settings) -> FastAPI:
             methods=jsonrpc_methods,
             supported_methods=supported_extension_jsonrpc_methods,
             guard_hooks=session_guard_hooks,
+            extension_activation_authorizer=extension_activation_authorizer,
             rpc_url=extension_contracts.CORE_JSONRPC_PATH,
             dispatcher_factory=CodexSessionQueryJSONRPCApplication,
             stream_budget_max_bytes=settings.a2a_stream_max_bytes,

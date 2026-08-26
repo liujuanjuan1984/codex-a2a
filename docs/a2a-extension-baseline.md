@@ -60,7 +60,7 @@ Phase 1 is intentionally internal-facing. The goal is to establish a single sour
 
 - Shared request/response extensions use request-level `A2A-Extensions` activation when the request depends on that negotiated behavior.
 - Provider-private `codex.*` method extensions and shared `a2a.interrupt.*` callback method extensions also require request-level activation of the URI that declares the invoked method.
-- The server rejects an extension method when its URI was not requested and echoes the URI in the response `A2A-Extensions` header when activation succeeds.
+- The server evaluates extension methods through a common deployment-aware capability policy, rejects a method when its URI was not requested or activation is not authorized, and merges all actually activated URIs into the response `A2A-Extensions` header.
 - Shared callback contracts may publish minimal public discovery metadata, but their detailed method contracts and reply schemas remain on authenticated discovery surfaces.
 - Compatibility and wire-profile documents are not negotiable extensions.
 

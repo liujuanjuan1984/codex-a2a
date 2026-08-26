@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
+from types import MappingProxyType
 from typing import Any, Literal
 
 from a2a.types import AgentExtension
@@ -35,6 +37,7 @@ class ExtensionContractDescriptor:
     params_builder_signature: Literal["no_args", "runtime_profile", "protocol_version"]
     public_params_keys: tuple[str, ...] | None = None
     public_params_transform: Literal["streaming_public"] | None = None
+    method_contracts_name: str | None = None
 
 
 def _select_public_extension_params(
@@ -96,18 +99,47 @@ def _build_extension_contract_params(
 
     builder = getattr(contract_extensions, descriptor.params_builder_name)
     if descriptor.params_builder_signature == "no_args":
-        return dict(builder())
-    if descriptor.params_builder_signature == "runtime_profile":
-        return dict(builder(runtime_profile=runtime_profile))
-    if settings is None:
-        msg = f"settings are required to build {descriptor.key}"
-        raise ValueError(msg)
-    return dict(
-        builder(
-            protocol_version=settings.a2a_protocol_version,
-            runtime_profile=runtime_profile,
+        params = dict(builder())
+    elif descriptor.params_builder_signature == "runtime_profile":
+        params = dict(builder(runtime_profile=runtime_profile))
+    else:
+        if settings is None:
+            msg = f"settings are required to build {descriptor.key}"
+            raise ValueError(msg)
+        params = dict(
+            builder(
+                protocol_version=settings.a2a_protocol_version,
+                runtime_profile=runtime_profile,
+            )
         )
-    )
+    return params
+
+
+def build_method_extension_uri_by_method(
+    *,
+    enabled_methods: Iterable[str] | None = None,
+) -> Mapping[str, str]:
+    declared: dict[str, str] = {}
+    for descriptor in EXTENSION_CONTRACT_REGISTRY:
+        if descriptor.method_contracts_name is None:
+            continue
+        contracts = getattr(extension_specs, descriptor.method_contracts_name)
+        for contract in contracts.values():
+            existing_uri = declared.get(contract.method)
+            if existing_uri is not None:
+                raise ValueError(
+                    "Extension method maps to multiple extension URIs: "
+                    f"{contract.method} ({existing_uri}, {descriptor.uri})"
+                )
+            declared[contract.method] = descriptor.uri
+
+    if enabled_methods is None:
+        return MappingProxyType(declared)
+    enabled = frozenset(enabled_methods)
+    unknown = enabled.difference(declared)
+    if unknown:
+        raise ValueError(f"Methods missing an extension contract mapping: {sorted(unknown)}")
+    return MappingProxyType({method: uri for method, uri in declared.items() if method in enabled})
 
 
 EXTENSION_CONTRACT_REGISTRY: tuple[ExtensionContractDescriptor, ...] = (
@@ -164,6 +196,7 @@ EXTENSION_CONTRACT_REGISTRY: tuple[ExtensionContractDescriptor, ...] = (
         taxonomy_group="codex_provider_private_contracts",
         params_builder_name="build_session_query_extension_params",
         params_builder_signature="runtime_profile",
+        method_contracts_name="SESSION_QUERY_METHOD_CONTRACTS",
     ),
     ExtensionContractDescriptor(
         key="discovery",
@@ -177,6 +210,7 @@ EXTENSION_CONTRACT_REGISTRY: tuple[ExtensionContractDescriptor, ...] = (
         taxonomy_group="codex_provider_private_contracts",
         params_builder_name="build_discovery_extension_params",
         params_builder_signature="runtime_profile",
+        method_contracts_name="DISCOVERY_METHOD_CONTRACTS",
     ),
     ExtensionContractDescriptor(
         key="thread_lifecycle",
@@ -190,6 +224,7 @@ EXTENSION_CONTRACT_REGISTRY: tuple[ExtensionContractDescriptor, ...] = (
         taxonomy_group="codex_provider_private_contracts",
         params_builder_name="build_thread_lifecycle_extension_params",
         params_builder_signature="runtime_profile",
+        method_contracts_name="THREAD_LIFECYCLE_METHOD_CONTRACTS",
     ),
     ExtensionContractDescriptor(
         key="interrupt_recovery",
@@ -203,6 +238,7 @@ EXTENSION_CONTRACT_REGISTRY: tuple[ExtensionContractDescriptor, ...] = (
         taxonomy_group="codex_provider_private_contracts",
         params_builder_name="build_interrupt_recovery_extension_params",
         params_builder_signature="runtime_profile",
+        method_contracts_name="INTERRUPT_RECOVERY_METHOD_CONTRACTS",
     ),
     ExtensionContractDescriptor(
         key="turn_control",
@@ -216,6 +252,7 @@ EXTENSION_CONTRACT_REGISTRY: tuple[ExtensionContractDescriptor, ...] = (
         taxonomy_group="codex_provider_private_contracts",
         params_builder_name="build_turn_control_extension_params",
         params_builder_signature="runtime_profile",
+        method_contracts_name="TURN_CONTROL_METHOD_CONTRACTS",
     ),
     ExtensionContractDescriptor(
         key="review_control",
@@ -229,6 +266,7 @@ EXTENSION_CONTRACT_REGISTRY: tuple[ExtensionContractDescriptor, ...] = (
         taxonomy_group="codex_provider_private_contracts",
         params_builder_name="build_review_control_extension_params",
         params_builder_signature="runtime_profile",
+        method_contracts_name="REVIEW_CONTROL_METHOD_CONTRACTS",
     ),
     ExtensionContractDescriptor(
         key="exec_control",
@@ -242,6 +280,7 @@ EXTENSION_CONTRACT_REGISTRY: tuple[ExtensionContractDescriptor, ...] = (
         taxonomy_group="codex_provider_private_contracts",
         params_builder_name="build_exec_control_extension_params",
         params_builder_signature="runtime_profile",
+        method_contracts_name="EXEC_CONTROL_METHOD_CONTRACTS",
     ),
     ExtensionContractDescriptor(
         key="interrupt_callback",
@@ -261,7 +300,9 @@ EXTENSION_CONTRACT_REGISTRY: tuple[ExtensionContractDescriptor, ...] = (
             "interrupt_metadata_field",
             "request_id_field",
             "authorization",
+            "activation",
         ),
+        method_contracts_name="INTERRUPT_CALLBACK_METHOD_CONTRACTS",
     ),
     ExtensionContractDescriptor(
         key="wire_contract",

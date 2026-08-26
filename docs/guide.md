@@ -53,7 +53,8 @@ Current behavior:
   - `/tasks/{id}:subscribe`
 - extension JSON-RPC methods are declared separately from the core baseline even though they share the same `POST /` endpoint
 - each extension JSON-RPC method requires the declaring URI in the request `A2A-Extensions` header
-- a handled extension method response echoes only the URI activated for that method in its `A2A-Extensions` header
+- a handled extension method response merges every extension actually activated for the request into its `A2A-Extensions` header; requested but inactive or unsupported URIs are not echoed
+- method extension activation passes through one capability policy layer: the method must be enabled for the deployment, its URI must be explicitly requested, and an optional deployment authorizer may reject activation for the authenticated call context
 - `codex.interrupts.list` is an always-declared adapter-local recovery surface for pending interrupt request IDs; invocation still requires its extension URI
 - `codex.turns.steer` becomes deployment-conditional when `A2A_ENABLE_TURN_CONTROL=false`
 - `codex.review.start` and `codex.review.watch` become deployment-conditional when `A2A_ENABLE_REVIEW_CONTROL=false`
@@ -76,17 +77,26 @@ Unsupported method contract on the shared JSON-RPC endpoint (`POST /`):
   - JSON-RPC error code: `-32004`
   - error reason: `EXTENSION_NEGOTIATION_REQUIRED`
   - error context fields: `method`, `required_extensions`, `requested_extensions`, and `header`
+  - error semantics: project-level `codex-a2a` convention carried by the standard A2A `UnsupportedOperationError`; it is not the standard `ExtensionSupportRequiredError`, which applies to Agent Card extensions declared with `required: true`
+- Registered and requested extension method rejected by the deployment activation authorizer:
+  - JSON-RPC error code: `-32007`
+  - error reason: `EXTENSION_ACTIVATION_FORBIDDEN`
+  - error context fields: `method`, `extension_uri`, and `capability`
+  - error semantics: project-level `codex-a2a` authorization convention; the extension is not activated or echoed and the handler is not executed
 
 Consumer guidance:
 
 - Discover the current method set from Agent Card / OpenAPI before calling custom JSON-RPC methods.
 - Activate the URI that declares the method through `A2A-Extensions`, and verify the response echo before treating the extension as active for that request.
+- Read each method extension's machine-readable `params.activation` contract for the activation policy, response behavior, error codes, project-defined reasons, and error data fields.
 - Fetch the authenticated extended card when you need the authenticated skill inventory or deployment-aware examples.
 - Use OpenAPI for anonymous shared-contract hints and transport notes; use the authenticated extended card for provider-private method matrices and detailed compatibility metadata.
 - Treat `supported_methods` in extension-namespace `error.data` as the runtime truth for the current deployment, especially when a deployment-conditional method is disabled.
 - Treat the core A2A methods as the portable interoperability baseline.
 - Treat `codex.*` methods plus `metadata.codex.directory` and `metadata.codex.execution` as a Codex-specific control plane for Codex-aware clients rather than generic A2A portability claims.
 - See [extension-specifications.md](./extension-specifications.md) for the stable URI/spec index, and [compatibility.md](./compatibility.md) for compatibility promises.
+
+Server embedders that need principal-, tenant-, or deployment-specific extension policy may pass `extension_activation_authorizer` to `create_app`. The synchronous callable receives `(method, extension_uri, call_context)` after transport authentication and explicit URI negotiation; returning `False` denies activation before the extension handler runs. The default is to allow a deployment-enabled, explicitly requested extension after the normal transport authentication boundary, while method handlers continue to enforce their existing fine-grained authorization and ownership guards.
 
 ## Compatibility Profile
 

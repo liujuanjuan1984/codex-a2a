@@ -1,17 +1,21 @@
 from __future__ import annotations
 
+from typing import Any
 from unittest.mock import AsyncMock
 
 import httpx
 import pytest
 from a2a.server.jsonrpc_models import InternalError
+from starlette.responses import Response
 
 from codex_a2a.contracts.extensions import (
     DISCOVERY_EXTENSION_URI,
     EXTENSION_JSONRPC_PATH,
+    INTERRUPT_CALLBACK_EXTENSION_URI,
     INTERRUPT_RECOVERY_EXTENSION_URI,
     SESSION_QUERY_EXTENSION_URI,
 )
+from codex_a2a.jsonrpc.application import CodexSessionQueryJSONRPCApplication
 from tests.support.dummy_clients import DummySessionQueryCodexClient as DummyCodexClient
 from tests.support.jsonrpc_errors import error_context, error_reason
 from tests.support.settings import make_settings
@@ -26,7 +30,12 @@ _EXTENSION_HEADERS = {
 }
 
 
-def _build_app(monkeypatch: pytest.MonkeyPatch, dummy: DummyCodexClient):
+def _build_app(
+    monkeypatch: pytest.MonkeyPatch,
+    dummy: DummyCodexClient,
+    *,
+    extension_activation_authorizer=None,
+):
     import codex_a2a.server.application as app_module
 
     monkeypatch.setattr(app_module, "CodexClient", lambda _settings, **kwargs: dummy)
@@ -35,7 +44,24 @@ def _build_app(monkeypatch: pytest.MonkeyPatch, dummy: DummyCodexClient):
             a2a_bearer_token="t-1",
             a2a_log_payloads=False,
             **_BASE_SETTINGS,
-        )
+        ),
+        extension_activation_authorizer=extension_activation_authorizer,
+    )
+
+
+def test_activated_extension_headers_merge_without_echoing_requested_only_values() -> None:
+    response = Response(
+        headers={"A2A-Extensions": (f"{DISCOVERY_EXTENSION_URI}, {SESSION_QUERY_EXTENSION_URI}")}
+    )
+
+    merged = CodexSessionQueryJSONRPCApplication._with_activated_extensions(
+        response,
+        (SESSION_QUERY_EXTENSION_URI, INTERRUPT_CALLBACK_EXTENSION_URI),
+    )
+
+    assert merged.headers["A2A-Extensions"] == (
+        f"{DISCOVERY_EXTENSION_URI},{SESSION_QUERY_EXTENSION_URI},"
+        f"{INTERRUPT_CALLBACK_EXTENSION_URI}"
     )
 
 
@@ -188,6 +214,65 @@ async def test_session_query_requires_matching_extension_activation(
             DISCOVERY_EXTENSION_URI,
         ],
         "header": "A2A-Extensions",
+    }
+    assert "A2A-Extensions" not in response.headers
+    dummy.list_sessions.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_extension_capability_policy_can_deny_activation_for_call_context(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    dummy = DummyCodexClient(
+        make_settings(
+            a2a_bearer_token="t-1",
+            a2a_log_payloads=False,
+            **_BASE_SETTINGS,
+        )
+    )
+    dummy.list_sessions = AsyncMock(side_effect=AssertionError("should not be called"))  # type: ignore[method-assign]
+    observed: dict[str, Any] = {}
+
+    def deny_activation(method: str, extension_uri: str, context) -> bool:
+        observed.update(
+            method=method,
+            extension_uri=extension_uri,
+            identity=context.state.get("identity"),
+        )
+        return False
+
+    app = _build_app(
+        monkeypatch,
+        dummy,
+        extension_activation_authorizer=deny_activation,
+    )
+    transport = httpx.ASGITransport(app=app)
+
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post(
+            EXTENSION_JSONRPC_PATH,
+            headers=_EXTENSION_HEADERS,
+            json={
+                "jsonrpc": "2.0",
+                "id": 32,
+                "method": "codex.sessions.list",
+                "params": {"limit": 5},
+            },
+        )
+
+    payload = response.json()
+    assert payload["error"]["code"] == -32007
+    assert error_reason(payload) == "EXTENSION_ACTIVATION_FORBIDDEN"
+    assert error_context(payload) == {
+        "@type": "type.googleapis.com/codex_a2a.ErrorContext",
+        "method": "codex.sessions.list",
+        "extension_uri": SESSION_QUERY_EXTENSION_URI,
+        "capability": f"extension:{SESSION_QUERY_EXTENSION_URI}",
+    }
+    assert observed == {
+        "method": "codex.sessions.list",
+        "extension_uri": SESSION_QUERY_EXTENSION_URI,
+        "identity": "automation",
     }
     assert "A2A-Extensions" not in response.headers
     dummy.list_sessions.assert_not_awaited()

@@ -21,7 +21,8 @@ Provider-private contract note:
 Negotiation note:
 
 - Shared request/response extensions, provider-private `codex.*` method extensions, and the shared interrupt callback method extension participate in request-level negotiation.
-- Discover method extension URIs from the authenticated extended Agent Card (with the interrupt callback also summarized on public anonymous surfaces), request the URI through `A2A-Extensions`, then invoke one of its documented JSON-RPC methods. The response echoes the URI when activation succeeds.
+- Discover method extension URIs from the authenticated extended Agent Card (with the interrupt callback also summarized on public anonymous surfaces), request the URI through `A2A-Extensions`, then invoke one of its documented JSON-RPC methods. The response lists every extension actually activated for that request and does not echo requested-only URIs.
+- Each method extension publishes a machine-readable `params.activation` contract covering the request/response headers, deployment-aware capability policy, response merge behavior, and the project-defined negotiation/authorization error conventions.
 - `wire_contract` and `compatibility_profile` are descriptive metadata contracts, not activatable runtime extensions.
 
 Canonical URI note:
@@ -130,7 +131,7 @@ URI: `urn:codex-a2a:extension:interactive-interrupt:v1`
 - Discovery surface: public Agent Card, authenticated extended card `capabilities.extensions`, and anonymous OpenAPI `x-a2a-extension-contracts.interrupt_callback`
 - Transport: provider-private JSON-RPC methods on `POST /`
 - Negotiation: request-level activation through `A2A-Extensions`
-- Public disclosure: method aliases, supported interrupt event names, shared interrupt metadata field names, and the authentication/request-id scope summary only
+- Public disclosure: method aliases, supported interrupt event names, shared interrupt metadata field names, activation/error semantics, and the authentication/request-id scope summary only
 - Authenticated disclosure: full JSON-RPC endpoint metadata, method contracts, reply schemas, provider-private metadata, success result fields, errors, and runtime profile
 - Note: this URI identifies a shared interrupt callback contract and is published on both anonymous and authenticated discovery surfaces. Anonymous publication does not imply anonymous invocation; callback methods require configured transport authentication and an active pending interrupt `request_id`, with session-owner validation when session binding is available.
 

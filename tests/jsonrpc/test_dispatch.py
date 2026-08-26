@@ -155,5 +155,5 @@ def test_extension_method_registry_rejects_cross_extension_method_collisions() -
     }
     methods["list_skills"] = methods["list_sessions"]
 
-    with pytest.raises(ValueError, match="maps to multiple extension URIs"):
+    with pytest.raises(ValueError, match="configured under multiple keys"):
         ExtensionMethodRegistry.from_methods(methods)

@@ -1,7 +1,9 @@
+from codex_a2a.contracts import extension_specs
 from codex_a2a.contracts.extension_registry import (
     EXTENSION_CONTRACT_REGISTRY,
     build_agent_card_extensions_from_registry,
     build_extension_taxonomy_from_registry,
+    build_method_extension_uri_by_method,
     build_openapi_extension_contracts_from_registry,
 )
 from codex_a2a.contracts.extensions import (
@@ -177,7 +179,21 @@ def test_interrupt_callback_public_disclosure_does_not_imply_anonymous_invocatio
         "interrupt_metadata_field",
         "request_id_field",
         "authorization",
+        "activation",
     )
+
+
+def test_registry_is_authoritative_for_method_extension_uri_mapping() -> None:
+    mapping = build_method_extension_uri_by_method()
+
+    for descriptor in EXTENSION_CONTRACT_REGISTRY:
+        if descriptor.method_contracts_name is None:
+            continue
+        assert descriptor.negotiation_mode == "negotiated"
+        assert {
+            mapping[contract.method]
+            for contract in getattr(extension_specs, descriptor.method_contracts_name).values()
+        } == {descriptor.uri}
 
 
 def test_extension_taxonomy_is_derived_from_registry() -> None:

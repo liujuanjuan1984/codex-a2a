@@ -17,6 +17,11 @@ from starlette.requests import Request
 from starlette.responses import Response
 from starlette.routing import Route
 
+from codex_a2a.contracts.extension_activation import (
+    METHOD_EXTENSION_NEGOTIATION_ERROR_REASON,
+    METHOD_EXTENSION_POLICY_ERROR_CODE,
+    METHOD_EXTENSION_POLICY_ERROR_REASON,
+)
 from codex_a2a.execution.discovery_runtime import CodexDiscoveryRuntime
 from codex_a2a.execution.exec_runtime import CodexExecRuntime
 from codex_a2a.execution.review_runtime import CodexReviewRuntime
@@ -26,6 +31,10 @@ from codex_a2a.jsonrpc.discovery_query import handle_discovery_query_request
 from codex_a2a.jsonrpc.dispatch import ExtensionMethodRegistry
 from codex_a2a.jsonrpc.errors import adapt_jsonrpc_error
 from codex_a2a.jsonrpc.exec_control import handle_exec_control_request
+from codex_a2a.jsonrpc.extension_policy import (
+    ExtensionActivationAuthorizer,
+    MethodExtensionCapabilityPolicy,
+)
 from codex_a2a.jsonrpc.hooks import SessionGuardHooks
 from codex_a2a.jsonrpc.interrupt_recovery import handle_interrupt_recovery_request
 from codex_a2a.jsonrpc.interrupts import handle_interrupt_callback_request
@@ -53,6 +62,7 @@ def create_extension_jsonrpc_routes(
     supported_methods: list[str],
     guard_hooks: SessionGuardHooks,
     rpc_url: str,
+    extension_activation_authorizer: ExtensionActivationAuthorizer | None = None,
     dispatcher_factory=None,
     stream_budget_max_bytes: int = 0,
     stream_budget_max_duration_seconds: float = 0.0,
@@ -70,6 +80,7 @@ def create_extension_jsonrpc_routes(
         methods=methods,
         supported_methods=supported_methods,
         guard_hooks=guard_hooks,
+        extension_activation_authorizer=extension_activation_authorizer,
         stream_budget_max_bytes=stream_budget_max_bytes,
         stream_budget_max_duration_seconds=stream_budget_max_duration_seconds,
         stream_budget_idle_timeout_seconds=stream_budget_idle_timeout_seconds,
@@ -97,6 +108,7 @@ class CodexSessionQueryJSONRPCApplication(JsonRpcDispatcher):
         methods: dict[str, str],
         supported_methods: list[str],
         guard_hooks: SessionGuardHooks,
+        extension_activation_authorizer: ExtensionActivationAuthorizer | None = None,
         stream_budget_max_bytes: int = 0,
         stream_budget_max_duration_seconds: float = 0.0,
         stream_budget_idle_timeout_seconds: float = 0.0,
@@ -137,6 +149,10 @@ class CodexSessionQueryJSONRPCApplication(JsonRpcDispatcher):
         }
         self._supported_methods = list(supported_methods)
         self._method_registry = ExtensionMethodRegistry.from_methods(methods)
+        self._extension_capability_policy = MethodExtensionCapabilityPolicy(
+            self._method_registry,
+            authorizer=extension_activation_authorizer,
+        )
         self._guard_hooks = guard_hooks
         self._stream_budget_max_bytes = stream_budget_max_bytes
         self._stream_budget_max_duration_seconds = stream_budget_max_duration_seconds
@@ -192,11 +208,25 @@ class CodexSessionQueryJSONRPCApplication(JsonRpcDispatcher):
                 return self._unsupported_method_response(base_request.id, base_request.method)
             return await super().handle_requests(request)
 
-        extension_uri = self._method_registry.extension_uri_by_method[base_request.method]
         call_context = self._context_builder.build(request)
-        if extension_uri not in call_context.requested_extensions:
+        activation = self._extension_capability_policy.evaluate(base_request.method, call_context)
+        if not activation.activated:
             if base_request.id is None:
                 return Response(status_code=204)
+            if activation.denial_reason == "activation_forbidden":
+                return self._generate_error_response(
+                    base_request.id,
+                    JSONRPCError(
+                        code=METHOD_EXTENSION_POLICY_ERROR_CODE,
+                        message="Extension activation forbidden",
+                        data={
+                            "type": METHOD_EXTENSION_POLICY_ERROR_REASON,
+                            "method": activation.method,
+                            "extension_uri": activation.extension_uri,
+                            "capability": f"extension:{activation.extension_uri}",
+                        },
+                    ),
+                )
             return self._generate_error_response(
                 base_request.id,
                 UnsupportedOperationError(
@@ -205,10 +235,10 @@ class CodexSessionQueryJSONRPCApplication(JsonRpcDispatcher):
                         f"negotiation via the {HTTP_EXTENSION_HEADER} header."
                     ),
                     data={
-                        "type": "EXTENSION_NEGOTIATION_REQUIRED",
-                        "method": base_request.method,
-                        "required_extensions": [extension_uri],
-                        "requested_extensions": sorted(call_context.requested_extensions),
+                        "type": METHOD_EXTENSION_NEGOTIATION_ERROR_REASON,
+                        "method": activation.method,
+                        "required_extensions": [activation.extension_uri],
+                        "requested_extensions": list(activation.requested_extensions),
                         "header": HTTP_EXTENSION_HEADER,
                     },
                 ),
@@ -224,7 +254,7 @@ class CodexSessionQueryJSONRPCApplication(JsonRpcDispatcher):
                     InvalidParamsError(message="params must be an object"),
                 )
             )
-            return self._with_activated_extension(response, extension_uri)
+            return self._with_activated_extensions(response, activation.activated_extensions)
 
         if base_request.method in self._method_registry.session_query_methods:
             response = await handle_session_query_request(self, base_request, params)
@@ -279,11 +309,21 @@ class CodexSessionQueryJSONRPCApplication(JsonRpcDispatcher):
                 params,
                 request=request,
             )
-        return self._with_activated_extension(response, extension_uri)
+        return self._with_activated_extensions(response, activation.activated_extensions)
 
     @staticmethod
-    def _with_activated_extension(response: Response, extension_uri: str) -> Response:
-        response.headers[HTTP_EXTENSION_HEADER] = extension_uri
+    def _with_activated_extensions(
+        response: Response,
+        activated_extensions: tuple[str, ...],
+    ) -> Response:
+        merged: list[str] = []
+        existing_header = response.headers.get(HTTP_EXTENSION_HEADER, "")
+        for value in (*existing_header.split(","), *activated_extensions):
+            normalized = value.strip()
+            if normalized and normalized not in merged:
+                merged.append(normalized)
+        if merged:
+            response.headers[HTTP_EXTENSION_HEADER] = ",".join(merged)
         return response
 
     @staticmethod
