@@ -446,6 +446,11 @@ def test_method_extensions_publish_machine_readable_activation_contract(
     assert activation["errors"]["negotiation_required"]["convention"] == "codex-a2a"
     assert activation["errors"]["activation_forbidden"]["jsonrpc_code"] == -32004
     assert activation["errors"]["activation_forbidden"]["convention"] == "codex-a2a"
+    assert activation["errors"]["policy_evaluation_failed"] == {
+        "a2a_error_type": "InternalError",
+        "jsonrpc_code": -32603,
+        "convention": "A2A_JSON_RPC",
+    }
 
 
 def test_extension_uris_map_to_repository_spec_index() -> None:

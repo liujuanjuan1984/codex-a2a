@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import AsyncGenerator
 from typing import Any
 
@@ -46,6 +47,8 @@ from codex_a2a.protocol_versions import get_current_protocol_version
 from codex_a2a.redact import redact_absolute_paths
 from codex_a2a.server.runtime_limits import apply_stream_budget
 from codex_a2a.upstream.client import CodexClient
+
+logger = logging.getLogger(__name__)
 
 
 def create_extension_jsonrpc_routes(
@@ -208,7 +211,22 @@ class CodexSessionQueryJSONRPCApplication(JsonRpcDispatcher):
             return await super().handle_requests(request)
 
         call_context = self._context_builder.build(request)
-        activation = self._extension_capability_policy.evaluate(base_request.method, call_context)
+        try:
+            activation = await self._extension_capability_policy.evaluate(
+                base_request.method,
+                call_context,
+            )
+        except Exception:
+            logger.exception(
+                "Extension activation policy evaluation failed method=%s",
+                base_request.method,
+            )
+            if base_request.id is None:
+                return Response(status_code=204)
+            return self._generate_error_response(
+                base_request.id,
+                InternalError(message="Extension activation policy evaluation failed"),
+            )
         if not activation.activated:
             if base_request.id is None:
                 return Response(status_code=204)

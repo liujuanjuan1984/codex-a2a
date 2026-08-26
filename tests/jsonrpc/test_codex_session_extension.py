@@ -279,6 +279,57 @@ async def test_extension_capability_policy_can_deny_activation_for_call_context(
 
 
 @pytest.mark.asyncio
+async def test_extension_capability_policy_failure_is_fail_closed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    dummy = DummyCodexClient(
+        make_settings(
+            a2a_bearer_token="t-1",
+            a2a_log_payloads=False,
+            **_BASE_SETTINGS,
+        )
+    )
+    dummy.list_sessions = AsyncMock(side_effect=AssertionError("should not be called"))  # type: ignore[method-assign]
+
+    def invalid_authorizer(_method: str, _extension_uri: str, _context) -> Any:
+        return "allow"
+
+    app = _build_app(
+        monkeypatch,
+        dummy,
+        extension_activation_authorizer=invalid_authorizer,
+    )
+    transport = httpx.ASGITransport(app=app)
+
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post(
+            EXTENSION_JSONRPC_PATH,
+            headers=_EXTENSION_HEADERS,
+            json={
+                "jsonrpc": "2.0",
+                "id": 34,
+                "method": "codex.sessions.list",
+                "params": {"limit": 5},
+            },
+        )
+        notification_response = await client.post(
+            EXTENSION_JSONRPC_PATH,
+            headers=_EXTENSION_HEADERS,
+            json={
+                "jsonrpc": "2.0",
+                "method": "codex.sessions.list",
+                "params": {"limit": 5},
+            },
+        )
+
+    assert response.json()["error"]["code"] == -32603
+    assert "A2A-Extensions" not in response.headers
+    assert notification_response.status_code == 204
+    assert "A2A-Extensions" not in notification_response.headers
+    dummy.list_sessions.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_extension_notification_without_activation_is_not_dispatched(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

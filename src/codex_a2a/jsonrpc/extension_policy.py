@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import inspect
+from collections.abc import Awaitable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal, Protocol
 
@@ -17,7 +19,7 @@ class ExtensionActivationAuthorizer(Protocol):
         method: str,
         extension_uri: str,
         context: ServerCallContext,
-    ) -> bool: ...
+    ) -> bool | Awaitable[bool]: ...
 
 
 @dataclass(frozen=True)
@@ -45,7 +47,7 @@ class MethodExtensionCapabilityPolicy:
         self._method_lookup = method_lookup
         self._authorizer = authorizer
 
-    def evaluate(
+    async def evaluate(
         self,
         method: str,
         context: ServerCallContext,
@@ -63,18 +65,20 @@ class MethodExtensionCapabilityPolicy:
                 activated_extensions=(),
                 denial_reason="negotiation_required",
             )
-        if self._authorizer is not None and not self._authorizer(
-            method,
-            extension_uri,
-            context,
-        ):
-            return ExtensionActivationDecision(
-                method=method,
-                extension_uri=extension_uri,
-                requested_extensions=requested_extensions,
-                activated_extensions=(),
-                denial_reason="activation_forbidden",
-            )
+        if self._authorizer is not None:
+            authorized = self._authorizer(method, extension_uri, context)
+            if inspect.isawaitable(authorized):
+                authorized = await authorized
+            if not isinstance(authorized, bool):
+                raise TypeError("Extension activation authorizer must return bool")
+            if not authorized:
+                return ExtensionActivationDecision(
+                    method=method,
+                    extension_uri=extension_uri,
+                    requested_extensions=requested_extensions,
+                    activated_extensions=(),
+                    denial_reason="activation_forbidden",
+                )
         return ExtensionActivationDecision(
             method=method,
             extension_uri=extension_uri,
