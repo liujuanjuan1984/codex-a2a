@@ -2,6 +2,7 @@ from codex_a2a.contracts.extension_registry import (
     EXTENSION_CONTRACT_REGISTRY,
     build_agent_card_extensions_from_registry,
     build_extension_taxonomy_from_registry,
+    build_method_extension_uri_by_method,
     build_openapi_extension_contracts_from_registry,
 )
 from codex_a2a.contracts.extensions import (
@@ -75,18 +76,14 @@ def test_extension_registry_captures_phase1_inventory() -> None:
     negotiated_keys = [
         descriptor.key for descriptor in descriptors if descriptor.negotiation_mode == "negotiated"
     ]
-    declaration_only_keys = [
-        descriptor.key
-        for descriptor in descriptors
-        if descriptor.negotiation_mode == "declaration_only"
-    ]
     not_applicable_keys = [
         descriptor.key
         for descriptor in descriptors
         if descriptor.negotiation_mode == "not_applicable"
     ]
-    assert negotiated_keys == ["session_binding", "streaming"]
-    assert declaration_only_keys == [
+    assert negotiated_keys == [
+        "session_binding",
+        "streaming",
         "session_query",
         "discovery",
         "thread_lifecycle",
@@ -171,7 +168,7 @@ def test_interrupt_callback_public_disclosure_does_not_imply_anonymous_invocatio
         if descriptor.uri == INTERRUPT_CALLBACK_EXTENSION_URI
     )
 
-    assert interrupt_descriptor.negotiation_mode == "declaration_only"
+    assert interrupt_descriptor.negotiation_mode == "negotiated"
     assert interrupt_descriptor.public_agent_card is True
     assert interrupt_descriptor.authenticated_agent_card is True
     assert interrupt_descriptor.openapi_group == "a2a"
@@ -181,7 +178,18 @@ def test_interrupt_callback_public_disclosure_does_not_imply_anonymous_invocatio
         "interrupt_metadata_field",
         "request_id_field",
         "authorization",
+        "activation",
     )
+
+
+def test_registry_is_authoritative_for_method_extension_uri_mapping() -> None:
+    mapping = build_method_extension_uri_by_method()
+
+    for descriptor in EXTENSION_CONTRACT_REGISTRY:
+        if not descriptor.methods:
+            continue
+        assert descriptor.negotiation_mode == "negotiated"
+        assert {mapping[method] for method in descriptor.methods} == {descriptor.uri}
 
 
 def test_extension_taxonomy_is_derived_from_registry() -> None:

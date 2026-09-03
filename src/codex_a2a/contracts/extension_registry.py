@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
+from types import MappingProxyType
 from typing import Any, Literal
 
 from a2a.types import AgentExtension
@@ -18,9 +20,8 @@ class ExtensionContractDescriptor:
     title: str
     description: str
     # negotiated: request-level activation via A2A-Extensions is meaningful
-    # declaration_only: discover through Agent Card/OpenAPI and invoke directly
     # not_applicable: descriptive metadata, not an activatable runtime extension
-    negotiation_mode: Literal["negotiated", "declaration_only", "not_applicable"]
+    negotiation_mode: Literal["negotiated", "not_applicable"]
     public_agent_card: bool
     authenticated_agent_card: bool
     openapi_group: Literal["a2a", "codex"] | None
@@ -36,6 +37,7 @@ class ExtensionContractDescriptor:
     params_builder_signature: Literal["no_args", "runtime_profile", "protocol_version"]
     public_params_keys: tuple[str, ...] | None = None
     public_params_transform: Literal["streaming_public"] | None = None
+    methods: tuple[str, ...] = ()
 
 
 def _select_public_extension_params(
@@ -97,18 +99,46 @@ def _build_extension_contract_params(
 
     builder = getattr(contract_extensions, descriptor.params_builder_name)
     if descriptor.params_builder_signature == "no_args":
-        return dict(builder())
-    if descriptor.params_builder_signature == "runtime_profile":
-        return dict(builder(runtime_profile=runtime_profile))
-    if settings is None:
-        msg = f"settings are required to build {descriptor.key}"
-        raise ValueError(msg)
-    return dict(
-        builder(
-            protocol_version=settings.a2a_protocol_version,
-            runtime_profile=runtime_profile,
+        params = dict(builder())
+    elif descriptor.params_builder_signature == "runtime_profile":
+        params = dict(builder(runtime_profile=runtime_profile))
+    else:
+        if settings is None:
+            msg = f"settings are required to build {descriptor.key}"
+            raise ValueError(msg)
+        params = dict(
+            builder(
+                protocol_version=settings.a2a_protocol_version,
+                runtime_profile=runtime_profile,
+            )
         )
-    )
+    return params
+
+
+def build_method_extension_uri_by_method(
+    *,
+    enabled_methods: Iterable[str] | None = None,
+) -> Mapping[str, str]:
+    declared: dict[str, str] = {}
+    for descriptor in EXTENSION_CONTRACT_REGISTRY:
+        if not descriptor.methods:
+            continue
+        for method in descriptor.methods:
+            existing_uri = declared.get(method)
+            if existing_uri is not None:
+                raise ValueError(
+                    "Extension method maps to multiple extension URIs: "
+                    f"{method} ({existing_uri}, {descriptor.uri})"
+                )
+            declared[method] = descriptor.uri
+
+    if enabled_methods is None:
+        return MappingProxyType(declared)
+    enabled = frozenset(enabled_methods)
+    unknown = enabled.difference(declared)
+    if unknown:
+        raise ValueError(f"Methods missing an extension contract mapping: {sorted(unknown)}")
+    return MappingProxyType({method: uri for method, uri in declared.items() if method in enabled})
 
 
 EXTENSION_CONTRACT_REGISTRY: tuple[ExtensionContractDescriptor, ...] = (
@@ -158,98 +188,105 @@ EXTENSION_CONTRACT_REGISTRY: tuple[ExtensionContractDescriptor, ...] = (
         uri=extension_specs.SESSION_QUERY_EXTENSION_URI,
         title="Codex Session Query v1",
         description="Provider-private Codex session history and low-risk control methods.",
-        negotiation_mode="declaration_only",
+        negotiation_mode="negotiated",
         public_agent_card=False,
         authenticated_agent_card=True,
         openapi_group="codex",
         taxonomy_group="codex_provider_private_contracts",
         params_builder_name="build_session_query_extension_params",
         params_builder_signature="runtime_profile",
+        methods=tuple(extension_specs.SESSION_QUERY_METHODS.values()),
     ),
     ExtensionContractDescriptor(
         key="discovery",
         uri=extension_specs.DISCOVERY_EXTENSION_URI,
         title="Codex Discovery v1",
         description="Provider-private skills, apps, plugins, and watch bridge methods.",
-        negotiation_mode="declaration_only",
+        negotiation_mode="negotiated",
         public_agent_card=False,
         authenticated_agent_card=True,
         openapi_group="codex",
         taxonomy_group="codex_provider_private_contracts",
         params_builder_name="build_discovery_extension_params",
         params_builder_signature="runtime_profile",
+        methods=tuple(extension_specs.DISCOVERY_METHODS.values()),
     ),
     ExtensionContractDescriptor(
         key="thread_lifecycle",
         uri=extension_specs.THREAD_LIFECYCLE_EXTENSION_URI,
         title="Codex Thread Lifecycle v1",
         description="Provider-private thread lifecycle control and watch bridge methods.",
-        negotiation_mode="declaration_only",
+        negotiation_mode="negotiated",
         public_agent_card=False,
         authenticated_agent_card=True,
         openapi_group="codex",
         taxonomy_group="codex_provider_private_contracts",
         params_builder_name="build_thread_lifecycle_extension_params",
         params_builder_signature="runtime_profile",
+        methods=tuple(extension_specs.THREAD_LIFECYCLE_METHODS.values()),
     ),
     ExtensionContractDescriptor(
         key="interrupt_recovery",
         uri=extension_specs.INTERRUPT_RECOVERY_EXTENSION_URI,
         title="Codex Interrupt Recovery v1",
         description="Provider-private interrupt rediscovery contract for authenticated callers.",
-        negotiation_mode="declaration_only",
+        negotiation_mode="negotiated",
         public_agent_card=False,
         authenticated_agent_card=True,
         openapi_group="codex",
         taxonomy_group="codex_provider_private_contracts",
         params_builder_name="build_interrupt_recovery_extension_params",
         params_builder_signature="runtime_profile",
+        methods=tuple(extension_specs.INTERRUPT_RECOVERY_METHODS.values()),
     ),
     ExtensionContractDescriptor(
         key="turn_control",
         uri=extension_specs.TURN_CONTROL_EXTENSION_URI,
         title="Codex Turn Control v1",
         description="Provider-private active-turn steering for already-running regular turns.",
-        negotiation_mode="declaration_only",
+        negotiation_mode="negotiated",
         public_agent_card=False,
         authenticated_agent_card=True,
         openapi_group="codex",
         taxonomy_group="codex_provider_private_contracts",
         params_builder_name="build_turn_control_extension_params",
         params_builder_signature="runtime_profile",
+        methods=tuple(extension_specs.TURN_CONTROL_METHODS.values()),
     ),
     ExtensionContractDescriptor(
         key="review_control",
         uri=extension_specs.REVIEW_CONTROL_EXTENSION_URI,
         title="Codex Review Control v1",
         description="Provider-private review control and lifecycle watch bridge.",
-        negotiation_mode="declaration_only",
+        negotiation_mode="negotiated",
         public_agent_card=False,
         authenticated_agent_card=True,
         openapi_group="codex",
         taxonomy_group="codex_provider_private_contracts",
         params_builder_name="build_review_control_extension_params",
         params_builder_signature="runtime_profile",
+        methods=tuple(extension_specs.REVIEW_CONTROL_METHODS.values()),
     ),
     ExtensionContractDescriptor(
         key="exec_control",
         uri=extension_specs.EXEC_CONTROL_EXTENSION_URI,
         title="Codex Exec v1",
         description="Provider-private standalone interactive command execution.",
-        negotiation_mode="declaration_only",
+        negotiation_mode="negotiated",
         public_agent_card=False,
         authenticated_agent_card=True,
         openapi_group="codex",
         taxonomy_group="codex_provider_private_contracts",
         params_builder_name="build_exec_control_extension_params",
         params_builder_signature="runtime_profile",
+        methods=tuple(extension_specs.EXEC_CONTROL_METHODS.values()),
     ),
     ExtensionContractDescriptor(
         key="interrupt_callback",
         uri=extension_specs.INTERRUPT_CALLBACK_EXTENSION_URI,
         title="Shared Interactive Interrupt v1",
         description="Shared interrupt callback reply methods.",
-        negotiation_mode="declaration_only",
+        negotiation_mode="negotiated",
         public_agent_card=True,
         authenticated_agent_card=True,
         openapi_group="a2a",
@@ -262,7 +299,9 @@ EXTENSION_CONTRACT_REGISTRY: tuple[ExtensionContractDescriptor, ...] = (
             "interrupt_metadata_field",
             "request_id_field",
             "authorization",
+            "activation",
         ),
+        methods=tuple(extension_specs.INTERRUPT_CALLBACK_METHODS.values()),
     ),
     ExtensionContractDescriptor(
         key="wire_contract",
