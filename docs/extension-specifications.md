@@ -20,8 +20,9 @@ Provider-private contract note:
 
 Negotiation note:
 
-- `urn:codex-a2a:extension:session-binding:v1` and `urn:codex-a2a:extension:stream-hints:v1` are the only current request-level negotiated extensions in this repository family.
-- Provider-private `codex.*` extension URIs and the shared interrupt callback URI are declaration-only contracts. Discover them from the authenticated extended Agent Card (with the interrupt callback also summarized on public anonymous surfaces), then invoke the documented JSON-RPC methods directly; no additional `A2A-Extensions` activation header is required for those methods.
+- Shared request/response extensions, provider-private `codex.*` method extensions, and the shared interrupt callback method extension participate in request-level negotiation.
+- Discover method extension URIs from the authenticated extended Agent Card (with the interrupt callback also summarized on public anonymous surfaces), request the URI through `A2A-Extensions`, then invoke one of its documented JSON-RPC methods. The response lists every extension actually activated for that request and does not echo requested-only URIs.
+- Each method extension publishes a machine-readable `params.activation` contract covering the request/response headers, deployment-aware capability policy, response merge behavior, and the project-defined negotiation/authorization error conventions.
 - `wire_contract` and `compatibility_profile` are descriptive metadata contracts, not activatable runtime extensions.
 
 Canonical URI note:
@@ -59,7 +60,7 @@ URI: `urn:codex-a2a:extension:session-query:v1`
 - Scope: provider-private Codex session history and low-risk control methods
 - Discovery surface: authenticated extended card `capabilities.extensions` plus skill inventory
 - Transport: provider-private JSON-RPC methods on `POST /`
-- Negotiation: declaration-only; discover first, then invoke the documented methods directly
+- Negotiation: request-level activation through `A2A-Extensions`
 - Note: this URI remains a stable contract identifier and is published only on authenticated discovery surfaces
 
 ## Codex Discovery v1
@@ -69,7 +70,7 @@ URI: `urn:codex-a2a:extension:discovery:v1`
 - Scope: provider-private skills/apps/plugins discovery methods and discovery watch bridge
 - Discovery surface: authenticated extended card `capabilities.extensions` plus skill inventory
 - Transport: provider-private JSON-RPC methods on `POST /`
-- Negotiation: declaration-only; discover first, then invoke the documented methods directly
+- Negotiation: request-level activation through `A2A-Extensions`
 - Note: this URI remains a stable contract identifier and is published only on authenticated discovery surfaces
 
 ## Codex Thread Lifecycle v1
@@ -79,7 +80,7 @@ URI: `urn:codex-a2a:extension:thread-lifecycle:v1`
 - Scope: provider-private thread lifecycle control and lifecycle watch bridge
 - Discovery surface: authenticated extended card `capabilities.extensions` plus skill inventory
 - Transport: provider-private JSON-RPC methods on `POST /`
-- Negotiation: declaration-only; discover first, then invoke the documented methods directly
+- Negotiation: request-level activation through `A2A-Extensions`
 - Note: this URI remains a stable contract identifier and is published only on authenticated discovery surfaces
 
 ## Codex Interrupt Recovery v1
@@ -89,7 +90,7 @@ URI: `urn:codex-a2a:extension:interrupt-recovery:v1`
 - Scope: provider-private interrupt rediscovery contract for authenticated callers
 - Discovery surface: authenticated extended card `capabilities.extensions` plus skill inventory
 - Transport: provider-private JSON-RPC methods on `POST /`
-- Negotiation: declaration-only; discover first, then invoke the documented methods directly
+- Negotiation: request-level activation through `A2A-Extensions`
 - Note: this URI remains a stable contract identifier and is published only on authenticated discovery surfaces
 
 ## Codex Turn Control v1
@@ -99,7 +100,7 @@ URI: `urn:codex-a2a:extension:turn-control:v1`
 - Scope: provider-private active-turn steering for already-running regular turns
 - Discovery surface: authenticated extended card `capabilities.extensions` plus skill inventory
 - Transport: provider-private JSON-RPC methods on `POST /`
-- Negotiation: declaration-only; discover first, then invoke the documented methods directly
+- Negotiation: request-level activation through `A2A-Extensions`
 - Note: this URI remains a stable contract identifier and is published only on authenticated discovery surfaces
 
 ## Codex Review Control v1
@@ -109,7 +110,7 @@ URI: `urn:codex-a2a:extension:review-control:v1`
 - Scope: provider-private review-start control and review lifecycle watch bridge for uncommitted changes, branches, commits, and custom reviewer instructions
 - Discovery surface: authenticated extended card `capabilities.extensions` plus skill inventory
 - Transport: provider-private JSON-RPC methods on `POST /`
-- Negotiation: declaration-only; discover first, then invoke the documented methods directly
+- Negotiation: request-level activation through `A2A-Extensions`
 - Note: this URI remains a stable contract identifier and is published only on authenticated discovery surfaces
 
 ## Codex Exec v1
@@ -119,7 +120,7 @@ URI: `urn:codex-a2a:extension:exec-control:v1`
 - Scope: provider-private standalone interactive command execution
 - Discovery surface: authenticated extended card `capabilities.extensions` plus skill inventory
 - Transport: provider-private JSON-RPC methods on `POST /`
-- Negotiation: declaration-only; discover first, then invoke the documented methods directly
+- Negotiation: request-level activation through `A2A-Extensions`
 - Note: this URI remains a stable contract identifier and is published only on authenticated discovery surfaces
 
 ## Shared Interactive Interrupt v1
@@ -129,8 +130,8 @@ URI: `urn:codex-a2a:extension:interactive-interrupt:v1`
 - Scope: shared interrupt callback reply methods
 - Discovery surface: public Agent Card, authenticated extended card `capabilities.extensions`, and anonymous OpenAPI `x-a2a-extension-contracts.interrupt_callback`
 - Transport: provider-private JSON-RPC methods on `POST /`
-- Negotiation: declaration-only; discover first, then invoke the documented methods directly
-- Public disclosure: method aliases, supported interrupt event names, shared interrupt metadata field names, and the authentication/request-id scope summary only
+- Negotiation: request-level activation through `A2A-Extensions`
+- Public disclosure: method aliases, supported interrupt event names, shared interrupt metadata field names, activation/error semantics, and the authentication/request-id scope summary only
 - Authenticated disclosure: full JSON-RPC endpoint metadata, method contracts, reply schemas, provider-private metadata, success result fields, errors, and runtime profile
 - Note: this URI identifies a shared interrupt callback contract and is published on both anonymous and authenticated discovery surfaces. Anonymous publication does not imply anonymous invocation; callback methods require configured transport authentication and an active pending interrupt `request_id`, with session-owner validation when session binding is available.
 

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from typing import Any
+from collections.abc import Callable
+from functools import wraps
+from typing import Any, ParamSpec
 
 from codex_a2a.contracts.runtime_output import (
     build_artifact_stream_contract_params,
@@ -20,7 +22,26 @@ from codex_a2a.protocol_versions import (
 )
 
 from . import extension_specs
+from .extension_activation import build_method_extension_activation_contract
 from .extension_registry import build_extension_taxonomy_from_registry
+
+_P = ParamSpec("_P")
+
+
+def _method_extension_params(
+    extension_uri: str,
+) -> Callable[[Callable[_P, dict[str, Any]]], Callable[_P, dict[str, Any]]]:
+    def decorate(builder: Callable[_P, dict[str, Any]]) -> Callable[_P, dict[str, Any]]:
+        @wraps(builder)
+        def wrapped(*args: _P.args, **kwargs: _P.kwargs) -> dict[str, Any]:
+            params = builder(*args, **kwargs)
+            params["activation"] = build_method_extension_activation_contract(extension_uri)
+            return params
+
+        return wrapped
+
+    return decorate
+
 
 CORE_JSONRPC_PATH = "/"
 EXTENSION_JSONRPC_PATH = CORE_JSONRPC_PATH
@@ -390,14 +411,14 @@ def build_compatibility_profile_params(
                 "claims that they are part of the A2A core baseline."
             ),
             (
-                "Treat shared session-binding and stream-hints as the negotiated "
-                "Agent Card extension surface for this deployment."
+                "Treat shared session-binding and stream-hints plus declared JSON-RPC "
+                "method extensions as request-level negotiated surfaces."
             ),
             (
                 "Treat a2a.interrupt.* callback methods as a shared callback contract "
-                "declared on the public and authenticated discovery surfaces, then "
-                "invoked directly on the shared JSON-RPC endpoint rather than treated "
-                "as core A2A behavior."
+                "declared on the public and authenticated discovery surfaces. Request "
+                "the callback extension URI through A2A-Extensions before invoking a "
+                "callback method on the shared JSON-RPC endpoint."
             ),
             (
                 f"Use {CORE_JSONRPC_PATH} for both core A2A JSON-RPC methods and "
@@ -525,6 +546,7 @@ def build_streaming_extension_params() -> dict[str, Any]:
     }
 
 
+@_method_extension_params(SESSION_QUERY_EXTENSION_URI)
 def build_session_query_extension_params(
     *,
     runtime_profile: RuntimeProfile,
@@ -690,6 +712,7 @@ def build_session_query_extension_params(
     }
 
 
+@_method_extension_params(DISCOVERY_EXTENSION_URI)
 def build_discovery_extension_params(
     *,
     runtime_profile: RuntimeProfile,
@@ -842,6 +865,7 @@ def build_discovery_extension_params(
     }
 
 
+@_method_extension_params(THREAD_LIFECYCLE_EXTENSION_URI)
 def build_thread_lifecycle_extension_params(
     *,
     runtime_profile: RuntimeProfile,
@@ -956,6 +980,7 @@ def build_thread_lifecycle_extension_params(
     }
 
 
+@_method_extension_params(INTERRUPT_RECOVERY_EXTENSION_URI)
 def build_interrupt_recovery_extension_params(
     *,
     runtime_profile: RuntimeProfile,
@@ -1010,6 +1035,7 @@ def build_interrupt_recovery_extension_params(
     }
 
 
+@_method_extension_params(TURN_CONTROL_EXTENSION_URI)
 def build_turn_control_extension_params(
     *,
     runtime_profile: RuntimeProfile,
@@ -1071,6 +1097,7 @@ def build_turn_control_extension_params(
     }
 
 
+@_method_extension_params(REVIEW_CONTROL_EXTENSION_URI)
 def build_review_control_extension_params(
     *,
     runtime_profile: RuntimeProfile,
@@ -1185,6 +1212,7 @@ def build_review_control_extension_params(
     }
 
 
+@_method_extension_params(EXEC_CONTROL_EXTENSION_URI)
 def build_exec_control_extension_params(
     *,
     runtime_profile: RuntimeProfile,
@@ -1249,6 +1277,7 @@ def build_exec_control_extension_params(
     }
 
 
+@_method_extension_params(INTERRUPT_CALLBACK_EXTENSION_URI)
 def build_interrupt_callback_extension_params(
     *,
     runtime_profile: RuntimeProfile,
