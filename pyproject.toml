@@ -25,14 +25,14 @@ classifiers = [
     "Topic :: Internet :: WWW/HTTP",
 ]
 dependencies = [
-    "a2a-sdk==1.1.2",
+    "a2a-sdk==1.1.4",
     "aiosqlite>=0.20,<1.0",
     "fastapi>=0.121,<0.142",
     "httpx>=0.28.1,<0.29",
     "protobuf>=6.33.5,<7.0",
     "pydantic>=2.6,<3.0",
     "pydantic-settings>=2.2,<3.0",
-    "sqlalchemy>=2.0,<3.0",
+    "sqlalchemy>=2.0,<2.1",
     "sse-starlette>=2.1,<4.0",
     "uvicorn>=0.29,<0.53",
 ]

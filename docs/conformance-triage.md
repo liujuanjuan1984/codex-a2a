@@ -5,7 +5,7 @@ This document is the standing triage template for local `./scripts/conformance.s
 ## Authorities Used For Triage
 
 - The latest compatible released upstream A2A specification is authoritative; currently this is `v1.0.1` for the repository's advertised `1.0` wire line.
-- `a2a-sdk==1.1.2` as installed in this repository.
+- `a2a-sdk==1.1.4` as installed in this repository.
 - The default A2A protocol version advertised by this repository: `1.0`.
 - TCK assertions are non-normative observations and may lag the released specification.
 - Repository compatibility policy:
