@@ -7,7 +7,7 @@ This document explains the compatibility promises this repository currently trie
 | Layer | Supported contract | Evidence and boundary |
 | --- | --- | --- |
 | Python | 3.11–3.14 | Package classifiers cover all four versions; CI runs 3.13 as the quality gate and 3.11, 3.12, and 3.14 in the runtime matrix. |
-| A2A Python SDK | Exactly `a2a-sdk==1.1.2` | Pinned in `pyproject.toml`; this is the [official A2A Python SDK](https://github.com/a2aproject/a2a-python), not a fork. |
+| A2A Python SDK | Exactly `a2a-sdk==1.1.4` | Pinned in `pyproject.toml`; this is the [official A2A Python SDK](https://github.com/a2aproject/a2a-python), not a fork. |
 | A2A protocol | `1.0` wire line | The released upstream A2A specification is normative for portable core semantics; the current compatible release is `v1.0.1`. SDK compatibility with other protocol versions does not extend this adapter's claim. |
 | Inbound A2A transports | JSON-RPC and HTTP+JSON | Both are repository-owned runtime surfaces. gRPC is not exposed by this adapter. |
 | Codex local runtime | Codex CLI/App Server | The local [Apache-2.0 Codex CLI](https://github.com/openai/codex) is the upstream process boundary. Scheduled smoke tests install the latest stable CLI and complete a real local App Server turn. |
