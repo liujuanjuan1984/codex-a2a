@@ -46,7 +46,7 @@ dev = [
     "pytest-asyncio>=0.23",
     "pytest-cov>=5.0,<8.0",
     "diff-cover>=9,<11",
-    "ruff>=0.5",
+    "ruff==0.16.9",
     "mypy>=1.11,<2.4",
 ]
 

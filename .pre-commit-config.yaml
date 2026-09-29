@@ -6,12 +6,21 @@ repos:
       - id: trailing-whitespace
       - id: end-of-file-fixer
       - id: check-yaml
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.14.14
+  - repo: local
     hooks:
       - id: ruff
+        name: ruff check (uv)
+        entry: uv run --locked --extra dev ruff check --force-exclude
+        language: system
+        types_or: [python, pyi, jupyter]
+        require_serial: true
         args: ["--fix"]
       - id: ruff-format
+        name: ruff format (uv)
+        entry: uv run --locked --extra dev ruff format --force-exclude
+        language: system
+        types_or: [python, pyi, jupyter]
+        require_serial: true
   - repo: https://github.com/Yelp/detect-secrets
     rev: v1.5.0
     hooks:
