@@ -256,7 +256,10 @@ async def test_session_query_runtime_result_envelope_matches_declared_contract(
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.post(
             EXTENSION_JSONRPC_PATH,
-            headers={"Authorization": "Bearer t-1"},
+            headers={
+                "Authorization": "Bearer t-1",
+                "A2A-Extensions": SESSION_QUERY_EXTENSION_URI,
+            },
             json={"jsonrpc": "2.0", "id": 1, "method": method, "params": params},
         )
 
@@ -379,11 +382,27 @@ def test_interrupt_callback_public_contract_keeps_detailed_matrix_authenticated(
         "interrupt_metadata_field",
         "request_id_field",
         "authorization",
+        "activation",
     }
     assert public_params["authorization"] == {
         "transport_auth": "required",
         "request_id_scope": "active_pending_interrupt_request",
         "owner_validation": "session_owner_match_when_session_binding_available",
+    }
+    assert public_params["activation"]["required_extension_uri"] == (
+        INTERRUPT_CALLBACK_EXTENSION_URI
+    )
+    assert public_params["activation"]["errors"]["negotiation_required"] == {
+        "a2a_error_type": "UnsupportedOperationError",
+        "jsonrpc_code": -32004,
+        "reason": "EXTENSION_NEGOTIATION_REQUIRED",
+        "data_fields": [
+            "method",
+            "required_extensions",
+            "requested_extensions",
+            "header",
+        ],
+        "convention": "codex-a2a",
     }
     assert "method_contracts" not in public_params
     assert "jsonrpc_endpoint" not in public_params
@@ -391,6 +410,47 @@ def test_interrupt_callback_public_contract_keeps_detailed_matrix_authenticated(
     assert "method_contracts" in authenticated_params
     assert "jsonrpc_endpoint" in authenticated_params
     assert "permission_reply_values" in authenticated_params
+
+
+@pytest.mark.parametrize(
+    "extension_uri",
+    [
+        SESSION_QUERY_EXTENSION_URI,
+        DISCOVERY_EXTENSION_URI,
+        THREAD_LIFECYCLE_EXTENSION_URI,
+        INTERRUPT_RECOVERY_EXTENSION_URI,
+        TURN_CONTROL_EXTENSION_URI,
+        REVIEW_CONTROL_EXTENSION_URI,
+        EXEC_CONTROL_EXTENSION_URI,
+        INTERRUPT_CALLBACK_EXTENSION_URI,
+    ],
+)
+def test_method_extensions_publish_machine_readable_activation_contract(
+    extension_uri: str,
+) -> None:
+    settings = make_settings(a2a_bearer_token="test-token")
+    card = build_authenticated_extended_agent_card(settings)
+    ext_by_uri = {extension.uri: extension for extension in card.capabilities.extensions or []}
+
+    activation = ext_by_uri[extension_uri].params["activation"]
+
+    assert activation["mode"] == "request_level"
+    assert activation["request_header"] == "A2A-Extensions"
+    assert activation["response_header"] == "A2A-Extensions"
+    assert activation["required_extension_uri"] == extension_uri
+    assert activation["response_behavior"] == {
+        "echo": "all_extensions_activated_for_request",
+        "ignore_requested_but_inactive_extensions": True,
+    }
+    assert activation["errors"]["negotiation_required"]["jsonrpc_code"] == -32004
+    assert activation["errors"]["negotiation_required"]["convention"] == "codex-a2a"
+    assert activation["errors"]["activation_forbidden"]["jsonrpc_code"] == -32004
+    assert activation["errors"]["activation_forbidden"]["convention"] == "codex-a2a"
+    assert activation["errors"]["policy_evaluation_failed"] == {
+        "a2a_error_type": "InternalError",
+        "jsonrpc_code": -32603,
+        "convention": "A2A_JSON_RPC",
+    }
 
 
 def test_extension_uris_map_to_repository_spec_index() -> None:
@@ -428,6 +488,25 @@ def test_extension_uris_map_to_repository_spec_index() -> None:
             f"Extension URI {uri!r} does not map to a checked-in spec document."
         )
         assert uri in index_text
+
+
+@pytest.mark.parametrize(
+    "extension_uri",
+    [
+        SESSION_QUERY_EXTENSION_URI,
+        DISCOVERY_EXTENSION_URI,
+        THREAD_LIFECYCLE_EXTENSION_URI,
+        INTERRUPT_RECOVERY_EXTENSION_URI,
+        TURN_CONTROL_EXTENSION_URI,
+        REVIEW_CONTROL_EXTENSION_URI,
+        EXEC_CONTROL_EXTENSION_URI,
+        INTERRUPT_CALLBACK_EXTENSION_URI,
+    ],
+)
+def test_guide_documents_method_extension_activation(extension_uri: str) -> None:
+    guide_text = Path("docs/guide.md").read_text()
+
+    assert f"A2A-Extensions: {extension_uri}" in guide_text
 
 
 def test_guide_mentions_declared_streaming_contract_fields() -> None:

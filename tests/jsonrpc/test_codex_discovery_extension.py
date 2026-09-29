@@ -3,13 +3,17 @@ from unittest.mock import AsyncMock
 import httpx
 import pytest
 
-from codex_a2a.contracts.extensions import EXTENSION_JSONRPC_PATH
+from codex_a2a.contracts.extensions import DISCOVERY_EXTENSION_URI, EXTENSION_JSONRPC_PATH
 from tests.support.dummy_clients import DummySessionQueryCodexClient as DummyCodexClient
 from tests.support.settings import make_settings
 
 _BASE_SETTINGS = {
     "codex_timeout": 1.0,
     "a2a_log_level": "DEBUG",
+}
+_EXTENSION_HEADERS = {
+    "Authorization": "Bearer t-1",
+    "A2A-Extensions": DISCOVERY_EXTENSION_URI,
 }
 
 
@@ -37,7 +41,7 @@ async def test_discovery_extension_routes_read_only_methods(monkeypatch) -> None
 
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-        headers = {"Authorization": "Bearer t-1"}
+        headers = _EXTENSION_HEADERS
         skills_response = await client.post(
             EXTENSION_JSONRPC_PATH,
             headers=headers,
@@ -135,7 +139,7 @@ async def test_discovery_responses_exclude_local_paths_and_raw_records(monkeypat
 
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-        headers = {"Authorization": "Bearer t-1"}
+        headers = _EXTENSION_HEADERS
         responses = []
         for method, request_id, params in (
             ("codex.discovery.skills.list", 401, {}),
@@ -187,7 +191,7 @@ async def test_discovery_watch_routes_to_runtime(monkeypatch) -> None:
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.post(
             EXTENSION_JSONRPC_PATH,
-            headers={"Authorization": "Bearer t-1"},
+            headers=_EXTENSION_HEADERS,
             json={
                 "jsonrpc": "2.0",
                 "id": 308,
@@ -220,7 +224,7 @@ async def test_experimental_plugin_discovery_is_disabled_by_default(monkeypatch)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.post(
             EXTENSION_JSONRPC_PATH,
-            headers={"Authorization": "Bearer t-1"},
+            headers=_EXTENSION_HEADERS,
             json={
                 "jsonrpc": "2.0",
                 "id": 309,
@@ -258,7 +262,7 @@ async def test_discovery_extension_rejects_invalid_request_shapes(monkeypatch) -
 
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-        headers = {"Authorization": "Bearer t-1"}
+        headers = _EXTENSION_HEADERS
         skills_response = await client.post(
             EXTENSION_JSONRPC_PATH,
             headers=headers,

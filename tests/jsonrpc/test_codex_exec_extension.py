@@ -3,9 +3,9 @@ from unittest.mock import ANY, AsyncMock
 import httpx
 import pytest
 
-from codex_a2a.contracts.extensions import EXTENSION_JSONRPC_PATH
+from codex_a2a.contracts.extensions import EXEC_CONTROL_EXTENSION_URI, EXTENSION_JSONRPC_PATH
 from tests.support.dummy_clients import DummySessionQueryCodexClient as DummyCodexClient
-from tests.support.http_auth import basic_auth_header as _basic_auth_header
+from tests.support.http_auth import basic_auth_header as _base_basic_auth_header
 from tests.support.jsonrpc_errors import (
     error_context as _error_context,
 )
@@ -18,6 +18,13 @@ _BASE_SETTINGS = {
     "codex_timeout": 1.0,
     "a2a_log_level": "DEBUG",
 }
+
+
+def _basic_auth_header(username: str, password: str) -> dict[str, str]:
+    return {
+        **_base_basic_auth_header(username, password),
+        "A2A-Extensions": EXEC_CONTROL_EXTENSION_URI,
+    }
 
 
 @pytest.mark.asyncio
@@ -360,7 +367,10 @@ async def test_exec_control_requires_exec_capability(monkeypatch) -> None:
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.post(
             EXTENSION_JSONRPC_PATH,
-            headers={"Authorization": "Bearer t-1"},
+            headers={
+                "Authorization": "Bearer t-1",
+                "A2A-Extensions": EXEC_CONTROL_EXTENSION_URI,
+            },
             json={
                 "jsonrpc": "2.0",
                 "id": 210,
