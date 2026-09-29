@@ -5,6 +5,7 @@ import hashlib
 import json
 import logging
 import uuid
+from contextlib import aclosing
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, TypeGuard
 
@@ -212,22 +213,23 @@ class CodexThreadLifecycleRuntime:
             }
         }
         try:
-            async for event in self._client.stream_events(stop_event=handle.stop_event):
-                payload = self._payload_from_event(event, handle=handle)
-                if payload is None:
-                    continue
-                await enqueue_artifact_update(
-                    event_queue=event_queue,
-                    task_id=handle.task_id,
-                    context_id=handle.context_id,
-                    artifact_id=f"{handle.task_id}:thread-lifecycle",
-                    part=new_data_part(payload),
-                    append=append,
-                    last_chunk=None,
-                    artifact_metadata=metadata,
-                    event_metadata=metadata,
-                )
-                append = True
+            async with aclosing(self._client.stream_events(stop_event=handle.stop_event)) as events:
+                async for event in events:
+                    payload = self._payload_from_event(event, handle=handle)
+                    if payload is None:
+                        continue
+                    await enqueue_artifact_update(
+                        event_queue=event_queue,
+                        task_id=handle.task_id,
+                        context_id=handle.context_id,
+                        artifact_id=f"{handle.task_id}:thread-lifecycle",
+                        part=new_data_part(payload),
+                        append=append,
+                        last_chunk=None,
+                        artifact_metadata=metadata,
+                        event_metadata=metadata,
+                    )
+                    append = True
         except asyncio.CancelledError:
             release_reason = "task_cancel"
             raise

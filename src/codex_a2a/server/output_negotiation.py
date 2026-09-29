@@ -1,19 +1,15 @@
 from __future__ import annotations
 
-import asyncio
 import json
 from collections.abc import Iterable
 from typing import Any, cast
 
-from a2a.server.events import EventConsumer
-from a2a.server.tasks import ResultAggregator, TaskManager
 from a2a.types import (
     Artifact,
     Message,
     Part,
     Task,
     TaskArtifactUpdateEvent,
-    TaskState,
     TaskStatusUpdateEvent,
 )
 from google.protobuf.message import Message as ProtoMessage  # type: ignore[import-untyped]
@@ -166,111 +162,6 @@ def apply_accepted_output_modes(
         return proto_with_updates(payload, parts=[])
 
     return payload
-
-
-class NegotiatingResultAggregator(ResultAggregator):
-    def __init__(
-        self,
-        task_manager: TaskManager,
-        accepted_output_modes: Iterable[str] | None,
-    ) -> None:
-        super().__init__(task_manager)
-        self._accepted_output_modes = normalize_accepted_output_modes(accepted_output_modes)
-
-    def _transform_event(self, event: Any) -> Any | None:
-        negotiated_event = apply_accepted_output_modes(event, self._accepted_output_modes)
-        if negotiated_event is None:
-            return None
-        return annotate_output_negotiation_metadata(negotiated_event, self._accepted_output_modes)
-
-    async def _persist_output_negotiation_metadata(self, event: Any) -> None:
-        if not isinstance(event, TaskArtifactUpdateEvent):
-            return
-
-        accepted_output_modes = extract_accepted_output_modes_from_metadata(event.metadata)
-        if accepted_output_modes is None:
-            return
-
-        task = await self.task_manager.ensure_task(event)
-        merged_metadata = merge_output_negotiation_metadata(task.metadata, accepted_output_modes)
-        if merged_metadata == task.metadata:
-            return
-        task.ClearField("metadata")
-        if merged_metadata is not None:
-            task.metadata.CopyFrom(merged_metadata)
-        await self.task_manager._save_task(task)
-
-    async def consume_and_emit(self, consumer: EventConsumer):  # noqa: ANN201
-        async for event in consumer.consume_all():
-            transformed_event = self._transform_event(event)
-            if transformed_event is None:
-                continue
-            await self._persist_output_negotiation_metadata(transformed_event)
-            await self.task_manager.process(transformed_event)
-            yield transformed_event
-
-    async def consume_all(self, consumer: EventConsumer) -> Task | Message | None:
-        async for event in consumer.consume_all():
-            transformed_event = self._transform_event(event)
-            if transformed_event is None:
-                continue
-            if isinstance(transformed_event, Message):
-                self._message = transformed_event
-                return transformed_event
-            await self._persist_output_negotiation_metadata(transformed_event)
-            await self.task_manager.process(transformed_event)
-        return await self.task_manager.get_task()
-
-    async def consume_and_break_on_interrupt(
-        self,
-        consumer: EventConsumer,
-        blocking: bool = True,
-        event_callback=None,  # noqa: ANN001
-    ) -> tuple[Task | Message | None, bool, asyncio.Task | None]:
-        event_stream = consumer.consume_all()
-        interrupted = False
-        bg_task: asyncio.Task | None = None
-        async for event in event_stream:
-            transformed_event = self._transform_event(event)
-            if transformed_event is None:
-                continue
-            if isinstance(transformed_event, Message):
-                self._message = transformed_event
-                return transformed_event, False, None
-            await self._persist_output_negotiation_metadata(transformed_event)
-            await self.task_manager.process(transformed_event)
-
-            should_interrupt = False
-            is_auth_required = (
-                isinstance(transformed_event, Task | TaskStatusUpdateEvent)
-                and transformed_event.status.state == TaskState.TASK_STATE_AUTH_REQUIRED
-            )
-            if is_auth_required:
-                should_interrupt = True
-            elif not blocking:
-                should_interrupt = True
-
-            if should_interrupt:
-                bg_task = asyncio.create_task(
-                    self._continue_consuming(event_stream, event_callback)
-                )
-                interrupted = True
-                break
-        return await self.task_manager.get_task(), interrupted, bg_task
-
-    async def _continue_consuming(
-        self,
-        event_stream,
-        event_callback=None,  # noqa: ANN001
-    ) -> None:
-        async for event in event_stream:
-            transformed_event = self._transform_event(event)
-            if transformed_event is None:
-                continue
-            await self._persist_output_negotiation_metadata(transformed_event)
-            await self.task_manager.process(transformed_event)
-            if event_callback:
-                await event_callback()
 
 
 def _filter_task(task: Task, accepted_modes: frozenset[str]) -> Task:

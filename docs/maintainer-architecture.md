@@ -74,6 +74,16 @@ flowchart TD
 -   **Session State**: Stores the binding of `context_id` to `session_id`.
 -   **Interrupt Store**: Stores pending interrupt requests to survive service restarts.
 
+## Background Streams and Shutdown
+
+Background streams use SDK Source/Sink queues: producers persist once before
+broadcasting, and slow or disconnected subscribers cannot block other consumers.
+Shutdown drains SDK and adapter tasks before closing clients and stores.
+
+Use the [standard upgrade procedure](./guide.md#released-cli-self-start) and restart;
+the task-store format is unchanged. SDK upgrade regressions run in normal CI and
+can be checked with `uv run pytest --no-cov tests/server/test_sdk_upgrade.py`.
+
 ## Configuration Layering
 
 Configuration is handled in `src/codex_a2a/config.py` using `pydantic-settings`. It is categorized by prefix:

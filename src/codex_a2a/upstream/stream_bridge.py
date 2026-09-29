@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
-from collections.abc import AsyncIterator, Awaitable, Callable
+from collections.abc import AsyncGenerator, Awaitable, Callable
 from typing import Any
 
 from codex_a2a.upstream.discovery_payloads import normalize_app_items
@@ -97,7 +97,7 @@ class CodexStreamEventBridge:
     async def stream_events(
         self,
         stop_event: asyncio.Event | None = None,
-    ) -> AsyncIterator[dict[str, Any]]:
+    ) -> AsyncGenerator[dict[str, Any], None]:
         queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue(maxsize=self._event_queue_maxsize)
         self._event_subscribers.add(queue)
         try:
