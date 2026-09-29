@@ -278,10 +278,13 @@ class CodexExecRuntime:
             )
         finally:
             handle.stop_event.set()
+            child_tasks: list[asyncio.Future] = [exec_task]
             if pending_event_task is not None:
-                pending_event_task.cancel()
-                with contextlib.suppress(asyncio.CancelledError):
-                    await pending_event_task
+                child_tasks.append(pending_event_task)
+            for child_task in child_tasks:
+                if not child_task.done():
+                    child_task.cancel()
+            await asyncio.gather(*child_tasks, return_exceptions=True)
 
     async def _emit_output_delta(
         self,

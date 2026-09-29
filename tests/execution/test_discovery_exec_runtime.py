@@ -396,3 +396,53 @@ async def test_exec_runtime_rejects_owner_mismatch_for_existing_session() -> Non
             close_stdin=False,
             owner_identity="owner-b",
         )
+
+
+@pytest.mark.asyncio
+async def test_exec_cancellation_drains_command_and_event_waiters() -> None:
+    started = asyncio.Event()
+    command_stopped = asyncio.Event()
+    events_started = asyncio.Event()
+    events_stopped = asyncio.Event()
+
+    class BlockingExecClient(ExecClientStub):
+        async def exec_start(self, *args, **kwargs):
+            started.set()
+            try:
+                await asyncio.Event().wait()
+            finally:
+                command_stopped.set()
+
+        async def stream_events(self, *args, **kwargs):
+            events_started.set()
+            try:
+                await asyncio.Event().wait()
+                yield {}
+            finally:
+                events_stopped.set()
+
+    client = BlockingExecClient(stream_events=[])
+    runtime = CodexExecRuntime(client=client, request_handler=RecordingRequestHandler())
+    handle = ExecSessionHandle(
+        process_id="exec-shutdown",
+        task_id="task-shutdown",
+        context_id="ctx-shutdown",
+        stop_event=asyncio.Event(),
+        command_text="bash",
+    )
+    producer = asyncio.create_task(
+        runtime._run_exec_session(
+            handle=handle,
+            request={"command": "bash", "process_id": handle.process_id},
+            directory=None,
+            event_queue=DummyEventQueue(),
+        )
+    )
+    await asyncio.wait_for(started.wait(), 2)
+    await asyncio.wait_for(events_started.wait(), 2)
+    producer.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await asyncio.wait_for(producer, 2)
+    assert command_stopped.is_set()
+    assert events_stopped.is_set()
+    assert client.exec_terminate_calls == [{"process_id": "exec-shutdown"}]

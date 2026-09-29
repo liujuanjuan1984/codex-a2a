@@ -7,7 +7,7 @@ import uuid
 from a2a.server.agent_execution.active_task import INTERRUPTED_TASK_STATES, TERMINAL_TASK_STATES
 from a2a.server.context import ServerCallContext
 from a2a.server.events import EventConsumer
-from a2a.server.events.event_queue import EventQueueLegacy
+from a2a.server.events.event_queue import EventQueue, EventQueueLegacy
 from a2a.server.events.queue_manager import QueueManager
 from a2a.server.request_handlers import DefaultRequestHandler
 from a2a.server.tasks import TaskManager
@@ -87,6 +87,12 @@ class _InMemoryQueueManager(QueueManager):
             return queue
         return await queue.tap()
 
+    async def aclose(self) -> None:
+        queues = list(self._queues.values())
+        self._queues.clear()
+        # No consumer is guaranteed to remain during server shutdown.
+        await asyncio.gather(*(queue.close(immediate=True) for queue in queues))
+
 
 class CodexRequestHandler(DefaultRequestHandler):
     """Harden request lifecycle behavior around cancel, subscribe, and disconnects."""
@@ -97,8 +103,33 @@ class CodexRequestHandler(DefaultRequestHandler):
         super().__init__(*args, **kwargs)
         self._task_output_modes: dict[str, frozenset[str]] = {}
         self._background_tasks: set[asyncio.Task] = set()
-        self._queue_manager: QueueManager = _InMemoryQueueManager()
+        self._queue_manager = _InMemoryQueueManager()
         self._producer_tasks: dict[str, asyncio.Task] = {}
+        self._lifecycle_lock = asyncio.Lock()
+        self._closed = False
+
+    async def aclose(self) -> None:
+        """Drain SDK tasks and adapter streams while their dependencies are alive."""
+        async with self._lifecycle_lock:
+            self._closed = True
+            try:
+                await super().aclose()
+            finally:
+                try:
+                    # Unblock producers, including cleanup that emits final events.
+                    await self._queue_manager.aclose()
+                finally:
+                    tasks = set(self._background_tasks) | set(self._producer_tasks.values())
+                    for task in tasks:
+                        if not task.done():
+                            task.cancel()
+                    results = await asyncio.gather(*tasks, return_exceptions=True)
+                    for result in results:
+                        if isinstance(result, Exception):
+                            logger.error("Error draining background stream", exc_info=result)
+                    self._background_tasks.clear()
+                    self._producer_tasks.clear()
+                    self._task_output_modes.clear()
 
     def _track_background_task(self, task: asyncio.Task) -> None:
         self._background_tasks.add(task)
@@ -143,6 +174,20 @@ class CodexRequestHandler(DefaultRequestHandler):
         context=None,
         producer,
     ) -> asyncio.Task:
+        async with self._lifecycle_lock:
+            if self._closed:
+                raise RuntimeError("CodexRequestHandler is closed")
+            return await self._start_background_task_stream(
+                task=task, context=context, producer=producer
+            )
+
+    async def _start_background_task_stream(
+        self,
+        *,
+        task: Task,
+        context=None,
+        producer,
+    ) -> asyncio.Task:
         store_context = self._task_store_context(context)
         await self.task_store.save(task, store_context)
         source_queue = await self._queue_manager.create_or_tap(task.id)
@@ -154,7 +199,7 @@ class CodexRequestHandler(DefaultRequestHandler):
             context=store_context,
         )
 
-        class _PersistingEventQueue:
+        class _PersistingEventQueue(EventQueue):
             async def enqueue_event(self, event) -> None:  # noqa: ANN001
                 await source_queue.enqueue_event(event)
                 await task_manager.process(event)

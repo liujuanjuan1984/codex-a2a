@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from contextlib import asynccontextmanager
+from contextlib import AsyncExitStack, asynccontextmanager
 from typing import Any
 
 import uvicorn
@@ -288,22 +288,24 @@ def create_app(settings: Settings) -> FastAPI:
             persistence_summary["database_url"],
             persistence_summary["sqlite_tuning"],
         )
-        await task_store_runtime.startup()
-        await push_config_store_runtime.startup()
-        await runtime_state_runtime.startup()
-        try:
+        async with AsyncExitStack() as cleanup:
+            if shared_database_engine is not None:
+                cleanup.push_async_callback(shared_database_engine.dispose)
+            await task_store_runtime.startup()
+            cleanup.push_async_callback(task_store_runtime.shutdown)
+            await push_config_store_runtime.startup()
+            cleanup.push_async_callback(push_config_store_runtime.shutdown)
+            await runtime_state_runtime.startup()
+            cleanup.push_async_callback(runtime_state_runtime.shutdown)
+            cleanup.push_async_callback(client.close)
+            cleanup.push_async_callback(a2a_client_manager.close_all)
+            # Callbacks run in reverse order. Producers may still need clients
+            # and stores while unwinding, even if another cleanup callback fails.
+            cleanup.push_async_callback(handler.aclose)
             await client.restore_persisted_interrupt_requests()
             await client.startup_preflight()
             await thread_lifecycle_runtime.reconcile_persisted_watches()
             yield
-        finally:
-            await a2a_client_manager.close_all()
-            await client.close()
-            await runtime_state_runtime.shutdown()
-            await push_config_store_runtime.shutdown()
-            await task_store_runtime.shutdown()
-            if shared_database_engine is not None:
-                await shared_database_engine.dispose()
 
     context_builder = IdentityAwareCallContextBuilder()
     jsonrpc_methods = {

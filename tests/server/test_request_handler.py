@@ -9,7 +9,6 @@ import pytest
 from a2a.server.context import ServerCallContext
 from a2a.server.events import EventConsumer
 from a2a.server.events.event_queue import EventQueue, EventQueueLegacy
-from a2a.server.events.queue_manager import QueueManager
 from a2a.server.tasks import TaskManager
 from a2a.server.tasks.inmemory_task_store import InMemoryTaskStore
 from a2a.types import (
@@ -677,27 +676,8 @@ async def test_resubscribe_applies_stored_output_negotiation_to_live_events() ->
 
     source_queue = EventQueueLegacy()
 
-    class _QueueManager(QueueManager):
-        async def add(self, task_id: str, queue: EventQueueLegacy) -> None:
-            del task_id, queue
-
-        async def get(self, task_id: str) -> EventQueueLegacy | None:
-            del task_id
-            return source_queue
-
-        async def tap(self, task_id):  # noqa: ANN001
-            assert task_id == "task-1"
-            return await source_queue.tap()
-
-        async def close(self, task_id: str) -> None:
-            del task_id
-
-        async def create_or_tap(self, task_id: str) -> EventQueueLegacy:
-            assert task_id == "task-1"
-            return source_queue
-
     handler = _make_handler(task_store=task_store)
-    handler._queue_manager = cast(QueueManager, _QueueManager())
+    await handler._queue_manager.add(task.id, source_queue)
 
     async def _enqueue_events() -> None:
         await asyncio.sleep(0)

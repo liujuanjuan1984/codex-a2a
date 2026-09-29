@@ -74,6 +74,35 @@ flowchart TD
 -   **Session State**: Stores the binding of `context_id` to `session_id`.
 -   **Interrupt Store**: Stores pending interrupt requests to survive service restarts.
 
+## Server Shutdown
+
+The ASGI lifespan closes resources in dependency order: request handler, outbound
+A2A clients, Codex client, runtime-state store, push-config store, task store, and
+finally the shared database engine. Cleanup continues through the remaining
+resources if one close operation raises. A startup failure also releases stores
+that have already started and the shared engine.
+
+`CodexRequestHandler.aclose()` first drains the SDK's active-task registry through
+`DefaultRequestHandler.aclose()`. It also closes the adapter's background-stream
+queues immediately, cancels and awaits its producers, and rejects new background
+streams after shutdown. This includes discovery, review, interactive exec, and
+thread lifecycle watches. Their cleanup runs while clients and stores remain
+available; interactive exec also drains its command and event waiters.
+
+Shutdown is resource cleanup, not an A2A `CancelTask` request: it does not promise
+that every persisted task changes to `CANCELED`, or that unfinished work resumes
+after a restart. Producers retain their existing task-state semantics.
+
+For a local lifecycle check without a live Codex process, run:
+
+```bash
+uv run pytest --no-cov tests/server/test_request_handler_lifecycle.py tests/execution/test_discovery_exec_runtime.py
+```
+
+The lifecycle tests cover real SDK early producer failure persistence and replay,
+active-task draining, undrained adapter queues, startup/close failures, and cleanup
+ordering. They do not replace production task-state monitoring.
+
 ## Configuration Layering
 
 Configuration is handled in `src/codex_a2a/config.py` using `pydantic-settings`. It is categorized by prefix:
