@@ -327,3 +327,35 @@ async def test_lifespan_releases_started_stores_if_later_startup_fails(monkeypat
     task_shutdown.assert_awaited_once()
     push_shutdown.assert_not_awaited()
     engine.dispose.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_shutdown_preserves_cleanup_of_already_cancelled_producer() -> None:
+    handler = _handler()
+    started = asyncio.Event()
+    cleaning = asyncio.Event()
+    release_cleanup = asyncio.Event()
+    cleaned = asyncio.Event()
+
+    async def producer(queue):
+        started.set()
+        try:
+            await asyncio.Event().wait()
+        finally:
+            cleaning.set()
+            await release_cleanup.wait()
+            cleaned.set()
+
+    stream = await handler.start_background_task_stream(task=_task(), producer=producer)
+    await started.wait()
+    stream.cancel()
+    await cleaning.wait()
+    closing = asyncio.create_task(handler.aclose())
+    try:
+        # A shutdown must wait for the pending finalizer, not cancel it again.
+        done, _ = await asyncio.wait({closing}, timeout=0.02)
+        assert not done
+    finally:
+        release_cleanup.set()
+        await asyncio.wait_for(closing, 2)
+    assert cleaned.is_set()

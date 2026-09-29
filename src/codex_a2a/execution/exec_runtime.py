@@ -282,9 +282,12 @@ class CodexExecRuntime:
             if pending_event_task is not None:
                 child_tasks.append(pending_event_task)
             for child_task in child_tasks:
-                if not child_task.done():
+                if not child_task.done() and not (
+                    isinstance(child_task, asyncio.Task) and child_task.cancelling()
+                ):
                     child_task.cancel()
             await asyncio.gather(*child_tasks, return_exceptions=True)
+            await stream_iter.aclose()
 
     async def _emit_output_delta(
         self,

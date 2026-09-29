@@ -2244,3 +2244,25 @@ async def test_dispatch_message_logs_with_pending_request_correlation_id(caplog)
         and record.correlation_id == "corr-rpc-7"
         for record in caplog.records
     )
+
+
+@pytest.mark.asyncio
+async def test_closing_event_iterator_immediately_releases_bridge_subscription(monkeypatch) -> None:
+    client = CodexClient(make_settings(a2a_bearer_token="test-token"))
+    monkeypatch.setattr(client, "_ensure_started", AsyncMock())
+    events = client.stream_events()
+    pending = asyncio.create_task(anext(events))
+    try:
+        await asyncio.sleep(0)
+        assert len(client._stream_bridge.event_subscribers) == 1
+        payload = {"type": "discovery.skills.changed", "properties": {}}
+        await client._stream_bridge.enqueue_stream_event(payload)
+        assert await asyncio.wait_for(pending, 2) == payload
+        await events.aclose()
+        assert not client._stream_bridge.event_subscribers
+    finally:
+        if not pending.done():
+            pending.cancel()
+        await asyncio.gather(pending, return_exceptions=True)
+        await events.aclose()
+        await client.close()

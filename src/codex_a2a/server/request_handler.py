@@ -121,7 +121,8 @@ class CodexRequestHandler(DefaultRequestHandler):
                 finally:
                     tasks = set(self._background_tasks) | set(self._producer_tasks.values())
                     for task in tasks:
-                        if not task.done():
+                        # A second cancel can interrupt persistence in a finalizer.
+                        if not task.done() and not task.cancelling():
                             task.cancel()
                     results = await asyncio.gather(*tasks, return_exceptions=True)
                     for result in results:

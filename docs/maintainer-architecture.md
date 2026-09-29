@@ -87,7 +87,10 @@ that have already started and the shared engine.
 queues immediately, cancels and awaits its producers, and rejects new background
 streams after shutdown. This includes discovery, review, interactive exec, and
 thread lifecycle watches. Their cleanup runs while clients and stores remain
-available; interactive exec also drains its command and event waiters.
+available; producers already handling cancellation are awaited without another
+cancel request that could interrupt their finalizers. Interactive exec also drains
+its command and event waiters. Watch and exec iterators explicitly close the
+upstream event subscription before producer cleanup finishes.
 
 Shutdown is resource cleanup, not an A2A `CancelTask` request: it does not promise
 that every persisted task changes to `CANCELED`, or that unfinished work resumes
@@ -96,7 +99,7 @@ after a restart. Producers retain their existing task-state semantics.
 For a local lifecycle check without a live Codex process, run:
 
 ```bash
-uv run pytest --no-cov tests/server/test_request_handler_lifecycle.py tests/execution/test_discovery_exec_runtime.py
+uv run pytest --no-cov tests/server/test_request_handler_lifecycle.py tests/execution/test_discovery_exec_runtime.py tests/execution/test_watch_lifecycle.py
 ```
 
 The lifecycle tests cover real SDK early producer failure persistence and replay,

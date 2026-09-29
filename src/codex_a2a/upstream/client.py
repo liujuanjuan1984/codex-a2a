@@ -4,7 +4,8 @@ import asyncio
 import logging
 import time
 import uuid
-from collections.abc import AsyncIterator, Mapping
+from collections.abc import AsyncGenerator, Mapping
+from contextlib import aclosing
 from typing import TYPE_CHECKING, Any
 
 from codex_a2a import __version__
@@ -272,11 +273,12 @@ class CodexClient:
 
     async def stream_events(
         self, stop_event: asyncio.Event | None = None, *, directory: str | None = None
-    ) -> AsyncIterator[dict[str, Any]]:
+    ) -> AsyncGenerator[dict[str, Any], None]:
         del directory
         await self._ensure_started()
-        async for event in self._stream_bridge.stream_events(stop_event=stop_event):
-            yield event
+        async with aclosing(self._stream_bridge.stream_events(stop_event=stop_event)) as events:
+            async for event in events:
+                yield event
 
     async def create_session(
         self,

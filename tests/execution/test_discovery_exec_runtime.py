@@ -446,3 +446,53 @@ async def test_exec_cancellation_drains_command_and_event_waiters() -> None:
     assert command_stopped.is_set()
     assert events_stopped.is_set()
     assert client.exec_terminate_calls == [{"process_id": "exec-shutdown"}]
+
+
+@pytest.mark.asyncio
+async def test_exec_cancellation_closes_event_iterator_suspended_at_yield() -> None:
+    emitting = asyncio.Event()
+    stream_closed = asyncio.Event()
+
+    class YieldingExecClient(ExecClientStub):
+        async def exec_start(self, *args, **kwargs):
+            await asyncio.Event().wait()
+
+        async def stream_events(self, *args, **kwargs):
+            try:
+                yield {
+                    "type": "exec.output.delta",
+                    "properties": {"process_id": "exec-1", "stream": "stdout"},
+                }
+            finally:
+                stream_closed.set()
+
+    class BlockingQueue(DummyEventQueue):
+        async def enqueue_event(self, event):
+            emitting.set()
+            await asyncio.Event().wait()
+
+    client = YieldingExecClient(stream_events=[])
+    runtime = CodexExecRuntime(client=client, request_handler=RecordingRequestHandler())
+    handle = ExecSessionHandle(
+        process_id="exec-1",
+        task_id="task-1",
+        context_id="ctx-1",
+        stop_event=asyncio.Event(),
+        command_text="bash",
+    )
+    stream = client.stream_events()
+    # Retain the iterator as a caller may do: cleanup cannot depend on GC.
+    client.stream_events = lambda **kwargs: stream
+    producer = asyncio.create_task(
+        runtime._run_exec_session(
+            handle=handle, request={}, directory=None, event_queue=BlockingQueue()
+        )
+    )
+    try:
+        await asyncio.wait_for(emitting.wait(), 2)
+        producer.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await producer
+        assert stream_closed.is_set()
+    finally:
+        await stream.aclose()
