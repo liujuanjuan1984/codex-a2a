@@ -74,7 +74,7 @@ When a TCK run fails, inspect the raw report before changing the runtime:
 
 - Some failures may point to real runtime gaps.
 - Some failures may reflect an outdated embedded specification or a TCK-specific interpretation. Resolve those disagreements against the latest compatible released A2A specification.
-- Some failures may come from TCK assumptions that do not match `a2a-sdk==1.1.2`.
+- Some failures may come from TCK assumptions that do not match `a2a-sdk==1.1.4`.
 - Some failures may come from older A2A naming or schema expectations that no longer match the repository's `1.0` contract.
 - Some failures may be local experiment artifacts from the dummy-backed runtime.
 
