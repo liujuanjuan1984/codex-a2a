@@ -103,6 +103,11 @@ The lifecycle tests cover real SDK early producer failure persistence and replay
 active-task draining, undrained adapter queues, startup/close failures, and cleanup
 ordering. They do not replace production task-state monitoring.
 
+Background-stream subscriptions still use the SDK's `EventQueueLegacy`; its future
+removal requires a queue migration tracked in
+[#338](https://github.com/liujuanjuan1984/codex-a2a/issues/338). Executors and the
+adapter's persisting producer queue use the public `EventQueue` interface.
+
 ## Configuration Layering
 
 Configuration is handled in `src/codex_a2a/config.py` using `pydantic-settings`. It is categorized by prefix:

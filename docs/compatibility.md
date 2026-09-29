@@ -17,14 +17,6 @@ This document explains the compatibility promises this repository currently trie
 
 The repository pins the SDK version in `pyproject.toml` and validates the published CLI build in CI. Upgrade the SDK deliberately rather than relying on floating dependency resolution.
 
-SDK lifecycle follow-up is tracked in [#338](https://github.com/liujuanjuan1984/codex-a2a/issues/338).
-The server integrates `DefaultRequestHandler.aclose()` and drains adapter-owned
-background streams before closing their clients and stores. Early producer failure
-persistence is covered by regression tests. The pinned SDK still provides
-`EventQueueLegacy`, which the adapter uses for background-stream subscriptions;
-its future removal still requires a queue migration. Executors accept the public
-`EventQueue` interface, and the adapter's persisting producer queue subclasses it.
-
 This repository is an independent community project. The [A2A Protocol project](https://github.com/a2aproject/A2A), its official SDK, and the OpenAI Codex CLI are upstream dependencies or specifications, not organizational ownership or endorsement of `codex-a2a`. OpenAI's [open-source component list](https://developers.openai.com/codex/open-source) identifies the IDE extension and Codex cloud as not open source. Desktop and web products are also separate product surfaces; their availability and behavior are not inherited from the open-source CLI/App Server contract and are outside this compatibility matrix.
 
 The OpenAPI-published compatibility profile and wire contract publish `default_protocol_version`, `supported_protocol_versions`, and `protocol_compatibility`. Request-time `A2A-Version` negotiation now targets the repository's `1.0` baseline only, and the published contracts should describe the implemented `1.0` transport surface rather than any legacy compatibility line.
