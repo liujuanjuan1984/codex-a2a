@@ -146,15 +146,24 @@ async def test_aclose_drains_adapter_streams_and_undrained_queues(
 
 
 @pytest.mark.asyncio
-async def test_aclose_drains_stream_cancelled_before_first_execution() -> None:
+async def test_immediate_stream_cancellation_closes_dispatcher() -> None:
     handler = _handler()
-    producer = AsyncMock()
+
+    async def wait_for_cancel(queue):
+        await asyncio.Event().wait()
+
+    producer = AsyncMock(side_effect=wait_for_cancel)
     stream = await handler.start_background_task_stream(task=_task(), producer=producer)
-    stream.cancel()
-    await asyncio.wait_for(handler.aclose(), 2)
-    assert stream.cancelled()
-    producer.assert_not_awaited()
-    assert await handler._queue_manager.get("background") is None
+    source = await handler._queue_manager.get("background")
+    try:
+        stream.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await stream
+        producer.assert_not_awaited()
+        assert source._dispatcher_task.done()
+        assert source.is_closed()
+    finally:
+        await handler.aclose()
 
 
 @pytest.mark.asyncio

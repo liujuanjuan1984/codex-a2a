@@ -203,9 +203,14 @@ class CodexRequestHandler(DefaultRequestHandler):
             async def close(self) -> None:
                 await source_queue.close(immediate=True)
 
+        started = asyncio.Event()
+        run_producer = asyncio.Event()
+
         async def _run_stream() -> None:
             queue = _PersistingEventQueue()
             try:
+                started.set()
+                await run_producer.wait()
                 await producer(queue)
             except TaskStoreOperationError:
                 raise
@@ -239,6 +244,11 @@ class CodexRequestHandler(DefaultRequestHandler):
         stream_task.set_name(f"background_stream:{task.id}")
         await self._register_producer(task.id, stream_task)
         self._track_background_task(stream_task)
+        # Enter the cleanup scope before exposing a cancellable task handle.
+        try:
+            await started.wait()
+        finally:
+            run_producer.set()
         return stream_task
 
     @classmethod
