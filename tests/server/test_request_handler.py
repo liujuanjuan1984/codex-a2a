@@ -27,7 +27,12 @@ from a2a.types import (
     TaskStatus,
     TaskStatusUpdateEvent,
 )
-from a2a.utils.errors import InternalError, UnsupportedOperationError
+from a2a.utils.errors import (
+    InternalError,
+    InvalidParamsError,
+    TaskNotFoundError,
+    UnsupportedOperationError,
+)
 
 from codex_a2a.a2a_proto import (
     new_data_part,
@@ -542,7 +547,13 @@ async def test_message_send_stream_filters_unaccepted_output_parts_to_text() -> 
 
 
 @pytest.mark.asyncio
-async def test_get_task_applies_stored_output_negotiation() -> None:
+@pytest.mark.parametrize(
+    ("history_length", "expected_ids"),
+    [(None, ["m-1", "m-2"]), (0, []), (1, ["m-2"]), (10, ["m-1", "m-2"])],
+)
+async def test_get_task_applies_stored_output_negotiation(
+    history_length: int | None, expected_ids: list[str]
+) -> None:
     task_store = InMemoryTaskStore()
     task = Task(
         id="task-1",
@@ -561,15 +572,61 @@ async def test_get_task_applies_stored_output_negotiation() -> None:
                 parts=[new_data_part({"kind": "state", "tool": "bash"})],
             )
         ],
+        history=[
+            Message(
+                message_id=message_id,
+                role=Role.ROLE_AGENT,
+                parts=[new_data_part({"kind": "state", "tool": "bash"})],
+            )
+            for message_id in ("m-1", "m-2")
+        ],
         metadata=merge_output_negotiation_metadata(None, ["text/plain"]),
     )
     await task_store.save(task, _server_context())
     handler = _make_handler(task_store=task_store)
 
-    result = await handler.on_get_task(GetTaskRequest(id="task-1"))
+    params = GetTaskRequest(id="task-1")
+    if history_length is not None:
+        params.history_length = history_length
+    result = await handler.on_get_task(params)
 
     assert part_text(result.status.message.parts[0]) == '{"kind":"state","tool":"bash"}'
     assert part_text(result.artifacts[0].parts[0]) == '{"kind":"state","tool":"bash"}'
+    assert [message.message_id for message in result.history] == expected_ids
+    assert all(
+        part_text(message.parts[0]) == '{"kind":"state","tool":"bash"}'
+        for message in result.history
+    )
+    stored_task = await task_store.get("task-1", _server_context())
+    assert stored_task is not None
+    assert [message.message_id for message in stored_task.history] == ["m-1", "m-2"]
+    assert stored_task.artifacts[0].parts[0].WhichOneof("content") == "data"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "params", [GetTaskRequest(), GetTaskRequest(id="task-1", history_length=-1)]
+)
+async def test_get_task_validates_request_before_accessing_store(params: GetTaskRequest) -> None:
+    task_store = _mock_task_store()
+    handler = _make_handler(task_store=task_store)
+
+    with pytest.raises(InvalidParamsError):
+        await handler.on_get_task(params)
+
+    task_store.get.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_get_task_preserves_context_and_missing_task_error() -> None:
+    task_store = _mock_task_store()
+    handler = _make_handler(task_store=task_store)
+    context = _server_context()
+
+    with pytest.raises(TaskNotFoundError):
+        await handler.on_get_task(GetTaskRequest(id="missing"), context)
+
+    task_store.get.assert_awaited_once_with("missing", context)
 
 
 @pytest.mark.asyncio
