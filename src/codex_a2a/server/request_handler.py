@@ -10,7 +10,6 @@ from a2a.server.events import EventConsumer
 from a2a.server.events.event_queue import EventQueueLegacy
 from a2a.server.events.queue_manager import QueueManager
 from a2a.server.request_handlers import DefaultRequestHandler
-from a2a.server.request_handlers.default_request_handler_v2 import validate_history_length
 from a2a.server.tasks import TaskManager
 from a2a.types import (
     Artifact,
@@ -119,17 +118,10 @@ class CodexRequestHandler(DefaultRequestHandler):
     ):
         store_context = self._task_store_context(context)
         try:
-            # The A2A SDK currently validates GetTaskRequest through a protobuf
-            # field API that is incompatible with protobuf 7.x. Mirror the small
-            # upstream get-task flow here so the server remains usable on current deps.
-            validate_history_length(params)
-            task = await self.task_store.get(params.id, store_context)
-            if task is None:
-                raise TaskNotFoundError()
+            task = await super().on_get_task(params, store_context)
             accepted_output_modes = self._accepted_output_modes_for_task(
                 task_id=params.id, task=task
             )
-            task = apply_history_length(task, params)
             return apply_accepted_output_modes(task, accepted_output_modes)
         except TaskStoreOperationError as exc:
             raise self._task_store_server_error(exc) from exc

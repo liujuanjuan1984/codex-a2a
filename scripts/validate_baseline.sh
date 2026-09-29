@@ -19,8 +19,9 @@ run_pip_audit() {
     if XDG_CACHE_HOME="${audit_cache_dir}" uv run pip-audit --requirement "${requirement_file}"; then
       rm -rf "${audit_cache_dir}"
       return 0
+    else
+      status=$?
     fi
-    status=$?
     rm -rf "${audit_cache_dir}"
     if [[ "${attempt}" -ge "${max_attempts}" ]]; then
       echo "pip-audit failed after ${attempt} attempts" >&2

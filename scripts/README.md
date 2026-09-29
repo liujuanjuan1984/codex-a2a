@@ -38,6 +38,7 @@ The `Publish` workflow now separates build, PyPI publish, and GitHub Release syn
 - `validate_baseline.sh` now includes a conservative private dead-code check before type-checking and test execution.
 - `audit_low_call_sites.py` is intentionally advisory only. Use it to surface low-call-count candidates, then inspect the actual consumer chain before removing an abstraction.
 - `validate_baseline.sh` now blocks on runtime dependency vulnerability audit, while `dependency_health.sh` remains focused on broader dependency review (`outdated` + dev audit).
+- The baseline makes up to three runtime audit attempts (the initial attempt plus at most two retries), with a fresh cache per attempt. If every attempt fails, it returns the last audit exit code and stops before package build and wheel smoke testing. A successful retry allows validation to continue.
 - [`.github/dependabot.yml`](../.github/dependabot.yml) prefers a single weekly grouped Dependabot PR for `uv`, while the repository scripts remain the explicit audit and validation entrypoints.
 - End-user runtime startup does not use repository scripts. Prefer the published CLI command documented in [README.md](../README.md) and [docs/guide.md](../docs/guide.md).
 - Keep long-form documentation changes in `docs/` to avoid divergence.
