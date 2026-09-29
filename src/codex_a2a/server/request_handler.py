@@ -3,12 +3,12 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
+from contextlib import aclosing
 
 from a2a.server.agent_execution.active_task import INTERRUPTED_TASK_STATES, TERMINAL_TASK_STATES
 from a2a.server.context import ServerCallContext
-from a2a.server.events import EventConsumer
-from a2a.server.events.event_queue import EventQueue, EventQueueLegacy
-from a2a.server.events.queue_manager import QueueManager
+from a2a.server.events.event_queue import EventQueue, QueueShutDown
+from a2a.server.events.event_queue_v2 import EventQueueSource
 from a2a.server.request_handlers import DefaultRequestHandler
 from a2a.server.tasks import TaskManager
 from a2a.types import (
@@ -41,7 +41,6 @@ from codex_a2a.metrics import (
     get_metrics_registry,
 )
 from codex_a2a.server.output_negotiation import (
-    NegotiatingResultAggregator,
     annotate_output_negotiation_metadata,
     apply_accepted_output_modes,
     extract_accepted_output_modes_from_metadata,
@@ -58,39 +57,29 @@ logger = logging.getLogger(__name__)
 _CANCELED_TASK_STATES = frozenset({TaskState.TASK_STATE_CANCELED})
 
 
-class _InMemoryQueueManager(QueueManager):
+_BACKGROUND_STREAM_DRAIN_TIMEOUT_SECONDS = 1.0
+
+
+class _BackgroundQueueManager:
+    """Adapter-owned registry, independent of the SDK's legacy QueueManager."""
+
     def __init__(self) -> None:
-        self._queues: dict[str, EventQueueLegacy] = {}
+        self._queues: dict[str, EventQueueSource] = {}
 
-    async def add(self, task_id: str, queue: EventQueueLegacy) -> None:
-        self._queues[task_id] = queue
-
-    async def get(self, task_id: str) -> EventQueueLegacy | None:
+    async def get(self, task_id: str) -> EventQueueSource | None:
         return self._queues.get(task_id)
 
-    async def tap(self, task_id: str) -> EventQueueLegacy | None:
-        queue = self._queues.get(task_id)
-        if queue is None:
-            return None
-        return await queue.tap()
-
-    async def close(self, task_id: str) -> None:
-        queue = self._queues.pop(task_id, None)
-        if queue is not None:
-            await queue.close()
-
-    async def create_or_tap(self, task_id: str) -> EventQueueLegacy:
-        queue = self._queues.get(task_id)
-        if queue is None:
-            queue = EventQueueLegacy()
-            self._queues[task_id] = queue
-            return queue
-        return await queue.tap()
+    async def create(self, task_id: str) -> EventQueueSource:
+        if task_id in self._queues:
+            raise ValueError(f"Background stream already exists: {task_id}")
+        # Persistence is handled by the producer; there is no default consumer.
+        queue = EventQueueSource(create_default_sink=False)
+        self._queues[task_id] = queue
+        return queue
 
     async def aclose(self) -> None:
         queues = list(self._queues.values())
         self._queues.clear()
-        # No consumer is guaranteed to remain during server shutdown.
         await asyncio.gather(*(queue.close(immediate=True) for queue in queues))
 
 
@@ -103,7 +92,7 @@ class CodexRequestHandler(DefaultRequestHandler):
         super().__init__(*args, **kwargs)
         self._task_output_modes: dict[str, frozenset[str]] = {}
         self._background_tasks: set[asyncio.Task] = set()
-        self._queue_manager = _InMemoryQueueManager()
+        self._queue_manager = _BackgroundQueueManager()
         self._producer_tasks: dict[str, asyncio.Task] = {}
         self._lifecycle_lock = asyncio.Lock()
         self._closed = False
@@ -178,6 +167,8 @@ class CodexRequestHandler(DefaultRequestHandler):
         async with self._lifecycle_lock:
             if self._closed:
                 raise RuntimeError("CodexRequestHandler is closed")
+            if await self._queue_manager.get(task.id) is not None:
+                raise ValueError(f"Background stream already exists: {task.id}")
             return await self._start_background_task_stream(
                 task=task, context=context, producer=producer
             )
@@ -191,7 +182,7 @@ class CodexRequestHandler(DefaultRequestHandler):
     ) -> asyncio.Task:
         store_context = self._task_store_context(context)
         await self.task_store.save(task, store_context)
-        source_queue = await self._queue_manager.create_or_tap(task.id)
+        source_queue = await self._queue_manager.create(task.id)
         task_manager = TaskManager(
             task_id=task.id,
             context_id=task.context_id,
@@ -200,19 +191,49 @@ class CodexRequestHandler(DefaultRequestHandler):
             context=store_context,
         )
 
+        accepted_output_modes = self._accepted_output_modes_for_task(task_id=task.id, task=task)
+
         class _PersistingEventQueue(EventQueue):
             async def enqueue_event(self, event) -> None:  # noqa: ANN001
-                await source_queue.enqueue_event(event)
+                event = annotate_output_negotiation_metadata(event, accepted_output_modes)
+                # Persist once, before broadcasting. Subscribers only project events.
                 await task_manager.process(event)
+                await source_queue.enqueue_event(event)
 
             async def close(self) -> None:
                 await source_queue.close(immediate=True)
 
         async def _run_stream() -> None:
+            queue = _PersistingEventQueue()
             try:
-                await producer(_PersistingEventQueue())
+                await producer(queue)
+            except TaskStoreOperationError:
+                raise
+            except Exception:
+                current_task = await self.task_store.get(task.id, store_context)
+                if (
+                    current_task is not None
+                    and current_task.status.state not in TERMINAL_TASK_STATES
+                ):
+                    await queue.enqueue_event(
+                        TaskStatusUpdateEvent(
+                            task_id=task.id,
+                            context_id=task.context_id,
+                            status=TaskStatus(state=TaskState.TASK_STATE_FAILED),
+                        )
+                    )
+                raise
             finally:
-                await source_queue.close(immediate=True)
+                try:
+                    # Let healthy subscribers receive the final events; never wait
+                    # indefinitely for an abandoned sink to acknowledge its buffer.
+                    if not self._closed:
+                        async with asyncio.timeout(_BACKGROUND_STREAM_DRAIN_TIMEOUT_SECONDS):
+                            await source_queue.close()
+                except TimeoutError:
+                    logger.warning("Background stream drain timed out task_id=%s", task.id)
+                finally:
+                    await source_queue.close(immediate=True)
 
         stream_task = asyncio.create_task(_run_stream())
         stream_task.set_name(f"background_stream:{task.id}")
@@ -439,28 +460,42 @@ class CodexRequestHandler(DefaultRequestHandler):
                 task_id=params.id,
                 task=task,
             )
-            queue = await self._queue_manager.tap(task.id)
-            if queue is None:
-                async for event in super().on_subscribe_to_task(params, store_context):
-                    negotiated_event = apply_accepted_output_modes(event, accepted_output_modes)
-                    if negotiated_event is None:
-                        continue
-                    yield negotiated_event
+            source = await self._queue_manager.get(task.id)
+            if source is None:
+                async with aclosing(
+                    super().on_subscribe_to_task(params, store_context)
+                ) as subscription:
+                    async for event in subscription:
+                        negotiated_event = apply_accepted_output_modes(event, accepted_output_modes)
+                        if negotiated_event is None:
+                            continue
+                        yield negotiated_event
                 return
 
-            task_manager = TaskManager(
-                task_id=task.id,
-                context_id=task.context_id,
-                task_store=self.task_store,
-                initial_message=None,
-                context=store_context,
-            )
-            result_aggregator = NegotiatingResultAggregator(task_manager, accepted_output_modes)
-            consumer = EventConsumer(queue)
-            async for event in result_aggregator.consume_and_emit(consumer):
-                yield event
-                if self._is_terminal_subscription_event(event):
-                    return
+            try:
+                queue = await source.tap(evict_on_full=True)
+            except QueueShutDown:
+                # The producer may have finished after the initial snapshot read.
+                refreshed = await self.on_get_task(GetTaskRequest(id=task.id), store_context)
+                if refreshed is not None:
+                    yield refreshed
+                return
+            try:
+                while True:
+                    try:
+                        event = await queue.dequeue_event()
+                    except QueueShutDown:
+                        return
+                    queue.task_done()
+                    negotiated_event = apply_accepted_output_modes(event, accepted_output_modes)
+                    if negotiated_event is not None:
+                        yield annotate_output_negotiation_metadata(
+                            negotiated_event, accepted_output_modes
+                        )
+                    if self._is_terminal_subscription_event(event):
+                        return
+            finally:
+                await queue.close(immediate=True)
         except TaskStoreOperationError as exc:
             raise self._task_store_server_error(exc) from exc
 
@@ -469,8 +504,9 @@ class CodexRequestHandler(DefaultRequestHandler):
         params: SubscribeToTaskRequest,
         context=None,
     ):
-        async for event in self.on_subscribe_to_task(params, context):
-            yield event
+        async with aclosing(self.on_subscribe_to_task(params, context)) as subscription:
+            async for event in subscription:
+                yield event
 
     @staticmethod
     def _is_terminal_subscription_event(event: object) -> bool:

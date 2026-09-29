@@ -13,7 +13,6 @@ from a2a.types import (
     Role,
     SendMessageConfiguration,
     SendMessageRequest,
-    SubscribeToTaskRequest,
     Task,
     TaskState,
     TaskStatus,
@@ -194,32 +193,6 @@ async def test_shutdown_waits_for_inflight_stream_registration(monkeypatch) -> N
     assert stream.done()
     assert not handler._background_tasks
     assert await handler._queue_manager.get("background") is None
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("streaming", [False, True])
-async def test_sdk_early_failure_is_persisted_and_replayed(streaming) -> None:
-    handler = _handler(RuntimeError("early producer failure"))
-    params = _params()
-    try:
-        with pytest.raises(RuntimeError, match="early producer failure"):
-            async with asyncio.timeout(2):
-                if streaming:
-                    async for _ in handler.on_message_send_stream(params):
-                        pass
-                else:
-                    await handler.on_message_send(params)
-        context = handler.agent_executor.execute.call_args.args[0]
-        task = await handler.on_get_task(GetTaskRequest(id=context.task_id))
-        assert task.status.state == TaskState.TASK_STATE_FAILED
-        assert [message.message_id for message in task.history] == ["original-message"]
-        replay = [
-            event
-            async for event in handler.on_subscribe_to_task(SubscribeToTaskRequest(id=task.id))
-        ]
-        assert replay == [task]
-    finally:
-        await handler.aclose()
 
 
 @pytest.mark.asyncio

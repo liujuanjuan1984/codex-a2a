@@ -2,14 +2,11 @@ from __future__ import annotations
 
 import asyncio
 from types import SimpleNamespace
-from typing import cast
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from a2a.server.context import ServerCallContext
-from a2a.server.events import EventConsumer
-from a2a.server.events.event_queue import EventQueue, EventQueueLegacy
-from a2a.server.tasks import TaskManager
+from a2a.server.events.event_queue import EventQueue
 from a2a.server.tasks.inmemory_task_store import InMemoryTaskStore
 from a2a.types import (
     Artifact,
@@ -42,7 +39,6 @@ from codex_a2a.a2a_proto import (
 from codex_a2a.contracts.runtime_output import build_interrupt_metadata, build_output_metadata
 from codex_a2a.server.agent_card import build_agent_card
 from codex_a2a.server.output_negotiation import (
-    NegotiatingResultAggregator,
     merge_output_negotiation_metadata,
 )
 from codex_a2a.server.request_handler import CodexRequestHandler
@@ -631,14 +627,13 @@ async def test_get_task_preserves_context_and_missing_task_error() -> None:
 @pytest.mark.asyncio
 async def test_artifact_only_task_persists_output_negotiation_metadata() -> None:
     task_store = InMemoryTaskStore()
-    task_manager = TaskManager(
-        task_id="task-1",
+    handler = _make_handler(task_store=task_store)
+    task = Task(
+        id="task-1",
         context_id="ctx-1",
-        task_store=task_store,
-        initial_message=None,
-        context=_server_context(),
+        status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
+        metadata=merge_output_negotiation_metadata(None, ["text/plain"]),
     )
-    aggregator = NegotiatingResultAggregator(task_manager, ["text/plain"])
     event = TaskArtifactUpdateEvent(
         task_id="task-1",
         context_id="ctx-1",
@@ -650,13 +645,12 @@ async def test_artifact_only_task_persists_output_negotiation_metadata() -> None
         last_chunk=True,
     )
 
-    class _Consumer:
-        async def consume_all(self):  # noqa: ANN201
-            yield event
+    async def producer(queue):
+        await queue.enqueue_event(event)
 
-    await aggregator.consume_all(cast(EventConsumer, _Consumer()))
-
-    handler = _make_handler(task_store=task_store)
+    stream = await handler.start_background_task_stream(task=task, producer=producer)
+    await stream
+    await handler.aclose()
     result = await handler.on_get_task(GetTaskRequest(id="task-1"))
 
     assert part_text(result.artifacts[0].parts[0]) == '{"kind":"state","tool":"bash"}'
@@ -674,10 +668,8 @@ async def test_resubscribe_applies_stored_output_negotiation_to_live_events() ->
     )
     await task_store.save(task, _server_context())
 
-    source_queue = EventQueueLegacy()
-
     handler = _make_handler(task_store=task_store)
-    await handler._queue_manager.add(task.id, source_queue)
+    source_queue = await handler._queue_manager.create(task.id)
 
     async def _enqueue_events() -> None:
         await asyncio.sleep(0)
@@ -706,6 +698,7 @@ async def test_resubscribe_applies_stored_output_negotiation_to_live_events() ->
         event async for event in handler.on_resubscribe_to_task(SubscribeToTaskRequest(id="task-1"))
     ]
     await producer_task
+    await handler.aclose()
 
     assert len(events) == 2
     assert (
