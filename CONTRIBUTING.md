@@ -72,6 +72,8 @@ bash -n scripts/smoke_test_built_cli.sh
 
 If `pre-commit` rewrites files, review the rewritten output and re-run the checks until the working tree is clean.
 
+Do not silence signals with global suppressions. `pytest` `filterwarnings` `ignore:` entries and `mypy` `follow_imports = silent` hide real failures or drift; scope the fix instead (for example `[mypy-<package>.*] ignore_missing_imports = True`) so the gate keeps reporting everything else.
+
 Ruff's version is declared in the `dev` extra in `pyproject.toml` and resolved in `uv.lock`. The local pre-commit hooks run `uv run --locked --extra dev ruff`, so direct commands, hooks, and CI use the same project dependency. To upgrade Ruff, update that dependency and regenerate `uv.lock`; there is no separate Ruff hook revision to maintain.
 
 ## Compatibility Expectations
