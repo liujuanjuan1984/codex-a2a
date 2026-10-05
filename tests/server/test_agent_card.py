@@ -3,6 +3,7 @@ from typing import Any
 from a2a.types import AgentExtension, AgentSkill
 
 from codex_a2a.a2a_proto import proto_to_python
+from codex_a2a.contracts.extension_activation import build_method_extension_activation_contract
 from codex_a2a.contracts.extension_registry import build_openapi_extension_contracts_from_registry
 from codex_a2a.contracts.extensions import (
     COMPATIBILITY_PROFILE_EXTENSION_URI,
@@ -310,6 +311,7 @@ def test_public_agent_card_minimizes_provider_private_contracts() -> None:
             "request_id_scope": "active_pending_interrupt_request",
             "owner_validation": "session_owner_match_when_session_binding_available",
         },
+        "activation": build_method_extension_activation_contract(INTERRUPT_CALLBACK_EXTENSION_URI),
     }
 
 

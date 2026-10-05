@@ -11,7 +11,10 @@ from a2a.server.routes.common import StarletteUser
 from a2a.types import Task, TaskPushNotificationConfig, TaskState, TaskStatus
 from starlette.authentication import SimpleUser
 
-from codex_a2a.contracts.extensions import EXTENSION_JSONRPC_PATH
+from codex_a2a.contracts.extensions import (
+    EXTENSION_JSONRPC_PATH,
+    INTERRUPT_CALLBACK_EXTENSION_URI,
+)
 from tests.support.settings import make_settings
 
 
@@ -255,7 +258,10 @@ async def test_database_backend_persists_task_session_and_interrupt_state_across
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
             response = await client.post(
                 EXTENSION_JSONRPC_PATH,
-                headers={"Authorization": "Bearer test-token"},
+                headers={
+                    "Authorization": "Bearer test-token",
+                    "A2A-Extensions": INTERRUPT_CALLBACK_EXTENSION_URI,
+                },
                 json={
                     "jsonrpc": "2.0",
                     "id": 1,
