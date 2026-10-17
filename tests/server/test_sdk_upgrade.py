@@ -77,7 +77,10 @@ async def runtime(request, tmp_path):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("streaming", [False, True])
-async def test_early_failure_persists_once_and_terminal_task_cannot_restart(runtime, streaming):
+@pytest.mark.parametrize("restart_streaming", [False, True])
+async def test_early_failure_persists_once_and_terminal_task_cannot_restart(
+    runtime, streaming, restart_streaming
+):
     handler, _, _ = runtime
     params = SendMessageRequest(
         message=Message(
@@ -99,8 +102,15 @@ async def test_early_failure_persists_once_and_terminal_task_cannot_restart(runt
     assert snapshot.status.state == TaskState.TASK_STATE_FAILED
     assert [message.message_id for message in snapshot.history] == ["message"]
     params.message.task_id = task_id
-    with pytest.raises(InvalidParamsError):
-        await handler.on_message_send(params)
+    with pytest.raises(InvalidParamsError) as exc_info:
+        if restart_streaming:
+            async for _ in handler.on_message_send_stream(params):
+                pass
+        else:
+            await handler.on_message_send(params)
+    assert "terminal state" in (exc_info.value.message or "")
+    assert exc_info.value.data is not None
+    assert exc_info.value.data["reason"] == "terminal_task_cannot_restart"
     handler.agent_executor.execute.assert_awaited_once()
     assert [
         event async for event in handler.on_subscribe_to_task(SubscribeToTaskRequest(id=task_id))

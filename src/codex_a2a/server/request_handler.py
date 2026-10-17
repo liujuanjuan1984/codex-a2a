@@ -6,11 +6,12 @@ import uuid
 from contextlib import aclosing
 
 from a2a.server.agent_execution.active_task import INTERRUPTED_TASK_STATES, TERMINAL_TASK_STATES
+from a2a.server.cluster.task_store import VersionedTaskStore
 from a2a.server.context import ServerCallContext
 from a2a.server.events.event_queue import EventQueue, QueueShutDown
 from a2a.server.events.event_queue_v2 import EventQueueSource
 from a2a.server.request_handlers import DefaultRequestHandler
-from a2a.server.tasks import TaskManager
+from a2a.server.tasks import TaskManager, TaskStore
 from a2a.types import (
     Artifact,
     CancelTaskRequest,
@@ -26,6 +27,7 @@ from a2a.types import (
 )
 from a2a.utils.errors import (
     InternalError,
+    InvalidParamsError,
     InvalidRequestError,
     TaskNotCancelableError,
     TaskNotFoundError,
@@ -129,6 +131,13 @@ class CodexRequestHandler(DefaultRequestHandler):
 
         task.add_done_callback(_discard)
 
+    def _task_store(self) -> TaskStore:
+        """Return the unversioned store used by the adapter's direct persistence paths."""
+        store = self.task_store
+        if isinstance(store, VersionedTaskStore):
+            raise RuntimeError("CodexRequestHandler requires an unversioned TaskStore")
+        return store
+
     async def _register_producer(self, task_id: str, producer_task: asyncio.Task) -> None:
         self._producer_tasks[task_id] = producer_task
 
@@ -181,12 +190,13 @@ class CodexRequestHandler(DefaultRequestHandler):
         producer,
     ) -> asyncio.Task:
         store_context = self._task_store_context(context)
-        await self.task_store.save(task, store_context)
+        task_store = self._task_store()
+        await task_store.save(task, store_context)
         source_queue = await self._queue_manager.create(task.id)
         task_manager = TaskManager(
             task_id=task.id,
             context_id=task.context_id,
-            task_store=self.task_store,
+            task_store=task_store,
             initial_message=None,
             context=store_context,
         )
@@ -215,7 +225,7 @@ class CodexRequestHandler(DefaultRequestHandler):
             except TaskStoreOperationError:
                 raise
             except Exception:
-                current_task = await self.task_store.get(task.id, store_context)
+                current_task = await task_store.get(task.id, store_context)
                 if (
                     current_task is not None
                     and current_task.status.state not in TERMINAL_TASK_STATES
@@ -357,24 +367,35 @@ class CodexRequestHandler(DefaultRequestHandler):
                 },
             )
 
-    async def _validate_message_context_match(self, params, store_context) -> None:  # noqa: ANN001
-        """Reject messages whose contextId conflicts with the referenced task's context.
+    async def _validate_message_task_reference(self, params, store_context) -> None:  # noqa: ANN001
+        """Reject terminal task restarts and mismatched contextId references.
 
         A2A multi-turn messages that reference an existing task must use the
-        task's contextId; a mismatching contextId is an invalid request.
+        task's contextId. Terminal tasks must not be restarted in place.
         """
         message = getattr(params, "message", None)
         if message is None:
             return
         task_id = getattr(message, "task_id", None)
-        context_id = getattr(message, "context_id", None)
-        if not task_id or not context_id:
+        if not task_id:
             return
+        context_id = getattr(message, "context_id", None)
         try:
-            existing = await self.task_store.get(task_id, store_context)
+            existing = await self._task_store().get(task_id, store_context)
         except TaskStoreOperationError as exc:
             raise self._task_store_server_error(exc) from exc
-        if existing is not None and existing.context_id and existing.context_id != context_id:
+        if existing is None:
+            return
+        if existing.status.state in TERMINAL_TASK_STATES:
+            raise InvalidParamsError(
+                message=f"Task {task_id} is in terminal state: {existing.status.state}",
+                data={
+                    "task_id": task_id,
+                    "state": existing.status.state,
+                    "reason": "terminal_task_cannot_restart",
+                },
+            )
+        if context_id and existing.context_id and existing.context_id != context_id:
             raise InvalidRequestError(
                 message=f"contextId mismatch for task {task_id}",
                 data={
@@ -420,8 +441,9 @@ class CodexRequestHandler(DefaultRequestHandler):
         context=None,
     ) -> Task | None:
         store_context = self._task_store_context(context)
+        task_store = self._task_store()
         try:
-            task = await self.task_store.get(params.id, store_context)
+            task = await task_store.get(params.id, store_context)
             if not task:
                 raise TaskNotFoundError()
 
@@ -437,7 +459,7 @@ class CodexRequestHandler(DefaultRequestHandler):
             try:
                 return await super().on_cancel_task(params, store_context)
             except TaskNotCancelableError:
-                refreshed = await self.task_store.get(params.id, store_context)
+                refreshed = await task_store.get(params.id, store_context)
                 if refreshed and refreshed.status.state in _CANCELED_TASK_STATES:
                     return refreshed
                 raise
@@ -450,8 +472,9 @@ class CodexRequestHandler(DefaultRequestHandler):
         context=None,
     ):
         store_context = self._task_store_context(context)
+        task_store = self._task_store()
         try:
-            task = await self.task_store.get(params.id, store_context)
+            task = await task_store.get(params.id, store_context)
             if not task:
                 raise TaskNotFoundError()
 
@@ -528,7 +551,7 @@ class CodexRequestHandler(DefaultRequestHandler):
 
     async def on_message_send_stream(self, params, context=None):
         self._validate_chat_output_modes(params)
-        await self._validate_message_context_match(params, self._task_store_context(context))
+        await self._validate_message_task_reference(params, self._task_store_context(context))
         self._metrics.inc_counter(A2A_STREAM_REQUESTS_TOTAL)
         self._metrics.inc_gauge(A2A_STREAM_ACTIVE)
         task_id = getattr(getattr(params, "message", None), "task_id", None) or str(uuid.uuid4())
@@ -588,7 +611,7 @@ class CodexRequestHandler(DefaultRequestHandler):
 
     async def on_message_send(self, params, context=None):
         self._validate_chat_output_modes(params)
-        await self._validate_message_context_match(params, self._task_store_context(context))
+        await self._validate_message_task_reference(params, self._task_store_context(context))
         task_id = getattr(getattr(params, "message", None), "task_id", None) or str(uuid.uuid4())
         accepted_output_modes = self._accepted_output_modes_from_params(params)
         active_task = None

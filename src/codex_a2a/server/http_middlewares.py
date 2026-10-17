@@ -267,6 +267,20 @@ def _looks_like_jsonrpc_envelope(payload: dict | None) -> bool:
     return isinstance(method, str) and isinstance(version, str)
 
 
+def _looks_like_legacy_message_payload(payload: dict | None) -> bool:
+    if payload is None:
+        return False
+    message = payload.get("message")
+    return isinstance(message, dict) and "content" in message and "parts" not in message
+
+
+def _looks_like_legacy_jsonrpc_message_payload(payload: dict | None) -> bool:
+    if payload is None or payload.get("method") not in {"SendMessage", "SendStreamingMessage"}:
+        return False
+    params = payload.get("params")
+    return isinstance(params, dict) and _looks_like_legacy_message_payload(params)
+
+
 def _is_jsonrpc_path(path: str) -> bool:
     return path in {
         extension_contracts.CORE_JSONRPC_PATH,
@@ -484,18 +498,23 @@ def _install_agent_card_cache_middleware(
         return response
 
 
-def _install_rest_payload_shape_guard(app: FastAPI) -> None:
+def _install_message_payload_shape_guard(app: FastAPI) -> None:
     @app.middleware("http")
-    async def guard_rest_payload_shape(request: Request, call_next):
-        if (
-            request.method != "POST"
-            or _canonical_rest_path(request.url.path) not in _REST_MESSAGE_PATHS
-        ):
+    async def guard_message_payload_shape(request: Request, call_next):
+        if request.method != "POST":
+            return await call_next(request)
+
+        path = _canonical_rest_path(request.url.path)
+        is_rest_message = path in _REST_MESSAGE_PATHS
+        is_jsonrpc = _is_jsonrpc_path(path)
+        if not is_rest_message and not is_jsonrpc:
             return await call_next(request)
 
         body = await _get_request_body(request)
         payload = _parse_json_body(body)
-        if _looks_like_jsonrpc_envelope(payload):
+        if is_rest_message and (
+            _looks_like_jsonrpc_envelope(payload) or _looks_like_legacy_message_payload(payload)
+        ):
             return JSONResponse(
                 {
                     "error": (
@@ -507,6 +526,15 @@ def _install_rest_payload_shape_guard(app: FastAPI) -> None:
                     )
                 },
                 status_code=400,
+            )
+        if is_jsonrpc and _looks_like_legacy_jsonrpc_message_payload(payload):
+            return _jsonrpc_error_response(
+                request_id=_jsonrpc_request_id(payload),
+                error=JSONRPCError(
+                    code=-32602,
+                    message="Invalid parameters",
+                    data={"reason": "legacy_message_content_shape"},
+                ),
             )
         return await call_next(request)
 
@@ -869,7 +897,7 @@ def install_http_middlewares(
         public_card_etag=public_card_etag,
         extended_card_etag=extended_card_etag,
     )
-    _install_rest_payload_shape_guard(app)
+    _install_message_payload_shape_guard(app)
     _install_subscribe_task_guard(app, task_store=task_store)
     _install_payload_logging_middleware(app, settings=settings)
     _install_rate_limit_middleware(app, settings=settings)

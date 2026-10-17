@@ -7,8 +7,8 @@ This document explains the compatibility promises this repository currently trie
 | Layer | Supported contract | Evidence and boundary |
 | --- | --- | --- |
 | Python | 3.11–3.14 | Package classifiers cover all four versions; CI runs 3.13 as the quality gate and 3.11, 3.12, and 3.14 in the runtime matrix. |
-| A2A Python SDK | Exactly `a2a-sdk==1.1.5` | Pinned in `pyproject.toml`; this is the [official A2A Python SDK](https://github.com/a2aproject/a2a-python), not a fork. |
-| Protocol Buffers | `protobuf>=6.33.5,<8.0` | The lockfile selects 7.36.2. SDK 1.1.5 supports protobuf 7; Google API Core, common protos, and proto-plus must resolve within the same range. Task retrieval delegates validation and history trimming to the SDK. |
+| A2A Python SDK | Exactly `a2a-sdk==1.2.2` | Pinned in `pyproject.toml`; this is the [official A2A Python SDK](https://github.com/a2aproject/a2a-python), not a fork. |
+| Protocol Buffers | `protobuf>=6.33.5,<8.0` | The lockfile selects 7.36.2. SDK 1.2.2 supports protobuf 7; Google API Core, common protos, and proto-plus must resolve within the same range. Task retrieval delegates validation and history trimming to the SDK. |
 | SQLAlchemy | `sqlalchemy[asyncio]>=2.0,<3.0` | The `asyncio` extra explicitly installs `greenlet` for the async persistence engine, including standalone wheel installations. The lockfile selects the development version. |
 | A2A protocol | `1.0` wire line | The released upstream A2A specification is normative for portable core semantics; the current compatible release is `v1.0.1`. SDK compatibility with other protocol versions does not extend this adapter's claim. |
 | Inbound A2A transports | JSON-RPC and HTTP+JSON | Both are repository-owned runtime surfaces. gRPC is not exposed by this adapter. |
@@ -74,9 +74,12 @@ Service-level behavior layered on top of those core methods should also be decla
 
 Task-store resilience is also service-level behavior in this deployment:
 
+- A `SendMessage` that references a task already in a terminal state is rejected as invalid parameters instead of restarting that task in place.
 - Once a task reaches a terminal state, later conflicting persistence writes are dropped on a first-terminal-state-wins basis.
 - In the default SQLite-backed deployment, terminal-task persistence is guarded with an atomic database upsert instead of a process-local read-before-write check.
 - Task-store I/O failures are surfaced as stable service errors instead of leaking backend-specific exceptions through request handlers.
+
+HTTP+JSON message endpoints accept the A2A 1.0 `message.parts` shape. A JSON-RPC envelope or the legacy `message.content` shape is rejected with `400` rather than being partially accepted through unknown-field handling.
 
 Task durability is deployment-dependent:
 
