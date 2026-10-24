@@ -326,6 +326,39 @@ async def test_database_backend_persists_push_notification_configs_across_app_re
     assert configs[0].url == "https://example.invalid/webhook"
 
 
+@pytest.mark.asyncio
+async def test_subscribe_guard_uses_authenticated_task_owner(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    import codex_a2a.server.application as app_module
+
+    monkeypatch.setattr(app_module, "CodexClient", PersistentStateDummyClient)
+    settings = make_settings(
+        a2a_bearer_token="test-token",
+        a2a_database_url=f"sqlite+aiosqlite:///{(tmp_path / 'subscribe-owner.db').resolve()}",
+    )
+
+    app = app_module.create_app(settings)
+    async with app.router.lifespan_context(app):
+        task = _task("owned-task")
+        task.status.state = TaskState.TASK_STATE_COMPLETED
+        await task_store_save(
+            app.state.task_store,
+            task,
+            _authenticated_context("automation"),
+        )
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.get(
+                "/tasks/owned-task:subscribe",
+                headers={"Authorization": "Bearer test-token"},
+            )
+
+    assert response.status_code == 200
+    assert "owned-task" in response.text
+
+
 def _sqlite_schema_version(database_path: Path, scope: str) -> int | None:
     connection = sqlite3.connect(database_path)
     try:

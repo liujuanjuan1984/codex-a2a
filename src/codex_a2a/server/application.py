@@ -211,7 +211,9 @@ def _create_single_tenant_rest_routes(
             methods=["POST"],
         ),
     ]
-    return retained + streaming_routes
+    # Specific streaming paths must precede the generic /tasks/{id} route;
+    # otherwise Starlette treats "task-id:subscribe" as a task id.
+    return streaming_routes + retained
 
 
 def create_app(settings: Settings) -> FastAPI:

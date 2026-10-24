@@ -7,13 +7,16 @@ import time
 from typing import Any, cast
 from urllib.parse import unquote, urlsplit
 
+from a2a.auth.user import UnauthenticatedUser
 from a2a.server.cluster import VersionedTaskStore
 from a2a.server.context import ServerCallContext
 from a2a.server.jsonrpc_models import JSONRPCError
 from a2a.server.request_handlers.response_helpers import agent_card_to_dict
+from a2a.server.routes.common import StarletteUser
 from a2a.server.tasks.task_store import TaskStore
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
+from starlette.authentication import SimpleUser
 from starlette.datastructures import Headers
 from starlette.middleware.gzip import GZipResponder
 from starlette.responses import Response, StreamingResponse
@@ -557,8 +560,17 @@ def _install_subscribe_task_guard(app: FastAPI, *, task_store: VersionedTaskStor
         if not task_id:
             return JSONResponse({"error": "Task not found"}, status_code=404)
 
+        identity = getattr(request.state, "user_identity", None)
+        context = ServerCallContext(
+            state={"identity": identity} if isinstance(identity, str) else {},
+            user=(
+                StarletteUser(SimpleUser(identity))
+                if isinstance(identity, str) and identity
+                else UnauthenticatedUser()
+            ),
+        )
         try:
-            task = await task_store_get(task_store, task_id, ServerCallContext())
+            task = await task_store_get(task_store, task_id, context)
         except TaskStoreOperationError as exc:
             logger.exception(
                 "Task store operation failed while guarding subscribe path task_id=%s operation=%s",

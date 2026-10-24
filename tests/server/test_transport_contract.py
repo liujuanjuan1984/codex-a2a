@@ -1417,6 +1417,23 @@ async def test_subscribe_missing_task_returns_controlled_404(monkeypatch) -> Non
 
 
 @pytest.mark.asyncio
+async def test_subscribe_blank_task_id_returns_controlled_404(monkeypatch) -> None:
+    import codex_a2a.server.application as app_module
+
+    monkeypatch.setattr(app_module, "CodexClient", DummyChatCodexClient)
+    app = app_module.create_app(make_settings(a2a_bearer_token="test-token"))
+    transport = httpx.ASGITransport(app=app)
+
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get(
+            "/tasks/%20:subscribe",
+            headers={"Authorization": "Bearer test-token"},
+        )
+
+    assert response.status_code == 404
+    assert response.json() == {"error": "Task not found"}
+
+
 @pytest.mark.asyncio
 async def test_subscribe_task_store_failure_returns_controlled_503(monkeypatch) -> None:
     import codex_a2a.server.application as app_module

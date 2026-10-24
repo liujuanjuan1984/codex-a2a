@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from a2a.server.context import ServerCallContext
 from a2a.server.events.event_queue import EventQueue
+from a2a.server.request_handlers import DefaultRequestHandler
 from a2a.server.tasks.inmemory_task_store import InMemoryTaskStore
 from a2a.types import (
     Artifact,
@@ -26,9 +27,11 @@ from a2a.types import (
 from a2a.utils.errors import (
     InternalError,
     InvalidParamsError,
+    TaskNotCancelableError,
     TaskNotFoundError,
     UnsupportedOperationError,
 )
+from sqlalchemy.exc import SQLAlchemyError
 
 from codex_a2a.a2a_proto import (
     new_data_part,
@@ -42,7 +45,11 @@ from codex_a2a.server.output_negotiation import (
     merge_output_negotiation_metadata,
 )
 from codex_a2a.server.request_handler import CodexRequestHandler
-from codex_a2a.server.task_store import TASK_STORE_ERROR_TYPE, TaskStoreOperationError
+from codex_a2a.server.task_store import (
+    TASK_STORE_ERROR_TYPE,
+    TaskStoreOperationError,
+    task_store_save,
+)
 from tests.support.settings import make_settings
 
 
@@ -151,6 +158,72 @@ async def test_cancel_is_idempotent_for_already_canceled_task() -> None:
 
 
 @pytest.mark.asyncio
+async def test_cancel_terminal_task_reports_named_state() -> None:
+    task_store = InMemoryTaskStore()
+    await task_store_save(
+        task_store,
+        Task(
+            id="task-1",
+            context_id="ctx-1",
+            status=TaskStatus(state=TaskState.TASK_STATE_COMPLETED),
+        ),
+    )
+    handler = _make_handler(task_store=task_store)
+
+    with pytest.raises(TaskNotCancelableError) as exc_info:
+        await handler.on_cancel_task(CancelTaskRequest(id="task-1"))
+
+    assert "TASK_STATE_COMPLETED" in (exc_info.value.message or "")
+
+
+@pytest.mark.asyncio
+async def test_cancel_sqlalchemy_failure_maps_to_stable_server_error(monkeypatch) -> None:
+    task_store = InMemoryTaskStore()
+    await task_store_save(
+        task_store,
+        Task(
+            id="task-1",
+            context_id="ctx-1",
+            status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
+        ),
+    )
+    handler = _make_handler(task_store=task_store)
+    monkeypatch.setattr(
+        DefaultRequestHandler,
+        "on_cancel_task",
+        AsyncMock(side_effect=SQLAlchemyError("database unavailable")),
+    )
+
+    with pytest.raises(InternalError, match="Task store unavailable while loading task state."):
+        await handler.on_cancel_task(CancelTaskRequest(id="task-1"))
+
+
+@pytest.mark.asyncio
+async def test_subscribe_sqlalchemy_failure_maps_to_stable_server_error(monkeypatch) -> None:
+    task_store = InMemoryTaskStore()
+    await task_store_save(
+        task_store,
+        Task(
+            id="task-1",
+            context_id="ctx-1",
+            status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
+        ),
+    )
+    handler = _make_handler(task_store=task_store)
+
+    async def broken_subscribe(*args, **kwargs):  # noqa: ANN002, ANN003
+        del args, kwargs
+        raise SQLAlchemyError("database unavailable")
+        yield  # pragma: no cover
+
+    monkeypatch.setattr(DefaultRequestHandler, "on_subscribe_to_task", broken_subscribe)
+
+    with pytest.raises(InternalError, match="Task store unavailable while loading task state."):
+        async for _ in handler.on_resubscribe_to_task(SubscribeToTaskRequest(id="task-1")):
+            pass
+
+
+@pytest.mark.asyncio
 async def test_resubscribe_replays_terminal_task_once() -> None:
     task_store = InMemoryTaskStore()
     task = Task(
@@ -170,9 +243,16 @@ async def test_resubscribe_replays_terminal_task_once() -> None:
 
 
 @pytest.mark.asyncio
-async def test_get_task_store_failure_maps_to_stable_server_error() -> None:
+@pytest.mark.parametrize(
+    "error",
+    [
+        TaskStoreOperationError("get", "task-1"),
+        SQLAlchemyError("database unavailable"),
+    ],
+)
+async def test_get_task_store_failure_maps_to_stable_server_error(error: Exception) -> None:
     task_store = MagicMock()
-    task_store.get = AsyncMock(side_effect=TaskStoreOperationError("get", "task-1"))
+    task_store.get = AsyncMock(side_effect=error)
     handler = _make_handler(task_store=task_store)
 
     with pytest.raises(InternalError, match="Task store unavailable while loading task state."):
@@ -180,9 +260,16 @@ async def test_get_task_store_failure_maps_to_stable_server_error() -> None:
 
 
 @pytest.mark.asyncio
-async def test_resubscribe_task_store_failure_maps_to_stable_server_error() -> None:
+@pytest.mark.parametrize(
+    "error",
+    [
+        TaskStoreOperationError("get", "task-1"),
+        SQLAlchemyError("database unavailable"),
+    ],
+)
+async def test_resubscribe_task_store_failure_maps_to_stable_server_error(error: Exception) -> None:
     task_store = MagicMock()
-    task_store.get = AsyncMock(side_effect=TaskStoreOperationError("get", "task-1"))
+    task_store.get = AsyncMock(side_effect=error)
     handler = _make_handler(task_store=task_store)
 
     with pytest.raises(InternalError, match="Task store unavailable while loading task state."):
@@ -194,7 +281,16 @@ async def test_resubscribe_task_store_failure_maps_to_stable_server_error() -> N
 
 
 @pytest.mark.asyncio
-async def test_message_send_returns_failed_task_for_task_store_error() -> None:
+@pytest.mark.parametrize(
+    "store_error",
+    [
+        TaskStoreOperationError("save", "task-1"),
+        SQLAlchemyError("database unavailable"),
+    ],
+)
+async def test_message_send_returns_failed_task_for_task_store_error(
+    store_error: Exception,
+) -> None:
     params = SendMessageRequest(
         message=Message(
             message_id="m-1",
@@ -205,7 +301,7 @@ async def test_message_send_returns_failed_task_for_task_store_error() -> None:
         )
     )
     handler = _StubActiveTaskHandler(
-        active_task=_StubActiveTask(subscribe_error=TaskStoreOperationError("save", "task-1")),
+        active_task=_StubActiveTask(subscribe_error=store_error),
         task_store=_mock_task_store(),
     )
     result = await handler.on_message_send(params)
@@ -297,7 +393,16 @@ async def test_background_interrupt_resolution_updates_task_snapshot_for_get_and
 
 
 @pytest.mark.asyncio
-async def test_message_send_stream_emits_failed_events_for_task_store_error() -> None:
+@pytest.mark.parametrize(
+    "store_error",
+    [
+        TaskStoreOperationError("save", "task-1"),
+        SQLAlchemyError("database unavailable"),
+    ],
+)
+async def test_message_send_stream_emits_failed_events_for_task_store_error(
+    store_error: Exception,
+) -> None:
     params = SendMessageRequest(
         message=Message(
             message_id="m-1",
@@ -308,7 +413,7 @@ async def test_message_send_stream_emits_failed_events_for_task_store_error() ->
         )
     )
     handler = _StubActiveTaskHandler(
-        active_task=_StubActiveTask(subscribe_error=TaskStoreOperationError("save", "task-1")),
+        active_task=_StubActiveTask(subscribe_error=store_error),
         task_store=_mock_task_store(),
     )
     events = [event async for event in handler.on_message_send_stream(params)]

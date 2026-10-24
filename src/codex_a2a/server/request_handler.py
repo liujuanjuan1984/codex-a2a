@@ -33,6 +33,7 @@ from a2a.utils.errors import (
     UnsupportedOperationError,
 )
 from a2a.utils.task import apply_history_length
+from sqlalchemy.exc import SQLAlchemyError
 
 from codex_a2a.a2a_proto import new_text_part
 from codex_a2a.media_modes import DEFAULT_OUTPUT_MEDIA_MODES, TEXT_PLAIN_MEDIA_MODE
@@ -147,7 +148,9 @@ class CodexRequestHandler(DefaultRequestHandler):
                 task_id=params.id, task=task
             )
             return apply_accepted_output_modes(task, accepted_output_modes)
-        except TaskStoreOperationError as exc:
+        except (TaskStoreOperationError, SQLAlchemyError) as exc:
+            if isinstance(exc, SQLAlchemyError):
+                exc = TaskStoreOperationError("get", params.id)
             raise self._task_store_server_error(exc) from exc
 
     async def _setup_active_task(self, params, context=None):  # noqa: ANN001
@@ -375,7 +378,9 @@ class CodexRequestHandler(DefaultRequestHandler):
         context_id = getattr(message, "context_id", None)
         try:
             existing = await task_store_get(self._versioned_store, task_id, store_context)
-        except TaskStoreOperationError as exc:
+        except (TaskStoreOperationError, SQLAlchemyError) as exc:
+            if isinstance(exc, SQLAlchemyError):
+                exc = TaskStoreOperationError("get", task_id)
             raise self._task_store_server_error(exc) from exc
         if existing is None:
             return
@@ -445,8 +450,9 @@ class CodexRequestHandler(DefaultRequestHandler):
                 return task
 
             if task.status.state in TERMINAL_TASK_STATES:
+                state_name = TaskState.Name(task.status.state)
                 raise TaskNotCancelableError(
-                    message=f"Task cannot be canceled - current state: {task.status.state}"
+                    message=f"Task cannot be canceled - current state: {state_name}"
                 )
 
             try:
@@ -456,7 +462,9 @@ class CodexRequestHandler(DefaultRequestHandler):
                 if refreshed and refreshed.status.state in _CANCELED_TASK_STATES:
                     return refreshed
                 raise
-        except TaskStoreOperationError as exc:
+        except (TaskStoreOperationError, SQLAlchemyError) as exc:
+            if isinstance(exc, SQLAlchemyError):
+                exc = TaskStoreOperationError("get", params.id)
             raise self._task_store_server_error(exc) from exc
 
     async def on_subscribe_to_task(
@@ -521,7 +529,9 @@ class CodexRequestHandler(DefaultRequestHandler):
                         return
             finally:
                 await queue.close(immediate=True)
-        except TaskStoreOperationError as exc:
+        except (TaskStoreOperationError, SQLAlchemyError) as exc:
+            if isinstance(exc, SQLAlchemyError):
+                exc = TaskStoreOperationError("get", params.id)
             raise self._task_store_server_error(exc) from exc
 
     async def on_resubscribe_to_task(
@@ -579,7 +589,9 @@ class CodexRequestHandler(DefaultRequestHandler):
                 if callable(close_subscription):
                     await close_subscription()
             stream_completed = True
-        except TaskStoreOperationError as exc:
+        except (TaskStoreOperationError, SQLAlchemyError) as exc:
+            if isinstance(exc, SQLAlchemyError):
+                exc = TaskStoreOperationError("save", task_id)
             logger.exception(
                 "Task store operation failed during streaming task_id=%s operation=%s",
                 task_id,
@@ -652,7 +664,9 @@ class CodexRequestHandler(DefaultRequestHandler):
                 close_subscription = getattr(subscription, "aclose", None)
                 if callable(close_subscription):
                     await close_subscription()
-        except TaskStoreOperationError as exc:
+        except (TaskStoreOperationError, SQLAlchemyError) as exc:
+            if isinstance(exc, SQLAlchemyError):
+                exc = TaskStoreOperationError("save", task_id)
             logger.exception(
                 "Task store operation failed during SendMessage task_id=%s operation=%s",
                 task_id,
