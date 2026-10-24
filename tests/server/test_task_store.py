@@ -13,9 +13,12 @@ from a2a.server.cluster import (
     VersionedTaskStore,
 )
 from a2a.server.context import ServerCallContext
+from a2a.server.routes.common import StarletteUser
 from a2a.server.tasks.copying_task_store import CopyingTaskStoreAdapter
 from a2a.server.tasks.database_task_store import DatabaseTaskStore
 from a2a.types import ListTasksRequest, ListTasksResponse, Task, TaskState, TaskStatus
+from google.protobuf.timestamp_pb2 import Timestamp
+from starlette.authentication import SimpleUser
 
 from codex_a2a.server.database import build_database_engine
 from codex_a2a.server.task_store import (
@@ -37,6 +40,19 @@ def _task(state: TaskState = TaskState.TASK_STATE_WORKING) -> Task:
         id="task-1",
         context_id="ctx-1",
         status=TaskStatus(state=state),
+    )
+
+
+def _timed_task(task_id: str, timestamp: str) -> Task:
+    status_timestamp = Timestamp()
+    status_timestamp.FromJsonString(timestamp)
+    return Task(
+        id=task_id,
+        context_id="ctx-pagination",
+        status=TaskStatus(
+            state=TaskState.TASK_STATE_COMPLETED,
+            timestamp=status_timestamp,
+        ),
     )
 
 
@@ -379,3 +395,44 @@ async def test_versioned_store_helpers_preserve_existing_store_errors() -> None:
 
     with pytest.raises(TaskStoreOperationError, match="Task store delete failed"):
         await task_store_delete(task_store, "task-1")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("database", [False, True])
+async def test_list_tasks_keyset_token_survives_first_page_delete(
+    tmp_path: Path,
+    database: bool,
+) -> None:
+    runtime = build_task_store_runtime(
+        make_settings(
+            a2a_bearer_token="test-token",
+            a2a_database_url=(
+                f"sqlite+aiosqlite:///{(tmp_path / 'pagination.db').resolve()}"
+                if database
+                else None
+            ),
+        )
+    )
+    context = ServerCallContext(user=StarletteUser(SimpleUser("automation")))
+    await runtime.startup()
+    try:
+        for task in (
+            _timed_task("task-newest", "2026-10-24T03:00:00Z"),
+            _timed_task("task-middle", "2026-10-24T02:00:00Z"),
+            _timed_task("task-oldest", "2026-10-24T01:00:00Z"),
+        ):
+            await task_store_save(runtime.task_store, task, context)
+
+        store = as_versioned_task_store(runtime.task_store)
+        first_page = await store.list(ListTasksRequest(page_size=1), context)
+        assert [task.id for task in first_page.tasks] == ["task-newest"]
+        assert first_page.next_page_token
+
+        await task_store_delete(runtime.task_store, "task-newest", context)
+        second_page = await store.list(
+            ListTasksRequest(page_size=1, page_token=first_page.next_page_token),
+            context,
+        )
+        assert [task.id for task in second_page.tasks] == ["task-middle"]
+    finally:
+        await runtime.shutdown()

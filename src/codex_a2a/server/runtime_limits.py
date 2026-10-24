@@ -8,6 +8,9 @@ from collections import deque
 from collections.abc import AsyncGenerator, AsyncIterator, Callable
 from typing import Any, NoReturn
 
+from a2a.utils.proto_utils import to_stream_response
+from google.protobuf.json_format import MessageToDict  # type: ignore[import-untyped]
+from google.protobuf.message import Message as ProtoMessage  # type: ignore[import-untyped]
 from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
@@ -114,6 +117,8 @@ class StreamBudgetExceeded(Exception):
 
 def json_event_size(item: Any) -> int:
     """Approximate the on-wire SSE bytes for one serialized event item."""
+    if isinstance(item, ProtoMessage):
+        item = MessageToDict(to_stream_response(item))
     serialized = json.dumps(
         item,
         separators=(",", ":"),

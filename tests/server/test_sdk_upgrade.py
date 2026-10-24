@@ -23,7 +23,7 @@ from a2a.types import (
     TaskStatus,
     TaskStatusUpdateEvent,
 )
-from a2a.utils.errors import InvalidParamsError
+from a2a.utils.errors import UnsupportedOperationError
 
 from codex_a2a.a2a_proto import new_text_part, part_text
 from codex_a2a.logging_context import bind_correlation_id, get_correlation_id
@@ -164,17 +164,13 @@ async def test_early_failure_persists_once_and_terminal_task_cannot_restart(
     assert snapshot.status.state == TaskState.TASK_STATE_FAILED
     assert [message.message_id for message in snapshot.history] == ["message"]
     params.message.task_id = task_id
-    with pytest.raises(InvalidParamsError) as exc_info:
+    with pytest.raises(UnsupportedOperationError) as exc_info:
         if restart_streaming:
             async for _ in handler.on_message_send_stream(params):
                 pass
         else:
             await handler.on_message_send(params)
-    assert "terminal state" in (exc_info.value.message or "")
-    assert "TASK_STATE_FAILED" in (exc_info.value.message or "")
-    assert exc_info.value.data is not None
-    assert exc_info.value.data["state"] == "TASK_STATE_FAILED"
-    assert exc_info.value.data["reason"] == "terminal_task_cannot_restart"
+    assert exc_info.value.message
     handler.agent_executor.execute.assert_awaited_once()
     assert [
         event async for event in handler.on_subscribe_to_task(SubscribeToTaskRequest(id=task_id))

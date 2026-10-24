@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import logging
 from contextlib import AsyncExitStack, asynccontextmanager
-from typing import Any
+from typing import Any, cast
 
 import uvicorn
+from a2a.server.request_handlers.request_handler import RequestHandler
 from a2a.server.routes.agent_card_routes import create_agent_card_routes
 from a2a.server.routes.rest_dispatcher import RestDispatcher
 from a2a.server.routes.rest_routes import create_rest_routes
@@ -71,41 +72,44 @@ _STREAMING_REST_PATHS = frozenset({"/message:stream", "/tasks/{id}:subscribe"})
 _STREAM_BUDGET_REJECT_REASON = "STREAM_BUDGET_EXCEEDED"
 
 
-class BudgetedRestDispatcher(RestDispatcher):
-    """REST dispatcher that applies streaming output budgets to SSE streams."""
+class StreamBudgetedRequestHandler:
+    """Apply stream budgets through the public RequestHandler API."""
 
     def __init__(
         self,
-        request_handler: Any,
-        context_builder: Any,
+        request_handler: RequestHandler,
         *,
         stream_budget_max_bytes: int,
         stream_budget_max_duration_seconds: float,
         stream_budget_idle_timeout_seconds: float,
     ) -> None:
-        super().__init__(
-            request_handler=request_handler,
-            context_builder=context_builder,
-        )
+        self._request_handler = request_handler
         self._stream_budget_max_bytes = stream_budget_max_bytes
         self._stream_budget_max_duration_seconds = stream_budget_max_duration_seconds
         self._stream_budget_idle_timeout_seconds = stream_budget_idle_timeout_seconds
 
-    async def _handle_streaming(
-        self,
-        request: Request,
-        handler_func: Any,
-    ) -> Any:
-        async def budgeted_handler(context: Any) -> Any:
-            async for item in apply_stream_budget(
-                aiter(handler_func(context)),
-                max_bytes=self._stream_budget_max_bytes,
-                max_duration_seconds=self._stream_budget_max_duration_seconds,
-                idle_timeout_seconds=self._stream_budget_idle_timeout_seconds,
-            ):
-                yield item
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._request_handler, name)
 
-        return await super()._handle_streaming(request, budgeted_handler)
+    def _apply_budget(self, stream: Any) -> Any:
+        return apply_stream_budget(
+            stream,
+            max_bytes=self._stream_budget_max_bytes,
+            max_duration_seconds=self._stream_budget_max_duration_seconds,
+            idle_timeout_seconds=self._stream_budget_idle_timeout_seconds,
+        )
+
+    async def on_message_send_stream(self, params: Any, context: Any) -> Any:
+        async for item in self._apply_budget(
+            self._request_handler.on_message_send_stream(params, context)
+        ):
+            yield item
+
+    async def on_subscribe_to_task(self, params: Any, context: Any) -> Any:
+        async for item in self._apply_budget(
+            self._request_handler.on_subscribe_to_task(params, context)
+        ):
+            yield item
 
 
 def _stream_budget_error_response(error: StreamBudgetExceeded) -> JSONResponse:
@@ -129,13 +133,10 @@ def _rest_error_response(error: Exception) -> JSONResponse:
 
 def _create_single_tenant_rest_routes(
     *,
-    request_handler: Any,
+    request_handler: RequestHandler,
     context_builder: Any = None,
     path_prefix: str = "",
     enable_v0_3_compat: bool = False,
-    stream_budget_max_bytes: int = 0,
-    stream_budget_max_duration_seconds: float = 0.0,
-    stream_budget_idle_timeout_seconds: float = 0.0,
 ) -> list[BaseRoute]:
     # The SDK exposes a tenant-prefixed REST alias by default. This service's
     # supported HTTP+JSON contract is the spec-rooted single-tenant surface
@@ -150,12 +151,9 @@ def _create_single_tenant_rest_routes(
     )
     base_routes = [route for route in sdk_routes if not _is_sdk_tenant_mount(route)]
 
-    dispatcher = BudgetedRestDispatcher(
+    dispatcher = RestDispatcher(
         request_handler=request_handler,
         context_builder=context_builder,
-        stream_budget_max_bytes=stream_budget_max_bytes,
-        stream_budget_max_duration_seconds=stream_budget_max_duration_seconds,
-        stream_budget_idle_timeout_seconds=stream_budget_idle_timeout_seconds,
     )
 
     async def _handle_streaming_route(request: Request, handler_func: Any) -> Response:
@@ -382,16 +380,22 @@ def create_app(settings: Settings) -> FastAPI:
             stream_budget_idle_timeout_seconds=settings.a2a_stream_idle_timeout_seconds,
         )
     )
+    rest_request_handler = cast(
+        RequestHandler,
+        StreamBudgetedRequestHandler(
+            handler,
+            stream_budget_max_bytes=settings.a2a_stream_max_bytes,
+            stream_budget_max_duration_seconds=settings.a2a_stream_max_duration_seconds,
+            stream_budget_idle_timeout_seconds=settings.a2a_stream_idle_timeout_seconds,
+        ),
+    )
     app.router.routes.extend(
         _create_single_tenant_rest_routes(
-            request_handler=handler,
+            request_handler=rest_request_handler,
             context_builder=context_builder,
             # A2A 1.0 roots the HTTP+JSON surface at the service root; the SDK
             # default prefix is empty, matching the URL the Agent Card advertises.
             path_prefix="",
-            stream_budget_max_bytes=settings.a2a_stream_max_bytes,
-            stream_budget_max_duration_seconds=settings.a2a_stream_max_duration_seconds,
-            stream_budget_idle_timeout_seconds=settings.a2a_stream_idle_timeout_seconds,
         )
     )
     app.state.codex_client = client

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any, cast
 
+from a2a.utils.constants import A2A_JSON_MEDIA_TYPE
 from fastapi import FastAPI
 
 from codex_a2a.config import Settings
@@ -133,6 +134,23 @@ def _ensure_path_item(
     return operation
 
 
+def _ensure_rest_success_media_types(paths: dict[str, Any], security: object) -> None:
+    for path, method, description in (
+        ("/message:send", "post", "A2A message response"),
+        ("/tasks", "get", "A2A task list"),
+        ("/tasks/{id}", "get", "A2A task"),
+        ("/tasks/{id}:cancel", "post", "A2A canceled task"),
+    ):
+        operation = _ensure_path_item(paths, path, method)
+        if security:
+            operation["security"] = list(cast(list[dict[str, list[str]]], security))
+        responses = operation.setdefault("responses", {})
+        response = responses.setdefault("200", {"description": description})
+        content = response.setdefault("content", {})
+        content.pop("application/json", None)
+        content.setdefault(A2A_JSON_MEDIA_TYPE, {})
+
+
 def patch_openapi_contract(
     app: FastAPI,
     *,
@@ -247,6 +265,8 @@ def patch_openapi_contract(
                     continue
                 app_json["schema"] = {"$ref": contract["schema_ref"]}
                 app_json["examples"] = rest_examples
+
+            _ensure_rest_success_media_types(paths, schema.get("security"))
 
         app.openapi_schema = schema
         return schema

@@ -74,16 +74,19 @@ Service-level behavior layered on top of those core methods should also be decla
 
 Task-store resilience is also service-level behavior in this deployment:
 
-- A `SendMessage` that references a task already in a terminal state is rejected as invalid parameters instead of restarting that task in place.
+- A `SendMessage` that references a task already in a terminal state follows the SDK contract and raises `UnsupportedOperationError`; the task is not restarted in place.
 - Database-backed deployments use the SDK `VersionedDatabaseTaskStore`, `DatabaseTaskEventStream`, and their per-task compare-and-swap versioning; stale writes are rejected rather than overwriting the current task snapshot.
 - Memory-backed deployments use the SDK `CopyingTaskStoreAdapter` and `LegacyTaskStoreAdapter`; they are process-local and do not provide cross-replica version coordination.
 - Task-store I/O failures are surfaced as stable service errors instead of leaking backend-specific exceptions through request handlers.
 
 HTTP+JSON message endpoints accept the A2A 1.0 `message.parts` shape. A JSON-RPC envelope or the legacy `message.content` shape is rejected with `400` rather than being partially accepted through unknown-field handling.
 
+Successful HTTP+JSON responses use the SDK's `application/a2a+json` media type. REST error envelopes remain AIP-193 `application/json` payloads, and OpenAPI response declarations follow the same split.
+
 Task durability is deployment-dependent:
 
 - `A2A_DATABASE_URL=<sqlalchemy-async-url>` preserves task lookup/cancel/resubscribe state across process restarts.
+- SDK keyset page tokens remain usable after a task from the preceding page is deleted; memory and database regressions cover this pagination behavior.
 - `A2A_DATABASE_URL` now defaults to a workspace-local SQLite database at `${CODEX_WORKSPACE_ROOT}/.codex-a2a/codex-a2a.db` when `CODEX_WORKSPACE_ROOT` is configured; otherwise it falls back to `sqlite+aiosqlite:///./codex-a2a.db`. Persistence therefore remains the default runtime behavior.
 - The same database-backed mode also preserves session-binding ownership state and pending interrupt callback requests that still fall within their TTL. Session-binding and ownership persistence are independent from the in-memory session cache TTL.
 - The default SQLite + WAL profile is intended for a stable local filesystem path, not for network filesystems or sync-managed folders with weaker locking behavior.
