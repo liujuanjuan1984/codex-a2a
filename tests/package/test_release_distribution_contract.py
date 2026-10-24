@@ -97,7 +97,7 @@ def test_publish_workflow_builds_and_smoke_tests_release_artifacts() -> None:
     assert "--requirement /tmp/runtime-requirements.txt" in PUBLISH_WORKFLOW_TEXT
     assert "timeout 120s uv run pip-audit" in PUBLISH_WORKFLOW_TEXT
     assert "--disable-pip" in PUBLISH_WORKFLOW_TEXT
-    assert "--no-deps" in PUBLISH_WORKFLOW_TEXT
+    assert "--require-hashes" in PUBLISH_WORKFLOW_TEXT
     assert "--progress-spinner off" in PUBLISH_WORKFLOW_TEXT
     assert "uv build --no-sources" in PUBLISH_WORKFLOW_TEXT
     assert "fetch-depth: 0" in PUBLISH_WORKFLOW_TEXT
@@ -238,7 +238,7 @@ def test_validation_and_publish_paths_filter_known_build_warnings() -> None:
     validate_baseline_text = Path("scripts/validate_baseline.sh").read_text()
     assert "uv run pip-audit" in validate_baseline_text
     assert "--disable-pip" in validate_baseline_text
-    assert "--no-deps" in validate_baseline_text
+    assert "--require-hashes" in validate_baseline_text
     assert "fetch-depth: 0" in CI_WORKFLOW_TEXT
     assert "vcs_versioning._backends._git" not in PUBLISH_WORKFLOW_TEXT
     assert "PYTHONWARNINGS" not in validate_baseline_text

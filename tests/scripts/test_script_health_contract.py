@@ -31,7 +31,7 @@ def test_validate_baseline_keeps_local_regression_scope() -> None:
     assert 'run_pip_audit "${runtime_requirements}"' in VALIDATE_BASELINE_TEXT
     assert 'timeout "${timeout_seconds}s"' in VALIDATE_BASELINE_TEXT
     assert "--disable-pip" in VALIDATE_BASELINE_TEXT
-    assert "--no-deps" in VALIDATE_BASELINE_TEXT
+    assert "--require-hashes" in VALIDATE_BASELINE_TEXT
     assert "--progress-spinner off" in VALIDATE_BASELINE_TEXT
     assert "pip-audit failed on attempt" in VALIDATE_BASELINE_TEXT
     assert "uv build --no-sources" in VALIDATE_BASELINE_TEXT
@@ -76,7 +76,7 @@ def test_dependency_health_keeps_dependency_review_scope() -> None:
     assert "uv run pip-audit" in DEPENDENCY_HEALTH_TEXT
     assert "timeout 120s" in DEPENDENCY_HEALTH_TEXT
     assert "--disable-pip" in DEPENDENCY_HEALTH_TEXT
-    assert "--no-deps" in DEPENDENCY_HEALTH_TEXT
+    assert "--require-hashes" in DEPENDENCY_HEALTH_TEXT
     assert "--progress-spinner off" in DEPENDENCY_HEALTH_TEXT
     assert "uv run pytest" not in DEPENDENCY_HEALTH_TEXT
     assert "uv run mypy" not in DEPENDENCY_HEALTH_TEXT

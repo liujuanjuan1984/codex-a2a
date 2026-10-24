@@ -82,7 +82,7 @@ def test_baseline_audit_gates_build_and_preserves_failure_status(
     assert len({call["cache"] for call in audits}) == len(audits)
     assert all(not Path(call["cache"]).exists() for call in audits)
     assert "--disable-pip" in audits[0]["args"]
-    assert "--no-deps" in audits[0]["args"]
+    assert "--require-hashes" in audits[0]["args"]
     assert "--progress-spinner" in audits[0]["args"]
     requirements = audits[0]["args"][-1]
     assert not Path(requirements).exists()

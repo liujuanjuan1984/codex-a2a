@@ -59,7 +59,7 @@ jobs:
           XDG_CACHE_HOME="${audit_cache_dir}" \
             timeout 120s uv run pip-audit \
             --disable-pip \
-            --no-deps \
+            --require-hashes \
             --progress-spinner off \
             --requirement /tmp/runtime-requirements.txt
 

@@ -21,7 +21,7 @@ run_pip_audit() {
     if XDG_CACHE_HOME="${audit_cache_dir}" timeout "${timeout_seconds}s" \
       uv run pip-audit \
       --disable-pip \
-      --no-deps \
+      --require-hashes \
       --progress-spinner off \
       --requirement "${requirement_file}"; then
       rm -rf "${audit_cache_dir}"
