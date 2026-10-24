@@ -469,14 +469,14 @@ async def test_disconnect_detaches_sink_without_stopping_producer(
 @pytest.mark.asyncio
 async def test_completion_between_snapshot_and_tap_replays_final_task(runtime, monkeypatch):
     handler, _, _ = runtime
-    await task_store_save(handler._versioned_store, _task(), ServerCallContext())
+    await task_store_save(handler.task_store, _task(), ServerCallContext())
     source = await handler._queue_manager.create("task")
     original_tap = source.tap
 
     async def complete_before_tap(**kwargs):
         final = _task()
         final.status.state = TaskState.TASK_STATE_COMPLETED
-        await task_store_save(handler._versioned_store, final, ServerCallContext())
+        await task_store_save(handler.task_store, final, ServerCallContext())
         await source.close(immediate=True)
         return await original_tap(**kwargs)
 
@@ -494,7 +494,7 @@ async def test_duplicate_stream_registration_preserves_existing_snapshot(runtime
     producer = AsyncMock()
     await handler._queue_manager.create("task")
     task = _task()
-    await task_store_save(handler._versioned_store, task, ServerCallContext())
+    await task_store_save(handler.task_store, task, ServerCallContext())
     replacement = _task()
     replacement.status.state = TaskState.TASK_STATE_FAILED
     with pytest.raises(ValueError, match="already exists"):

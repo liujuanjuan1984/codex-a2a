@@ -228,12 +228,12 @@ class CodexRequestHandler(DefaultRequestHandler):
         producer,
     ) -> asyncio.Task:
         store_context = self._task_store_context(context)
-        await task_store_save(self._versioned_store, task, store_context)
+        await task_store_save(self.task_store, task, store_context)
         source_queue = await self._queue_manager.create(task.id)
         task_manager = TaskManager(
             task_id=task.id,
             context_id=task.context_id,
-            task_store=self._versioned_store,
+            task_store=self.task_store,
             initial_message=None,
             context=store_context,
         )
@@ -262,7 +262,7 @@ class CodexRequestHandler(DefaultRequestHandler):
             except TaskStoreOperationError:
                 raise
             except Exception:
-                current_task = await task_store_get(self._versioned_store, task.id, store_context)
+                current_task = await task_store_get(self.task_store, task.id, store_context)
                 if (
                     current_task is not None
                     and current_task.status.state not in TERMINAL_TASK_STATES
@@ -441,7 +441,7 @@ class CodexRequestHandler(DefaultRequestHandler):
     ) -> Task | None:
         store_context = self._task_store_context(context)
         try:
-            task = await task_store_get(self._versioned_store, params.id, store_context)
+            task = await task_store_get(self.task_store, params.id, store_context)
             if not task:
                 raise TaskNotFoundError()
 
@@ -458,7 +458,7 @@ class CodexRequestHandler(DefaultRequestHandler):
             try:
                 return await super().on_cancel_task(params, store_context)
             except TaskNotCancelableError:
-                refreshed = await task_store_get(self._versioned_store, params.id, store_context)
+                refreshed = await task_store_get(self.task_store, params.id, store_context)
                 if refreshed and refreshed.status.state in _CANCELED_TASK_STATES:
                     return refreshed
                 raise
@@ -474,7 +474,7 @@ class CodexRequestHandler(DefaultRequestHandler):
     ):
         store_context = self._task_store_context(context)
         try:
-            task = await task_store_get(self._versioned_store, params.id, store_context)
+            task = await task_store_get(self.task_store, params.id, store_context)
             if not task:
                 raise TaskNotFoundError()
 
