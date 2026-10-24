@@ -134,18 +134,25 @@ class CodexRequestHandler(DefaultRequestHandler):
 
     def __init__(self, *args, **kwargs) -> None:  # noqa: ANN002, ANN003
         self._task_output_modes: dict[str, frozenset[str]] = {}
-        request_context_builder = kwargs.pop("request_context_builder", None)
+        super_args = list(args)
+        if len(super_args) > 6:
+            request_context_builder: RequestContextBuilder | None = super_args[6]
+        else:
+            request_context_builder = kwargs.pop("request_context_builder", None)
         if request_context_builder is None:
             request_context_builder = SimpleRequestContextBuilder(
                 should_populate_referred_tasks=False,
                 task_store=None,
             )
-        super_kwargs = dict(kwargs)
-        super_kwargs["request_context_builder"] = _OutputModeAwareRequestContextBuilder(
+        wrapped_builder = _OutputModeAwareRequestContextBuilder(
             request_context_builder,
             remember=self._remember_task_output_modes,
         )
-        super().__init__(*args, **super_kwargs)
+        if len(super_args) > 6:
+            super_args[6] = wrapped_builder
+        else:
+            kwargs["request_context_builder"] = wrapped_builder
+        super().__init__(*super_args, **kwargs)
         self._background_tasks: set[asyncio.Task] = set()
         self._queue_manager = _BackgroundQueueManager()
         self._producer_tasks: dict[str, asyncio.Task] = {}

@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 import pytest_asyncio
+from a2a.server.agent_execution import SimpleRequestContextBuilder
 from a2a.server.context import ServerCallContext
 from a2a.server.events.event_queue import QueueShutDown
 from a2a.server.request_handlers import DefaultRequestHandler
@@ -116,6 +117,25 @@ def _task():
 
 def test_handler_uses_public_request_context_builder_seam() -> None:
     assert CodexRequestHandler._setup_active_task is DefaultRequestHandler._setup_active_task
+
+
+def test_handler_accepts_positional_request_context_builder() -> None:
+    builder = SimpleRequestContextBuilder(
+        should_populate_referred_tasks=False,
+        task_store=None,
+    )
+
+    handler = CodexRequestHandler(
+        MagicMock(),
+        InMemoryTaskStore(),
+        build_agent_card(make_settings(a2a_bearer_token="test-token")),
+        None,
+        None,
+        None,
+        builder,
+    )
+
+    assert handler._request_context_builder._inner is builder
 
 
 def _status(state):
