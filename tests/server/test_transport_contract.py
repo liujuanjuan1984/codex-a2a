@@ -1353,6 +1353,73 @@ async def test_dual_stack_send_rejects_cross_transport_payload_shapes(monkeypatc
 
 
 @pytest.mark.asyncio
+async def test_terminal_follow_up_is_unsupported_across_send_transports(monkeypatch) -> None:
+    import codex_a2a.server.application as app_module
+
+    monkeypatch.setattr(app_module, "CodexClient", DummyChatCodexClient)
+    app = app_module.create_app(make_settings(a2a_bearer_token="test-token"))
+    await task_store_save(
+        app.state.task_store,
+        Task(
+            id="terminal-task",
+            context_id="terminal-context",
+            status=TaskStatus(state=TaskState.TASK_STATE_COMPLETED),
+        ),
+        ServerCallContext(user=StarletteUser(SimpleUser("automation"))),
+    )
+    headers = {"Authorization": "Bearer test-token"}
+    message = {
+        "messageId": "terminal-follow-up",
+        "taskId": "terminal-task",
+        "contextId": "terminal-context",
+        "role": "ROLE_USER",
+        "parts": [{"text": "run again"}],
+    }
+    transport = httpx.ASGITransport(app=app)
+
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        rest_send = await client.post("/message:send", headers=headers, json={"message": message})
+        rest_stream = await client.post(
+            "/message:stream",
+            headers=headers,
+            json={"message": message},
+        )
+        rpc_send = await client.post(
+            CORE_JSONRPC_PATH,
+            headers=headers,
+            json={
+                "jsonrpc": "2.0",
+                "id": 700,
+                "method": "SendMessage",
+                "params": {"message": message},
+            },
+        )
+        rpc_stream = await client.post(
+            CORE_JSONRPC_PATH,
+            headers=headers,
+            json={
+                "jsonrpc": "2.0",
+                "id": 701,
+                "method": "SendStreamingMessage",
+                "params": {"message": message},
+            },
+        )
+
+    for response in (rest_send, rest_stream):
+        assert response.status_code == 400
+        assert response.headers["content-type"].split(";", 1)[0] == "application/json"
+        error = response.json()["error"]
+        assert error["status"] == "FAILED_PRECONDITION"
+        assert error["details"][0]["reason"] == "UNSUPPORTED_OPERATION"
+
+    for response in (rpc_send, rpc_stream):
+        assert response.status_code == 200
+        error = response.json()["error"]
+        assert error["code"] == -32004
+        assert error["data"][0]["reason"] == "UNSUPPORTED_OPERATION"
+
+
+@pytest.mark.asyncio
 async def test_rest_success_responses_use_a2a_json_media_type(monkeypatch) -> None:
     import codex_a2a.server.application as app_module
 

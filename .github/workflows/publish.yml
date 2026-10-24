@@ -55,8 +55,13 @@ jobs:
         run: |
           audit_cache_dir="$(mktemp -d)"
           trap 'rm -rf "${audit_cache_dir}"' EXIT
+          # The export is complete and hash-pinned; avoid a second pip resolver pass.
           XDG_CACHE_HOME="${audit_cache_dir}" \
-            uv run pip-audit --requirement /tmp/runtime-requirements.txt
+            timeout 120s uv run pip-audit \
+            --disable-pip \
+            --no-deps \
+            --progress-spinner off \
+            --requirement /tmp/runtime-requirements.txt
 
       - name: Resolve release tag
         id: release_tag
