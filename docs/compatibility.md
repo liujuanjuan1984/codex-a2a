@@ -75,8 +75,8 @@ Service-level behavior layered on top of those core methods should also be decla
 Task-store resilience is also service-level behavior in this deployment:
 
 - A `SendMessage` that references a task already in a terminal state is rejected as invalid parameters instead of restarting that task in place.
-- Once a task reaches a terminal state, later conflicting persistence writes are dropped on a first-terminal-state-wins basis.
-- In the default SQLite-backed deployment, terminal-task persistence is guarded with an atomic database upsert instead of a process-local read-before-write check.
+- Database-backed deployments use the SDK `VersionedDatabaseTaskStore`, `DatabaseTaskEventStream`, and their per-task compare-and-swap versioning; stale writes are rejected rather than overwriting the current task snapshot.
+- Memory-backed deployments use the SDK `CopyingTaskStoreAdapter` and `LegacyTaskStoreAdapter`; they are process-local and do not provide cross-replica version coordination.
 - Task-store I/O failures are surfaced as stable service errors instead of leaking backend-specific exceptions through request handlers.
 
 HTTP+JSON message endpoints accept the A2A 1.0 `message.parts` shape. A JSON-RPC envelope or the legacy `message.content` shape is rejected with `400` rather than being partially accepted through unknown-field handling.

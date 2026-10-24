@@ -6,12 +6,11 @@ import uuid
 from contextlib import aclosing
 
 from a2a.server.agent_execution.active_task import INTERRUPTED_TASK_STATES, TERMINAL_TASK_STATES
-from a2a.server.cluster.task_store import VersionedTaskStore
 from a2a.server.context import ServerCallContext
 from a2a.server.events.event_queue import EventQueue, QueueShutDown
 from a2a.server.events.event_queue_v2 import EventQueueSource
 from a2a.server.request_handlers import DefaultRequestHandler
-from a2a.server.tasks import TaskManager, TaskStore
+from a2a.server.tasks import TaskManager
 from a2a.types import (
     Artifact,
     CancelTaskRequest,
@@ -53,6 +52,8 @@ from codex_a2a.server.task_store import (
     TaskStoreOperationError,
     build_task_store_failure_metadata,
     task_store_failure_message,
+    task_store_get,
+    task_store_save,
 )
 
 logger = logging.getLogger(__name__)
@@ -131,13 +132,6 @@ class CodexRequestHandler(DefaultRequestHandler):
 
         task.add_done_callback(_discard)
 
-    def _task_store(self) -> TaskStore:
-        """Return the unversioned store used by the adapter's direct persistence paths."""
-        store = self.task_store
-        if isinstance(store, VersionedTaskStore):
-            raise RuntimeError("CodexRequestHandler requires an unversioned TaskStore")
-        return store
-
     async def _register_producer(self, task_id: str, producer_task: asyncio.Task) -> None:
         self._producer_tasks[task_id] = producer_task
 
@@ -190,13 +184,12 @@ class CodexRequestHandler(DefaultRequestHandler):
         producer,
     ) -> asyncio.Task:
         store_context = self._task_store_context(context)
-        task_store = self._task_store()
-        await task_store.save(task, store_context)
+        await task_store_save(self._versioned_store, task, store_context)
         source_queue = await self._queue_manager.create(task.id)
         task_manager = TaskManager(
             task_id=task.id,
             context_id=task.context_id,
-            task_store=task_store,
+            task_store=self._versioned_store,
             initial_message=None,
             context=store_context,
         )
@@ -225,7 +218,7 @@ class CodexRequestHandler(DefaultRequestHandler):
             except TaskStoreOperationError:
                 raise
             except Exception:
-                current_task = await task_store.get(task.id, store_context)
+                current_task = await task_store_get(self._versioned_store, task.id, store_context)
                 if (
                     current_task is not None
                     and current_task.status.state not in TERMINAL_TASK_STATES
@@ -381,7 +374,7 @@ class CodexRequestHandler(DefaultRequestHandler):
             return
         context_id = getattr(message, "context_id", None)
         try:
-            existing = await self._task_store().get(task_id, store_context)
+            existing = await task_store_get(self._versioned_store, task_id, store_context)
         except TaskStoreOperationError as exc:
             raise self._task_store_server_error(exc) from exc
         if existing is None:
@@ -442,9 +435,8 @@ class CodexRequestHandler(DefaultRequestHandler):
         context=None,
     ) -> Task | None:
         store_context = self._task_store_context(context)
-        task_store = self._task_store()
         try:
-            task = await task_store.get(params.id, store_context)
+            task = await task_store_get(self._versioned_store, params.id, store_context)
             if not task:
                 raise TaskNotFoundError()
 
@@ -460,7 +452,7 @@ class CodexRequestHandler(DefaultRequestHandler):
             try:
                 return await super().on_cancel_task(params, store_context)
             except TaskNotCancelableError:
-                refreshed = await task_store.get(params.id, store_context)
+                refreshed = await task_store_get(self._versioned_store, params.id, store_context)
                 if refreshed and refreshed.status.state in _CANCELED_TASK_STATES:
                     return refreshed
                 raise
@@ -473,9 +465,8 @@ class CodexRequestHandler(DefaultRequestHandler):
         context=None,
     ):
         store_context = self._task_store_context(context)
-        task_store = self._task_store()
         try:
-            task = await task_store.get(params.id, store_context)
+            task = await task_store_get(self._versioned_store, params.id, store_context)
             if not task:
                 raise TaskNotFoundError()
 

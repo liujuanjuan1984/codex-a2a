@@ -29,19 +29,20 @@ from codex_a2a.a2a_proto import new_text_part, part_text
 from codex_a2a.logging_context import bind_correlation_id, get_correlation_id
 from codex_a2a.server.agent_card import build_agent_card
 from codex_a2a.server.request_handler import CodexRequestHandler
-from codex_a2a.server.task_store import build_task_store_runtime
+from codex_a2a.server.task_store import build_task_store_runtime, task_store_save
 from tests.support.settings import make_settings
 
 pytestmark = pytest.mark.filterwarnings("error::DeprecationWarning")
 
 
-def _handler(store):
+def _handler(store, *, event_stream=None):
     executor = MagicMock()
     executor.execute = AsyncMock(side_effect=RuntimeError("early failure"))
     return CodexRequestHandler(
         agent_executor=executor,
         task_store=store,
         agent_card=build_agent_card(make_settings(a2a_bearer_token="test-token")),
+        event_stream=event_stream,
     )
 
 
@@ -128,7 +129,7 @@ async def runtime(request, tmp_path):
     )
     store = build_task_store_runtime(settings)
     await store.startup()
-    handler = _handler(store.task_store)
+    handler = _handler(store.task_store, event_stream=store.event_stream)
     try:
         yield handler, store, settings
     finally:
@@ -273,7 +274,7 @@ async def test_existing_database_snapshot_survives_reopen_without_migration(tmp_
 
     new_store = build_task_store_runtime(settings)
     await new_store.startup()
-    handler = _handler(new_store.task_store)
+    handler = _handler(new_store.task_store, event_stream=new_store.event_stream)
     try:
         assert await handler.on_get_task(GetTaskRequest(id="task")) == snapshot
         assert [
@@ -467,14 +468,14 @@ async def test_disconnect_detaches_sink_without_stopping_producer(
 @pytest.mark.asyncio
 async def test_completion_between_snapshot_and_tap_replays_final_task(runtime, monkeypatch):
     handler, _, _ = runtime
-    await handler.task_store.save(_task(), ServerCallContext())
+    await task_store_save(handler._versioned_store, _task(), ServerCallContext())
     source = await handler._queue_manager.create("task")
     original_tap = source.tap
 
     async def complete_before_tap(**kwargs):
         final = _task()
         final.status.state = TaskState.TASK_STATE_COMPLETED
-        await handler.task_store.save(final, ServerCallContext())
+        await task_store_save(handler._versioned_store, final, ServerCallContext())
         await source.close(immediate=True)
         return await original_tap(**kwargs)
 
@@ -492,7 +493,7 @@ async def test_duplicate_stream_registration_preserves_existing_snapshot(runtime
     producer = AsyncMock()
     await handler._queue_manager.create("task")
     task = _task()
-    await handler.task_store.save(task, ServerCallContext())
+    await task_store_save(handler._versioned_store, task, ServerCallContext())
     replacement = _task()
     replacement.status.state = TaskState.TASK_STATE_FAILED
     with pytest.raises(ValueError, match="already exists"):

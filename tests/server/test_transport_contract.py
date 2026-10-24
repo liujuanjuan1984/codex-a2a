@@ -318,6 +318,7 @@ async def test_create_app_shares_database_engine_across_runtime_components(monke
         captured["task_engine"] = engine
         return SimpleNamespace(
             task_store=task_store,
+            event_stream=None,
             startup=task_startup,
             shutdown=task_shutdown,
         )
@@ -1441,6 +1442,7 @@ async def test_subscribe_task_store_failure_returns_controlled_503(monkeypatch) 
         "build_task_store_runtime",
         lambda settings, engine=None: TaskStoreRuntime(  # noqa: ARG005
             task_store=_FailingTaskStore(),
+            event_stream=None,
             startup=AsyncMock(),
             shutdown=AsyncMock(),
         ),

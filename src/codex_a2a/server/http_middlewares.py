@@ -7,6 +7,7 @@ import time
 from typing import Any, cast
 from urllib.parse import unquote, urlsplit
 
+from a2a.server.cluster import VersionedTaskStore
 from a2a.server.context import ServerCallContext
 from a2a.server.jsonrpc_models import JSONRPCError
 from a2a.server.request_handlers.response_helpers import agent_card_to_dict
@@ -48,7 +49,12 @@ from codex_a2a.server.runtime_limits import (
     SlidingWindowRateLimiter,
     build_rate_limit_response,
 )
-from codex_a2a.server.task_store import TaskStoreOperationError, task_store_failure_message
+from codex_a2a.server.task_store import (
+    TaskStoreOperationError,
+    as_versioned_task_store,
+    task_store_failure_message,
+    task_store_get,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -539,7 +545,7 @@ def _install_message_payload_shape_guard(app: FastAPI) -> None:
         return await call_next(request)
 
 
-def _install_subscribe_task_guard(app: FastAPI, *, task_store: TaskStore) -> None:
+def _install_subscribe_task_guard(app: FastAPI, *, task_store: VersionedTaskStore) -> None:
     @app.middleware("http")
     async def guard_missing_subscribe_task(request: Request, call_next):
         path = _canonical_rest_path(request.url.path)
@@ -552,7 +558,7 @@ def _install_subscribe_task_guard(app: FastAPI, *, task_store: TaskStore) -> Non
             return JSONResponse({"error": "Task not found"}, status_code=404)
 
         try:
-            task = await task_store.get(task_id, ServerCallContext())
+            task = await task_store_get(task_store, task_id, ServerCallContext())
         except TaskStoreOperationError as exc:
             logger.exception(
                 "Task store operation failed while guarding subscribe path task_id=%s operation=%s",
@@ -879,7 +885,7 @@ def install_http_middlewares(
     app: FastAPI,
     *,
     settings: Settings,
-    task_store: TaskStore,
+    task_store: TaskStore | VersionedTaskStore,
     agent_card: object,
     extended_agent_card: object,
 ) -> None:
@@ -887,6 +893,7 @@ def install_http_middlewares(
     extended_card_etag = _build_agent_card_etag(extended_agent_card)
     configured_credentials = build_static_auth_credentials(settings)
     advertised_schemes = {credential.auth_scheme for credential in configured_credentials}
+    versioned_task_store = as_versioned_task_store(task_store)
 
     # Registration order is significant: Starlette wraps the most recently
     # added middleware outermost, so this mirrors the original single-function
@@ -898,7 +905,7 @@ def install_http_middlewares(
         extended_card_etag=extended_card_etag,
     )
     _install_message_payload_shape_guard(app)
-    _install_subscribe_task_guard(app, task_store=task_store)
+    _install_subscribe_task_guard(app, task_store=versioned_task_store)
     _install_payload_logging_middleware(app, settings=settings)
     _install_rate_limit_middleware(app, settings=settings)
     _install_bearer_auth_middleware(

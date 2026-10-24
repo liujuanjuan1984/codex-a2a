@@ -257,6 +257,7 @@ def create_app(settings: Settings) -> FastAPI:
         push_config_store=push_config_store_runtime.push_config_store,
         agent_card=agent_card,
         extended_agent_card=extended_agent_card,
+        event_stream=task_store_runtime.event_stream,
     )
     exec_runtime = CodexExecRuntime(
         client=client,

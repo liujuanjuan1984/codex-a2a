@@ -22,6 +22,7 @@ from a2a.types import (
 from codex_a2a.a2a_proto import new_text_part
 from codex_a2a.server.agent_card import build_agent_card
 from codex_a2a.server.request_handler import CodexRequestHandler
+from codex_a2a.server.task_store import task_store_get
 from tests.support.settings import make_settings
 
 
@@ -142,7 +143,7 @@ async def test_aclose_drains_adapter_streams_and_undrained_queues(
     with pytest.raises(RuntimeError, match="closed"):
         await handler.start_background_task_stream(task=_task("late"), producer=producer_mock)
     producer_mock.assert_not_awaited()
-    assert await handler.task_store.get("late", ServerCallContext()) is None
+    assert await task_store_get(handler._versioned_store, "late", ServerCallContext()) is None
 
 
 @pytest.mark.asyncio
@@ -184,14 +185,20 @@ async def test_shutdown_waits_for_inflight_stream_registration(monkeypatch) -> N
     handler = _handler()
     saving = asyncio.Event()
     release_save = asyncio.Event()
-    save = handler.task_store.save
+    save = handler._versioned_store.save
 
-    async def delayed_save(task, context):
+    async def delayed_save(task, *, event, prev, prev_version, context):
         saving.set()
         await release_save.wait()
-        await save(task, context)
+        await save(
+            task,
+            event=event,
+            prev=prev,
+            prev_version=prev_version,
+            context=context,
+        )
 
-    monkeypatch.setattr(handler.task_store, "save", delayed_save)
+    monkeypatch.setattr(handler._versioned_store, "save", delayed_save)
     registration = asyncio.create_task(
         handler.start_background_task_stream(task=_task(), producer=AsyncMock())
     )
@@ -231,7 +238,10 @@ async def test_lifespan_closes_in_dependency_order_even_after_error(monkeypatch,
         app_module,
         "build_task_store_runtime",
         lambda *args, **kwargs: SimpleNamespace(
-            task_store=InMemoryTaskStore(), startup=AsyncMock(), shutdown=close("tasks")
+            task_store=InMemoryTaskStore(),
+            event_stream=None,
+            startup=AsyncMock(),
+            shutdown=close("tasks"),
         ),
     )
     monkeypatch.setattr(
@@ -288,7 +298,10 @@ async def test_lifespan_releases_started_stores_if_later_startup_fails(monkeypat
         app_module,
         "build_task_store_runtime",
         lambda *args, **kwargs: SimpleNamespace(
-            task_store=InMemoryTaskStore(), startup=AsyncMock(), shutdown=task_shutdown
+            task_store=InMemoryTaskStore(),
+            event_stream=None,
+            startup=AsyncMock(),
+            shutdown=task_shutdown,
         ),
     )
     monkeypatch.setattr(
