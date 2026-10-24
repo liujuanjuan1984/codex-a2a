@@ -9,6 +9,7 @@ import pytest
 import pytest_asyncio
 from a2a.server.context import ServerCallContext
 from a2a.server.events.event_queue import QueueShutDown
+from a2a.server.tasks import InMemoryTaskStore, TaskUpdater
 from a2a.types import (
     Artifact,
     GetTaskRequest,
@@ -25,6 +26,7 @@ from a2a.types import (
 from a2a.utils.errors import InvalidParamsError
 
 from codex_a2a.a2a_proto import new_text_part, part_text
+from codex_a2a.logging_context import bind_correlation_id, get_correlation_id
 from codex_a2a.server.agent_card import build_agent_card
 from codex_a2a.server.request_handler import CodexRequestHandler
 from codex_a2a.server.task_store import build_task_store_runtime
@@ -41,6 +43,65 @@ def _handler(store):
         task_store=store,
         agent_card=build_agent_card(make_settings(a2a_bearer_token="test-token")),
     )
+
+
+def _request_handler(executor) -> CodexRequestHandler:
+    return CodexRequestHandler(
+        agent_executor=executor,
+        task_store=InMemoryTaskStore(),
+        agent_card=build_agent_card(make_settings(a2a_bearer_token="test-token")),
+    )
+
+
+async def _wait_for_active_tasks_to_release(handler: CodexRequestHandler) -> None:
+    for _ in range(100):
+        if not handler._active_task_registry._active_tasks:
+            return
+        await asyncio.sleep(0.01)
+    raise AssertionError("active tasks were not released")
+
+
+class _MessageOnlyExecutor:
+    async def execute(self, context, event_queue) -> None:  # noqa: ANN001
+        await event_queue.enqueue_event(
+            Message(
+                message_id="direct-response",
+                context_id=context.context_id,
+                role=Role.ROLE_AGENT,
+                parts=[new_text_part("direct response")],
+            )
+        )
+
+    async def cancel(self, context, event_queue) -> None:  # noqa: ANN001
+        del context, event_queue
+
+
+class _InputRequiredThenCompleteExecutor:
+    def __init__(self) -> None:
+        self.seen_correlation_ids: list[str | None] = []
+        self.task: Task | None = None
+
+    async def execute(self, context, event_queue) -> None:  # noqa: ANN001
+        self.seen_correlation_ids.append(get_correlation_id())
+        if context.current_task is not None:
+            updater = TaskUpdater(event_queue, context.task_id, context.context_id)
+            await updater.complete()
+            return
+        self.task = Task(
+            id=context.task_id,
+            context_id=context.context_id,
+            status=TaskStatus(state=TaskState.TASK_STATE_SUBMITTED),
+            history=[context.message],
+        )
+        await event_queue.enqueue_event(self.task)
+        updater = TaskUpdater(event_queue, self.task.id, self.task.context_id)
+        await updater.update_status(
+            TaskState.TASK_STATE_INPUT_REQUIRED,
+            message=updater.new_agent_message([new_text_part("more input required")]),
+        )
+
+    async def cancel(self, context, event_queue) -> None:  # noqa: ANN001
+        del context, event_queue
 
 
 def _task():
@@ -116,6 +177,82 @@ async def test_early_failure_persists_once_and_terminal_task_cannot_restart(
         event async for event in handler.on_subscribe_to_task(SubscribeToTaskRequest(id=task_id))
     ] == [snapshot]
     assert await handler.on_get_task(GetTaskRequest(id=task_id)) == snapshot
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("streaming", [False, True])
+async def test_direct_message_response_releases_active_task(streaming):
+    handler = _request_handler(_MessageOnlyExecutor())
+    params = SendMessageRequest(
+        message=Message(
+            message_id="message",
+            role=Role.ROLE_USER,
+            parts=[new_text_part("hello")],
+        )
+    )
+    try:
+        if streaming:
+            events = [event async for event in handler.on_message_send_stream(params)]
+            assert len(events) == 1
+            assert isinstance(events[0], Message)
+        else:
+            result = await handler.on_message_send(params)
+            assert isinstance(result, Message)
+        await _wait_for_active_tasks_to_release(handler)
+    finally:
+        await handler.aclose()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("streaming", [False, True])
+async def test_follow_up_message_uses_sender_contextvars(streaming):
+    executor = _InputRequiredThenCompleteExecutor()
+    handler = _request_handler(executor)
+    first_params = SendMessageRequest(
+        message=Message(
+            message_id="first",
+            role=Role.ROLE_USER,
+            parts=[new_text_part("first")],
+        )
+    )
+
+    async def send(params):
+        if streaming:
+            async for _ in handler.on_message_send_stream(params):
+                pass
+            assert executor.task is not None
+            task = await handler.on_get_task(GetTaskRequest(id=executor.task.id))
+            assert task is not None
+            return task
+        result = await handler.on_message_send(params)
+        assert isinstance(result, Task)
+        return result
+
+    try:
+        with bind_correlation_id("correlation-first"):
+            first = await send(first_params)
+        assert isinstance(first, Task)
+        assert first.status.state == TaskState.TASK_STATE_INPUT_REQUIRED
+
+        second_params = SendMessageRequest(
+            message=Message(
+                message_id="second",
+                task_id=first.id,
+                context_id=first.context_id,
+                role=Role.ROLE_USER,
+                parts=[new_text_part("second")],
+            )
+        )
+        with bind_correlation_id("correlation-second"):
+            second = await send(second_params)
+        assert isinstance(second, Task)
+        assert second.status.state == TaskState.TASK_STATE_COMPLETED
+        assert executor.seen_correlation_ids == [
+            "correlation-first",
+            "correlation-second",
+        ]
+    finally:
+        await handler.aclose()
 
 
 @pytest.mark.asyncio

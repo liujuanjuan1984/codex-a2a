@@ -3,6 +3,7 @@ from __future__ import annotations
 import httpx
 from a2a.client import A2AClientError as SDKA2AClientError
 from a2a.client.errors import A2AClientTimeoutError, AgentCardResolutionError
+from google.protobuf.json_format import ParseError  # type: ignore[import-untyped]
 
 from codex_a2a.client.errors import (
     A2AAgentUnavailableError,
@@ -63,5 +64,14 @@ def test_timeout_maps_unavailable() -> None:
 
 def test_sdk_protocol_errors_map_to_protocol_type() -> None:
     mapped = map_a2a_sdk_error(SDKA2AClientError("bad payload"))
+
+    assert isinstance(mapped, A2AClientProtocolError)
+
+
+def test_malformed_agent_card_parse_errors_map_to_protocol_type() -> None:
+    mapped = map_a2a_sdk_error(
+        ParseError("Invalid agent card structure"),
+        operation="agent_card",
+    )
 
     assert isinstance(mapped, A2AClientProtocolError)

@@ -3,6 +3,7 @@ from __future__ import annotations
 import httpx
 from a2a.client import A2AClientError as SDKA2AClientError
 from a2a.client.errors import A2AClientTimeoutError, AgentCardResolutionError
+from google.protobuf.json_format import ParseError  # type: ignore[import-untyped]
 
 
 class A2AClientError(RuntimeError):
@@ -126,6 +127,9 @@ def map_a2a_sdk_error(
 
     if isinstance(exc, A2AClientTimeoutError):
         return A2AAgentUnavailableError(str(exc))
+
+    if isinstance(exc, ParseError):
+        return A2AClientProtocolError(str(exc))
 
     if isinstance(exc, SDKA2AClientError):
         return A2AClientProtocolError(str(exc))
