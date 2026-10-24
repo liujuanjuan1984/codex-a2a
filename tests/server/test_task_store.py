@@ -338,3 +338,44 @@ async def test_versioned_store_helpers_wrap_operation_failures() -> None:
         match="Task store delete failed for task_id=task-1",
     ):
         await task_store_delete(task_store, "task-1")
+
+
+class _TaskStoreOperationRaisingVersionedStore(VersionedTaskStore):
+    async def save(
+        self,
+        task: Task,
+        *,
+        event=None,
+        prev=None,
+        prev_version: TaskVersion,
+        context: ServerCallContext,
+    ) -> TaskVersion:
+        del task, event, prev, prev_version, context
+        raise TaskStoreOperationError("save", "task-1")
+
+    async def get(self, task_id: str, context: ServerCallContext):
+        del task_id, context
+        return None
+
+    async def list(
+        self,
+        params: ListTasksRequest,
+        context: ServerCallContext,
+    ) -> ListTasksResponse:
+        del params, context
+        return ListTasksResponse()
+
+    async def delete(self, task_id: str, context: ServerCallContext) -> None:
+        del task_id, context
+        raise TaskStoreOperationError("delete", "task-1")
+
+
+@pytest.mark.asyncio
+async def test_versioned_store_helpers_preserve_existing_store_errors() -> None:
+    task_store = _TaskStoreOperationRaisingVersionedStore()
+
+    with pytest.raises(TaskStoreOperationError, match="Task store save failed"):
+        await task_store_save(task_store, _task())
+
+    with pytest.raises(TaskStoreOperationError, match="Task store delete failed"):
+        await task_store_delete(task_store, "task-1")
