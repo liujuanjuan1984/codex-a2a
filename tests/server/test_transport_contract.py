@@ -1226,6 +1226,14 @@ async def test_dual_stack_send_rejects_cross_transport_payload_shapes(monkeypatc
             "content": [{"text": "hello"}],
         }
     }
+    rest_with_mixed_shape = {
+        "message": {
+            "messageId": "m-rest-mixed",
+            "role": "ROLE_USER",
+            "content": [{"text": "legacy"}],
+            "parts": [{"text": "current"}],
+        }
+    }
     full_jsonrpc_envelope = {
         "jsonrpc": "2.0",
         "id": 3,
@@ -1250,6 +1258,19 @@ async def test_dual_stack_send_rejects_cross_transport_payload_shapes(monkeypatc
             }
         },
     }
+    rpc_with_mixed_shape = {
+        "jsonrpc": "2.0",
+        "id": 4,
+        "method": "SendMessage",
+        "params": {
+            "message": {
+                "messageId": "m-rpc-mixed",
+                "role": "ROLE_USER",
+                "content": [{"text": "legacy"}],
+                "parts": [{"text": "current"}],
+            }
+        },
+    }
 
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         rest_resp = await client.post(
@@ -1258,6 +1279,13 @@ async def test_dual_stack_send_rejects_cross_transport_payload_shapes(monkeypatc
             json=rest_with_legacy_shape,
         )
         assert rest_resp.status_code == 400
+
+        rest_mixed_resp = await client.post(
+            "/message:send",
+            headers=headers,
+            json=rest_with_mixed_shape,
+        )
+        assert rest_mixed_resp.status_code == 400
 
         rest_envelope_resp = await client.post(
             "/message:send",
@@ -1271,6 +1299,14 @@ async def test_dual_stack_send_rejects_cross_transport_payload_shapes(monkeypatc
         assert rpc_resp.status_code == 200
         payload = rpc_resp.json()
         assert payload["error"]["code"] in {-32600, -32602, -32603}
+
+        rpc_mixed_resp = await client.post(
+            CORE_JSONRPC_PATH,
+            headers=headers,
+            json=rpc_with_mixed_shape,
+        )
+        assert rpc_mixed_resp.status_code == 200
+        assert rpc_mixed_resp.json()["error"]["code"] == -32602
 
 
 @pytest.mark.asyncio

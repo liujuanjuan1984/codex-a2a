@@ -387,11 +387,12 @@ class CodexRequestHandler(DefaultRequestHandler):
         if existing is None:
             return
         if existing.status.state in TERMINAL_TASK_STATES:
+            state_name = TaskState.Name(existing.status.state)
             raise InvalidParamsError(
-                message=f"Task {task_id} is in terminal state: {existing.status.state}",
+                message=f"Task {task_id} is in terminal state: {state_name}",
                 data={
                     "task_id": task_id,
-                    "state": existing.status.state,
+                    "state": state_name,
                     "reason": "terminal_task_cannot_restart",
                 },
             )

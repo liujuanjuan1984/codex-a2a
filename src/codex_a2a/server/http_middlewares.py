@@ -271,7 +271,7 @@ def _looks_like_legacy_message_payload(payload: dict | None) -> bool:
     if payload is None:
         return False
     message = payload.get("message")
-    return isinstance(message, dict) and "content" in message and "parts" not in message
+    return isinstance(message, dict) and "content" in message
 
 
 def _looks_like_legacy_jsonrpc_message_payload(payload: dict | None) -> bool:

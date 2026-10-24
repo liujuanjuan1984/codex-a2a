@@ -170,7 +170,9 @@ async def test_early_failure_persists_once_and_terminal_task_cannot_restart(
         else:
             await handler.on_message_send(params)
     assert "terminal state" in (exc_info.value.message or "")
+    assert "TASK_STATE_FAILED" in (exc_info.value.message or "")
     assert exc_info.value.data is not None
+    assert exc_info.value.data["state"] == "TASK_STATE_FAILED"
     assert exc_info.value.data["reason"] == "terminal_task_cannot_restart"
     handler.agent_executor.execute.assert_awaited_once()
     assert [
