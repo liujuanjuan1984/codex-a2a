@@ -1413,7 +1413,11 @@ async def test_subscribe_missing_task_returns_controlled_404(monkeypatch) -> Non
         )
 
     assert response.status_code == 404
-    assert response.json() == {"error": "Task not found", "task_id": "task-missing"}
+    payload = response.json()
+    assert payload["error"]["code"] == 404
+    assert payload["error"]["status"] == "NOT_FOUND"
+    assert payload["error"]["message"] == "Task not found"
+    assert payload["error"]["details"][0]["reason"] == "TASK_NOT_FOUND"
 
 
 @pytest.mark.asyncio
@@ -1431,11 +1435,14 @@ async def test_subscribe_blank_task_id_returns_controlled_404(monkeypatch) -> No
         )
 
     assert response.status_code == 404
-    assert response.json() == {"error": "Task not found"}
+    payload = response.json()
+    assert payload["error"]["code"] == 404
+    assert payload["error"]["status"] == "NOT_FOUND"
+    assert payload["error"]["details"][0]["reason"] == "TASK_NOT_FOUND"
 
 
 @pytest.mark.asyncio
-async def test_subscribe_task_store_failure_returns_controlled_503(monkeypatch) -> None:
+async def test_subscribe_task_store_failure_uses_sdk_internal_error(monkeypatch) -> None:
     import codex_a2a.server.application as app_module
 
     class _FailingTaskStore(TaskStore):
@@ -1471,8 +1478,11 @@ async def test_subscribe_task_store_failure_returns_controlled_503(monkeypatch) 
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.get("/tasks/task-broken:subscribe", headers=headers)
 
-    assert response.status_code == 503
-    assert response.json() == {"error": "Task store unavailable while loading task state."}
+    assert response.status_code == 500
+    payload = response.json()
+    assert payload["error"]["code"] == 500
+    assert payload["error"]["status"] == "INTERNAL"
+    assert payload["error"]["details"][0]["reason"] == "INTERNAL_ERROR"
 
 
 def _rest_message_payload() -> dict:

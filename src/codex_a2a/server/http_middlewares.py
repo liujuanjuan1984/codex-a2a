@@ -5,18 +5,12 @@ import json
 import logging
 import time
 from typing import Any, cast
-from urllib.parse import unquote, urlsplit
+from urllib.parse import urlsplit
 
-from a2a.auth.user import UnauthenticatedUser
-from a2a.server.cluster import VersionedTaskStore
-from a2a.server.context import ServerCallContext
 from a2a.server.jsonrpc_models import JSONRPCError
 from a2a.server.request_handlers.response_helpers import agent_card_to_dict
-from a2a.server.routes.common import StarletteUser
-from a2a.server.tasks.task_store import TaskStore
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
-from starlette.authentication import SimpleUser
 from starlette.datastructures import Headers
 from starlette.middleware.gzip import GZipResponder
 from starlette.responses import Response, StreamingResponse
@@ -51,12 +45,6 @@ from codex_a2a.protocol_versions import (
 from codex_a2a.server.runtime_limits import (
     SlidingWindowRateLimiter,
     build_rate_limit_response,
-)
-from codex_a2a.server.task_store import (
-    TaskStoreOperationError,
-    as_versioned_task_store,
-    task_store_failure_message,
-    task_store_get,
 )
 
 logger = logging.getLogger(__name__)
@@ -548,43 +536,6 @@ def _install_message_payload_shape_guard(app: FastAPI) -> None:
         return await call_next(request)
 
 
-def _install_subscribe_task_guard(app: FastAPI, *, task_store: VersionedTaskStore) -> None:
-    @app.middleware("http")
-    async def guard_missing_subscribe_task(request: Request, call_next):
-        path = _canonical_rest_path(request.url.path)
-        if not path.startswith("/tasks/") or not path.endswith(":subscribe"):
-            return await call_next(request)
-
-        encoded_task_id = path.removeprefix("/tasks/").removesuffix(":subscribe")
-        task_id = unquote(encoded_task_id).strip()
-        if not task_id:
-            return JSONResponse({"error": "Task not found"}, status_code=404)
-
-        identity = getattr(request.state, "user_identity", None)
-        context = ServerCallContext(
-            state={"identity": identity} if isinstance(identity, str) else {},
-            user=(
-                StarletteUser(SimpleUser(identity))
-                if isinstance(identity, str) and identity
-                else UnauthenticatedUser()
-            ),
-        )
-        try:
-            task = await task_store_get(task_store, task_id, context)
-        except TaskStoreOperationError as exc:
-            logger.exception(
-                "Task store operation failed while guarding subscribe path task_id=%s operation=%s",
-                task_id,
-                exc.operation,
-            )
-            return JSONResponse(
-                {"error": task_store_failure_message(exc.operation)}, status_code=503
-            )
-        if task is None:
-            return JSONResponse({"error": "Task not found", "task_id": task_id}, status_code=404)
-        return await call_next(request)
-
-
 async def _payload_request_log_info(
     request: Request,
     *,
@@ -897,7 +848,6 @@ def install_http_middlewares(
     app: FastAPI,
     *,
     settings: Settings,
-    task_store: TaskStore | VersionedTaskStore,
     agent_card: object,
     extended_agent_card: object,
 ) -> None:
@@ -905,8 +855,6 @@ def install_http_middlewares(
     extended_card_etag = _build_agent_card_etag(extended_agent_card)
     configured_credentials = build_static_auth_credentials(settings)
     advertised_schemes = {credential.auth_scheme for credential in configured_credentials}
-    versioned_task_store = as_versioned_task_store(task_store)
-
     # Registration order is significant: Starlette wraps the most recently
     # added middleware outermost, so this mirrors the original single-function
     # registration order exactly.
@@ -917,7 +865,6 @@ def install_http_middlewares(
         extended_card_etag=extended_card_etag,
     )
     _install_message_payload_shape_guard(app)
-    _install_subscribe_task_guard(app, task_store=versioned_task_store)
     _install_payload_logging_middleware(app, settings=settings)
     _install_rate_limit_middleware(app, settings=settings)
     _install_bearer_auth_middleware(

@@ -436,7 +436,6 @@ def create_app(settings: Settings) -> FastAPI:
     install_http_middlewares(
         app,
         settings=settings,
-        task_store=task_store,
         agent_card=agent_card,
         extended_agent_card=extended_agent_card,
     )

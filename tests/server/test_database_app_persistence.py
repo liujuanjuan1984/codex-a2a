@@ -327,7 +327,7 @@ async def test_database_backend_persists_push_notification_configs_across_app_re
 
 
 @pytest.mark.asyncio
-async def test_subscribe_guard_uses_authenticated_task_owner(
+async def test_subscribe_uses_authenticated_task_owner(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
