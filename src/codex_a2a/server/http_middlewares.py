@@ -264,18 +264,50 @@ def _looks_like_jsonrpc_envelope(payload: dict | None) -> bool:
     return isinstance(method, str) and isinstance(version, str)
 
 
-def _looks_like_legacy_message_payload(payload: dict | None) -> bool:
-    if payload is None:
-        return False
-    message = payload.get("message")
-    return isinstance(message, dict) and "content" in message
+def _message_shape_violation(message: object) -> tuple[str, str] | None:
+    if not isinstance(message, dict):
+        return None
+    if "content" in message:
+        return "message.content", "message.content is not supported; use message.parts"
+
+    role = message.get("role")
+    if isinstance(role, str) and role in {"user", "agent"}:
+        return "message.role", "message.role must use ROLE_* values"
+
+    parts = message.get("parts")
+    if isinstance(parts, list):
+        for index, part in enumerate(parts):
+            if isinstance(part, dict) and ({"kind", "type", "file"} & part.keys()):
+                return (
+                    f"message.parts[{index}]",
+                    f"message.parts[{index}] must use direct Part fields "
+                    "such as text, raw, url, or data",
+                )
+    return None
 
 
-def _looks_like_legacy_jsonrpc_message_payload(payload: dict | None) -> bool:
+def _rest_message_payload(payload: dict | None) -> object | None:
+    return payload.get("message") if payload is not None else None
+
+
+def _jsonrpc_message_payload(payload: dict | None) -> object | None:
     if payload is None or payload.get("method") not in {"SendMessage", "SendStreamingMessage"}:
-        return False
+        return None
     params = payload.get("params")
-    return isinstance(params, dict) and _looks_like_legacy_message_payload(params)
+    return params.get("message") if isinstance(params, dict) else None
+
+
+def _invalid_rest_payload_response(*, message: str, field: str) -> JSONResponse:
+    return JSONResponse(
+        build_http_error_body(
+            status_code=400,
+            status="INVALID_ARGUMENT",
+            message=message,
+            reason="INVALID_HTTP_JSON_PAYLOAD",
+            metadata={"field": field},
+        ),
+        status_code=400,
+    )
 
 
 def _is_jsonrpc_path(path: str) -> bool:
@@ -509,28 +541,31 @@ def _install_message_payload_shape_guard(app: FastAPI) -> None:
 
         body = await _get_request_body(request)
         payload = _parse_json_body(body)
-        if is_rest_message and (
-            _looks_like_jsonrpc_envelope(payload) or _looks_like_legacy_message_payload(payload)
-        ):
-            return JSONResponse(
-                {
-                    "error": (
-                        "Invalid HTTP+JSON payload for REST endpoint. "
-                        "Use an A2A 1.0 request body with message.parts, or call "
-                        f"POST {extension_contracts.CORE_JSONRPC_PATH} "
-                        "with JSON-RPC method=SendMessage or "
-                        "method=SendStreamingMessage."
-                    )
-                },
-                status_code=400,
+        if is_rest_message and _looks_like_jsonrpc_envelope(payload):
+            return _invalid_rest_payload_response(
+                message=(
+                    "Invalid HTTP+JSON payload for REST endpoint. "
+                    "Use an A2A 1.0 request body with message.parts, or call "
+                    f"POST {extension_contracts.CORE_JSONRPC_PATH} "
+                    "with JSON-RPC method=SendMessage or method=SendStreamingMessage."
+                ),
+                field="envelope",
             )
-        if is_jsonrpc and _looks_like_legacy_jsonrpc_message_payload(payload):
+
+        message = (
+            _rest_message_payload(payload) if is_rest_message else _jsonrpc_message_payload(payload)
+        )
+        violation = _message_shape_violation(message)
+        if violation is not None:
+            field, message_text = violation
+            if is_rest_message:
+                return _invalid_rest_payload_response(message=message_text, field=field)
             return _jsonrpc_error_response(
                 request_id=_jsonrpc_request_id(payload),
                 error=JSONRPCError(
                     code=-32602,
                     message="Invalid parameters",
-                    data={"reason": "legacy_message_content_shape"},
+                    data={"type": "INVALID_FIELD", "field": f"params.{field}"},
                 ),
             )
         return await call_next(request)

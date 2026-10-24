@@ -3,8 +3,14 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
+from collections.abc import Callable
 from contextlib import aclosing
 
+from a2a.server.agent_execution import (
+    RequestContext,
+    RequestContextBuilder,
+    SimpleRequestContextBuilder,
+)
 from a2a.server.agent_execution.active_task import INTERRUPTED_TASK_STATES, TERMINAL_TASK_STATES
 from a2a.server.context import ServerCallContext
 from a2a.server.events.event_queue import EventQueue, QueueShutDown
@@ -17,6 +23,7 @@ from a2a.types import (
     GetTaskRequest,
     Message,
     Role,
+    SendMessageRequest,
     SubscribeToTaskRequest,
     Task,
     TaskArtifactUpdateEvent,
@@ -85,14 +92,60 @@ class _BackgroundQueueManager:
         await asyncio.gather(*(queue.close(immediate=True) for queue in queues))
 
 
+class _OutputModeAwareRequestContextBuilder(RequestContextBuilder):
+    """Record negotiated output modes before the SDK materializes a task."""
+
+    def __init__(
+        self,
+        inner: RequestContextBuilder,
+        *,
+        remember: Callable[[str, list[str] | None], None],
+    ) -> None:
+        self._inner = inner
+        self._remember = remember
+
+    async def build(
+        self,
+        context: ServerCallContext,
+        params: SendMessageRequest | None = None,
+        task_id: str | None = None,
+        context_id: str | None = None,
+        task: Task | None = None,
+    ) -> RequestContext:
+        request_context = await self._inner.build(
+            context=context,
+            params=params,
+            task_id=task_id,
+            context_id=context_id,
+            task=task,
+        )
+        if params is not None and request_context.task_id:
+            self._remember(
+                request_context.task_id,
+                CodexRequestHandler._accepted_output_modes_from_params(params),
+            )
+        return request_context
+
+
 class CodexRequestHandler(DefaultRequestHandler):
     """Harden request lifecycle behavior around cancel, subscribe, and disconnects."""
 
     _metrics = get_metrics_registry()
 
     def __init__(self, *args, **kwargs) -> None:  # noqa: ANN002, ANN003
-        super().__init__(*args, **kwargs)
         self._task_output_modes: dict[str, frozenset[str]] = {}
+        request_context_builder = kwargs.pop("request_context_builder", None)
+        if request_context_builder is None:
+            request_context_builder = SimpleRequestContextBuilder(
+                should_populate_referred_tasks=False,
+                task_store=None,
+            )
+        super_kwargs = dict(kwargs)
+        super_kwargs["request_context_builder"] = _OutputModeAwareRequestContextBuilder(
+            request_context_builder,
+            remember=self._remember_task_output_modes,
+        )
+        super().__init__(*args, **super_kwargs)
         self._background_tasks: set[asyncio.Task] = set()
         self._queue_manager = _BackgroundQueueManager()
         self._producer_tasks: dict[str, asyncio.Task] = {}
@@ -150,16 +203,6 @@ class CodexRequestHandler(DefaultRequestHandler):
             if isinstance(exc, SQLAlchemyError):
                 exc = TaskStoreOperationError("get", params.id)
             raise self._task_store_server_error(exc) from exc
-
-    async def _setup_active_task(self, params, context=None):  # noqa: ANN001
-        active_task, request_context = await super()._setup_active_task(params, context)
-        task_id = getattr(request_context, "task_id", None)
-        if isinstance(task_id, str) and task_id:
-            self._remember_task_output_modes(
-                task_id,
-                self._accepted_output_modes_from_params(params),
-            )
-        return active_task, request_context
 
     async def start_background_task_stream(
         self,

@@ -9,6 +9,7 @@ import pytest
 import pytest_asyncio
 from a2a.server.context import ServerCallContext
 from a2a.server.events.event_queue import QueueShutDown
+from a2a.server.request_handlers import DefaultRequestHandler
 from a2a.server.tasks import InMemoryTaskStore, TaskUpdater
 from a2a.types import (
     Artifact,
@@ -111,6 +112,10 @@ def _task():
         context_id="context",
         status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
     )
+
+
+def test_handler_uses_public_request_context_builder_seam() -> None:
+    assert CodexRequestHandler._setup_active_task is DefaultRequestHandler._setup_active_task
 
 
 def _status(state):

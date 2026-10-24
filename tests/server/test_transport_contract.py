@@ -163,22 +163,23 @@ async def test_streaming_route_uses_sdk_default_sse_keepalive() -> None:
             "path": "/message:stream",
             "raw_path": b"/message:stream",
             "query_string": b"",
-            "headers": [],
+            "headers": [(b"a2a-version", b"1.0")],
             "client": ("127.0.0.1", 12345),
             "server": ("test", 80),
         },
         receive,
     )
 
-    async def stream_method(_context):
-        async for item in _empty_async_stream():
-            yield item
+    class _StreamingRequestHandler:
+        async def on_message_send_stream(self, _params, _context):
+            async for item in _empty_async_stream():
+                yield item
 
     adapter = RestDispatcher(
-        request_handler=MagicMock(),
+        request_handler=_StreamingRequestHandler(),
         context_builder=context_builder,
     )
-    response = await adapter._handle_streaming(request, stream_method)
+    response = await adapter.on_message_send_stream(request)
 
     assert response.ping_interval == EventSourceResponse.DEFAULT_PING_INTERVAL
 
@@ -1243,20 +1244,50 @@ async def test_dual_stack_send_rejects_cross_transport_payload_shapes(monkeypatc
     transport = httpx.ASGITransport(app=app)
     headers = {"Authorization": "Bearer test-token"}
 
-    rest_with_legacy_shape = {
-        "message": {
-            "messageId": "m-rest-cross",
-            "role": "ROLE_USER",
-            "content": [{"text": "hello"}],
-        }
-    }
-    rest_with_mixed_shape = {
-        "message": {
-            "messageId": "m-rest-mixed",
-            "role": "ROLE_USER",
-            "content": [{"text": "legacy"}],
-            "parts": [{"text": "current"}],
-        }
+    invalid_messages = {
+        "legacy-content": (
+            {
+                "role": "ROLE_USER",
+                "content": [{"text": "hello"}],
+            },
+            "message.content",
+        ),
+        "mixed-content-parts": (
+            {
+                "role": "ROLE_USER",
+                "content": [{"text": "legacy"}],
+                "parts": [{"text": "current"}],
+            },
+            "message.content",
+        ),
+        "lowercase-role": (
+            {
+                "role": "user",
+                "parts": [{"text": "hello"}],
+            },
+            "message.role",
+        ),
+        "legacy-part-kind": (
+            {
+                "role": "ROLE_USER",
+                "parts": [{"kind": "text", "text": "hello"}],
+            },
+            "message.parts[0]",
+        ),
+        "legacy-part-type": (
+            {
+                "role": "ROLE_USER",
+                "parts": [{"type": "text", "text": "hello"}],
+            },
+            "message.parts[0]",
+        ),
+        "legacy-part-file": (
+            {
+                "role": "ROLE_USER",
+                "parts": [{"file": {"uri": "https://example.com/file.txt"}}],
+            },
+            "message.parts[0]",
+        ),
     }
     full_jsonrpc_envelope = {
         "jsonrpc": "2.0",
@@ -1270,47 +1301,8 @@ async def test_dual_stack_send_rejects_cross_transport_payload_shapes(monkeypatc
             }
         },
     }
-    rpc_with_legacy_shape = {
-        "jsonrpc": "2.0",
-        "id": 2,
-        "method": "SendMessage",
-        "params": {
-            "message": {
-                "messageId": "m-rpc-cross",
-                "role": "ROLE_USER",
-                "content": [{"text": "hello"}],
-            }
-        },
-    }
-    rpc_with_mixed_shape = {
-        "jsonrpc": "2.0",
-        "id": 4,
-        "method": "SendMessage",
-        "params": {
-            "message": {
-                "messageId": "m-rpc-mixed",
-                "role": "ROLE_USER",
-                "content": [{"text": "legacy"}],
-                "parts": [{"text": "current"}],
-            }
-        },
-    }
 
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-        rest_resp = await client.post(
-            "/message:send",
-            headers=headers,
-            json=rest_with_legacy_shape,
-        )
-        assert rest_resp.status_code == 400
-
-        rest_mixed_resp = await client.post(
-            "/message:send",
-            headers=headers,
-            json=rest_with_mixed_shape,
-        )
-        assert rest_mixed_resp.status_code == 400
-
         rest_envelope_resp = await client.post(
             "/message:send",
             headers=headers,
@@ -1318,19 +1310,46 @@ async def test_dual_stack_send_rejects_cross_transport_payload_shapes(monkeypatc
         )
         assert rest_envelope_resp.status_code == 400
         assert "Invalid HTTP+JSON payload" in rest_envelope_resp.text
+        envelope_error = rest_envelope_resp.json()["error"]
+        assert envelope_error["code"] == 400
+        assert envelope_error["status"] == "INVALID_ARGUMENT"
+        assert envelope_error["details"][0]["metadata"]["field"] == "envelope"
 
-        rpc_resp = await client.post(CORE_JSONRPC_PATH, headers=headers, json=rpc_with_legacy_shape)
-        assert rpc_resp.status_code == 200
-        payload = rpc_resp.json()
-        assert payload["error"]["code"] in {-32600, -32602, -32603}
+        for case_name, (message, expected_field) in invalid_messages.items():
+            rest_message = {
+                "messageId": f"{case_name}-rest",
+                **message,
+            }
+            rest_resp = await client.post(
+                "/message:send",
+                headers=headers,
+                json={"message": rest_message},
+            )
+            assert rest_resp.status_code == 400
+            rest_error = rest_resp.json()["error"]
+            assert rest_error["code"] == 400
+            assert rest_error["status"] == "INVALID_ARGUMENT"
+            assert rest_error["details"][0]["metadata"]["field"] == expected_field
 
-        rpc_mixed_resp = await client.post(
-            CORE_JSONRPC_PATH,
-            headers=headers,
-            json=rpc_with_mixed_shape,
-        )
-        assert rpc_mixed_resp.status_code == 200
-        assert rpc_mixed_resp.json()["error"]["code"] == -32602
+            rpc_resp = await client.post(
+                CORE_JSONRPC_PATH,
+                headers=headers,
+                json={
+                    "jsonrpc": "2.0",
+                    "id": case_name,
+                    "method": "SendMessage",
+                    "params": {
+                        "message": {
+                            "messageId": f"{case_name}-rpc",
+                            **message,
+                        }
+                    },
+                },
+            )
+            assert rpc_resp.status_code == 200
+            rpc_error = rpc_resp.json()["error"]
+            assert rpc_error["code"] == -32602
+            assert rpc_error["data"] == {"field": f"params.{expected_field}"}
 
 
 @pytest.mark.asyncio

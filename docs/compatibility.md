@@ -79,7 +79,7 @@ Task-store resilience is also service-level behavior in this deployment:
 - Memory-backed deployments use the SDK `CopyingTaskStoreAdapter` and `LegacyTaskStoreAdapter`; they are process-local and do not provide cross-replica version coordination.
 - Task-store I/O failures are surfaced as stable service errors instead of leaking backend-specific exceptions through request handlers.
 
-HTTP+JSON message endpoints accept the A2A 1.0 `message.parts` shape. A JSON-RPC envelope or the legacy `message.content` shape is rejected with `400` rather than being partially accepted through unknown-field handling.
+HTTP+JSON message endpoints accept the A2A 1.0 `message.parts` shape. A JSON-RPC envelope, legacy `message.content`, lowercase role values, or Part wrappers using `kind`, `type`, or `file` are rejected before SDK parsing rather than being partially accepted through unknown-field handling. JSON-RPC send methods apply the same message-shape guard and return `-32602` for invalid message fields.
 
 Successful HTTP+JSON responses use the SDK's `application/a2a+json` media type. REST error envelopes remain AIP-193 `application/json` payloads, and OpenAPI response declarations follow the same split.
 

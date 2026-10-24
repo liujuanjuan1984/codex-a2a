@@ -488,6 +488,7 @@ async def test_streaming_byte_budget_integration_rejects_rest_before_sse(monkeyp
     error_payload = response.json()["error"]
     assert error_payload["status"] == "RESOURCE_EXHAUSTED"
     assert error_payload["message"] == "Stream budget exceeded: byte budget"
+    assert error_payload["details"][0]["reason"] == "STREAM_BUDGET_EXCEEDED"
     assert get_metrics_registry().snapshot()["counters"][A2A_STREAM_BUDGET_REJECTED_TOTAL] == 1
 
 
