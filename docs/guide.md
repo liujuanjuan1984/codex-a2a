@@ -9,6 +9,7 @@ This guide covers runtime configuration, transport contracts, streaming/session/
   - Shared JSON-RPC (`POST /`) for both core A2A methods and provider-private extension methods
 - Agent Card publishes both HTTP+JSON and JSON-RPC endpoints through `supported_interfaces[]`.
 - Both supported interfaces publish the same `public_url`. For HTTP+JSON, that URL is the REST service root: per A2A 1.0 the concrete REST methods (`/message:send`, `/tasks/...`) live at that root, and the protocol version is negotiated via the `A2A-Version` header rather than a URL prefix.
+- Successful HTTP+JSON responses use `application/a2a+json`; REST errors remain AIP-193 `application/json` envelopes.
 - The public Agent Card at `/.well-known/agent-card.json` is intentionally slimmed to the minimum discovery surface.
 - The authenticated extended card exposes the authenticated provider-private skill inventory and deployment-aware examples:
   - preferred: JSON-RPC `GetExtendedAgentCard`
@@ -541,7 +542,7 @@ On the current npm global install layout for Linux x64, the command above resolv
 - Successful terminal chat results are artifact-first. Non-streaming terminal `Task` objects carry the completed answer in `Task.artifacts`; streaming terminal status updates carry lifecycle state and metadata but do not repeat the final answer in `status.message`.
 - `status.message` remains reserved for user-facing status, interrupt, or error details. Clients should not treat it as the canonical completed-result carrier on successful terminal surfaces.
 - `SubscribeToTask` remains part of the core A2A method baseline, but this deployment's terminal-task replay-once policy is a declared service-level behavior rather than a generic A2A guarantee.
-- Task persistence also applies a service-level resilience policy: once a task has been durably stored in a terminal state, later conflicting writes are dropped instead of overwriting that terminal snapshot.
+- Database-backed task persistence uses the SDK's versioned compare-and-swap store so stale writers cannot overwrite a newer task snapshot.
 
 ### Streaming and Interrupt Contract
 
@@ -1280,7 +1281,7 @@ Terminal-task note:
 - If the task is already terminal, this service replays one final task snapshot and then closes the stream.
 - That replay-once terminal behavior is a service-level contract for this deployment. It is published through the compatibility profile and wire contract so clients do not mistake it for a generic A2A baseline rule.
 - If the task store is unavailable while loading subscribe state, the service returns a controlled failure instead of exposing backend exception details.
-- In the default SQLite-backed deployment, terminal-task persistence is also database-guarded so late conflicting writes are dropped without relying on a process-local stale snapshot check.
+- In the default SQLite-backed deployment, the SDK version table rejects stale writes without relying on a process-local snapshot check.
 
 ## Development Setup
 

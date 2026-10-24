@@ -8,10 +8,14 @@ from unittest.mock import AsyncMock, MagicMock
 
 import httpx
 import pytest
+from a2a.server.context import ServerCallContext
+from a2a.server.routes.common import StarletteUser
 from a2a.server.routes.rest_dispatcher import RestDispatcher
 from a2a.server.tasks.task_store import TaskStore
+from a2a.types import Task, TaskState, TaskStatus
 from a2a.utils.constants import TransportProtocol
 from sse_starlette.sse import EventSourceResponse
+from starlette.authentication import SimpleUser
 from starlette.requests import Request
 
 from codex_a2a.contracts.extensions import (
@@ -36,7 +40,11 @@ from codex_a2a.server.http_middlewares import (
     AUTHENTICATED_EXTENDED_CARD_CACHE_CONTROL,
     PUBLIC_AGENT_CARD_CACHE_CONTROL,
 )
-from codex_a2a.server.task_store import TaskStoreOperationError, TaskStoreRuntime
+from codex_a2a.server.task_store import (
+    TaskStoreOperationError,
+    TaskStoreRuntime,
+    task_store_save,
+)
 from tests.support.dummy_clients import DummyChatCodexClient
 from tests.support.http_auth import basic_auth_header as _basic_auth_header
 from tests.support.settings import make_settings
@@ -318,6 +326,7 @@ async def test_create_app_shares_database_engine_across_runtime_components(monke
         captured["task_engine"] = engine
         return SimpleNamespace(
             task_store=task_store,
+            event_stream=None,
             startup=task_startup,
             shutdown=task_shutdown,
         )
@@ -428,6 +437,21 @@ def test_openapi_rest_message_routes_include_schema_examples_and_extension_contr
     assert "interrupt_callback" in root_contracts
     assert paths[CORE_JSONRPC_PATH]["post"].get("x-codex-contracts") is None
     assert paths[EXTENSION_JSONRPC_PATH]["post"].get("x-codex-contracts") is None
+
+
+def test_openapi_rest_success_responses_use_a2a_json_media_type() -> None:
+    app = create_app(make_settings(a2a_bearer_token="test-token"))
+    paths = app.openapi()["paths"]
+
+    for path, method in (
+        ("/message:send", "post"),
+        ("/tasks", "get"),
+        ("/tasks/{id}", "get"),
+        ("/tasks/{id}:cancel", "post"),
+    ):
+        content = paths[path][method]["responses"]["200"]["content"]
+        assert "application/a2a+json" in content
+        assert "application/json" not in content
 
 
 def test_openapi_jsonrpc_examples_include_core_and_extension_methods() -> None:
@@ -1103,8 +1127,8 @@ async def test_send_message_rejects_mismatched_context_id(monkeypatch) -> None:
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["error"]["code"] == -32600
-    assert "contextId mismatch" in payload["error"]["message"]
+    assert payload["error"]["code"] == -32602
+    assert "does not match context" in payload["error"]["message"]
 
 
 @pytest.mark.asyncio
@@ -1155,8 +1179,8 @@ async def test_streaming_message_rejects_mismatched_context_id(monkeypatch) -> N
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["error"]["code"] == -32600
-    assert "contextId mismatch" in payload["error"]["message"]
+    assert payload["error"]["code"] == -32602
+    assert "does not match context" in payload["error"]["message"]
 
 
 @pytest.mark.asyncio
@@ -1226,6 +1250,14 @@ async def test_dual_stack_send_rejects_cross_transport_payload_shapes(monkeypatc
             "content": [{"text": "hello"}],
         }
     }
+    rest_with_mixed_shape = {
+        "message": {
+            "messageId": "m-rest-mixed",
+            "role": "ROLE_USER",
+            "content": [{"text": "legacy"}],
+            "parts": [{"text": "current"}],
+        }
+    }
     full_jsonrpc_envelope = {
         "jsonrpc": "2.0",
         "id": 3,
@@ -1250,6 +1282,19 @@ async def test_dual_stack_send_rejects_cross_transport_payload_shapes(monkeypatc
             }
         },
     }
+    rpc_with_mixed_shape = {
+        "jsonrpc": "2.0",
+        "id": 4,
+        "method": "SendMessage",
+        "params": {
+            "message": {
+                "messageId": "m-rpc-mixed",
+                "role": "ROLE_USER",
+                "content": [{"text": "legacy"}],
+                "parts": [{"text": "current"}],
+            }
+        },
+    }
 
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         rest_resp = await client.post(
@@ -1258,6 +1303,13 @@ async def test_dual_stack_send_rejects_cross_transport_payload_shapes(monkeypatc
             json=rest_with_legacy_shape,
         )
         assert rest_resp.status_code == 400
+
+        rest_mixed_resp = await client.post(
+            "/message:send",
+            headers=headers,
+            json=rest_with_mixed_shape,
+        )
+        assert rest_mixed_resp.status_code == 400
 
         rest_envelope_resp = await client.post(
             "/message:send",
@@ -1271,6 +1323,63 @@ async def test_dual_stack_send_rejects_cross_transport_payload_shapes(monkeypatc
         assert rpc_resp.status_code == 200
         payload = rpc_resp.json()
         assert payload["error"]["code"] in {-32600, -32602, -32603}
+
+        rpc_mixed_resp = await client.post(
+            CORE_JSONRPC_PATH,
+            headers=headers,
+            json=rpc_with_mixed_shape,
+        )
+        assert rpc_mixed_resp.status_code == 200
+        assert rpc_mixed_resp.json()["error"]["code"] == -32602
+
+
+@pytest.mark.asyncio
+async def test_rest_success_responses_use_a2a_json_media_type(monkeypatch) -> None:
+    import codex_a2a.server.application as app_module
+
+    monkeypatch.setattr(app_module, "CodexClient", DummyChatCodexClient)
+    app = app_module.create_app(make_settings(a2a_bearer_token="test-token"))
+    context = ServerCallContext(user=StarletteUser(SimpleUser("automation")))
+    await task_store_save(
+        app.state.task_store,
+        Task(
+            id="task-completed",
+            context_id="ctx-media",
+            status=TaskStatus(state=TaskState.TASK_STATE_COMPLETED),
+        ),
+        context,
+    )
+    await task_store_save(
+        app.state.task_store,
+        Task(
+            id="task-working",
+            context_id="ctx-media",
+            status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
+        ),
+        context,
+    )
+    transport = httpx.ASGITransport(app=app)
+    headers = {"Authorization": "Bearer test-token"}
+
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        send_response = await client.post(
+            "/message:send",
+            headers=headers,
+            json={
+                "message": {
+                    "messageId": "m-media",
+                    "role": "ROLE_USER",
+                    "parts": [{"text": "media type"}],
+                }
+            },
+        )
+        task_response = await client.get("/tasks/task-completed", headers=headers)
+        list_response = await client.get("/tasks", headers=headers)
+        cancel_response = await client.post("/tasks/task-working:cancel", headers=headers)
+
+    for response in (send_response, task_response, list_response, cancel_response):
+        assert response.status_code == 200
+        assert response.headers["content-type"].split(";", 1)[0] == "application/a2a+json"
 
 
 @pytest.mark.asyncio
@@ -1376,12 +1485,36 @@ async def test_subscribe_missing_task_returns_controlled_404(monkeypatch) -> Non
         )
 
     assert response.status_code == 404
-    assert response.json() == {"error": "Task not found", "task_id": "task-missing"}
+    payload = response.json()
+    assert payload["error"]["code"] == 404
+    assert payload["error"]["status"] == "NOT_FOUND"
+    assert payload["error"]["message"] == "Task not found"
+    assert payload["error"]["details"][0]["reason"] == "TASK_NOT_FOUND"
 
 
 @pytest.mark.asyncio
+async def test_subscribe_blank_task_id_returns_controlled_404(monkeypatch) -> None:
+    import codex_a2a.server.application as app_module
+
+    monkeypatch.setattr(app_module, "CodexClient", DummyChatCodexClient)
+    app = app_module.create_app(make_settings(a2a_bearer_token="test-token"))
+    transport = httpx.ASGITransport(app=app)
+
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get(
+            "/tasks/%20:subscribe",
+            headers={"Authorization": "Bearer test-token"},
+        )
+
+    assert response.status_code == 404
+    payload = response.json()
+    assert payload["error"]["code"] == 404
+    assert payload["error"]["status"] == "NOT_FOUND"
+    assert payload["error"]["details"][0]["reason"] == "TASK_NOT_FOUND"
+
+
 @pytest.mark.asyncio
-async def test_subscribe_task_store_failure_returns_controlled_503(monkeypatch) -> None:
+async def test_subscribe_task_store_failure_uses_sdk_internal_error(monkeypatch) -> None:
     import codex_a2a.server.application as app_module
 
     class _FailingTaskStore(TaskStore):
@@ -1405,6 +1538,7 @@ async def test_subscribe_task_store_failure_returns_controlled_503(monkeypatch) 
         "build_task_store_runtime",
         lambda settings, engine=None: TaskStoreRuntime(  # noqa: ARG005
             task_store=_FailingTaskStore(),
+            event_stream=None,
             startup=AsyncMock(),
             shutdown=AsyncMock(),
         ),
@@ -1416,8 +1550,11 @@ async def test_subscribe_task_store_failure_returns_controlled_503(monkeypatch) 
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.get("/tasks/task-broken:subscribe", headers=headers)
 
-    assert response.status_code == 503
-    assert response.json() == {"error": "Task store unavailable while loading task state."}
+    assert response.status_code == 500
+    payload = response.json()
+    assert payload["error"]["code"] == 500
+    assert payload["error"]["status"] == "INTERNAL"
+    assert payload["error"]["details"][0]["reason"] == "INTERNAL_ERROR"
 
 
 def _rest_message_payload() -> dict:

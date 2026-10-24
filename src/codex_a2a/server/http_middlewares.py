@@ -5,12 +5,10 @@ import json
 import logging
 import time
 from typing import Any, cast
-from urllib.parse import unquote, urlsplit
+from urllib.parse import urlsplit
 
-from a2a.server.context import ServerCallContext
 from a2a.server.jsonrpc_models import JSONRPCError
 from a2a.server.request_handlers.response_helpers import agent_card_to_dict
-from a2a.server.tasks.task_store import TaskStore
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from starlette.datastructures import Headers
@@ -48,7 +46,6 @@ from codex_a2a.server.runtime_limits import (
     SlidingWindowRateLimiter,
     build_rate_limit_response,
 )
-from codex_a2a.server.task_store import TaskStoreOperationError, task_store_failure_message
 
 logger = logging.getLogger(__name__)
 
@@ -265,6 +262,20 @@ def _looks_like_jsonrpc_envelope(payload: dict | None) -> bool:
     method = payload.get("method")
     version = payload.get("jsonrpc")
     return isinstance(method, str) and isinstance(version, str)
+
+
+def _looks_like_legacy_message_payload(payload: dict | None) -> bool:
+    if payload is None:
+        return False
+    message = payload.get("message")
+    return isinstance(message, dict) and "content" in message
+
+
+def _looks_like_legacy_jsonrpc_message_payload(payload: dict | None) -> bool:
+    if payload is None or payload.get("method") not in {"SendMessage", "SendStreamingMessage"}:
+        return False
+    params = payload.get("params")
+    return isinstance(params, dict) and _looks_like_legacy_message_payload(params)
 
 
 def _is_jsonrpc_path(path: str) -> bool:
@@ -484,18 +495,23 @@ def _install_agent_card_cache_middleware(
         return response
 
 
-def _install_rest_payload_shape_guard(app: FastAPI) -> None:
+def _install_message_payload_shape_guard(app: FastAPI) -> None:
     @app.middleware("http")
-    async def guard_rest_payload_shape(request: Request, call_next):
-        if (
-            request.method != "POST"
-            or _canonical_rest_path(request.url.path) not in _REST_MESSAGE_PATHS
-        ):
+    async def guard_message_payload_shape(request: Request, call_next):
+        if request.method != "POST":
+            return await call_next(request)
+
+        path = _canonical_rest_path(request.url.path)
+        is_rest_message = path in _REST_MESSAGE_PATHS
+        is_jsonrpc = _is_jsonrpc_path(path)
+        if not is_rest_message and not is_jsonrpc:
             return await call_next(request)
 
         body = await _get_request_body(request)
         payload = _parse_json_body(body)
-        if _looks_like_jsonrpc_envelope(payload):
+        if is_rest_message and (
+            _looks_like_jsonrpc_envelope(payload) or _looks_like_legacy_message_payload(payload)
+        ):
             return JSONResponse(
                 {
                     "error": (
@@ -508,34 +524,15 @@ def _install_rest_payload_shape_guard(app: FastAPI) -> None:
                 },
                 status_code=400,
             )
-        return await call_next(request)
-
-
-def _install_subscribe_task_guard(app: FastAPI, *, task_store: TaskStore) -> None:
-    @app.middleware("http")
-    async def guard_missing_subscribe_task(request: Request, call_next):
-        path = _canonical_rest_path(request.url.path)
-        if not path.startswith("/tasks/") or not path.endswith(":subscribe"):
-            return await call_next(request)
-
-        encoded_task_id = path.removeprefix("/tasks/").removesuffix(":subscribe")
-        task_id = unquote(encoded_task_id).strip()
-        if not task_id:
-            return JSONResponse({"error": "Task not found"}, status_code=404)
-
-        try:
-            task = await task_store.get(task_id, ServerCallContext())
-        except TaskStoreOperationError as exc:
-            logger.exception(
-                "Task store operation failed while guarding subscribe path task_id=%s operation=%s",
-                task_id,
-                exc.operation,
+        if is_jsonrpc and _looks_like_legacy_jsonrpc_message_payload(payload):
+            return _jsonrpc_error_response(
+                request_id=_jsonrpc_request_id(payload),
+                error=JSONRPCError(
+                    code=-32602,
+                    message="Invalid parameters",
+                    data={"reason": "legacy_message_content_shape"},
+                ),
             )
-            return JSONResponse(
-                {"error": task_store_failure_message(exc.operation)}, status_code=503
-            )
-        if task is None:
-            return JSONResponse({"error": "Task not found", "task_id": task_id}, status_code=404)
         return await call_next(request)
 
 
@@ -851,7 +848,6 @@ def install_http_middlewares(
     app: FastAPI,
     *,
     settings: Settings,
-    task_store: TaskStore,
     agent_card: object,
     extended_agent_card: object,
 ) -> None:
@@ -859,7 +855,6 @@ def install_http_middlewares(
     extended_card_etag = _build_agent_card_etag(extended_agent_card)
     configured_credentials = build_static_auth_credentials(settings)
     advertised_schemes = {credential.auth_scheme for credential in configured_credentials}
-
     # Registration order is significant: Starlette wraps the most recently
     # added middleware outermost, so this mirrors the original single-function
     # registration order exactly.
@@ -869,8 +864,7 @@ def install_http_middlewares(
         public_card_etag=public_card_etag,
         extended_card_etag=extended_card_etag,
     )
-    _install_rest_payload_shape_guard(app)
-    _install_subscribe_task_guard(app, task_store=task_store)
+    _install_message_payload_shape_guard(app)
     _install_payload_logging_middleware(app, settings=settings)
     _install_rate_limit_middleware(app, settings=settings)
     _install_bearer_auth_middleware(

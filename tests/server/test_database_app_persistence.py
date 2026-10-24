@@ -12,6 +12,7 @@ from a2a.types import Task, TaskPushNotificationConfig, TaskState, TaskStatus
 from starlette.authentication import SimpleUser
 
 from codex_a2a.contracts.extensions import EXTENSION_JSONRPC_PATH
+from codex_a2a.server.task_store import task_store_get, task_store_save
 from tests.support.settings import make_settings
 
 
@@ -201,7 +202,7 @@ async def test_database_backend_persists_task_session_and_interrupt_state_across
         executor = _executor_from_app(app1)
         codex_client = app1.state.codex_client
 
-        await task_store.save(_task("task-1"))
+        await task_store_save(task_store, _task("task-1"))
         session_id, pending = await executor._session_runtime.get_or_create_session(
             identity=request_identity,
             context_id="ctx-1",
@@ -227,7 +228,7 @@ async def test_database_backend_persists_task_session_and_interrupt_state_across
         task_store = _task_store_from_app(app2)
         executor = _executor_from_app(app2)
 
-        restored_task = await task_store.get("task-1")
+        restored_task = await task_store_get(task_store, "task-1")
         assert restored_task is not None
         assert restored_task.id == "task-1"
 
@@ -302,7 +303,7 @@ async def test_database_backend_persists_push_notification_configs_across_app_re
         task_store = _task_store_from_app(app1)
         push_config_store = _push_config_store_from_app(app1)
 
-        await task_store.save(_task("task-1"), context)
+        await task_store_save(task_store, _task("task-1"), context)
         await push_config_store.set_info(
             "task-1",
             TaskPushNotificationConfig(
@@ -323,6 +324,39 @@ async def test_database_backend_persists_push_notification_configs_across_app_re
     assert configs[0].id == "cfg-1"
     assert configs[0].task_id == "task-1"
     assert configs[0].url == "https://example.invalid/webhook"
+
+
+@pytest.mark.asyncio
+async def test_subscribe_uses_authenticated_task_owner(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    import codex_a2a.server.application as app_module
+
+    monkeypatch.setattr(app_module, "CodexClient", PersistentStateDummyClient)
+    settings = make_settings(
+        a2a_bearer_token="test-token",
+        a2a_database_url=f"sqlite+aiosqlite:///{(tmp_path / 'subscribe-owner.db').resolve()}",
+    )
+
+    app = app_module.create_app(settings)
+    async with app.router.lifespan_context(app):
+        task = _task("owned-task")
+        task.status.state = TaskState.TASK_STATE_COMPLETED
+        await task_store_save(
+            app.state.task_store,
+            task,
+            _authenticated_context("automation"),
+        )
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.get(
+                "/tasks/owned-task:subscribe",
+                headers={"Authorization": "Bearer test-token"},
+            )
+
+    assert response.status_code == 200
+    assert "owned-task" in response.text
 
 
 def _sqlite_schema_version(database_path: Path, scope: str) -> int | None:

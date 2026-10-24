@@ -26,12 +26,12 @@ from a2a.types import (
 )
 from a2a.utils.errors import (
     InternalError,
-    InvalidRequestError,
     TaskNotCancelableError,
     TaskNotFoundError,
     UnsupportedOperationError,
 )
 from a2a.utils.task import apply_history_length
+from sqlalchemy.exc import SQLAlchemyError
 
 from codex_a2a.a2a_proto import new_text_part
 from codex_a2a.media_modes import DEFAULT_OUTPUT_MEDIA_MODES, TEXT_PLAIN_MEDIA_MODE
@@ -51,6 +51,8 @@ from codex_a2a.server.task_store import (
     TaskStoreOperationError,
     build_task_store_failure_metadata,
     task_store_failure_message,
+    task_store_get,
+    task_store_save,
 )
 
 logger = logging.getLogger(__name__)
@@ -144,7 +146,9 @@ class CodexRequestHandler(DefaultRequestHandler):
                 task_id=params.id, task=task
             )
             return apply_accepted_output_modes(task, accepted_output_modes)
-        except TaskStoreOperationError as exc:
+        except (TaskStoreOperationError, SQLAlchemyError) as exc:
+            if isinstance(exc, SQLAlchemyError):
+                exc = TaskStoreOperationError("get", params.id)
             raise self._task_store_server_error(exc) from exc
 
     async def _setup_active_task(self, params, context=None):  # noqa: ANN001
@@ -181,12 +185,12 @@ class CodexRequestHandler(DefaultRequestHandler):
         producer,
     ) -> asyncio.Task:
         store_context = self._task_store_context(context)
-        await self.task_store.save(task, store_context)
+        await task_store_save(self._versioned_store, task, store_context)
         source_queue = await self._queue_manager.create(task.id)
         task_manager = TaskManager(
             task_id=task.id,
             context_id=task.context_id,
-            task_store=self.task_store,
+            task_store=self._versioned_store,
             initial_message=None,
             context=store_context,
         )
@@ -215,7 +219,7 @@ class CodexRequestHandler(DefaultRequestHandler):
             except TaskStoreOperationError:
                 raise
             except Exception:
-                current_task = await self.task_store.get(task.id, store_context)
+                current_task = await task_store_get(self._versioned_store, task.id, store_context)
                 if (
                     current_task is not None
                     and current_task.status.state not in TERMINAL_TASK_STATES
@@ -357,33 +361,6 @@ class CodexRequestHandler(DefaultRequestHandler):
                 },
             )
 
-    async def _validate_message_context_match(self, params, store_context) -> None:  # noqa: ANN001
-        """Reject messages whose contextId conflicts with the referenced task's context.
-
-        A2A multi-turn messages that reference an existing task must use the
-        task's contextId; a mismatching contextId is an invalid request.
-        """
-        message = getattr(params, "message", None)
-        if message is None:
-            return
-        task_id = getattr(message, "task_id", None)
-        context_id = getattr(message, "context_id", None)
-        if not task_id or not context_id:
-            return
-        try:
-            existing = await self.task_store.get(task_id, store_context)
-        except TaskStoreOperationError as exc:
-            raise self._task_store_server_error(exc) from exc
-        if existing is not None and existing.context_id and existing.context_id != context_id:
-            raise InvalidRequestError(
-                message=f"contextId mismatch for task {task_id}",
-                data={
-                    "task_id": task_id,
-                    "expected_context_id": existing.context_id,
-                    "provided_context_id": context_id,
-                },
-            )
-
     def _remember_task_output_modes(
         self,
         task_id: str,
@@ -421,7 +398,7 @@ class CodexRequestHandler(DefaultRequestHandler):
     ) -> Task | None:
         store_context = self._task_store_context(context)
         try:
-            task = await self.task_store.get(params.id, store_context)
+            task = await task_store_get(self._versioned_store, params.id, store_context)
             if not task:
                 raise TaskNotFoundError()
 
@@ -430,18 +407,21 @@ class CodexRequestHandler(DefaultRequestHandler):
                 return task
 
             if task.status.state in TERMINAL_TASK_STATES:
+                state_name = TaskState.Name(task.status.state)
                 raise TaskNotCancelableError(
-                    message=f"Task cannot be canceled - current state: {task.status.state}"
+                    message=f"Task cannot be canceled - current state: {state_name}"
                 )
 
             try:
                 return await super().on_cancel_task(params, store_context)
             except TaskNotCancelableError:
-                refreshed = await self.task_store.get(params.id, store_context)
+                refreshed = await task_store_get(self._versioned_store, params.id, store_context)
                 if refreshed and refreshed.status.state in _CANCELED_TASK_STATES:
                     return refreshed
                 raise
-        except TaskStoreOperationError as exc:
+        except (TaskStoreOperationError, SQLAlchemyError) as exc:
+            if isinstance(exc, SQLAlchemyError):
+                exc = TaskStoreOperationError("get", params.id)
             raise self._task_store_server_error(exc) from exc
 
     async def on_subscribe_to_task(
@@ -451,7 +431,7 @@ class CodexRequestHandler(DefaultRequestHandler):
     ):
         store_context = self._task_store_context(context)
         try:
-            task = await self.task_store.get(params.id, store_context)
+            task = await task_store_get(self._versioned_store, params.id, store_context)
             if not task:
                 raise TaskNotFoundError()
 
@@ -506,7 +486,9 @@ class CodexRequestHandler(DefaultRequestHandler):
                         return
             finally:
                 await queue.close(immediate=True)
-        except TaskStoreOperationError as exc:
+        except (TaskStoreOperationError, SQLAlchemyError) as exc:
+            if isinstance(exc, SQLAlchemyError):
+                exc = TaskStoreOperationError("get", params.id)
             raise self._task_store_server_error(exc) from exc
 
     async def on_resubscribe_to_task(
@@ -528,7 +510,6 @@ class CodexRequestHandler(DefaultRequestHandler):
 
     async def on_message_send_stream(self, params, context=None):
         self._validate_chat_output_modes(params)
-        await self._validate_message_context_match(params, self._task_store_context(context))
         self._metrics.inc_counter(A2A_STREAM_REQUESTS_TOTAL)
         self._metrics.inc_gauge(A2A_STREAM_ACTIVE)
         task_id = getattr(getattr(params, "message", None), "task_id", None) or str(uuid.uuid4())
@@ -564,7 +545,9 @@ class CodexRequestHandler(DefaultRequestHandler):
                 if callable(close_subscription):
                     await close_subscription()
             stream_completed = True
-        except TaskStoreOperationError as exc:
+        except (TaskStoreOperationError, SQLAlchemyError) as exc:
+            if isinstance(exc, SQLAlchemyError):
+                exc = TaskStoreOperationError("save", task_id)
             logger.exception(
                 "Task store operation failed during streaming task_id=%s operation=%s",
                 task_id,
@@ -588,7 +571,6 @@ class CodexRequestHandler(DefaultRequestHandler):
 
     async def on_message_send(self, params, context=None):
         self._validate_chat_output_modes(params)
-        await self._validate_message_context_match(params, self._task_store_context(context))
         task_id = getattr(getattr(params, "message", None), "task_id", None) or str(uuid.uuid4())
         accepted_output_modes = self._accepted_output_modes_from_params(params)
         active_task = None
@@ -637,7 +619,9 @@ class CodexRequestHandler(DefaultRequestHandler):
                 close_subscription = getattr(subscription, "aclose", None)
                 if callable(close_subscription):
                     await close_subscription()
-        except TaskStoreOperationError as exc:
+        except (TaskStoreOperationError, SQLAlchemyError) as exc:
+            if isinstance(exc, SQLAlchemyError):
+                exc = TaskStoreOperationError("save", task_id)
             logger.exception(
                 "Task store operation failed during SendMessage task_id=%s operation=%s",
                 task_id,

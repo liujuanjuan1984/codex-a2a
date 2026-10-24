@@ -7,8 +7,8 @@ This document explains the compatibility promises this repository currently trie
 | Layer | Supported contract | Evidence and boundary |
 | --- | --- | --- |
 | Python | 3.11–3.14 | Package classifiers cover all four versions; CI runs 3.13 as the quality gate and 3.11, 3.12, and 3.14 in the runtime matrix. |
-| A2A Python SDK | Exactly `a2a-sdk==1.1.5` | Pinned in `pyproject.toml`; this is the [official A2A Python SDK](https://github.com/a2aproject/a2a-python), not a fork. |
-| Protocol Buffers | `protobuf>=6.33.5,<8.0` | The lockfile selects 7.36.2. SDK 1.1.5 supports protobuf 7; Google API Core, common protos, and proto-plus must resolve within the same range. Task retrieval delegates validation and history trimming to the SDK. |
+| A2A Python SDK | Exactly `a2a-sdk==1.2.3` | Pinned in `pyproject.toml`; this is the [official A2A Python SDK](https://github.com/a2aproject/a2a-python), not a fork. |
+| Protocol Buffers | `protobuf>=6.33.5,<8.0` | The lockfile selects 7.36.2. SDK 1.2.3 supports protobuf 7; Google API Core, common protos, and proto-plus must resolve within the same range. Task retrieval delegates validation and history trimming to the SDK. |
 | SQLAlchemy | `sqlalchemy[asyncio]>=2.0,<3.0` | The `asyncio` extra explicitly installs `greenlet` for the async persistence engine, including standalone wheel installations. The lockfile selects the development version. |
 | A2A protocol | `1.0` wire line | The released upstream A2A specification is normative for portable core semantics; the current compatible release is `v1.0.1`. SDK compatibility with other protocol versions does not extend this adapter's claim. |
 | Inbound A2A transports | JSON-RPC and HTTP+JSON | Both are repository-owned runtime surfaces. gRPC is not exposed by this adapter. |
@@ -74,13 +74,19 @@ Service-level behavior layered on top of those core methods should also be decla
 
 Task-store resilience is also service-level behavior in this deployment:
 
-- Once a task reaches a terminal state, later conflicting persistence writes are dropped on a first-terminal-state-wins basis.
-- In the default SQLite-backed deployment, terminal-task persistence is guarded with an atomic database upsert instead of a process-local read-before-write check.
+- A `SendMessage` that references a task already in a terminal state follows the SDK contract and raises `UnsupportedOperationError`; the task is not restarted in place.
+- Database-backed deployments use the SDK `VersionedDatabaseTaskStore`, `DatabaseTaskEventStream`, and their per-task compare-and-swap versioning; stale writes are rejected rather than overwriting the current task snapshot.
+- Memory-backed deployments use the SDK `CopyingTaskStoreAdapter` and `LegacyTaskStoreAdapter`; they are process-local and do not provide cross-replica version coordination.
 - Task-store I/O failures are surfaced as stable service errors instead of leaking backend-specific exceptions through request handlers.
+
+HTTP+JSON message endpoints accept the A2A 1.0 `message.parts` shape. A JSON-RPC envelope or the legacy `message.content` shape is rejected with `400` rather than being partially accepted through unknown-field handling.
+
+Successful HTTP+JSON responses use the SDK's `application/a2a+json` media type. REST error envelopes remain AIP-193 `application/json` payloads, and OpenAPI response declarations follow the same split.
 
 Task durability is deployment-dependent:
 
 - `A2A_DATABASE_URL=<sqlalchemy-async-url>` preserves task lookup/cancel/resubscribe state across process restarts.
+- SDK keyset page tokens remain usable after a task from the preceding page is deleted; memory and database regressions cover this pagination behavior.
 - `A2A_DATABASE_URL` now defaults to a workspace-local SQLite database at `${CODEX_WORKSPACE_ROOT}/.codex-a2a/codex-a2a.db` when `CODEX_WORKSPACE_ROOT` is configured; otherwise it falls back to `sqlite+aiosqlite:///./codex-a2a.db`. Persistence therefore remains the default runtime behavior.
 - The same database-backed mode also preserves session-binding ownership state and pending interrupt callback requests that still fall within their TTL. Session-binding and ownership persistence are independent from the in-memory session cache TTL.
 - The default SQLite + WAL profile is intended for a stable local filesystem path, not for network filesystems or sync-managed folders with weaker locking behavior.
