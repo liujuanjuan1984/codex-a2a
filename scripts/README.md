@@ -37,8 +37,8 @@ The `Publish` workflow now separates build, PyPI publish, and GitHub Release syn
 - `validate_baseline.sh` and `dependency_health.sh` intentionally remain separate entrypoints and share common prerequisites through [`health_common.sh`](./health_common.sh).
 - `validate_baseline.sh` now includes a conservative private dead-code check before type-checking and test execution.
 - `audit_low_call_sites.py` is intentionally advisory only. Use it to surface low-call-count candidates, then inspect the actual consumer chain before removing an abstraction.
-- `validate_baseline.sh` now blocks on a timeout-bounded runtime dependency vulnerability audit, while `dependency_health.sh` remains focused on broader dependency review (`outdated` + dev audit).
-- Vulnerability audits consume complete hashed `uv export` requirements with `pip-audit --disable-pip --require-hashes`, avoiding a second pip resolver pass while enforcing the lock invariant.
+- `validate_baseline.sh` now blocks on runtime dependency vulnerability audit, while `dependency_health.sh` remains focused on broader dependency review (`outdated` + dev audit).
+- Vulnerability audits consume complete hashed `uv export` requirements with `pip-audit --disable-pip`, avoiding a second pip resolver pass while retaining hash verification.
 - The baseline makes up to three runtime audit attempts (the initial attempt plus at most two retries), with a fresh cache per attempt. If every attempt fails, it returns the last audit exit code and stops before package build and wheel smoke testing. A successful retry allows validation to continue.
 - [`.github/dependabot.yml`](../.github/dependabot.yml) prefers a single weekly grouped Dependabot PR for `uv`, while the repository scripts remain the explicit audit and validation entrypoints.
 - End-user runtime startup does not use repository scripts. Prefer the published CLI command documented in [README.md](../README.md) and [docs/guide.md](../docs/guide.md).

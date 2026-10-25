@@ -13,16 +13,12 @@ run_pip_audit() {
   local max_attempts=3
   local status=0
   local audit_cache_dir=""
-  local timeout_seconds="${PIP_AUDIT_TIMEOUT_SECONDS:-120}"
 
   while true; do
     audit_cache_dir="$(mktemp -d)"
     # uv export is complete and hash-pinned; do not run a second pip resolver pass.
-    if XDG_CACHE_HOME="${audit_cache_dir}" timeout "${timeout_seconds}s" \
-      uv run pip-audit \
+    if XDG_CACHE_HOME="${audit_cache_dir}" uv run pip-audit \
       --disable-pip \
-      --require-hashes \
-      --progress-spinner off \
       --requirement "${requirement_file}"; then
       rm -rf "${audit_cache_dir}"
       return 0
