@@ -7,8 +7,10 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 import pytest_asyncio
+from a2a.server.agent_execution import SimpleRequestContextBuilder
 from a2a.server.context import ServerCallContext
 from a2a.server.events.event_queue import QueueShutDown
+from a2a.server.request_handlers import DefaultRequestHandler
 from a2a.server.tasks import InMemoryTaskStore, TaskUpdater
 from a2a.types import (
     Artifact,
@@ -111,6 +113,29 @@ def _task():
         context_id="context",
         status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
     )
+
+
+def test_handler_uses_public_request_context_builder_seam() -> None:
+    assert CodexRequestHandler._setup_active_task is DefaultRequestHandler._setup_active_task
+
+
+def test_handler_accepts_positional_request_context_builder() -> None:
+    builder = SimpleRequestContextBuilder(
+        should_populate_referred_tasks=False,
+        task_store=None,
+    )
+
+    handler = CodexRequestHandler(
+        MagicMock(),
+        InMemoryTaskStore(),
+        build_agent_card(make_settings(a2a_bearer_token="test-token")),
+        None,
+        None,
+        None,
+        builder,
+    )
+
+    assert handler._request_context_builder._inner is builder
 
 
 def _status(state):
@@ -464,14 +489,14 @@ async def test_disconnect_detaches_sink_without_stopping_producer(
 @pytest.mark.asyncio
 async def test_completion_between_snapshot_and_tap_replays_final_task(runtime, monkeypatch):
     handler, _, _ = runtime
-    await task_store_save(handler._versioned_store, _task(), ServerCallContext())
+    await task_store_save(handler.task_store, _task(), ServerCallContext())
     source = await handler._queue_manager.create("task")
     original_tap = source.tap
 
     async def complete_before_tap(**kwargs):
         final = _task()
         final.status.state = TaskState.TASK_STATE_COMPLETED
-        await task_store_save(handler._versioned_store, final, ServerCallContext())
+        await task_store_save(handler.task_store, final, ServerCallContext())
         await source.close(immediate=True)
         return await original_tap(**kwargs)
 
@@ -489,7 +514,7 @@ async def test_duplicate_stream_registration_preserves_existing_snapshot(runtime
     producer = AsyncMock()
     await handler._queue_manager.create("task")
     task = _task()
-    await task_store_save(handler._versioned_store, task, ServerCallContext())
+    await task_store_save(handler.task_store, task, ServerCallContext())
     replacement = _task()
     replacement.status.state = TaskState.TASK_STATE_FAILED
     with pytest.raises(ValueError, match="already exists"):

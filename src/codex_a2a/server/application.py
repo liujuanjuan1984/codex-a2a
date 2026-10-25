@@ -7,16 +7,10 @@ from typing import Any, cast
 import uvicorn
 from a2a.server.request_handlers.request_handler import RequestHandler
 from a2a.server.routes.agent_card_routes import create_agent_card_routes
-from a2a.server.routes.rest_dispatcher import RestDispatcher
 from a2a.server.routes.rest_routes import create_rest_routes
-from a2a.types import SubscribeToTaskRequest, a2a_pb2
-from a2a.utils import proto_utils
-from a2a.utils.error_handlers import build_rest_error_payload
 from fastapi import FastAPI
-from google.protobuf.json_format import MessageToDict, Parse  # type: ignore[import-untyped]
-from starlette.requests import Request
-from starlette.responses import JSONResponse, PlainTextResponse, Response
-from starlette.routing import BaseRoute, Mount, Route
+from starlette.responses import JSONResponse, PlainTextResponse
+from starlette.routing import BaseRoute, Mount
 
 from codex_a2a.client.manager import A2AClientManager
 from codex_a2a.config import Settings
@@ -30,7 +24,6 @@ from codex_a2a.jsonrpc.application import (
     CodexSessionQueryJSONRPCApplication,
     create_extension_jsonrpc_routes,
 )
-from codex_a2a.jsonrpc.errors import build_http_error_body
 from codex_a2a.jsonrpc.hooks import SessionGuardHooks
 from codex_a2a.logging_context import install_log_record_factory
 from codex_a2a.metrics import get_metrics_registry
@@ -48,7 +41,6 @@ from codex_a2a.server.runtime_limits import (
     OperationCapacity,
     OperationCapacityMiddleware,
     RequestBodyLimitMiddleware,
-    StreamBudgetExceeded,
     apply_stream_budget,
 )
 from codex_a2a.server.runtime_state import build_runtime_state_runtime
@@ -66,10 +58,6 @@ logger = logging.getLogger(__name__)
 
 def _is_sdk_tenant_mount(route: BaseRoute) -> bool:
     return isinstance(route, Mount) and route.path == "/{tenant}"
-
-
-_STREAMING_REST_PATHS = frozenset({"/message:stream", "/tasks/{id}:subscribe"})
-_STREAM_BUDGET_REJECT_REASON = "STREAM_BUDGET_EXCEEDED"
 
 
 class StreamBudgetedRequestHandler:
@@ -112,25 +100,6 @@ class StreamBudgetedRequestHandler:
             yield item
 
 
-def _stream_budget_error_response(error: StreamBudgetExceeded) -> JSONResponse:
-    return JSONResponse(
-        build_http_error_body(
-            status_code=429,
-            status="RESOURCE_EXHAUSTED",
-            message=str(error),
-            reason=_STREAM_BUDGET_REJECT_REASON,
-        ),
-        status_code=429,
-    )
-
-
-def _rest_error_response(error: Exception) -> JSONResponse:
-    """Map a pre-SSE error to the same REST error payload the SDK emits."""
-    payload = build_rest_error_payload(error)
-    http_code = payload.get("error", {}).get("code", 500)
-    return JSONResponse(content=payload, status_code=http_code)
-
-
 def _create_single_tenant_rest_routes(
     *,
     request_handler: RequestHandler,
@@ -142,76 +111,15 @@ def _create_single_tenant_rest_routes(
     # supported HTTP+JSON contract is the spec-rooted single-tenant surface
     # (A2A 1.0 resolves REST paths from the advertised interface URL, with no
     # version prefix in the URL), so the application assembly narrows the route
-    # set explicitly and replaces the streaming routes with budgeted ones.
+    # set explicitly. Streaming budgets are applied through the public
+    # RequestHandler wrapper passed by the caller.
     sdk_routes = create_rest_routes(
         request_handler=request_handler,
         context_builder=context_builder,
         enable_v0_3_compat=enable_v0_3_compat,
         path_prefix=path_prefix,
     )
-    base_routes = [route for route in sdk_routes if not _is_sdk_tenant_mount(route)]
-
-    dispatcher = RestDispatcher(
-        request_handler=request_handler,
-        context_builder=context_builder,
-    )
-
-    async def _handle_streaming_route(request: Request, handler_func: Any) -> Response:
-        try:
-            return await dispatcher._handle_streaming(request, handler_func)
-        except StreamBudgetExceeded as error:
-            return _stream_budget_error_response(error)
-        except Exception as error:  # noqa: BLE001 - mirrors SDK rest_stream_error_handler
-            return _rest_error_response(error)
-
-    async def message_stream_route(request: Request) -> Response:
-        async def _handler(context: Any) -> Any:
-            body = await request.body()
-            params = a2a_pb2.SendMessageRequest()
-            Parse(body, params)
-            async for event in request_handler.on_message_send_stream(params, context):
-                yield MessageToDict(proto_utils.to_stream_response(event))
-
-        return await _handle_streaming_route(request, _handler)
-
-    async def subscribe_route(request: Request) -> Response:
-        task_id = request.path_params["id"]
-
-        async def _handler(context: Any) -> Any:
-            async for event in request_handler.on_subscribe_to_task(
-                SubscribeToTaskRequest(id=task_id),
-                context,
-            ):
-                yield MessageToDict(proto_utils.to_stream_response(event))
-
-        return await _handle_streaming_route(request, _handler)
-
-    prefixed_streaming_paths = {f"{path_prefix}{path}" for path in _STREAMING_REST_PATHS}
-    retained = [
-        route
-        for route in base_routes
-        if not (hasattr(route, "path") and route.path in prefixed_streaming_paths)
-    ]
-    streaming_routes = [
-        Route(
-            path=f"{path_prefix}/message:stream",
-            endpoint=message_stream_route,
-            methods=["POST"],
-        ),
-        Route(
-            path=f"{path_prefix}/tasks/{{id}}:subscribe",
-            endpoint=subscribe_route,
-            methods=["GET"],
-        ),
-        Route(
-            path=f"{path_prefix}/tasks/{{id}}:subscribe",
-            endpoint=subscribe_route,
-            methods=["POST"],
-        ),
-    ]
-    # Specific streaming paths must precede the generic /tasks/{id} route;
-    # otherwise Starlette treats "task-id:subscribe" as a task id.
-    return streaming_routes + retained
+    return [route for route in sdk_routes if not _is_sdk_tenant_mount(route)]
 
 
 def create_app(settings: Settings) -> FastAPI:

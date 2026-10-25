@@ -94,7 +94,8 @@ def test_publish_workflow_builds_and_smoke_tests_release_artifacts() -> None:
     assert "Export runtime requirements for vulnerability audit" in PUBLISH_WORKFLOW_TEXT
     assert "Run runtime dependency vulnerability audit" in PUBLISH_WORKFLOW_TEXT
     assert 'audit_cache_dir="$(mktemp -d)"' in PUBLISH_WORKFLOW_TEXT
-    assert "uv run pip-audit --requirement /tmp/runtime-requirements.txt" in PUBLISH_WORKFLOW_TEXT
+    assert "--requirement /tmp/runtime-requirements.txt" in PUBLISH_WORKFLOW_TEXT
+    assert "--disable-pip" in PUBLISH_WORKFLOW_TEXT
     assert "uv build --no-sources" in PUBLISH_WORKFLOW_TEXT
     assert "fetch-depth: 0" in PUBLISH_WORKFLOW_TEXT
     assert "PYTHONWARNINGS" not in PUBLISH_WORKFLOW_TEXT
@@ -232,7 +233,8 @@ def test_repository_wrappers_only_keep_remaining_user_or_maintainer_entrypoints(
 
 def test_validation_and_publish_paths_filter_known_build_warnings() -> None:
     validate_baseline_text = Path("scripts/validate_baseline.sh").read_text()
-    assert "uv run pip-audit --requirement" in validate_baseline_text
+    assert "uv run pip-audit" in validate_baseline_text
+    assert "--disable-pip" in validate_baseline_text
     assert "fetch-depth: 0" in CI_WORKFLOW_TEXT
     assert "vcs_versioning._backends._git" not in PUBLISH_WORKFLOW_TEXT
     assert "PYTHONWARNINGS" not in validate_baseline_text

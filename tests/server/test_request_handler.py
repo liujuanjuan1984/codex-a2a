@@ -14,6 +14,7 @@ from a2a.types import (
     CancelTaskRequest,
     GetTaskRequest,
     Message,
+    Part,
     Role,
     SendMessageConfiguration,
     SendMessageRequest,
@@ -35,7 +36,6 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from codex_a2a.a2a_proto import (
     new_data_part,
-    new_file_url_part,
     new_text_part,
     part_text,
 )
@@ -551,8 +551,8 @@ async def test_stream_disconnect_closes_active_task_generator() -> None:
 @pytest.mark.asyncio
 async def test_message_send_filters_unaccepted_output_parts_to_text() -> None:
     data_part = new_data_part({"kind": "state", "tool": "bash", "status": "running"})
-    image_part = new_file_url_part(
-        "https://example.com/screenshot.png",
+    image_part = Part(
+        url="https://example.com/screenshot.png",
         media_type="image/png",
         filename="screenshot.png",
     )

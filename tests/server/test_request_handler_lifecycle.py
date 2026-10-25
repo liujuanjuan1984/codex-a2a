@@ -143,7 +143,7 @@ async def test_aclose_drains_adapter_streams_and_undrained_queues(
     with pytest.raises(RuntimeError, match="closed"):
         await handler.start_background_task_stream(task=_task("late"), producer=producer_mock)
     producer_mock.assert_not_awaited()
-    assert await task_store_get(handler._versioned_store, "late", ServerCallContext()) is None
+    assert await task_store_get(handler.task_store, "late", ServerCallContext()) is None
 
 
 @pytest.mark.asyncio
@@ -182,23 +182,19 @@ async def test_aclose_observes_failed_background_stream(caplog) -> None:
 
 @pytest.mark.asyncio
 async def test_shutdown_waits_for_inflight_stream_registration(monkeypatch) -> None:
+    import codex_a2a.server.request_handler as handler_module
+
     handler = _handler()
     saving = asyncio.Event()
     release_save = asyncio.Event()
-    save = handler._versioned_store.save
+    save = handler_module.task_store_save
 
-    async def delayed_save(task, *, event, prev, prev_version, context):
+    async def delayed_save(task_store, task, context=None):
         saving.set()
         await release_save.wait()
-        await save(
-            task,
-            event=event,
-            prev=prev,
-            prev_version=prev_version,
-            context=context,
-        )
+        await save(task_store, task, context)
 
-    monkeypatch.setattr(handler._versioned_store, "save", delayed_save)
+    monkeypatch.setattr(handler_module, "task_store_save", delayed_save)
     registration = asyncio.create_task(
         handler.start_background_task_stream(task=_task(), producer=AsyncMock())
     )

@@ -16,7 +16,10 @@ run_pip_audit() {
 
   while true; do
     audit_cache_dir="$(mktemp -d)"
-    if XDG_CACHE_HOME="${audit_cache_dir}" uv run pip-audit --requirement "${requirement_file}"; then
+    # uv export is complete and hash-pinned; do not run a second pip resolver pass.
+    if XDG_CACHE_HOME="${audit_cache_dir}" uv run pip-audit \
+      --disable-pip \
+      --requirement "${requirement_file}"; then
       rm -rf "${audit_cache_dir}"
       return 0
     else

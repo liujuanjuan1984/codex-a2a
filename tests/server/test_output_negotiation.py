@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-from a2a.types import Artifact, Message, Role, TaskArtifactUpdateEvent
+from a2a.types import Artifact, Message, Part, Role, TaskArtifactUpdateEvent
 
 from codex_a2a.a2a_proto import (
     new_data_part,
-    new_file_url_part,
     new_text_part,
     part_text,
     proto_to_python,
@@ -40,8 +39,8 @@ def test_apply_accepted_output_modes_falls_back_file_parts_to_text() -> None:
         artifact=Artifact(
             artifact_id="artifact-1",
             parts=[
-                new_file_url_part(
-                    "https://example.com/demo.png",
+                Part(
+                    url="https://example.com/demo.png",
                     media_type="image/png",
                     filename="demo.png",
                 )
@@ -65,7 +64,7 @@ def test_apply_accepted_output_modes_drops_unaccepted_file_only_artifact() -> No
         context_id="ctx-1",
         artifact=Artifact(
             artifact_id="artifact-1",
-            parts=[new_file_url_part("https://example.com/demo.png", media_type="image/png")],
+            parts=[Part(url="https://example.com/demo.png", media_type="image/png")],
         ),
         append=False,
         last_chunk=True,

@@ -24,4 +24,7 @@ uv export \
   --output-file "${dev_requirements}" >/dev/null
 
 echo "[dependency-health] run dev dependency vulnerability audit"
-XDG_CACHE_HOME="${audit_cache_dir}" uv run pip-audit --requirement "${dev_requirements}"
+# uv export is complete and hash-pinned; do not run a second pip resolver pass.
+XDG_CACHE_HOME="${audit_cache_dir}" uv run pip-audit \
+  --disable-pip \
+  --requirement "${dev_requirements}"
