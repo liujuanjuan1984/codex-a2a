@@ -1,11 +1,10 @@
 from __future__ import annotations
 
 import pytest
+from a2a.types import Part
 
 from codex_a2a.a2a_proto import (
     new_data_part,
-    new_file_bytes_part,
-    new_file_url_part,
     new_text_part,
 )
 from codex_a2a.input_mapping import (
@@ -119,13 +118,13 @@ def test_map_a2a_message_parts_supports_v1_parts_and_image_variants() -> None:
     handle = build_skill_handle(cwd="/workspace", name="skill-creator", path="/tmp/SKILL.md")
     parts = [
         new_text_part("hello"),
-        new_file_url_part(
-            "https://example.com/demo.png",
+        Part(
+            url="https://example.com/demo.png",
             media_type="image/png",
             filename="demo.png",
         ),
-        new_file_url_part("data:image/png;base64,AAAA"),
-        new_file_bytes_part(b"\x00\x00\x00", media_type="image/jpeg"),
+        Part(url="data:image/png;base64,AAAA"),
+        Part(raw=b"\x00\x00\x00", media_type="image/jpeg"),
         new_data_part({"type": "mention", "name": "Demo App", "path": "app://demo"}),
         new_data_part({"type": "skill", "handle": handle}),
     ]
@@ -159,7 +158,7 @@ def test_skill_rich_input_rejects_client_supplied_path() -> None:
     ("parts", "message"),
     [
         (
-            [new_file_url_part("https://example.com/demo.txt", filename="demo.txt")],
+            [Part(url="https://example.com/demo.txt", filename="demo.txt")],
             "Only text, image file, and codex rich input data parts are supported.",
         ),
         (

@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from a2a.types import (
     Artifact,
+    Part,
     StreamResponse,
     Task,
     TaskArtifactUpdateEvent,
@@ -11,7 +12,7 @@ from a2a.types import (
     TaskStatus,
 )
 
-from codex_a2a.a2a_proto import new_data_part, new_file_url_part, new_text_part, part_text
+from codex_a2a.a2a_proto import new_data_part, new_text_part, part_text
 from codex_a2a.client import A2AClient
 from codex_a2a.execution.executor import CodexAgentExecutor
 from codex_a2a.upstream.client import CodexMessage
@@ -76,8 +77,8 @@ async def test_agent_maps_rich_input_parts_to_structured_codex_input() -> None:
         context_id="c-rich",
         text="",
         parts=[
-            new_file_url_part(
-                "https://example.com/screenshot.png",
+            Part(
+                url="https://example.com/screenshot.png",
                 media_type="image/png",
                 filename="screenshot.png",
             ),
@@ -166,8 +167,8 @@ async def test_agent_rejects_non_image_file_parts() -> None:
         context_id="c-bad-file",
         text="",
         parts=[
-            new_file_url_part(
-                "https://example.com/report.pdf",
+            Part(
+                url="https://example.com/report.pdf",
                 media_type="application/pdf",
                 filename="report.pdf",
             )

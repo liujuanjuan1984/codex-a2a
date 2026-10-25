@@ -53,34 +53,6 @@ def new_data_part(data: Any) -> Part:
     return Part(data=ParseDict(data, Value()))
 
 
-def new_file_url_part(
-    url: str,
-    *,
-    media_type: str | None = None,
-    filename: str | None = None,
-) -> Part:
-    kwargs: dict[str, Any] = {"url": url}
-    if media_type is not None:
-        kwargs["media_type"] = media_type
-    if filename is not None:
-        kwargs["filename"] = filename
-    return Part(**kwargs)
-
-
-def new_file_bytes_part(
-    raw: bytes,
-    *,
-    media_type: str | None = None,
-    filename: str | None = None,
-) -> Part:
-    kwargs: dict[str, Any] = {"raw": raw}
-    if media_type is not None:
-        kwargs["media_type"] = media_type
-    if filename is not None:
-        kwargs["filename"] = filename
-    return Part(**kwargs)
-
-
 def part_kind(part: Part | None) -> str | None:
     if part is None:
         return None
